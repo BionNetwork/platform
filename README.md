@@ -9,7 +9,10 @@
 
 #### Развертывание приложения
 
-В фалйе config/settings/local.py нужно прописать
+Для установки необходимых библиотек выполнить команду:
+pip install -r requirements/base.txtp
+
+В файле config/settings/local.py нужно прописать
 
 DEBUG=False
 и строку ALLOWED_HOSTS
