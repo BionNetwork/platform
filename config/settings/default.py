@@ -27,6 +27,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# set owr model for users
+AUTH_USER_MODEL = 'core.User'
 
 # Application definition
 
@@ -37,7 +39,7 @@ INSTALLED_APPS = (
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'core'
+    'core',
 )
 
 MIDDLEWARE_CLASSES = (
@@ -93,7 +95,7 @@ DATABASES = {
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Moscow'
 
 USE_I18N = True
 
@@ -105,7 +107,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.8/howto/static-files/
 
-STATIC_URL = '/static/'
+STATIC_URL = '/assets/'
+
+STATICFILES_DIRS = (
+    os.path.join(BASE_DIR, "assets"),
+)
 
 try:
     from .local import *
