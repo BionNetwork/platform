@@ -41,6 +41,7 @@ class Migration(migrations.Migration):
             options={
                 'verbose_name': '\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f',
                 'verbose_name_plural': '\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438',
+                'db_table': 'users'
             },
             managers=[
                 ('objects', django.contrib.auth.models.UserManager()),
