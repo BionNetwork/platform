@@ -65,6 +65,7 @@ class User(AbstractUser):
     is_verify_email = models.BooleanField(default=False)
 
     class Meta:
+        db_table = "users"
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
 
