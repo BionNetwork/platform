@@ -1,0 +1,22 @@
+[
+  {
+    "model": "core.user",
+    "pk": 11,
+    "fields": {
+      "first_name": "Test",
+      "last_name": "Test",
+      "middle_name": "Test",
+      "username": "test",
+      "password": "pbkdf2_sha256$20000$CKvoM3cRGr0a$suHaQjC4JTotZcXUgm0mEt0EkNXlSH83WC/TkQIPfMs=",
+      "email": "some@mail.ru",
+      "is_staff": true,
+      "is_active": true,
+      "phone": "77777777777",
+      "skype": "Hi",
+      "site": "www.Hi.com",
+      "city": "Gotham City",
+      "birth_date": "2015-12-31",
+      "is_verify_email": true
+    }
+  }
+]
