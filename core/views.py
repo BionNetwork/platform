@@ -17,6 +17,7 @@ from django.core.mail import send_mail
 from django.http import HttpResponse
 
 from .models import User
+from .helpers import Settings
 
 
 class BaseView(View):
@@ -90,9 +91,9 @@ class LoginView(BaseTemplateView):
                         'error': 'Пользователь не имеет почты!'
                     })
 
-                # need set host to settings
+                host = Settings.get_host(request)
                 code = uuid.uuid4().hex
-                message = 'http://127.0.0.1:8000/set_user_active?uuid={0}'.format(code)
+                message = '{0}/set_user_active?uuid={1}'.format(host, code)
 
                 user.verify_email_uuid = code
                 user.save()
@@ -122,9 +123,9 @@ class RegistrationView(BaseView):
 
         post = request.POST
 
-        # need set host to settings
+        host = Settings.get_host(request)
         code = uuid.uuid4().hex
-        message = 'http://127.0.0.1:8000/set_user_active?uuid={0}'.format(code)
+        message = '{0}/set_user_active?uuid={0}'.format(host, code)
 
         user = User(
             username=post.get('login'),
@@ -140,7 +141,7 @@ class RegistrationView(BaseView):
                   [user.email], fail_silently=False)
 
         return self.json_response(
-            {'error': 'Пользователь зарегистрирован! Проверьте свою почту!'})
+            {'error': 'Регистрация прошла успешно! На почту была отправлена инструкция по активации аккаунта.'})
 
 
 class SetUserActive(BaseView):
