@@ -1,73 +1,116 @@
-{% load staticfiles i18n %}<!DOCTYPE html>
-<html lang="en">
+{% load staticfiles i18n %}
+<!DOCTYPE html>
+
+<html>
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="x-ua-compatible" content="ie=edge">
-    <title>{% block title %}{% endblock title %}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>{% block title %}BI Platform{% endblock title %}</title>
+    <!-- Tell the browser to be responsive to screen width -->
+    <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
     <meta name="description" content="">
     <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon.ico' %}"/>
+    <!-- Bootstrap 3.3.5 -->
+    <link rel="stylesheet" href="{% static "system/bootstrap/css/bootstrap.min.css" %}">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+    <!-- Ionicons -->
+    <link rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
+    <!-- Theme style -->
+    <link rel="stylesheet" href="{% static "system/dist/css/AdminLTE.min.css" %}">
 
-    <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
-    <!--[if lt IE 9]>
-      <script src="https://html5shim.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]-->
-
-    <!-- Latest compiled and minified CSS -->
-    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
-
-    <!-- Optional theme -->
-    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap-theme.min.css">
-
-    <!-- Your stuff: Third-party css libraries go here -->
+    <link rel="stylesheet" href="{% static "system/dist/css/skins/skin-blue.min.css" %}">
 
     <!-- This file store project specific CSS -->
     <link href="{% static 'css/core.css' %}" rel="stylesheet">
     {% block css %}{% endblock css %}
 
+    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+        <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
   </head>
-  <body>
-    <nav class="navbar navbar-inverse">
-      <div class="container">
-        <div class="navbar-header">
-          <a class="navbar-brand" href="#">Home</a>
+
+  <body class="hold-transition skin-blue sidebar-mini">
+    <div class="wrapper">
+
+      <!-- Main Header -->
+      <header class="main-header">
+
+        <!-- Logo -->
+        <a href="/" class="logo">
+          <!-- mini logo for sidebar mini 50x50 pixels -->
+          <span class="logo-mini"><b>BI</b>P</span>
+          <!-- logo for regular state and mobile devices -->
+          <span class="logo-lg"><b>BI</b>Platform</span>
+        </a>
+
+        <!-- Header Navbar -->
+        {% include "layout/navigation.html" %}
+      </header>
+      <!-- Left side column. contains the logo and sidebar -->
+      <aside class="main-sidebar">
+        {% include "layout/sidebar-left.html" %}
+      </aside>
+
+      <!-- Content Wrapper. Contains page content -->
+      <div class="content-wrapper">
+        <!-- Content Header (Page header) -->
+        <section class="content-header">
+          {% block content-header %}
+
+          {% endblock %}
+        </section>
+
+        <!-- Main content -->
+        <section class="content">
+
+          <!-- Your Page Content Here -->
+            {% block content %}
+
+            {% endblock %}
+        </section><!-- /.content -->
+          {% block modal %}{% endblock modal %}
+      </div><!-- /.content-wrapper -->
+
+      <!-- Main Footer -->
+      <footer class="main-footer">
+        <!-- To the right -->
+        <div class="pull-right hidden-xs">
+          Аналитика в реальном времени
         </div>
+        <!-- Default to the left -->
+        <strong>Copyright &copy; 2015 <a href="http://etton.ru" target="_blank">Etton</a>.</strong> Все права защищены.
+      </footer>
 
-      </div>
-    </nav>
-    <div class="container">
-      {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">
-        <a href="#" class="close" data-dismiss="alert" aria-label="close">&times;</a>
-        {{ message }}
-      </div>
-      {% endfor %}
-      {% block alerts %}{% endblock alerts %}
+      <!-- Control Sidebar -->
+        {% include "layout/sidebar.html" %}
+        <!-- /.control-sidebar -->
+      <!-- Add the sidebar's background. This div must be placed
+           immediately after the control sidebar -->
+      <div class="control-sidebar-bg"></div>
+    </div><!-- ./wrapper -->
 
-      {% block content %}
-        <p>Default page content</p>
-      {% endblock content %}
-    </div>
-    <footer class="footer">
-      <div class="container">
-      </div>
-    </footer>
+    <!-- REQUIRED JS SCRIPTS -->
 
-    {% block modal %}{% endblock modal %}
-
-    <!-- Placed at the end of the document so the pages load faster -->
-
-    <!-- Latest JQuery -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-
-    <!-- Latest compiled and minified JavaScript -->
-    <script src="https://netdna.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
-
-    <!-- Your stuff: Third-party javascript libraries go here -->
+    <!-- jQuery 2.1.4 -->
+    <script src="{% static "system/plugins/jQuery/jQuery-2.1.4.min.js" %}"></script>
+    <!-- Bootstrap 3.3.5 -->
+    <script src="{% static "system/bootstrap/js/bootstrap.min.js" %}"></script>
+    <!-- AdminLTE App -->
+    <script src="{% static "system/dist/js/app.min.js" %}"></script>
 
     <!-- place project specific Javascript in this file -->
       <script src="{% static 'js/core.js' %}"></script>
       {% block javascript %}{% endblock javascript %}
+
+    <!-- Optionally, you can add Slimscroll and FastClick plugins.
+         Both of these plugins are recommended to enhance the
+         user experience. Slimscroll is required when using the
+         fixed layout. -->
   </body>
 </html>
- 
+
+
