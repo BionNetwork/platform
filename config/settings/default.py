@@ -30,6 +30,10 @@ ALLOWED_HOSTS = []
 # set owr model for users
 AUTH_USER_MODEL = 'core.User'
 
+LOGIN_URL = '/login'
+
+LOGOUT_URL = '/logout'
+
 # Application definition
 
 INSTALLED_APPS = (

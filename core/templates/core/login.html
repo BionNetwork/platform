@@ -1,2 +1,69 @@
 {% extends "base.html" %}
 
+{% block content %}
+
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3">
+                <h2 class="text-center login-title">Вход</h2>
+                    <form class="form-signin" method="post"> {% csrf_token %}
+                        <div class="form-group">
+                            <input type="text" name="username" class="form-control" placeholder="Логин" required autofocus>
+                        </div>
+                        <div class="form-group">
+                            <input type="password" name="password" class="form-control" placeholder="Пароль" required>
+                        </div>
+                        <span name="error">{{error}}</span>
+                        <div class="form-group">
+                            <button class="btn btn-sm btn-primary" type="submit">Войти</button>
+                            <button class="btn btn-sm btn-default" type="button" onclick="registration()">
+                                Регистрация</button>
+                        </div>
+                    </form>
+            </div>
+        </div>
+    </div>
+{% endblock content %}
+
+{% block modal %}
+    <div class="modal inmodal" tabindex="1" role="dialog" aria-hidden="true" id="modal-register">
+        <div class="modal-dialog" style="width:400px">
+            <div class="modal-content animated bounceInRight">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span aria-hidden="true">&times;</span>
+                        <span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title">Регистрация</h4>
+                </div>
+                <div class="modal-body">
+                    <form class="form-signin" id="regi_form">{% csrf_token %}
+                        <div class="form-group">
+                            <input type="email" name="reg_email" class="form-control"
+                                   placeholder="E-mail" required autofocus>
+                        </div>
+                        <div class="form-group">
+                            <input type="text" name="reg_login" class="form-control" placeholder="Логин" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="password" name="reg_password" class="form-control" placeholder="Пароль" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="password" name="reg_confirm" class="form-control" placeholder="Повтор" required>
+                        </div>
+                        <span name="error"></span>
+                        <div class="form-group">
+                            <button class="btn btn-sm btn-primary" type="button" onclick="registerUser('{{regUrl}}')">
+                                Регистрация</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock modal %}
+
+{% block javascript %}
+    <script src="http://cdn.jsdelivr.net/jquery.validation/1.14.0/jquery.validate.min.js"></script>
+{% endblock javascript %}

@@ -62,7 +62,7 @@ class User(AbstractUser):
     city = models.CharField(verbose_name='Город', max_length=50, null=True, blank=True)
     middle_name = models.CharField(max_length=50, blank=True, verbose_name='Отчество', default='')
     birth_date = models.DateField(verbose_name='Дата рождения', null=True, blank=True)
-    is_verify_email = models.BooleanField(default=False)
+    verify_email_uuid = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         db_table = "users"
