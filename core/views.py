@@ -56,6 +56,8 @@ class LoginView(BaseTemplateView):
     template_name = 'core/login.html'
 
     def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated():
+            return self.redirect_to_url("/")
         return self.render_to_response({'regUrl': '/registration'})
 
     def post(self, request, *args, **kwargs):
