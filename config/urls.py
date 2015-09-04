@@ -22,5 +22,7 @@ from core import urls as core_urls
 
 urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
-    url(r'^core/', include(core_urls, namespace='core'), name="index"),
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    url(r'', include(core_urls, namespace='core'), name="index"),
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + (
+    core_urls.urlpatterns)
+

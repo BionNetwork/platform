@@ -30,6 +30,10 @@ ALLOWED_HOSTS = []
 # set owr model for users
 AUTH_USER_MODEL = 'core.User'
 
+LOGIN_URL = '/login'
+
+LOGOUT_URL = '/logout'
+
 # Application definition
 
 INSTALLED_APPS = (
@@ -93,7 +97,7 @@ DATABASES = {
 # Internationalization
 # https://docs.djangoproject.com/en/1.8/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'ru-RU'
 
 TIME_ZONE = 'Europe/Moscow'
 
