@@ -25,7 +25,9 @@
                     <input type="password" name="password" class="form-control" placeholder="Password" required>
                     <span class="glyphicon glyphicon-lock form-control-feedback"></span>
                 </div>
-                <div class="alert alert-error">{{error}}</div>
+                {% if error %}
+                    <div class="alert alert-error">{{error}}</div>
+                {% endif %}
                 <div class="row">
                     <div class="col-xs-8">
                         <div class="checkbox icheck">
@@ -84,7 +86,7 @@
                         <div class="form-group">
                             <input type="password" name="reg_confirm" class="form-control" placeholder="Повтор" required>
                         </div>
-                        <span name="error"></span>
+                        <div class="alert" id="registration-message"></div>
                         <div class="form-group">
                             <button class="btn btn-sm btn-primary" type="button" onclick="registerUser('{{regUrl}}')">
                                 Регистрация</button>

@@ -6,11 +6,13 @@ $(document).ready(function(){
     }
 );
 
-function registration(){
+function registration()
+{
     modalReg.modal('show');
+    $("#registration-message").attr("class", "alert").html("");
 }
 
-function registerUser(regUrl){
+function registerUser(url){
     var f = $('#regi_form');
     if(!f.valid()){
         return;
@@ -20,14 +22,17 @@ function registerUser(regUrl){
         validator.showErrors({'error': 'Не совпадение паролей'});
         return;
     }
-    $.post(regUrl, {
-        csrfmiddlewaretoken: f.find('[name="csrfmiddlewaretoken"]').val(),
-        email: $('[name="reg_email"]').val(),
-        login: $('[name="reg_login"]').val(),
-        password: $('[name="reg_password"]').val(),
-        }, function(res){
-            modalReg.modal('hide');
-            $('[name="error"]').text(res['error'])
+    $.post(url, {
+            csrfmiddlewaretoken: f.find('[name="csrfmiddlewaretoken"]').val(),
+            email: $('[name="reg_email"]').val(),
+            login: $('[name="reg_login"]').val(),
+            password: $('[name="reg_password"]').val()
+        }, function (response) {
+            if (response['status'] == 'ok') {
+                $("#modal-register .modal-body").html("<div class='alert alert-info'>" + response['message'] + "</div>");
+            } else {
+                $('#registration-message').addClass("alert-error").text(response['message'])
+            }
         }
     );
 }

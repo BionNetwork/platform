@@ -15,7 +15,9 @@ from django.contrib.auth.models import check_password
 from django.conf import settings
 from django.core.mail import send_mail
 from django.http import HttpResponse
+from django.db.models import Q
 
+from smtplib import SMTPServerDisconnected
 from .models import User
 from .helpers import Settings
 
@@ -53,6 +55,9 @@ class HomeView(BaseTemplateView):
 
 
 class LoginView(BaseTemplateView):
+    """
+    Вход пользователя в систему
+    """
     template_name = 'core/login.html'
 
     def get(self, request, *args, **kwargs):
@@ -113,14 +118,18 @@ class LoginView(BaseTemplateView):
 
 
 class LogoutView(BaseView):
-
+    """
+    Выход пользователя
+    """
     def get(self, request, *args, **kwargs):
         logout(request)
         return self.redirect('login')
 
 
 class RegistrationView(BaseView):
-
+    """
+    Регистрация нового пользователя в системе
+    """
     def post(self, request, *args, **kwargs):
 
         post = request.POST
@@ -129,21 +138,48 @@ class RegistrationView(BaseView):
         code = uuid.uuid4().hex
         message = '{0}/set_user_active?uuid={0}'.format(host, code)
 
-        user = User(
-            username=post.get('login'),
-            email=post.get('email'),
-            is_active=False,
-            is_staff=True,
-            verify_email_uuid=code
-        )
-        user.set_password(post.get('password'))
-        user.save()
+        user_login = post.get('login', '')
+        user_email = post.get('email', '')
 
-        send_mail('Подтверждение!', message, settings.EMAIL_HOST_USER,
-                  [user.email], fail_silently=False)
+        try:
+            if len(user_login) == 0 or len(user_email) == 0:
+                raise ValueError("Логин или пароль не могут быть пустыми")
 
-        return self.json_response(
-            {'error': 'Регистрация прошла успешно! На почту была отправлена инструкция по активации аккаунта.'})
+            current_user = User.objects.filter(Q(username=user_login) | Q(email=user_email))
+
+            if len(current_user) > 0:
+                raise ValueError("Такой пользователь уже существует")
+            user = User(
+                username=user_login,
+                email=user_email,
+                is_active=False,
+                is_staff=True,
+                verify_email_uuid=code
+            )
+            user.set_password(post.get('password'))
+            user.save()
+
+            # тут сделать очередь на письма
+            send_mail('Подтверждение регистрации!', message, settings.EMAIL_HOST_USER,
+                      [user.email], fail_silently=False)
+
+            return self.json_response(
+                {'status': 'ok',
+                 'message': 'Регистрация прошла успешно! На почту была отправлена инструкция по активации аккаунта.'})
+        except ValueError, e:
+            return self.json_response(
+                {'status': 'error', 'message': e.message}
+            )
+        except SMTPServerDisconnected, e:
+            # @todo логирование ошибки
+            return self.json_response(
+                {'status': 'error', 'message': "Ошибка при отправке почты %s" % e.message}
+            )
+        except:
+            # @todo логирование ошибки
+            return self.json_response(
+                {'status': 'error', 'message': 'Произошла системная ошибка. Мы уже работаем над ней'}
+            )
 
 
 class SetUserActive(BaseView):
