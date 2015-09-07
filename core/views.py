@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 import uuid
 import json
+import logging
 
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
@@ -21,6 +22,7 @@ from smtplib import SMTPServerDisconnected
 from .models import User
 from .helpers import Settings
 
+logger = logging.getLogger(__name__)
 
 class BaseView(View):
 
@@ -171,12 +173,12 @@ class RegistrationView(BaseView):
                 {'status': 'error', 'message': e.message}
             )
         except SMTPServerDisconnected, e:
-            # @todo логирование ошибки
+            logger.exception(e.message)
             return self.json_response(
                 {'status': 'error', 'message': "Ошибка при отправке почты %s" % e.message}
             )
         except:
-            # @todo логирование ошибки
+            logger.exception("Произошла системная ошибка")
             return self.json_response(
                 {'status': 'error', 'message': 'Произошла системная ошибка. Мы уже работаем над ней'}
             )
