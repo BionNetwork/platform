@@ -102,7 +102,7 @@ class LoginView(BaseTemplateView):
 
                 host = Settings.get_host(request)
                 code = uuid.uuid4().hex
-                message = '{0}/set_user_active?uuid={1}'.format(host, code)
+                message = '{0}{2}?uuid={1}'.format(host, code, reverse('core:activate_user'))
 
                 user.verify_email_uuid = code
                 user.save()
@@ -138,7 +138,7 @@ class RegistrationView(BaseView):
 
         host = Settings.get_host(request)
         code = uuid.uuid4().hex
-        message = '{0}/set_user_active?uuid={0}'.format(host, code)
+        message = '{0}{2}?uuid={1}'.format(host, code, reverse('core:activate_user'))
 
         user_login = post.get('login', '')
         user_email = post.get('email', '')
