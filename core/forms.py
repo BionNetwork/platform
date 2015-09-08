@@ -23,7 +23,8 @@ class UserForm(forms.ModelForm):
 
     def init_fields(self):
         for field in self.fields:
-            self.fields[field].widget.attrs['class'] = 'form-control'
+            if field != 'is_active':
+                self.fields[field].widget.attrs['class'] = 'form-control'
 
     class Meta:
         model = User
