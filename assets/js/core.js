@@ -23,13 +23,11 @@ UserService = (function() {
     }
     validator = regForm.data('validator');
     if ($('[name="reg_password"]').val() !== $('[name="reg_confirm"]').val()) {
-      validator.showErrors({
-        'error': 'Не совпадение паролей'
-      });
+      $('#registration-message').addClass("alert-error").text('Не совпадение паролей')
       return false;
     }
     return $.post(url, {
-      csrfmiddlewaretoken: regForm.find('[name="csrfmiddlewaretoken"]').val(),
+      csrfmiddlewaretoken: csrftoken,
       email: $('[name="reg_email"]').val(),
       login: $('[name="reg_login"]').val(),
       password: $('[name="reg_password"]').val()
