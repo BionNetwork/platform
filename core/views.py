@@ -213,7 +213,7 @@ class SetUserActive(BaseView):
 
 class UserListView(BaseTemplateView):
 
-    template_name = 'core/users.html'
+    template_name = 'core/users/index.html'
 
     def get(self, request, *args, **kwargs):
         users = User.objects.all()
@@ -230,7 +230,7 @@ class RemoveUserView(BaseView):
 
 
 class NewUserView(BaseTemplateView):
-    template_name = 'core/new_user.html'
+    template_name = 'core/users/add.html'
 
     def get(self, request, *args, **kwargs):
         form = core_forms.NewUserForm()
@@ -253,7 +253,7 @@ class NewUserView(BaseTemplateView):
 
 
 class EditUserView(BaseTemplateView):
-    template_name = 'core/edit_user.html'
+    template_name = 'core/users/edit.html'
 
     def get(self, request, *args, **kwargs):
 
