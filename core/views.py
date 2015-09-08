@@ -226,7 +226,7 @@ class RemoveUserView(BaseView):
         user = get_object_or_404(User, pk=kwargs.get('id'))
         user.delete()
 
-        return self.json_response({'redirect_url': 'user_list'})
+        return self.json_response({'redirect_url': reverse('core:users')})
 
 
 class NewUserView(BaseTemplateView):
@@ -249,7 +249,7 @@ class NewUserView(BaseTemplateView):
         user.set_password(post.get('password'))
         user.save()
 
-        return self.redirect('user_list')
+        return self.redirect('core:users')
 
 
 class EditUserView(BaseTemplateView):
@@ -275,4 +275,4 @@ class EditUserView(BaseTemplateView):
 
         form.save()
 
-        return self.redirect('user_list')
+        return self.redirect('core:users')

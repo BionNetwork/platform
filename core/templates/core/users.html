@@ -12,7 +12,7 @@
 
     <div class="row">
         <button class="btn btn-white btn-sm" type="button">
-            <a href="/new_user">Добавить</a>
+            <a href="{% url "core:users.add" %}">Добавить</a>
         </button>
     </div>
 
@@ -34,8 +34,8 @@
                             <td>{{row.username}}
                             <td>{{row.email}}</td>
                             <td>{% if row.is_active %}Активный{% else %}Неактивный{% endif %}</td>
-                            <td><a href="javascript:void(0)" onclick="removeUser('remove_user/{{row.id}}/')">Удалить</a>/
-                                <a href="edit_user/{{row.id}}">Редактировать</a></td>
+                            <td><a href="javascript:void(0)" onclick="removeUser('{% url "core:users.delete" row.id %}')">Удалить</a>/
+                                <a href="{% url "core:users.edit" row.id %}">Редактировать</a></td>
                         </tr>
                     {% endfor %}
                     </tbody>
