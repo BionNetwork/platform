@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% load staticfiles i18n %}
+
+{% block content-header %}
+    <h1>
+        Редактирование пользователя
+    </h1>
+{% endblock %}
+
+{% block content %}
+
+<div class="wrapper-content">
+    <div class="col-sm-6">
+        <div class="row">
+            <form class="form-horizontal" method="post">{% csrf_token %}
+                {% for field in form %}
+                    <div class="form-group">
+                        <label class="col-sm-4 control-label">{{field.label}}</label>
+                        <div class="col-sm-8">
+                            {{field}}
+                        </div>
+                        <div class="col-sm-8">
+                            {{field.errors}}
+                        </div>
+                    </div>
+                {% endfor %}
+                <button type="submit">Сохранить</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
+
+{% block javascript %}
+    <script src="{% static 'js/users.js' %}"></script>
+{% endblock javascript %}

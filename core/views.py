@@ -7,7 +7,7 @@ import json
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.views.generic import TemplateView, View
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
@@ -17,9 +17,11 @@ from django.core.mail import send_mail
 from django.http import HttpResponse
 from django.db.models import Q
 
+
 from smtplib import SMTPServerDisconnected
 from .models import User
 from .helpers import Settings
+import forms as core_forms
 
 
 class BaseView(View):
@@ -205,3 +207,68 @@ class SetUserActive(BaseView):
         login(request, user)
 
         return self.redirect('home')
+
+
+class UserListView(BaseTemplateView):
+
+    template_name = 'core/users.html'
+
+    def get(self, request, *args, **kwargs):
+        users = User.objects.all()
+        return self.render_to_response({'users': users})
+
+
+class RemoveUserView(BaseView):
+
+    def post(self, request, *args, **kwargs):
+        user = get_object_or_404(User, pk=kwargs.get('id'))
+        user.delete()
+
+        return self.json_response({'redirect_url': 'user_list'})
+
+
+class NewUserView(BaseTemplateView):
+    template_name = 'core/new_user.html'
+
+    def get(self, request, *args, **kwargs):
+        form = core_forms.NewUserForm()
+        return render(request, self.template_name, {'form': form})
+
+    def post(self, request, *args, **kwargs):
+        form = core_forms.NewUserForm(request.POST)
+
+        if not form.is_valid():
+            return self.render_to_response({'form': form})
+
+        user = form.save(commit=False)
+        user.is_active = False
+        user.is_staff = True
+        user.save()
+
+        return self.redirect('user_list')
+
+
+class EditUserView(BaseTemplateView):
+    template_name = 'core/edit_user.html'
+
+    def get(self, request, *args, **kwargs):
+
+        user = get_object_or_404(User, pk=kwargs.get('id'))
+
+        form = core_forms.UserForm(instance=user)
+        return self.render_to_response({
+            'form': form
+        })
+
+    def post(self, request, *args, **kwargs):
+
+        post = request.POST
+        user = get_object_or_404(User, pk=kwargs.get('id'))
+        form = core_forms.UserForm(post, instance=user)
+
+        if not form.is_valid():
+            return self.render_to_response({'form': form})
+
+        form.save()
+
+        return self.redirect('user_list')
