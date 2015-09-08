@@ -19,6 +19,11 @@ class UserForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super(UserForm, self).__init__(*args, **kwargs)
+        self.init_fields()
+
+    def init_fields(self):
+        for field in self.fields:
+            self.fields[field].widget.attrs['class'] = 'form-control'
 
     class Meta:
         model = User
@@ -32,6 +37,10 @@ class NewUserForm(UserForm):
 
     password = forms.CharField(required=True, label='Пароль', widget=forms.PasswordInput())
     confirm = forms.CharField(required=True, label='Подтверждение', widget=forms.PasswordInput())
+
+    def __init__(self, *args, **kwargs):
+        super(UserForm, self).__init__(*args, **kwargs)
+        self.init_fields()
 
     class Meta(UserForm.Meta):
         fields = (

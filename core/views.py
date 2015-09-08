@@ -276,3 +276,13 @@ class EditUserView(BaseTemplateView):
         form.save()
 
         return self.redirect('core:users')
+
+
+class UserProfileView(BaseTemplateView):
+    template_name = 'core/users/profile.html'
+
+    def get(self, request, *args, **kwargs):
+        pass
+
+    def post(self, request, *args, **kwargs):
+        pass
