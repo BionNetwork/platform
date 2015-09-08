@@ -235,7 +235,8 @@ class NewUserView(BaseTemplateView):
         return render(request, self.template_name, {'form': form})
 
     def post(self, request, *args, **kwargs):
-        form = core_forms.NewUserForm(request.POST)
+        post = request.POST
+        form = core_forms.NewUserForm(post)
 
         if not form.is_valid():
             return self.render_to_response({'form': form})
@@ -243,6 +244,7 @@ class NewUserView(BaseTemplateView):
         user = form.save(commit=False)
         user.is_active = False
         user.is_staff = True
+        user.set_password(post.get('password'))
         user.save()
 
         return self.redirect('user_list')

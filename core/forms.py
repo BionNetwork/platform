@@ -39,11 +39,9 @@ class NewUserForm(UserForm):
             'email', 'birth_date', 'phone', 'skype', 'site', 'city',
         )
 
-    def clean_password(self):
+    def clean(self):
         password = self.cleaned_data.get('password')
         confirm = self.cleaned_data.get('confirm')
 
         if password != confirm:
             raise ValidationError('Пароли не совпадают')
-
-        return password
