@@ -282,7 +282,11 @@ class UserProfileView(BaseTemplateView):
     template_name = 'core/users/profile.html'
 
     def get(self, request, *args, **kwargs):
-        pass
+        user = get_object_or_404(User, pk=kwargs.get('id'))
+
+        return self.render_to_response({
+            'user': user
+        })
 
     def post(self, request, *args, **kwargs):
         pass
