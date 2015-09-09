@@ -26,6 +26,7 @@ import forms as core_forms
 
 logger = logging.getLogger(__name__)
 
+
 class BaseView(View):
 
     def redirect(self, reverse_name, args=None, **kwargs):
@@ -73,7 +74,7 @@ class LoginView(BaseTemplateView):
         post = request.POST
 
         username = post['username']
-        password=post['password']
+        password = post['password']
         user = None
 
         # if email (костылим):
