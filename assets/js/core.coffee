@@ -1,7 +1,7 @@
 modalReg = null
+csrftoken = UserService.getCookie('csrftoken');
 
 $(document).ready( ->
-  csrftoken = UserService.getCookie('csrftoken');
   modalReg = $('#modal-register');
 );
 
@@ -15,11 +15,11 @@ class UserService
         return false
     validator = regForm.data('validator')
     if($('[name="reg_password"]').val() != $('[name="reg_confirm"]').val())
-        validator.showErrors({'error': 'Не совпадение паролей'})
+        $('#registration-message').addClass("alert-error").text('Не совпадение паролей')
         return false
 
     $.post(url, {
-            csrfmiddlewaretoken: regForm.find('[name="csrfmiddlewaretoken"]').val(),
+            csrfmiddlewaretoken: csrftoken,
             email: $('[name="reg_email"]').val(),
             login: $('[name="reg_login"]').val(),
             password: $('[name="reg_password"]').val()
