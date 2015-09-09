@@ -8,7 +8,7 @@ from django.core.urlresolvers import reverse
 from core.models import User
 
 
-class LogiRegiTest(TestCase):
+class AuthenticationTest(TestCase):
 
     def setUp(self):
         self.client = Client()
