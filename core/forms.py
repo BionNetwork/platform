@@ -27,7 +27,7 @@ class UserForm(forms.ModelForm):
                 self.fields[field].widget.attrs['class'] = 'form-control'
 
         self.fields['email'].widget.attrs['placeholder'] = 'Email'
-        self.fields['birth_date'].widget.attrs['class'] = 'datepicker form-control'
+        self.fields['birth_date'].widget.attrs.update({'class': 'datepicker form-control', 'placeholder': 'дд.мм.ГГГГ'})
 
     class Meta:
         model = User
