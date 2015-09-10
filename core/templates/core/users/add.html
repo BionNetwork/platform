@@ -20,27 +20,38 @@
             <div class="box-body">
                 <form role="form" method="post">{% csrf_token %}
                     {% for field in form %}
-                        {% if field.name == 'email'%}
-                            <div class="form-group">
-                                <label>{{field.label}}</label>
+                        <div class="form-group">
+                            <label>{{field.label}}</label>
+                            {% if field.name == 'email'%}
                                 <div class="input-group">
                                     <div class="input-group-addon">
                                         <i class="fa fa-envelope"></i>
                                     </div>
                                         {{field}}
                                 </div>
-                            </div>
-                        {%else%}
-                            <div class="form-group">
-                                <label>{{field.label}}</label>
+                            {% elif field.name == "phone" %}
+                                <div class="input-group">
+                                    <div class="input-group-addon">
+                                        <i class="fa fa-phone"></i>
+                                    </div>
+                                        {{field}}
+                                </div>
+                            {% elif field.name == "skype" %}
+                                <div class="input-group">
+                                    <div class="input-group-addon">
+                                        <i class="fa fa-skype"></i>
+                                    </div>
+                                        {{field}}
+                                </div>
+                            {%else%}
                                 <div>
                                     {{field}}
                                 </div>
-                                <div>
-                                    {{ field.errors }}
-                                </div>
+                            {%endif%}
+                            <div>
+                                {{ field.errors }}
                             </div>
-                        {%endif%}
+                        </div>
                     {% endfor %}
                     <button type="submit">Сохранить</button>
                 </form>
