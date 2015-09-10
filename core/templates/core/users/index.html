@@ -19,18 +19,18 @@
 
                     <div class="box-tools">
                         <div class="input-group" style="width: 150px;">
-                            <input type="text" name="table_search" class="form-control input-sm pull-right"
-                                   placeholder="Search">
+                            <input type="text" name="table_search" class="form-control input-sm pull-right"  id="search"
+                                   placeholder="Search"  onchange="search()" value="{{search}}">
 
                             <div class="input-group-btn">
-                                <button class="btn btn-sm btn-default"><i class="fa fa-search"></i></button>
+                                <button class="btn btn-sm btn-default" onclick="search()"><i class="fa fa-search"></i></button>
                             </div>
                         </div>
                     </div>
                 </div>
                 <!-- /.box-header -->
                 <div class="box-body table-responsive no-padding">
-                    <table class="table table-hover">
+                    <table id="users_table" class="table table-hover" data-url="{% url "core:users" %}">
                         <tbody>
                         <tr>
                             <th>ID</th>
@@ -56,10 +56,31 @@
                         </tbody>
                     </table>
                 </div>
-                <!-- /.box-body -->
+
+                {% if max != 0%}
+                    <div class="box-body">
+                        <div class="text-center">
+                            <ul class="pagination">
+                                <li id="active_num" hidden="hidden" value="{{page}}"></li>
+                                <li><a class="fa fa-chevron-left" href="javascript:;" onclick="prev()"></a></li>
+                                {% for i in range%}
+                                    <li id="pagi_{{i}}" data-pagi="true"
+                                    {% if i == page %}
+                                        class="active"
+                                    {% endif %}
+                                    {% if i == max %}
+                                        data-max="true"
+                                    {% endif %}
+                                    ><a href="javascript:;" onclick="pagi({{i}})">{{i|add:"1"}}</a></li>
+                                {% endfor %}
+                                <li><a class="fa fa-chevron-right" href="javascript:;" onclick="next()"></a></li>
+                            </ul>
+                        </div>
+                    </div>
+                {% endif %}
             </div>
-            <!-- /.box -->
         </div>
+
     </div>
 
 

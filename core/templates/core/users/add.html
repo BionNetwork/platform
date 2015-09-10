@@ -20,16 +20,27 @@
             <div class="box-body">
                 <form role="form" method="post">{% csrf_token %}
                     {% for field in form %}
-                        <div class="form-group">
-                            <label>{{field.label}}</label>
-                            <div>
-                                {{field}}
+                        {% if field.name == 'email'%}
+                            <div class="form-group">
+                                <label>{{field.label}}</label>
+                                <div class="input-group">
+                                    <div class="input-group-addon">
+                                        <i class="fa fa-envelope"></i>
+                                    </div>
+                                        {{field}}
+                                </div>
                             </div>
-                            <div>
-                                {{ field.errors }}
+                        {%else%}
+                            <div class="form-group">
+                                <label>{{field.label}}</label>
+                                <div>
+                                    {{field}}
+                                </div>
+                                <div>
+                                    {{ field.errors }}
+                                </div>
                             </div>
-
-                        </div>
+                        {%endif%}
                     {% endfor %}
                     <button type="submit">Сохранить</button>
                 </form>
