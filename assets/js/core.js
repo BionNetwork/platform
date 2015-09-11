@@ -3,8 +3,6 @@ var UserService, csrftoken, modalReg;
 
 modalReg = null;
 
-csrftoken = UserService.getCookie('csrftoken');
-
 $(document).ready(function() {
   return modalReg = $('#modal-register');
 });
@@ -63,5 +61,7 @@ UserService = (function() {
   return UserService;
 
 })();
+
+csrftoken = UserService.getCookie('csrftoken');
 
 //# sourceMappingURL=core.js.map

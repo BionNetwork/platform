@@ -55,9 +55,11 @@
                                     {{field}}
                                 </div>
                             {%endif%}
-                            <div>
-                                {{ field.errors }}
-                            </div>
+                            {% if field.erros %}
+                                <div>
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
                         </div>
                     {% endfor %}
                     <button type="submit">Сохранить</button>

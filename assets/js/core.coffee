@@ -1,5 +1,4 @@
 modalReg = null
-csrftoken = UserService.getCookie('csrftoken');
 
 $(document).ready( ->
   modalReg = $('#modal-register');
@@ -42,3 +41,5 @@ class UserService
                 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                 break
     return cookieValue;
+
+csrftoken = UserService.getCookie('csrftoken');
