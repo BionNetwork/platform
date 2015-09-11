@@ -3,9 +3,8 @@ var UserService, csrftoken, modalReg;
 
 modalReg = null;
 
-csrftoken = UserService.getCookie('csrftoken');
-
 $(document).ready(function() {
+  csrftoken = UserService.getCookie('csrftoken');
   return modalReg = $('#modal-register');
 });
 
