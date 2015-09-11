@@ -26,6 +26,9 @@ class UserForm(forms.ModelForm):
             if field != 'is_active':
                 self.fields[field].widget.attrs['class'] = 'form-control'
 
+        self.fields['email'].widget.attrs['placeholder'] = 'Email'
+        self.fields['birth_date'].widget.attrs.update({'class': 'datepicker form-control', 'placeholder': 'дд.мм.ГГГГ'})
+
     class Meta:
         model = User
         fields = (

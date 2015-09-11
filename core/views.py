@@ -17,7 +17,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.http import HttpResponse
 from django.db.models import Q
-
+from django.core.paginator import Paginator
 
 from smtplib import SMTPServerDisconnected
 from .models import User
@@ -217,8 +217,37 @@ class UserListView(BaseTemplateView):
     template_name = 'core/users/index.html'
 
     def get(self, request, *args, **kwargs):
-        users = User.objects.all()
-        return self.render_to_response({'users': users})
+
+        get = request.GET
+        or_cond = Q()
+
+        search = get.get('search', None)
+        if search:
+            for field in ('username', 'email', 'id'):
+                or_cond |= Q(
+                    **{"%s__icontains" % field: search}
+                )
+        users = User.objects.filter(or_cond)
+        count = 20
+
+        paginator = Paginator(users, count)
+        page_count = paginator.num_pages
+
+        page = int(get.get('page', 0))
+        if page not in xrange(page_count):
+            page = 0
+
+        users = paginator.page(page + 1).object_list
+
+        return self.render_to_response(
+            {
+                'users': users,
+                'range': range(page_count),
+                'page': page,
+                'max': page_count-1,
+                'search': search or ''
+            }
+        )
 
 
 class RemoveUserView(BaseView):
