@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class SourcesListView(BaseTemplateView):
 
-    template_name = 'etl/index.html'
+    template_name = 'etl/datasources/index.html'
 
     def get(self, request, *args, **kwargs):
 
@@ -27,7 +27,7 @@ class SourcesListView(BaseTemplateView):
         search = get.get('search', None)
 
         if search:
-            for field in ('id', 'name', 'login', 'host', 'port', 'password'):
+            for field in ('id', 'db', 'login', 'host', 'port', 'password'):
                 or_cond |= Q(
                     **{"%s__icontains" % field: search}
                 )
@@ -58,7 +58,7 @@ class SourcesListView(BaseTemplateView):
 
 
 class NewSourceView(BaseTemplateView):
-    template_name = 'etl/add_source.html'
+    template_name = 'etl/datasources/add.html'
 
     def get(self, request, *args, **kwargs):
         form = etl_forms.SourceForm()
@@ -85,7 +85,7 @@ class NewSourceView(BaseTemplateView):
 
 
 class EditSourceView(BaseTemplateView):
-    template_name = 'etl/edit_source.html'
+    template_name = 'etl/datasources/edit.html'
 
     def get(self, request, *args, **kwargs):
 

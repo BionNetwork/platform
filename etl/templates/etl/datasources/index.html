@@ -34,7 +34,7 @@
                         <tbody>
                         <tr>
                             <th>ID</th>
-                            <th>Название</th>
+                            <th>База данных</th>
                             <th>Логин</th>
                             <th>Хост</th>
                             <th>Порт</th>
@@ -43,7 +43,7 @@
                         {% for row in sources %}
                             <tr>
                                 <td>{{ row.id }}</td>
-                                <td>{{ row.name }}</td>
+                                <td>{{ row.db }}</td>
                                 <td>{{ row.login }}</td>
                                 <td>{{ row.host }}</td>
                                 <td>{{ row.port }}</td>

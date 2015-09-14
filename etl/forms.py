@@ -20,7 +20,7 @@ class SourceForm(forms.ModelForm):
 
     class Meta:
         model = Datasource
-        fields = ('conn_type', 'name', 'login', 'password', 'host', 'port')
+        fields = ('conn_type', 'db', 'login', 'password', 'host', 'port')
         password = forms.CharField(widget=forms.PasswordInput)
         widgets = {
             'password': forms.PasswordInput(),

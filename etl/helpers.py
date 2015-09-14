@@ -26,7 +26,7 @@ def check_connection(data):
         'host': get_utf8_string(data.get('host', '')),
         'user': get_utf8_string(data.get('login', '')),
         'passwd': get_utf8_string(data.get('password', '')),
-        'db': get_utf8_string(data.get('name', '')),
+        'db': get_utf8_string(data.get('db', '')),
         'port': int(data.get('port', ''))
     }
 
