@@ -4,7 +4,6 @@ function checkConnection(){
     var form = $('#conn_form'),
         formData = new FormData(form[0]),
         url = form.attr('data-url');
-    console.log(formData);
 
     $.validator.messages.required = 'Обязательное поле!';
 
@@ -16,25 +15,24 @@ function checkConnection(){
         processData: false,
         contentType: false,
         type: 'POST',
-        success: function(data){
-            console.log(data);
-            if(data.result == 'error'){
-                console.log('err');
+        success: function(result){
+            //console.log(data);
+            if(result.status == 'error'){
                 $.confirm({
-                    text: "Подключение не удалось!",
+                    text: result.message || "Подключение не удалось!",
                     title:"Внимание",
                     confirmButtonClass: "btn-danger",
                     cancelButtonClass: "hidden",
-                    confirmButton: "Ок",
+                    confirmButton: "Ок"
                 });
             }
-            else if(data.result == 'success'){
+            else if(result.status == 'success'){
                 $.confirm({
                     width: '100px',
-                    text: "Подключение удалось!",
+                    text: result.message || "Подключение удалось!",
                     title:"Внимание",
                     cancelButtonClass: "hidden",
-                    confirmButton: "Ок",
+                    confirmButton: "Ок"
                 });
             }
         }

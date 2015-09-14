@@ -129,9 +129,9 @@ class CheckConnectionView(BaseView):
         try:
             result = helpers.check_connection(request.POST)
             return self.json_response(
-                {'result': 'error' if not result else 'success', })
+                {'status': 'error' if not result else 'success', 'message': 'Проверка соединения прошла успешно'})
         except Exception as e:
             logger.exception(e.message)
             return self.json_response(
-                {'result': 'error'}
+                {'status': 'error', 'message': 'Ошибка во время проверки соединения'}
             )
