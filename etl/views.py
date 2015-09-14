@@ -47,7 +47,7 @@ class SourcesListView(BaseTemplateView):
         return self.render_to_response(
             {
                 'sources': sources,
-                'url': reverse('etl:index') + sub_url,
+                'url': reverse('etl:datasources.index') + sub_url,
                 'range': range(page_count),
                 'page': page,
                 'search': search or ''
@@ -79,7 +79,7 @@ class NewSourceView(BaseTemplateView):
         source.user_id = request.user.id
         source.save()
 
-        return self.redirect('etl:index')
+        return self.redirect('etl:datasources.index')
 
 
 class EditSourceView(BaseTemplateView):
@@ -109,7 +109,7 @@ class EditSourceView(BaseTemplateView):
 
         form.save()
 
-        return self.redirect('etl:index')
+        return self.redirect('etl:datasources.index')
 
 
 class RemoveSourceView(BaseView):
@@ -118,7 +118,7 @@ class RemoveSourceView(BaseView):
         user = get_object_or_404(Datasource, pk=kwargs.get('id'))
         user.delete()
 
-        return self.json_response({'redirect_url': reverse('etl:index')})
+        return self.json_response({'redirect_url': reverse('etl:datasources.index')})
 
 
 class CheckConnectionView(BaseView):
