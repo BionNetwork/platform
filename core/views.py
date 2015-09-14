@@ -237,7 +237,7 @@ class UserListView(BaseTemplateView):
         if page not in xrange(page_count):
             page = 0
 
-        users = paginator.page(page + 1).object_list
+        users = paginator.page(page + 1)
 
         return self.render_to_response(
             {

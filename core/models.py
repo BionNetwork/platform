@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import datetime
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
-import datetime
+from djchoices import ChoiceItem, DjangoChoices
 
 """
 Базовые модели приложения
 """
+
+
+class ConnectionChoices(DjangoChoices):
+    POSTGRESQL = ChoiceItem(1, 'Postgresql')
+    MYSQL = ChoiceItem(2, 'Mysql')
+
 
 class Datasource(models.Model):
     """
@@ -29,6 +37,9 @@ class Datasource(models.Model):
     password = models.CharField(max_length=255, null=True, help_text="пароль")
     create_date = models.DateTimeField('create_date', help_text="дата создания", auto_now_add=True, db_index=True)
     user_id = models.IntegerField(help_text='идентификатор пользователя')
+    conn_type = models.SmallIntegerField(
+        verbose_name='Тип подключения', choices=ConnectionChoices.choices,
+        default=ConnectionChoices.POSTGRESQL)
 
     class Meta:
         db_table = "datasources"
