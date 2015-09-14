@@ -4,7 +4,6 @@ var UserService, csrftoken, modalReg;
 modalReg = null;
 
 $(document).ready(function() {
-  csrftoken = UserService.getCookie('csrftoken');
   return modalReg = $('#modal-register');
 });
 
@@ -42,11 +41,14 @@ UserService = (function() {
   };
 
   UserService.getCookie = function(name) {
-    var cookieValue, cookieValue;
+    var cookie, cookieValue, cookies, i, j, len, ref;
+    cookieValue = null;
     if (document.cookie && document.cookie !== '') {
       cookies = document.cookie.split(';');
-      for (var j = 0; j < cookies.length; j++){
-        cookie = cookies[j];
+      ref = cookies.length;
+      for (j = 0, len = ref.length; j < len; j++) {
+        i = ref[j];
+        cookie = jQuery.trim(cookies[i]);
         if (cookie.substring(0, name.length + 1) === (name + '=')) {
           cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
           break;
