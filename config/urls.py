@@ -20,9 +20,10 @@ from django.conf.urls.static import static
 
 from core import urls as core_urls
 
+
 urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
     url(r'', include(core_urls, namespace='core'), name="index"),
+    url(r'^etl/', include('etl.urls', namespace='etl')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + (
     core_urls.urlpatterns)
-

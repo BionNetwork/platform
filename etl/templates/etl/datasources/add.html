@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% load staticfiles i18n %}
+
+{% block content-header %}
+    <h1>
+        Добавление источника
+    </h1>
+{% endblock %}
+
+
+{% block content %}
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="box box-warning">
+            <div class="box-header with-border">
+                <h3 class="box-title">Данные источника</h3>
+            </div>
+            <!-- /.box-header -->
+            <div class="box-body">
+                <form novalidate role="form" method="post" id="conn_form" data-url="{% url "etl:datasources.check_conn" %}">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        <div class="form-group">
+                            <label>{{field.label}}</label>
+                                <div>
+                                    {{field}}
+                                </div>
+                            <div>
+                                {{ field.errors }}
+                            </div>
+                        </div>
+                    {% endfor %}
+                    <input type="hidden" id="win_type" data="{{type}}">
+                    <button type="button" class="btn" onclick="checkConnection()">Проверить подключение</button>
+                    <button type="submit" class="btn">Сохранить</button>
+
+                    <div class="form-group">
+                        <label>{{error_message}}</label>
+                    </div>
+                </form>
+            </div>
+            <!-- /.box-body -->
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
+
+
+{% block javascript %}
+    <script src="{% static 'js/sources.js' %}"></script>
+{% endblock javascript %}

@@ -1,15 +1,24 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import datetime
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
-import datetime
+from djchoices import ChoiceItem, DjangoChoices
 
 """
 Базовые модели приложения
 """
+
+
+class ConnectionChoices(DjangoChoices):
+    """Типы подключения"""
+    POSTGRESQL = ChoiceItem(1, 'Postgresql')
+    MYSQL = ChoiceItem(2, 'Mysql')
+
 
 class Datasource(models.Model):
     """
@@ -17,21 +26,25 @@ class Datasource(models.Model):
     """
 
     def __str__(self):
-        return self.name
+        return self.host + " " + self.database
 
     def was_created_recently(self):
         return self.create_date >= timezone.now() - datetime.timedelta(days=1)
 
-    name = models.CharField(max_length=255, help_text="название")
+    db = models.CharField(max_length=255, help_text="База данных", null=False)
     host = models.CharField(max_length=255, help_text="имя хоста", db_index=True)
     port = models.IntegerField(help_text="Порт подключения")
     login = models.CharField(max_length=1024, null=True, help_text="логин")
     password = models.CharField(max_length=255, null=True, help_text="пароль")
     create_date = models.DateTimeField('create_date', help_text="дата создания", auto_now_add=True, db_index=True)
     user_id = models.IntegerField(help_text='идентификатор пользователя')
+    conn_type = models.SmallIntegerField(
+        verbose_name='Тип подключения', choices=ConnectionChoices.choices,
+        default=ConnectionChoices.POSTGRESQL)
 
     class Meta:
         db_table = "datasources"
+        unique_together = ('host', 'db')
 
 
 class DatasourceMeta(models.Model):
@@ -39,7 +52,6 @@ class DatasourceMeta(models.Model):
     Мета информация для источников данных
     """
 
-    database_name = models.CharField(max_length=255, help_text="название базы", db_index=True)
     collection_name = models.CharField(max_length=255, help_text="название коллекции")
     fields = models.TextField(help_text="мета-информация полей")
     stats = models.TextField(help_text="статистика", null=True)
