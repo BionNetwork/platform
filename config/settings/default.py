@@ -117,10 +117,16 @@ LOGGING = {
         },
     },
     'handlers': {
-        'file': {
+        'core': {
             'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
             'class': 'logging.FileHandler',
             'filename': os.path.join(BASE_DIR, 'data', 'logs', 'application.log'),
+            'formatter': 'verbose'
+        },
+        'etl': {
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'data', 'logs', 'etl.log'),
             'formatter': 'verbose'
         },
         'console': {
@@ -133,12 +139,17 @@ LOGGING = {
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO')
         },
         'django.request': {
-            'handlers': ['file'],
+            'handlers': ['core'],
             'level': 'ERROR',
             'propagate': False
         },
         'core.views': {
-            'handlers': ['file'],
+            'handlers': ['core'],
+            'level': 'ERROR',
+            'propagate': True
+        },
+        'etl.views': {
+            'handlers': ['etl'],
             'level': 'ERROR',
             'propagate': True
         }

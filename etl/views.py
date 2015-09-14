@@ -9,9 +9,11 @@ from django.core.urlresolvers import reverse
 from core.views import BaseView, BaseTemplateView
 from core.models import Datasource
 import forms as etl_forms
+import logging
 
 import helpers
 
+logger = logging.getLogger(__name__)
 
 class SourcesListView(BaseTemplateView):
 
@@ -124,6 +126,12 @@ class RemoveSourceView(BaseView):
 class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
-        result = helpers.check_connection(request.POST)
-        return self.json_response(
-            {'result': 'error' if not result else 'success', })
+        try:
+            result = helpers.check_connection(request.POST)
+            return self.json_response(
+                {'result': 'error' if not result else 'success', })
+        except Exception as e:
+            logger.exception(e.message)
+            return self.json_response(
+                {'result': 'error'}
+            )
