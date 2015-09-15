@@ -41,14 +41,13 @@ UserService = (function() {
   };
 
   UserService.getCookie = function(name) {
-    var cookie, cookieValue, cookies, i, j, len, ref;
+    var cookie, cookieValue, cookies, i, len;
     cookieValue = null;
     if (document.cookie && document.cookie !== '') {
       cookies = document.cookie.split(';');
-      ref = cookies.length;
-      for (j = 0, len = ref.length; j < len; j++) {
-        i = ref[j];
-        cookie = jQuery.trim(cookies[i]);
+      for (i = 0, len = cookies.length; i < len; i++) {
+        cookie = cookies[i];
+        cookie = jQuery.trim(cookie);
         if (cookie.substring(0, name.length + 1) === (name + '=')) {
           cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
           break;
