@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
+from django.conf import settings
 
 from core.views import BaseView, BaseTemplateView
 from core.models import Datasource
@@ -12,8 +13,11 @@ import forms as etl_forms
 import logging
 
 import helpers
+from . import r_server
+
 
 logger = logging.getLogger(__name__)
+
 
 class SourcesListView(BaseTemplateView):
 
@@ -97,7 +101,8 @@ class EditSourceView(BaseTemplateView):
     def post(self, request, *args, **kwargs):
 
         post = request.POST
-        source = get_object_or_404(Datasource, pk=kwargs.get('id'))
+        source_id = kwargs.get('id')
+        source = get_object_or_404(Datasource, pk=source_id)
         form = etl_forms.SourceForm(post, instance=source)
 
         if not form.is_valid():
@@ -108,6 +113,11 @@ class EditSourceView(BaseTemplateView):
             return self.render_to_response(
                 {'form': form,
                  'error_message': 'Подключение не удалось! Подключение не сохранено!'})
+
+        if form.has_changed() and settings.USE_REDIS_CACHE:
+            user_dbs = '{0}_user_dbs'.format(request.user.id)
+            r_server.lrem(user_dbs, 1, source_id)
+            r_server.delete('source_{0}_{1}'.format(request.user.id, source_id))
 
         form.save()
 
@@ -136,3 +146,15 @@ class CheckConnectionView(BaseView):
             return self.json_response(
                 {'status': 'error', 'message': 'Ошибка во время проверки соединения'}
             )
+
+
+class GetConnectionDataView(BaseView):
+
+    def get(self, request, *args, **kwargs):
+        source = get_object_or_404(Datasource, pk=kwargs.get('id'))
+        try:
+            dbs = helpers.get_db_info(request.user.id, source)
+        except ValueError as err:
+            return self.json_response({'status': 'error', 'message': err.message})
+
+        return self.json_response({'data': dbs, 'status': 'success'})

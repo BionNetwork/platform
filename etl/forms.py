@@ -23,5 +23,5 @@ class SourceForm(forms.ModelForm):
         fields = ('conn_type', 'db', 'login', 'password', 'host', 'port')
         password = forms.CharField(widget=forms.PasswordInput)
         widgets = {
-            'password': forms.PasswordInput(),
+            'password': forms.PasswordInput(render_value=True),
         }

@@ -12,4 +12,5 @@ urlpatterns = [
     url(r'^datasources/edit/(?P<id>\d+)/$', views.EditSourceView.as_view(), name='datasources.edit'),
     url(r'^datasources/add$', views.NewSourceView.as_view(), name='datasources.add'),
     url(r'^datasources/check_conn$', views.CheckConnectionView.as_view(), name='datasources.check_conn'),
+    url(r'^datasources/get_data/(?P<id>\d+)/$', views.GetConnectionDataView.as_view(), name='datasources.get_data'),
 ]

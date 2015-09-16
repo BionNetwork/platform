@@ -26,7 +26,7 @@ class Datasource(models.Model):
     """
 
     def __str__(self):
-        return self.host + " " + self.database
+        return self.host + " " + self.db
 
     def was_created_recently(self):
         return self.create_date >= timezone.now() - datetime.timedelta(days=1)

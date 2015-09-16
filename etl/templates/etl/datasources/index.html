@@ -50,7 +50,11 @@
                                 <td>
                                     <a href="{% url "etl:datasources.edit" row.id %}"><i class="fa fa-edit text-blue"></i></a> &nbsp;
                                     <a href="javascript:void(0)"
-                                       onclick="removeSource('{% url "etl:datasources.delete" row.id %}')"><i class="fa fa-remove text-danger"></i></a>
+                                       onclick="removeSource('{% url "etl:datasources.delete" row.id %}')">
+                                    <i class="fa fa-remove text-danger"></i></a>&nbsp;&nbsp;
+                                    <a href="javascript:;"
+                                       onclick="getConnectionData('{% url "etl:datasources.get_data" row.id %}')">
+                                    <i class="fa fa-database text-orange"></i></a>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -83,30 +87,74 @@
         </div>
     </div>
 
-    <script>
-        function search(){
-            var etlUrl = $('#source_table').attr('data-url'),
-                search = $('#search').val();
-            document.location = etlUrl+'?search='+search;
-        }
-
-        function removeSource(url){
-            $.confirm({
-                text: "Вы действительно хотите удалить источник?",
-                confirm: function(button) {
-                    $.post(url,
-                        {csrfmiddlewaretoken: csrftoken},
-                        function(data) {
-                            window.location = data.redirect_url;
-                        }
-                    );
-                },
-                title:"Удаление источника",
-                confirmButton: "Удалить",
-                cancelButton: "Отмена"
-            });
-        }
-    </script>
-
 {% endblock content %}
 
+
+{% block modal %}
+    <div class="modal inmodal" tabindex="1" role="dialog" aria-hidden="true" id="modal-data">
+        <div class="modal-dialog" style="width:1200px;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span aria-hidden="true">&times;</span>
+                        <span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title">Список источников</h4>
+                </div>
+                <div class="modal-body" style="height:600px;">
+                    <div class="row">
+                        <div class="col-md-5" style="height:550px; overflow-y: auto; overflow-x: auto">
+                            <h3>Базы данных</h3>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="panel-group" id="databases" role="tablist">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-7" style="height:550px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/html" id="database-rows">
+        <% _.each(data, function(row) { %>
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <a class="collapsed fa fa-database" data-toggle="collapse"
+                        href="#<%= row.db_name %>Tables" aria-controls="<%= row.db_name %>Tables">
+                        <%= row.db_name2 %><br>
+                    </a>
+                </div>
+                <div id="<%= row.db_name %>Tables" class="panel-collapse collapse">
+                    <% _.each(row.tables, function(table) { %>
+                        <div class="col-sm-offset-1">
+                            <input type="checkbox">&nbsp;&nbsp;
+                                <a class="collapsed fa fa-table" data-toggle="collapse"
+                                    href="#<%= row.db_name %><%= table.name %>Сols"
+                                   aria-controls="<%= row.db_name %><%= table.name %>Сols">
+                                    <%= table.name %>
+                                </a>
+                        </div>
+                        <!--<div id="<%= row.db_name %><%= table.name %>Сols"-->
+                             <!--class="panel-collapse collapse col-sm-offset-3">-->
+                            <!--<% _.each(table.columns, function(col) { %>-->
+                                <!--<div>-->
+                                    <!--<a href="#" class="fa fa-square-o"> <%= col %></a>-->
+                                <!--</div>-->
+                            <!--<% }); %>-->
+                        <!--</div>-->
+                    <% }); %>
+                </div>
+            </div>
+        <% }); %>
+    </script>
+
+
+{% endblock modal %}
+
+{% block javascript %}
+    <script src="{% static 'js/sources.js' %}"></script>
+{% endblock javascript %}

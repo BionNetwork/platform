@@ -179,6 +179,13 @@ STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "assets"),
 )
 
+# redis conf
+REDIS_HOST = ''
+REDIS_PORT = ''
+REDIS_DB = ''
+REDIS_EXPIRE = 60 * 5
+USE_REDIS_CACHE = True
+
 try:
     from .local import *
 except ImportError:
