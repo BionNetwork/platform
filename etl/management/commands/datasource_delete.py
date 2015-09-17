@@ -14,8 +14,21 @@ class Command(BaseCommand):
         print "Searching datasources by args: %s" % json.dumps(args)
         filter_cond = dict()
         values = (arg.split('=') for arg in args if len(arg.split('=')) > 1)
+
         for value in values:
             filter_cond[value[0]] = value[1]
+        delete = True
+        ask_deletion = None
+
+        if len(filter_cond) == 0:
+            while ask_deletion not in ['Y', 'n']:
+                ask_deletion = raw_input("Вы действительно хотите удалить все источники? (Y/n) ")
+                if ask_deletion == 'Y':
+                    delete = True
+                else:
+                    delete = False
+        if not delete:
+            return False
         sources = Datasource.objects.filter(**filter_cond)
 
         if sources is not None:
