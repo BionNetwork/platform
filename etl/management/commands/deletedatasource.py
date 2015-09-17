@@ -31,7 +31,7 @@ class Command(BaseCommand):
             return False
         sources = Datasource.objects.filter(**filter_cond)
 
-        if sources is not None:
+        if sources.exists():
             for source in sources:
                 source.delete()
                 print 'Deleted datasource %d' % source['id']
