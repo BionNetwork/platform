@@ -180,11 +180,11 @@ STATICFILES_DIRS = (
 )
 
 # redis conf
-REDIS_HOST = ''
-REDIS_PORT = ''
-REDIS_DB = ''
+REDIS_HOST = 'localhost'
+REDIS_PORT = '6379'
+REDIS_DB = '0'
 REDIS_EXPIRE = 60 * 5
-USE_REDIS_CACHE = True
+USE_REDIS_CACHE = Falsef
 
 try:
     from .local import *
