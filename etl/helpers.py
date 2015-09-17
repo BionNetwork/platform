@@ -158,6 +158,7 @@ class DataSourceService(object):
             int(conn_info.get('conn_type', '')))
 
         del conn_info['conn_type']
+        conn_info['port'] = int(conn_info['port'])
 
         conn = instance.get_connection(conn_info)
         return conn
