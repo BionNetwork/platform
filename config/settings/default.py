@@ -184,7 +184,7 @@ REDIS_HOST = 'localhost'
 REDIS_PORT = '6379'
 REDIS_DB = '0'
 REDIS_EXPIRE = 60 * 5
-USE_REDIS_CACHE = Falsef
+USE_REDIS_CACHE = False
 
 try:
     from .local import *
