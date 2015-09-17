@@ -115,9 +115,12 @@ class EditSourceView(BaseTemplateView):
                  'error_message': 'Подключение не удалось! Подключение не сохранено!'})
 
         if form.has_changed() and settings.USE_REDIS_CACHE:
-            user_dbs = '{0}_user_dbs'.format(request.user.id)
-            r_server.lrem(user_dbs, 1, source_id)
-            r_server.delete('source_{0}_{1}'.format(request.user.id, source_id))
+            # отыскиваем ключи для удаления
+            user_db_key = helpers.RedisCacheKeys.get_user_databases(request.user.id)
+            user_datasource_key = helpers.RedisCacheKeys.get_user_datasource(request.user.id, source_id)
+
+            r_server.lrem(user_db_key, 1, source_id)
+            r_server.delete(user_datasource_key)
 
         form.save()
 

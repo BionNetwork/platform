@@ -43,10 +43,10 @@ def get_db_info(user_id, source):
     result = []
 
     if settings.USE_REDIS_CACHE:
-        user_dbs = '{0}_user_dbs'.format(user_id)
-        source_str = 'source_{0}_{1}'.format(user_id, '{0}')
+        user_db_key = RedisCacheKeys.get_user_databases(user_id)
+        user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
 
-        if not r_server.exists(source_str.format(source.id)):
+        if not r_server.exists(user_datasource_key):
             conn_info = {
                 'host': get_utf8_string(source.host),
                 'user': get_utf8_string(source.login or ''),
@@ -68,22 +68,23 @@ def get_db_info(user_id, source):
                     "db_name2": '{0}: {1}'.format(source.host, source.db),
                     "tables": tables
                 }
-                if str(source.id) not in r_server.lrange(user_dbs, 0, -1):
-                    r_server.rpush(user_dbs, source.id)
-                r_server.set(source_str.format(source.id), json.dumps(new_db))
-                r_server.expire(source_str.format(source.id), settings.REDIS_EXPIRE)
+                if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
+                    r_server.rpush(user_db_key, source.id)
+                r_server.set(user_datasource_key, json.dumps(new_db))
+                r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
-        for el in r_server.lrange(user_dbs, 0, -1):
-            if not r_server.exists(source_str.format(el)):
-                r_server.lrem(user_dbs, 1, el)
+        for el in r_server.lrange(user_db_key, 0, -1):
+            el_key = RedisCacheKeys.get_user_datasource(user_id, el)
+            if not r_server.exists(el_key):
+                r_server.lrem(user_db_key, 1, el)
             else:
-                result.append(json.loads(r_server.get(source_str.format(el))))
+                result.append(json.loads(r_server.get(el_key)))
 
     return result
 
 
 class Postgresql(object):
-
+    """Управление источником данных Postgres"""
     @staticmethod
     def get_connection(conn_info):
         try:
@@ -109,7 +110,7 @@ class Postgresql(object):
 
 
 class Mysql(object):
-
+    """Управление источником данных MySQL"""
     @staticmethod
     def get_connection(conn_info):
         try:
@@ -133,7 +134,7 @@ class Mysql(object):
 
 
 class DataSourceConnectionFactory(object):
-
+    """Фабрика для подключения к источникам данных"""
     @staticmethod
     def factory(conn_type):
         if conn_type == ConnectionChoices.POSTGRESQL:
@@ -145,7 +146,7 @@ class DataSourceConnectionFactory(object):
 
 
 class DataSourceService(object):
-
+    """Сервис для источников данных"""
     @staticmethod
     def get_tables(source, conn):
         instance = DataSourceConnectionFactory.factory(source.conn_type)
@@ -162,3 +163,14 @@ class DataSourceService(object):
 
         conn = instance.get_connection(conn_info)
         return conn
+
+
+class RedisCacheKeys(object):
+    """Ключи для редиса"""
+    @staticmethod
+    def get_user_databases(user_id):
+        return '{0}_user_dbs'.format(user_id)
+
+    @staticmethod
+    def get_user_datasource(user_id, datasource_id):
+        return 'source_{0}_{1}'.format(user_id, datasource_id)
