@@ -64,8 +64,8 @@ def get_db_info(user_id, source):
                 tables = DataSourceService.get_tables(source, conn)
 
                 new_db = {
-                    "db_name": '{0}{1}'.format(source.host, source.db),
-                    "db_name2": '{0}: {1}'.format(source.host, source.db),
+                    "db": source.db,
+                    "host": source.host,
                     "tables": tables
                 }
                 if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
