@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import psycopg2
 import MySQLdb
 import json
+from itertools import groupby
 
 from django.conf import settings
 
@@ -47,31 +48,19 @@ def get_db_info(user_id, source):
         user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
 
         if not r_server.exists(user_datasource_key):
-            conn_info = {
-                'host': get_utf8_string(source.host),
-                'user': get_utf8_string(source.login or ''),
-                'passwd': get_utf8_string(source.password or ''),
-                'db': get_utf8_string(source.db),
-                'port': source.port,
-                'conn_type': source.conn_type
-            }
-
+            conn_info = source.get_connection_dict()
             conn = DataSourceService.get_connection(conn_info)
+            tables = DataSourceService.get_tables(source, conn)
 
-            if not conn:
-                raise ValueError("Сбой при подключении!")
-            else:
-                tables = DataSourceService.get_tables(source, conn)
-
-                new_db = {
-                    "db": source.db,
-                    "host": source.host,
-                    "tables": tables
-                }
-                if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
-                    r_server.rpush(user_db_key, source.id)
-                r_server.set(user_datasource_key, json.dumps(new_db))
-                r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
+            new_db = {
+                "db": source.db,
+                "host": source.host,
+                "tables": tables
+            }
+            if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
+                r_server.rpush(user_db_key, source.id)
+            r_server.set(user_datasource_key, json.dumps(new_db))
+            r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
         for el in r_server.lrange(user_db_key, 0, -1):
             el_key = RedisCacheKeys.get_user_datasource(user_id, el)
@@ -83,7 +72,24 @@ def get_db_info(user_id, source):
     return result
 
 
-class Postgresql(object):
+def get_columns_info(source, tables):
+
+    conn_info = source.get_connection_dict()
+    conn = DataSourceService.get_connection(conn_info)
+
+    return DataSourceService.get_columns(source, tables, conn)
+
+
+class SUBD(object):
+
+    @staticmethod
+    def get_query_result(query, conn):
+        cursor = conn.cursor()
+        cursor.execute(query)
+        return cursor.fetchall()
+
+
+class Postgresql(SUBD):
     """Управление источником данных Postgres"""
     @staticmethod
     def get_connection(conn_info):
@@ -100,16 +106,37 @@ class Postgresql(object):
         query = """
             SELECT table_name FROM information_schema.tables where table_schema='public';
         """
-        cursor = conn.cursor()
-        cursor.execute(query)
-        records = cursor.fetchall()
+        records = Postgresql.get_query_result(query, conn)
 
         records = map(lambda x: {'name': x[0], 'columns': []}, records)
 
         return records
 
+    @staticmethod
+    def get_columns(source, tables, conn):
 
-class Mysql(object):
+        tables_str = ', '.join(["'{0}'".format(y) for y in tables])
+
+        query = """
+            SELECT table_name, column_name FROM information_schema.columns
+            where table_name={0};
+        """.format(tables_str)
+
+        print query
+        records = Postgresql.get_query_result(query, conn)
+
+        print groupby(records, lambda x: x[0])
+
+        result = []
+        for key, group in groupby(records, lambda x: x[0]):
+            result.append({
+                "tname": key, 'db': source.db, 'host': source.host,
+                "cols": [x[1] for x in records]
+            })
+        print result
+
+
+class Mysql(SUBD):
     """Управление источником данных MySQL"""
     @staticmethod
     def get_connection(conn_info):
@@ -153,6 +180,11 @@ class DataSourceService(object):
         return instance.get_tables(source, conn)
 
     @staticmethod
+    def get_columns(source, tables, conn):
+        instance = DataSourceConnectionFactory.factory(source.conn_type)
+        return instance.get_columns(source, tables, conn)
+
+    @staticmethod
     def get_connection(conn_info):
 
         instance = DataSourceConnectionFactory.factory(
@@ -162,6 +194,8 @@ class DataSourceService(object):
         conn_info['port'] = int(conn_info['port'])
 
         conn = instance.get_connection(conn_info)
+        if conn is None:
+            raise ValueError("Сбой при подключении!")
         return conn
 
 

@@ -23,10 +23,8 @@ class Command(BaseCommand):
         if len(filter_cond) == 0:
             while ask_deletion not in ['Y', 'n']:
                 ask_deletion = raw_input("Вы действительно хотите удалить все источники? (Y/n) ")
-                if ask_deletion == 'Y':
-                    delete = True
-                else:
-                    delete = False
+                delete = ask_deletion == 'Y'
+
         if not delete:
             return False
         sources = Datasource.objects.filter(**filter_cond)

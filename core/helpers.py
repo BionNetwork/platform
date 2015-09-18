@@ -18,3 +18,12 @@ class Settings:
             protocol = 'http'
 
         return "%s://%s" % (protocol, host)
+
+
+def get_utf8_string(value):
+    """
+    Кодирование в utf-8 строки
+    :param value: string
+    :return: string
+    """
+    return unicode(value)

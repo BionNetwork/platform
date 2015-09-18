@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import json
+
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
@@ -161,3 +163,35 @@ class GetConnectionDataView(BaseView):
             return self.json_response({'status': 'error', 'message': err.message})
 
         return self.json_response({'data': dbs, 'status': 'success'})
+
+
+class GetColumnsView(BaseView):
+
+    def get(self, request, *args, **kwargs):
+
+        err_mess = ''
+
+        d = {"user_id": request.user.id}
+        try:
+            d["host"], d["db"], table = request.GET.get('h_bd_t').split('*')
+        except ValueError:
+            err_mess = 'Подключение не удалось!'
+        else:
+            try:
+                source = Datasource.objects.get(**d)
+            except Datasource.DoesNotExists:
+                err_mess = 'Такого источника не найдено!'
+            else:
+                try:
+                    columns = helpers.get_columns_info(source, [table, ])
+
+                    print 'ad;isugasmg'
+                    print columns
+                except ValueError as err:
+                    err_mess = err.message
+
+        if err_mess:
+            return self.json_response(
+                {'data': '', 'status': 'error', 'message': 'Подключение не удалось!'})
+
+        return self.json_response({'data': columns, 'status': 'success'})

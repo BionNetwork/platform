@@ -9,6 +9,8 @@ from django.utils import timezone
 
 from djchoices import ChoiceItem, DjangoChoices
 
+from helpers import get_utf8_string
+
 """
 Базовые модели приложения
 """
@@ -41,6 +43,16 @@ class Datasource(models.Model):
     conn_type = models.SmallIntegerField(
         verbose_name='Тип подключения', choices=ConnectionChoices.choices,
         default=ConnectionChoices.POSTGRESQL)
+
+    def get_connection_dict(self):
+        return {
+            'host': get_utf8_string(self.host),
+            'user': get_utf8_string(self.login or ''),
+            'passwd': get_utf8_string(self.password or ''),
+            'db': get_utf8_string(self.db),
+            'port': self.port,
+            'conn_type': self.conn_type
+        }
 
     class Meta:
         db_table = "datasources"

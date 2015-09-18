@@ -26,7 +26,6 @@ function checkConnection(){
         contentType: false,
         type: 'POST',
         success: function(result){
-            //console.log(data);
             if(result.status == 'error'){
                 $.confirm({
                     text: result.message || "Подключение не удалось!",
@@ -72,6 +71,8 @@ function removeSource(url){
     });
 }
 
+var chosenTables;
+
 function getConnectionData(dataUrl){
 
     $.get(dataUrl,
@@ -84,9 +85,110 @@ function getConnectionData(dataUrl){
             var dataWindow = $('#modal-data');
             dataWindow.modal('show');
 
+            chosenTables = $('#chosenTables');
+
             if(res.status == 'error'){
                 confirmAlert(res.message);
             }
 
         });
 }
+
+function checkChbs(div_id){
+    var d = $('#'+div_id);
+    if(d.attr('style')){
+        d.removeAttr('style');
+        $('#tToR').addClass('disabled');
+    }
+
+    var chbs = $('.mychb:checked');
+    if(chbs.length){
+        $('#tsToR').removeClass('disabled');
+    }
+    else{
+        $('#tsToR').addClass('disabled');
+    }
+}
+
+function setActive(div_id){
+    var d = $('#'+div_id);
+    console.log('d', d);
+    if(d.attr('style')){
+        d.removeAttr('style');
+        $('.mychb').prop('checked', false);
+        $('#tToR').addClass('disabled');
+
+        var chbs = $('.mychb:checked');
+        if(!chbs.length){
+            $('#tsToR').addClass('disabled');
+        }
+    }
+    else{
+        $('.mychbdiv').removeAttr('style');
+        $('.mychb').prop('checked', false);
+        d.css('background-color', 'orange');
+        d.find('input[type="checkbox"]').prop('checked', true);
+        $('#tToR').removeClass('disabled');
+    }
+}
+
+function tableToRight(url){
+    var orange = $('div[style="background-color: orange;"]');
+    console.log(orange);
+    if(orange.length){
+        $.get(url,
+              {
+                  csrfmiddlewaretoken: csrftoken,
+                  h_bd_t: orange.attr('host-db-table'),
+
+              },
+              function(data){
+                 console.log(data);
+              }
+        );
+    }
+
+
+    data = [{'tname': 'T1', 'db': 'db', 'host': 'host', 'cols': [1,2,3]}]
+
+    var colsTemplate = _.template($('#table-cols').html());
+    chosenTables.append(colsTemplate({data: data}));
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
