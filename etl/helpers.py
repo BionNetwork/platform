@@ -88,6 +88,26 @@ class SUBD(object):
         cursor.execute(query)
         return cursor.fetchall()
 
+    @staticmethod
+    def get_columns(source, tables, conn):
+
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+
+        query = """
+            SELECT table_name, column_name FROM information_schema.columns
+            where table_name in {0};
+        """.format(tables_str)
+
+        records = Postgresql.get_query_result(query, conn)
+
+        result = []
+        for key, group in groupby(records, lambda x: x[0]):
+            result.append({
+                "tname": key, 'db': source.db, 'host': source.host,
+                "cols": [x[1] for x in group]
+            })
+        return result
+
 
 class Postgresql(SUBD):
     """Управление источником данных Postgres"""
@@ -104,36 +124,13 @@ class Postgresql(SUBD):
     @staticmethod
     def get_tables(source, conn):
         query = """
-            SELECT table_name FROM information_schema.tables where table_schema='public';
+            SELECT table_name FROM information_schema.tables
+            where table_schema='public' order by table_name;
         """
         records = Postgresql.get_query_result(query, conn)
-
-        records = map(lambda x: {'name': x[0], 'columns': []}, records)
+        records = map(lambda x: {'name': x[0], }, sorted(records, key=lambda y: y[0]))
 
         return records
-
-    @staticmethod
-    def get_columns(source, tables, conn):
-
-        tables_str = ', '.join(["'{0}'".format(y) for y in tables])
-
-        query = """
-            SELECT table_name, column_name FROM information_schema.columns
-            where table_name={0};
-        """.format(tables_str)
-
-        print query
-        records = Postgresql.get_query_result(query, conn)
-
-        print groupby(records, lambda x: x[0])
-
-        result = []
-        for key, group in groupby(records, lambda x: x[0]):
-            result.append({
-                "tname": key, 'db': source.db, 'host': source.host,
-                "cols": [x[1] for x in records]
-            })
-        print result
 
 
 class Mysql(SUBD):
@@ -149,13 +146,12 @@ class Mysql(SUBD):
     @staticmethod
     def get_tables(source, conn):
         query = """
-            SELECT table_name FROM information_schema.tables where table_schema='{0}';
+            SELECT table_name FROM information_schema.tables
+            where table_schema='{0}' order by table_name;
         """.format(source.db)
-        cursor = conn.cursor()
-        cursor.execute(query)
-        records = cursor.fetchall()
 
-        records = map(lambda x: {'name': x[0], 'columns': []}, records)
+        records = Mysql.get_query_result(query, conn)
+        records = map(lambda x: {'name': x[0], }, records)
 
         return records
 

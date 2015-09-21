@@ -168,30 +168,25 @@ class GetConnectionDataView(BaseView):
 class GetColumnsView(BaseView):
 
     def get(self, request, *args, **kwargs):
-
+        get = request.GET
         err_mess = ''
-
-        d = {"user_id": request.user.id}
+        d = {
+            "user_id": request.user.id,
+            "host": get.get('host', ''),
+            "db": get.get('db', '')
+        }
+        tables = json.loads(get.get('tables', ''))
         try:
-            d["host"], d["db"], table = request.GET.get('h_bd_t').split('*')
-        except ValueError:
-            err_mess = 'Подключение не удалось!'
+            source = Datasource.objects.get(**d)
+        except Datasource.DoesNotExists:
+            err_mess = 'Такого источника не найдено!'
         else:
             try:
-                source = Datasource.objects.get(**d)
-            except Datasource.DoesNotExists:
-                err_mess = 'Такого источника не найдено!'
-            else:
-                try:
-                    columns = helpers.get_columns_info(source, [table, ])
-
-                    print 'ad;isugasmg'
-                    print columns
-                except ValueError as err:
-                    err_mess = err.message
+                columns = helpers.get_columns_info(source, tables)
+            except ValueError as err:
+                err_mess = err.message
 
         if err_mess:
-            return self.json_response(
-                {'data': '', 'status': 'error', 'message': 'Подключение не удалось!'})
+            return self.json_response({'message': err_mess})
 
-        return self.json_response({'data': columns, 'status': 'success'})
+        return self.json_response({'data': columns, 'message': ''})

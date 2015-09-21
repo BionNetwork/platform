@@ -71,27 +71,28 @@ function removeSource(url){
     });
 }
 
-var chosenTables;
+var chosenTables, colsTemplate;
 
 function getConnectionData(dataUrl){
+
+    colsTemplate = _.template($('#table-cols').html())
 
     $.get(dataUrl,
         {csrfmiddlewaretoken: csrftoken},
         function(res){
-        console.log(res);
             var rowsTemplate = _.template($('#database-rows').html());
-            $('#databases').html(rowsTemplate({data: res.data}));
-
-            var dataWindow = $('#modal-data');
-            dataWindow.modal('show');
+                $('#databases').html(rowsTemplate({data: res.data})),
+                dataWindow = $('#modal-data');
 
             chosenTables = $('#chosenTables');
+            chosenTables.html('');
+            dataWindow.modal('show');
 
             if(res.status == 'error'){
                 confirmAlert(res.message);
             }
-
-        });
+        }
+    );
 }
 
 function checkChbs(div_id){
@@ -112,7 +113,6 @@ function checkChbs(div_id){
 
 function setActive(div_id){
     var d = $('#'+div_id);
-    console.log('d', d);
     if(d.attr('style')){
         d.removeAttr('style');
         $('.mychb').prop('checked', false);
@@ -132,63 +132,47 @@ function setActive(div_id){
     }
 }
 
-function tableToRight(url){
-    var orange = $('div[style="background-color: orange;"]');
-    console.log(orange);
-    if(orange.length){
-        $.get(url,
-              {
-                  csrfmiddlewaretoken: csrftoken,
-                  h_bd_t: orange.attr('host-db-table'),
-
-              },
-              function(data){
-                 console.log(data);
-              }
-        );
-    }
-
-
-    data = [{'tname': 'T1', 'db': 'db', 'host': 'host', 'cols': [1,2,3]}]
-
-    var colsTemplate = _.template($('#table-cols').html());
-    chosenTables.append(colsTemplate({data: data}));
-
+function getColumns(url, dict){
+    $.get(url, dict,
+        function(res){
+            if(res.message){
+               confirmAlert(res.message);
+            }
+            else{
+               chosenTables.append(colsTemplate({data: res.data}));
+            }
+        }
+    );
 }
 
+function tableToRight(url){
+    var orange = $('div[style="background-color: orange;"]');
 
+    if(orange.length && !$('#'+orange.attr('id')+'Cols').length){
+        getColumns(url, {
+                    csrfmiddlewaretoken: csrftoken,
+                    host: orange.attr('data-host'),
+                    db : orange.attr('data-db'),
+                    tables: JSON.stringify([orange.attr('data-table'), ])});
+                   }
+}
 
+function tablesToRight(url){
+    var divs = $('.mychb:checked').closest('div'),
+        dict = {
+                csrfmiddlewaretoken: csrftoken,
+                host: divs.attr('data-host'),
+                db : divs.attr('data-db'),
+            }
 
+    var tables = divs.map(function(i, el) {
+        var id = $(this).attr('id');
+        if(!$('#'+id+'Cols').length){
+            return $(this).attr('data-table');
+        }
+    }).get();
 
+    dict['tables'] = JSON.stringify(tables);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    getColumns(url, dict);
+}
