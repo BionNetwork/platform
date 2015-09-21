@@ -99,12 +99,12 @@
                         <span aria-hidden="true">&times;</span>
                         <span class="sr-only">Close</span>
                     </button>
-                    <h4 class="modal-title">Список источников</h4>
+                    <h4 class="modal-title">Управление источником</h4>
                 </div>
                 <div class="modal-body" style="height:600px;font-size:13px">
                     <div class="row">
                         <div class="col-md-3" style="height:550px; overflow-y: auto;">
-                            <h3>Базы данных</h3>
+                            <h3>База данных</h3>
                             <div class="row">
                                 <div class="col-md-12">
                                     <div class="panel-group" id="databases" role="tablist">
@@ -131,8 +131,8 @@
                                 <div id="chosenTables">
                                 </div>
                             </div>
-                            <div style="height:350px;overflow-x:scroll">
-                                <div id="chosenColsRows" style="width:1000%;">
+                            <div style="height:340px;overflow-x:scroll;border: #ddd solid 1px;">
+                                <div id="chosenColsRows" style="width:10000%;">
                                 </div>
                             </div>
                         </div>
@@ -143,49 +143,80 @@
     </div>
 
     <script type="text/html" id="database-rows">
-        <% _.each(data, function(row) { %>
             <div class="panel panel-default">
                 <div class="panel-heading">
                     <a class="collapsed fa fa-database" data-toggle="collapse"
-                        href="#<%= row.host%><%= row.db%>Tables" aria-controls="<%= row.host%><%= row.db%>Tables">
-                        <%= row.host%>: <%= row.db%><br>
+                        href="#<%= data.host%><%= data.db%>Tables"
+                       aria-controls="<%= data.host %><%= data.db %>Tables">
+                        <%= data.host%>: <%= data.db%><br>
                     </a>
                 </div>
-                <div id="<%= row.host%><%= row.db%>Tables" class="panel-collapse collapse">
-                    <% _.each(row.tables, function(table) { %>
-                        <div class="col-sm-offset-1 mychbdiv" id="<%= row.host%><%= row.db%><%= table.name %>"
-                                data-host="<%= row.host%>" data-db="<%= row.db%>" data-table="<%= table.name %>">
+                <div id="<%= data.host%><%= data.db%>Tables" class="panel-collapse collapse">
+                    <% _.each(data.tables, function(table) { %>
+                        <div class="col-sm-offset-1 mychbdiv" id="<%= table.name %>"
+                                data-host="<%= data.host%>" data-db="<%= data.db%>" data-table="<%= table.name %>">
                             <input type="checkbox" class="mychb"
-                                   onclick="checkChbs('<%= row.host%><%= row.db%><%= table.name %>')">&nbsp;&nbsp;
+                                   onclick="checkChbs('<%= table.name %>')">&nbsp;&nbsp;
                                 <a class="collapsed fa fa-table" data-toggle="collapse"
-                                    onclick="setActive('<%= row.host%><%= row.db%><%= table.name %>')">
+                                    onclick="setActive('<%= table.name %>')">
                                     <%= table.display %>
                                 </a>
                         </div>
                     <% }); %>
                 </div>
             </div>
-        <% }); %>
     </script>
 
     <script type="text/html" id="table-cols">
         <% _.each(data, function(row) { %>
             <div class="panel panel-default col-md-4">
                 <a class="collapsed fa fa-table" data-toggle="collapse" style="margin-left:5px;"
-                    href="#<%= row.host%><%= row.db%><%= row.tname%>Cols"
-                    aria-controls="<%= row.host%><%= row.db%><%= row.tname%>Cols">
-                    <%= row.tname%><br>
+                    href="#<%= row.tname%>Cols"
+                    aria-controls="<%= row.tname%>Cols">
+                    <%= row.tname %><br>
                 </a>
-                <div id="<%= row.host%><%= row.db%><%= row.tname%>Cols" class="panel-collapse collapse">
+                <div id="<%= row.tname%>Cols" class="panel-collapse collapse">
+
                     <% _.each(row.cols, function(col){ %>
-                        <div class="col-sm-offset-2 mychbdiv">
-                            <a class="collapsed" data-toggle="collapse">
-                                <%= col %>
-                            </a>
+                        <div class="mychbdiv">
+                            <ul>
+                                <li class="dropdown messages-menu">
+                                    <a class="dropdown-toggle" style="font-weight:bold;"
+                                        id="for-col-<%= row.tname%>-<%= col %>"
+                                        data-toggle="dropdown" href="javascript:void(0)">
+                                        <%= col %>
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        <li><a href="javascript:void(0)"
+                                                onclick="addCol('<%= row.tname%>','<%= col %>')">
+                                            Добавить</a></li>
+                                        <li><a href="javascript:void(0)"
+                                                onclick="delCol('col-<%= row.tname%>-<%= col %>')">
+                                            Удалить</a></li>
+                                    </ul>
+                                </li>
+                            </ul>
                         </div>
                     <% }); %>
+
                 </div>
             </div>
+        <% }); %>
+    </script>
+
+    <script type="text/html" id="cols-names">
+        <% _.each(data, function(row) { %>
+            <% _.each(row.cols, function(col) { %>
+                <div style="float:left;min-width:150px;width:auto;"
+                     id="col-<%= row.tname%>-<%= col %>">
+                    <div style="text-align:center;border: #ddd solid 1px;">
+                        <%= row.tname%>
+                    </div>
+                    <div style="text-align:center;border: #ddd solid 1px;">
+                        <%= col %>
+                    </div>
+                </div>
+            <% }); %>
         <% }); %>
     </script>
 

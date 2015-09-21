@@ -41,8 +41,6 @@ def check_connection(post):
 
 def get_db_info(user_id, source):
 
-    result = []
-
     if settings.USE_REDIS_CACHE:
         user_db_key = RedisCacheKeys.get_user_databases(user_id)
         user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
@@ -62,14 +60,18 @@ def get_db_info(user_id, source):
             r_server.set(user_datasource_key, json.dumps(new_db))
             r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
-        for el in r_server.lrange(user_db_key, 0, -1):
-            el_key = RedisCacheKeys.get_user_datasource(user_id, el)
-            if not r_server.exists(el_key):
-                r_server.lrem(user_db_key, 1, el)
-            else:
-                result.append(json.loads(r_server.get(el_key)))
+        return json.loads(r_server.get(user_datasource_key))
 
-    return result
+    else:
+        conn_info = source.get_connection_dict()
+        conn = DataSourceService.get_connection(conn_info)
+        tables = DataSourceService.get_tables(source, conn)
+
+        return {
+            "db": source.db,
+            "host": source.host,
+            "tables": tables
+        }
 
 
 def get_columns_info(source, tables):

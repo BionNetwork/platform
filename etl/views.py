@@ -158,11 +158,11 @@ class GetConnectionDataView(BaseView):
     def get(self, request, *args, **kwargs):
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
         try:
-            dbs = helpers.get_db_info(request.user.id, source)
+            db = helpers.get_db_info(request.user.id, source)
         except ValueError as err:
             return self.json_response({'status': 'error', 'message': err.message})
 
-        return self.json_response({'data': dbs, 'status': 'success'})
+        return self.json_response({'data': db, 'status': 'success'})
 
 
 class GetColumnsView(BaseView):

@@ -71,11 +71,12 @@ function removeSource(url){
     });
 }
 
-var chosenTables, colsTemplate;
+var chosenTables, chosenColsRows, colsTemplate, colNames;
 
 function getConnectionData(dataUrl){
 
-    colsTemplate = _.template($('#table-cols').html())
+    colsTemplate = _.template($('#table-cols').html());
+    colsNames = _.template($('#cols-names').html());
 
     $.get(dataUrl,
         {csrfmiddlewaretoken: csrftoken},
@@ -84,8 +85,10 @@ function getConnectionData(dataUrl){
                 $('#databases').html(rowsTemplate({data: res.data})),
                 dataWindow = $('#modal-data');
 
+            chosenColsRows = $('#chosenColsRows');
             chosenTables = $('#chosenTables');
             chosenTables.html('');
+            chosenColsRows.html('');
             dataWindow.modal('show');
 
             if(res.status == 'error'){
@@ -135,11 +138,13 @@ function setActive(div_id){
 function getColumns(url, dict){
     $.get(url, dict,
         function(res){
+        console.log(res)
             if(res.message){
                confirmAlert(res.message);
             }
             else{
                chosenTables.append(colsTemplate({data: res.data}));
+               chosenColsRows.append(colsNames({data: res.data}));
             }
         }
     );
@@ -153,8 +158,10 @@ function tableToRight(url){
                     csrfmiddlewaretoken: csrftoken,
                     host: orange.attr('data-host'),
                     db : orange.attr('data-db'),
-                    tables: JSON.stringify([orange.attr('data-table'), ])});
-                   }
+                    tables: JSON.stringify([orange.attr('data-table'), ])
+                }
+        );
+    }
 }
 
 function tablesToRight(url){
@@ -165,14 +172,29 @@ function tablesToRight(url){
                 db : divs.attr('data-db'),
             }
 
-    var tables = divs.map(function(i, el) {
-        var id = $(this).attr('id');
+    var tables = divs.map(function(){
+        var el = $(this),
+            id = el.attr('id');
         if(!$('#'+id+'Cols').length){
-            return $(this).attr('data-table');
+            return el.attr('data-table');
         }
     }).get();
 
-    dict['tables'] = JSON.stringify(tables);
+    if(tables.length){
+        dict['tables'] = JSON.stringify(tables);
+        getColumns(url, dict);
+    }
+}
 
-    getColumns(url, dict);
+function addCol(tName, colName){
+    $('#for-col-'+tName+'-'+colName).css('font-weight', 'bold');
+    if(!$('#col-'+tName+'-'+colName).length){
+        chosenColsRows.append(
+        colsNames({data: [{tname: tName, cols: [colName]}]}));
+    }
+}
+
+function delCol(id){
+    $('#for-'+id).css('font-weight', 'normal');
+    $('#'+id).remove();
 }
