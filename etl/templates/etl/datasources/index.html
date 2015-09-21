@@ -101,7 +101,7 @@
                     </button>
                     <h4 class="modal-title">Список источников</h4>
                 </div>
-                <div class="modal-body" style="height:600px;">
+                <div class="modal-body" style="height:600px;font-size:13px">
                     <div class="row">
                         <div class="col-md-3" style="height:550px; overflow-y: auto;">
                             <h3>Базы данных</h3>
@@ -127,8 +127,8 @@
                                     onclick="tablesToLeft()" id="tsToL"></button>
                         </div>
                         <div class="col-md-8" style="height:550px">
-                            <div style="height:200px;overflow-x:scroll">
-                                <div id="chosenTables" style="width:1000%;">
+                            <div style="height:200px;border: #ddd solid 1px; overflow-y:auto">
+                                <div id="chosenTables">
                                 </div>
                             </div>
                             <div style="height:350px;overflow-x:scroll">
@@ -159,7 +159,7 @@
                                    onclick="checkChbs('<%= row.host%><%= row.db%><%= table.name %>')">&nbsp;&nbsp;
                                 <a class="collapsed fa fa-table" data-toggle="collapse"
                                     onclick="setActive('<%= row.host%><%= row.db%><%= table.name %>')">
-                                    <%= table.name %>
+                                    <%= table.display %>
                                 </a>
                         </div>
                     <% }); %>
@@ -170,8 +170,8 @@
 
     <script type="text/html" id="table-cols">
         <% _.each(data, function(row) { %>
-            <div class="panel panel-default" style="height:auto; width:200px; float:left; margin-left:5px;">
-                <a class="collapsed fa fa-table" data-toggle="collapse"
+            <div class="panel panel-default col-md-4">
+                <a class="collapsed fa fa-table" data-toggle="collapse" style="margin-left:5px;"
                     href="#<%= row.host%><%= row.db%><%= row.tname%>Cols"
                     aria-controls="<%= row.host%><%= row.db%><%= row.tname%>Cols">
                     <%= row.tname%><br>

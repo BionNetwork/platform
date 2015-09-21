@@ -103,7 +103,7 @@ class SUBD(object):
         result = []
         for key, group in groupby(records, lambda x: x[0]):
             result.append({
-                "tname": key, 'db': source.db, 'host': source.host,
+                "tname": key[:23], 'db': source.db, 'host': source.host,
                 "cols": [x[1] for x in group]
             })
         return result
@@ -128,7 +128,8 @@ class Postgresql(SUBD):
             where table_schema='public' order by table_name;
         """
         records = Postgresql.get_query_result(query, conn)
-        records = map(lambda x: {'name': x[0], }, sorted(records, key=lambda y: y[0]))
+        records = map(lambda x: {'name': x[0], 'display': x[0][:23]},
+                      sorted(records, key=lambda y: y[0]))
 
         return records
 
@@ -151,7 +152,7 @@ class Mysql(SUBD):
         """.format(source.db)
 
         records = Mysql.get_query_result(query, conn)
-        records = map(lambda x: {'name': x[0], }, records)
+        records = map(lambda x: {'name': x[0], 'display': x[0][:23]}, records)
 
         return records
 
