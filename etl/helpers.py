@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import psycopg2
 import MySQLdb
 import json
+import decimal
 from itertools import groupby
 
 from django.conf import settings
@@ -229,3 +230,17 @@ class RedisCacheKeys(object):
     @staticmethod
     def get_user_datasource(user_id, datasource_id):
         return 'source_{0}_{1}'.format(user_id, datasource_id)
+
+
+class DecimalEncoder(object):
+    @staticmethod
+    def encode(data):
+        """Преобразуем decimal в строку, чтобы передать ответ клиенту"""
+        res = []
+        for row in data:
+            row = list(row)
+            for k, obj in enumerate(row):
+                if isinstance(obj, decimal.Decimal):
+                    row[k] = float(obj)
+            res.append(row)
+        return res

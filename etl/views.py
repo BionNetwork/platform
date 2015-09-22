@@ -170,7 +170,6 @@ class GetColumnsView(BaseView):
 
     def get(self, request, *args, **kwargs):
         get = request.GET
-        err_mess = ''
         d = {
             "user_id": request.user.id,
             "host": get.get('host', ''),
@@ -184,20 +183,19 @@ class GetColumnsView(BaseView):
         else:
             try:
                 columns = helpers.get_columns_info(source, tables)
+
+                return self.json_response({'data': columns, 'message': ''})
             except ValueError as err:
                 err_mess = err.message
 
         if err_mess:
             return self.json_response({'message': err_mess})
 
-        return self.json_response({'data': columns, 'message': ''})
-
 
 class GetDataRowsView(BaseView):
     def get(self, request, *args, **kwargs):
         get = request.GET
 
-        err_mess = ''
         d = {
             "user_id": request.user.id,
             "host": get.get('host', ''),
@@ -216,14 +214,19 @@ class GetDataRowsView(BaseView):
 
             for t_name, col_group in groupby(cols, lambda x: x["table"]):
                 table_names.append(t_name)
-                col_names += [x["col"] for x in col_group]
+                col_names += [x["table"] + "." + x["col"] for x in col_group]
 
             try:
                 data = helpers.get_rows_info(source, table_names, col_names)
+                if len(data) > 0:
+                    data = helpers.DecimalEncoder.encode(data)
+
+                return self.json_response({'status': 'ok', 'data': data})
             except ValueError as err:
                 err_mess = err.message
+            except Exception as e:
+                logger.exception(e.message)
+                err_mess = "Произошла системная ошибка"
 
         if err_mess:
-            return self.json_response({'message': err_mess})
-
-        return self.json_response({'data': data, 'message': ''})
+            return self.json_response({'status': 'error', 'message': err_mess})

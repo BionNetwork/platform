@@ -265,14 +265,18 @@ function refreshData(url){
             var el = $(this);
             return {
                 "table": el.data("table"),
-                "col": el.data("table")+ '.' +el.data("col"),
+                "col": el.data("col")
             }
         }).get();
 
     if(array.length){
         colsInfo['cols'] = JSON.stringify(array);
         $.get(url, colsInfo, function(res){
-            $('#chosenColsRows').append(selectedRow({data: res.data}));
+            if (res.status == 'error') {
+              confirmAlert(res.message)
+            } else {
+              $('#chosenColsRows').append(selectedRow({data: res.data}));
+            }
         });
     }
 }
