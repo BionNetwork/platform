@@ -3,6 +3,9 @@ from __future__ import unicode_literals
 
 __author__ = 'damir'
 
+import json
+import datetime
+
 """
 Хелпер настроек
 """
@@ -27,3 +30,15 @@ def get_utf8_string(value):
     :return: string
     """
     return unicode(value)
+
+
+class CustomJsonEncoder(json.JSONEncoder):
+    """
+        Свой JsonEncoder заэнкодит все что угодно
+    """
+    def default(self, obj):
+        if isinstance(obj, datetime.datetime):
+            return obj.strftime('%d.%m.%Y')
+        elif isinstance(obj, datetime.date):
+            return obj.strftime('%d.%m.%Y')
+        return json.JSONEncoder.default(self, obj)

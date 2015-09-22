@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import json
+from itertools import groupby
 
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -190,3 +191,39 @@ class GetColumnsView(BaseView):
             return self.json_response({'message': err_mess})
 
         return self.json_response({'data': columns, 'message': ''})
+
+
+class GetDataRowsView(BaseView):
+    def get(self, request, *args, **kwargs):
+        get = request.GET
+
+        err_mess = ''
+        d = {
+            "user_id": request.user.id,
+            "host": get.get('host', ''),
+            "db": get.get('db', '')
+        }
+
+        try:
+            source = Datasource.objects.get(**d)
+        except Datasource.DoesNotExists:
+            err_mess = 'Такого источника не найдено!'
+        else:
+            cols = json.loads(get.get('cols', ''))
+
+            table_names = []
+            col_names = []
+
+            for t_name, col_group in groupby(cols, lambda x: x["table"]):
+                table_names.append(t_name)
+                col_names += [x["col"] for x in col_group]
+
+            try:
+                data = helpers.get_rows_info(source, table_names, col_names)
+            except ValueError as err:
+                err_mess = err.message
+
+        if err_mess:
+            return self.json_response({'message': err_mess})
+
+        return self.json_response({'data': data, 'message': ''})

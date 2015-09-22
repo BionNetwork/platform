@@ -186,6 +186,9 @@ REDIS_DB = '0'
 REDIS_EXPIRE = 60 * 5
 USE_REDIS_CACHE = False
 
+# rows select limit
+ETL_COLLECTION_PREVIEW_LIMIT = 1000
+
 try:
     from .local import *
 except ImportError:

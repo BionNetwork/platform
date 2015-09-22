@@ -21,7 +21,7 @@ from django.core.paginator import Paginator
 
 from smtplib import SMTPServerDisconnected
 from .models import User
-from .helpers import Settings
+from .helpers import Settings, CustomJsonEncoder
 import forms as core_forms
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,8 @@ class BaseView(View):
 
     def json_response(self, context, **response_kwargs):
         response_kwargs['content_type'] = 'application/json'
-        return HttpResponse(json.dumps(context), **response_kwargs)
+        return HttpResponse(
+            json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
 class BaseTemplateView(TemplateView):

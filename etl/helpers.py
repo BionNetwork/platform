@@ -82,6 +82,14 @@ def get_columns_info(source, tables):
     return DataSourceService.get_columns(source, tables, conn)
 
 
+def get_rows_info(source, tables, cols):
+
+    conn_info = source.get_connection_dict()
+    conn = DataSourceService.get_connection(conn_info)
+
+    return DataSourceService.get_rows(source, conn, tables, cols)
+
+
 class SUBD(object):
 
     @staticmethod
@@ -100,7 +108,7 @@ class SUBD(object):
             where table_name in {0};
         """.format(tables_str)
 
-        records = Postgresql.get_query_result(query, conn)
+        records = SUBD.get_query_result(query, conn)
 
         result = []
         for key, group in groupby(records, lambda x: x[0]):
@@ -109,6 +117,15 @@ class SUBD(object):
                 "cols": [x[1] for x in group]
             })
         return result
+
+    @staticmethod
+    def get_rows(source, conn, tables, cols):
+        query = """
+            SELECT {0} FROM {1} LIMIT {2};
+        """.format(', '.join(cols), ', '.join(tables), settings.ETL_COLLECTION_PREVIEW_LIMIT)
+
+        records = SUBD.get_query_result(query, conn)
+        return records
 
 
 class Postgresql(SUBD):
@@ -182,6 +199,11 @@ class DataSourceService(object):
     def get_columns(source, tables, conn):
         instance = DataSourceConnectionFactory.factory(source.conn_type)
         return instance.get_columns(source, tables, conn)
+
+    @staticmethod
+    def get_rows(source, conn, tables, cols):
+        instance = DataSourceConnectionFactory.factory(source.conn_type)
+        return instance.get_rows(source, conn, tables, cols)
 
     @staticmethod
     def get_connection(conn_info):
