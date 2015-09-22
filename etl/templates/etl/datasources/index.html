@@ -113,16 +113,16 @@
                             </div>
                         </div>
                         <div class="col-md-1" style="height:550px;text-align: center">
-                            <button class="btn fa fa-arrow-circle-o-right disabled"
+                            <button class="btn fa fa-arrow-circle-o-right"
                                     style="margin-bottom:10px;margin-top:100px"
                                     onclick="tableToRight('{% url "etl:datasources.get_columns"%}')" id="tToR"></button>
-                            <button class="btn fa fa-arrow-circle-o-left disabled"
+                            <button class="btn fa fa-arrow-circle-o-left"
                                     style="margin-bottom:10px"
                                     onclick="tableToLeft()" id="tToL"></button>
-                            <button class="btn fa fa-angle-double-right disabled"
+                            <button class="btn fa fa-angle-double-right"
                                     style="margin-bottom:10px"
                                     onclick="tablesToRight('{% url "etl:datasources.get_columns"%}')" id="tsToR"></button>
-                            <button class="btn fa fa-angle-double-left disabled"
+                            <button class="btn fa fa-angle-double-left"
                                     style="margin-bottom:10px"
                                     onclick="tablesToLeft()" id="tsToL"></button>
                         </div>
@@ -141,6 +141,8 @@
             </div>
         </div>
     </div>
+
+    <!-- строки таблиц БД-->
 
     <script type="text/html" id="database-rows">
             <div class="panel panel-default">
@@ -167,18 +169,21 @@
             </div>
     </script>
 
+    <!-- строки колонок таблиц-->
+
     <script type="text/html" id="table-cols">
         <% _.each(data, function(row) { %>
             <div class="panel panel-default col-md-4">
+                <input type="checkbox" class="right-chbs">
                 <a class="collapsed fa fa-table" data-toggle="collapse" style="margin-left:5px;"
                     href="#<%= row.tname%>Cols"
                     aria-controls="<%= row.tname%>Cols">
                     <%= row.tname %><br>
                 </a>
-                <div id="<%= row.tname%>Cols" class="panel-collapse collapse">
+                <div id="<%= row.tname %>Cols" class="panel-collapse collapse">
 
                     <% _.each(row.cols, function(col){ %>
-                        <div class="mychbdiv">
+                        <div data-table="<%= row.tname %>" data-col="<%= col %>">
                             <ul>
                                 <li class="dropdown messages-menu">
                                     <a class="dropdown-toggle" style="font-weight:bold;"
@@ -203,6 +208,8 @@
             </div>
         <% }); %>
     </script>
+
+    <!-- строки колонок выборки-->
 
     <script type="text/html" id="cols-names">
         <% _.each(data, function(row) { %>

@@ -130,7 +130,7 @@ class Postgresql(SUBD):
             where table_schema='public' order by table_name;
         """
         records = Postgresql.get_query_result(query, conn)
-        records = map(lambda x: {'name': x[0], 'display': x[0][:23]},
+        records = map(lambda x: {'name': x[0], },
                       sorted(records, key=lambda y: y[0]))
 
         return records
@@ -154,7 +154,7 @@ class Mysql(SUBD):
         """.format(source.db)
 
         records = Mysql.get_query_result(query, conn)
-        records = map(lambda x: {'name': x[0], 'display': x[0][:23]}, records)
+        records = map(lambda x: {'name': x[0], }, records)
 
         return records
 

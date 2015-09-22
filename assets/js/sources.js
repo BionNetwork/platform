@@ -81,6 +81,9 @@ function getConnectionData(dataUrl){
     $.get(dataUrl,
         {csrfmiddlewaretoken: csrftoken},
         function(res){
+            _.each(res.data.tables,
+                function(el){el['display'] = el['name'].substr(0, 23);});
+
             var rowsTemplate = _.template($('#database-rows').html());
                 $('#databases').html(rowsTemplate({data: res.data})),
                 dataWindow = $('#modal-data');
@@ -90,6 +93,11 @@ function getConnectionData(dataUrl){
             chosenTables.html('');
             chosenColsRows.html('');
             dataWindow.modal('show');
+
+            $('#tToR').addClass('disabled');
+            $('#tsToR').addClass('disabled');
+            $('#tToL').addClass('disabled');
+            $('#tsToL').addClass('disabled');
 
             if(res.status == 'error'){
                 confirmAlert(res.message);
@@ -138,13 +146,14 @@ function setActive(div_id){
 function getColumns(url, dict){
     $.get(url, dict,
         function(res){
-        console.log(res)
             if(res.message){
                confirmAlert(res.message);
             }
             else{
                chosenTables.append(colsTemplate({data: res.data}));
                chosenColsRows.append(colsNames({data: res.data}));
+               $('#tToL').removeClass('disabled');
+               $('#tsToL').removeClass('disabled');
             }
         }
     );
@@ -197,4 +206,25 @@ function addCol(tName, colName){
 function delCol(id){
     $('#for-'+id).css('font-weight', 'normal');
     $('#'+id).remove();
+}
+
+function tableToLeft(){
+    var checked = $('.right-chbs:checked'),
+        divs = checked.siblings('div').find('div');
+    $.each(divs, function(i, el){
+        $('#col-'+$(this).data('table')+'-'+$(this).data('col')).remove();
+    });
+    checked.closest('div').remove();
+
+    if(!chosenTables.children().length){
+        $('#tToL').addClass('disabled');
+        $('#tsToL').addClass('disabled');
+    }
+}
+
+function tablesToLeft(){
+    chosenTables.html('');
+    chosenColsRows.html('');
+    $('#tToL').addClass('disabled');
+    $('#tsToL').addClass('disabled');
 }
