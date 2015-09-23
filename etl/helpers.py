@@ -108,7 +108,6 @@ class Database(object):
     def get_columns(cls, source, tables, conn):
 
         query = cls._get_columns_query(source, tables)
-        print query
 
         records = Database.get_query_result(query, conn)
 
