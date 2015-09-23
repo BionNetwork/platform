@@ -120,11 +120,10 @@ class Database(object):
         return result
 
     @staticmethod
-    def get_rows(conn, tables, cols):
+    def get_rows(source, conn, tables, cols):
         query = """
             SELECT {0} FROM {1} LIMIT {2};
         """.format(', '.join(cols), ', '.join(tables), settings.ETL_COLLECTION_PREVIEW_LIMIT)
-
         records = Database.get_query_result(query, conn)
         return records
 
@@ -225,7 +224,7 @@ class DataSourceService(object):
     @staticmethod
     def get_rows(source, conn, tables, cols):
         instance = DataSourceConnectionFactory.factory(source.conn_type)
-        return instance.get_rows(conn, tables, cols)
+        return instance.get_rows(source, conn, tables, cols)
 
     @staticmethod
     def get_connection(conn_info):

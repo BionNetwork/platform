@@ -206,10 +206,22 @@ class GetDataRowsView(BaseView):
 
             try:
                 data = helpers.Database.get_rows_info(source, table_names, col_names)
+
                 if len(data) > 0:
                     data = helpers.DecimalEncoder.encode(data)
 
-                return self.json_response({'status': 'ok', 'data': data})
+                data = zip(*data)
+                new_data = []
+
+                for i in xrange(len(col_names)):
+                    t, c = col_names[i].split('.')
+                    new_data.append({
+                        "table": t,
+                        "col": c,
+                        "cols": data[i] if data else []
+                    })
+
+                return self.json_response({'status': 'ok', 'data': new_data})
             except ValueError as err:
                 err_mess = err.message
             except Exception as e:
@@ -218,18 +230,4 @@ class GetDataRowsView(BaseView):
 
         if err_mess:
             return self.json_response({'status': 'error', 'message': err_mess})
-            return self.json_response({'message': err_mess})
 
-        data = zip(*data)
-
-        new_data = []
-
-        for i in xrange(len(col_names)):
-            t, c = col_names[i].split('.')
-            new_data.append({
-                "table": t,
-                "col": c,
-                "cols": data[i] if data else []
-            })
-
-        return self.json_response({'data': new_data, 'message': ''})
