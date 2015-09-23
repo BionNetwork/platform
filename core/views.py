@@ -51,7 +51,7 @@ class BaseTemplateView(TemplateView):
 
 
 class HomeView(BaseTemplateView):
-
+    """Главная страница dashboard"""
     @method_decorator(login_required)
     def dispatch(self, *args, **kwargs):
         return super(HomeView, self).dispatch(*args, **kwargs)
@@ -189,7 +189,9 @@ class RegistrationView(BaseView):
 
 
 class SetUserActive(BaseView):
-
+    """
+    Активация пользователей
+    """
     # тут насувать мессаджей на логин page
 
     def get(self, request, *args, **kwargs):
@@ -214,7 +216,9 @@ class SetUserActive(BaseView):
 
 
 class UserListView(BaseTemplateView):
-
+    """
+    Список пользователей в системе
+    """
     template_name = 'core/users/index.html'
 
     def get(self, request, *args, **kwargs):
@@ -252,7 +256,9 @@ class UserListView(BaseTemplateView):
 
 
 class RemoveUserView(BaseView):
-
+    """
+    Удаление пользователя
+    """
     def post(self, request, *args, **kwargs):
         user = get_object_or_404(User, pk=kwargs.get('id'))
         user.delete()
@@ -261,6 +267,9 @@ class RemoveUserView(BaseView):
 
 
 class NewUserView(BaseTemplateView):
+    """
+    Создание нового пользователя
+    """
     template_name = 'core/users/add.html'
 
     def get(self, request, *args, **kwargs):
@@ -284,6 +293,9 @@ class NewUserView(BaseTemplateView):
 
 
 class EditUserView(BaseTemplateView):
+    """
+    Редактирование пользователя
+    """
     template_name = 'core/users/edit.html'
 
     def get(self, request, *args, **kwargs):
@@ -310,6 +322,9 @@ class EditUserView(BaseTemplateView):
 
 
 class UserProfileView(BaseTemplateView):
+    """
+    Страница профиля пользователя
+    """
     template_name = 'core/users/profile.html'
 
     def get(self, request, *args, **kwargs):

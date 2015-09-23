@@ -22,76 +22,77 @@ def get_utf8_string(value):
     return unicode(value)
 
 
-def check_connection(post):
+class Database(object):
     """
-    Проверка соединения источников данных
-    :param data: dict
-    :return: connection obj or None
+    Базовыми возможности для работы с базами данных
+    Получение информации о таблице, список колонок, проверка соединения и т.д.
     """
-    conn_info = {
-        'host': get_utf8_string(post.get('host')),
-        'user': get_utf8_string(post.get('login')),
-        'passwd': get_utf8_string(post.get('password')),
-        'db': get_utf8_string(post.get('db')),
-        'port': get_utf8_string(post.get('port')),
-        'conn_type': get_utf8_string(post.get('conn_type')),
-    }
+    @staticmethod
+    def get_db_info(user_id, source):
 
-    return DataSourceService.get_connection(conn_info)
+        if settings.USE_REDIS_CACHE:
+            user_db_key = RedisCacheKeys.get_user_databases(user_id)
+            user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
 
+            if not r_server.exists(user_datasource_key):
+                conn_info = source.get_connection_dict()
+                conn = DataSourceService.get_connection(conn_info)
+                tables = DataSourceService.get_tables(source, conn)
 
-def get_db_info(user_id, source):
+                new_db = {
+                    "db": source.db,
+                    "host": source.host,
+                    "tables": tables
+                }
+                if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
+                    r_server.rpush(user_db_key, source.id)
+                r_server.set(user_datasource_key, json.dumps(new_db))
+                r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
-    if settings.USE_REDIS_CACHE:
-        user_db_key = RedisCacheKeys.get_user_databases(user_id)
-        user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
+            return json.loads(r_server.get(user_datasource_key))
 
-        if not r_server.exists(user_datasource_key):
+        else:
             conn_info = source.get_connection_dict()
             conn = DataSourceService.get_connection(conn_info)
             tables = DataSourceService.get_tables(source, conn)
 
-            new_db = {
+            return {
                 "db": source.db,
                 "host": source.host,
                 "tables": tables
             }
-            if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
-                r_server.rpush(user_db_key, source.id)
-            r_server.set(user_datasource_key, json.dumps(new_db))
-            r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
-        return json.loads(r_server.get(user_datasource_key))
-
-    else:
-        conn_info = source.get_connection_dict()
-        conn = DataSourceService.get_connection(conn_info)
-        tables = DataSourceService.get_tables(source, conn)
-
-        return {
-            "db": source.db,
-            "host": source.host,
-            "tables": tables
+    @staticmethod
+    def check_connection(post):
+        """
+        Проверка соединения источников данных
+        :param data: dict
+        :return: connection obj or None
+        """
+        conn_info = {
+            'host': get_utf8_string(post.get('host')),
+            'user': get_utf8_string(post.get('login')),
+            'passwd': get_utf8_string(post.get('password')),
+            'db': get_utf8_string(post.get('db')),
+            'port': get_utf8_string(post.get('port')),
+            'conn_type': get_utf8_string(post.get('conn_type')),
         }
 
+        return DataSourceService.get_connection(conn_info)
 
-def get_columns_info(source, tables):
+    @staticmethod
+    def get_columns_info(source, tables):
+        conn_info = source.get_connection_dict()
+        conn = DataSourceService.get_connection(conn_info)
 
-    conn_info = source.get_connection_dict()
-    conn = DataSourceService.get_connection(conn_info)
+        return DataSourceService.get_columns(source, tables, conn)
 
-    return DataSourceService.get_columns(source, tables, conn)
+    @staticmethod
+    def get_rows_info(source, tables, cols):
+        conn_info = source.get_connection_dict()
+        conn = DataSourceService.get_connection(conn_info)
 
-
-def get_rows_info(source, tables, cols):
-
-    conn_info = source.get_connection_dict()
-    conn = DataSourceService.get_connection(conn_info)
-
-    return DataSourceService.get_rows(source, conn, tables, cols)
-
-
-class SUBD(object):
+        return DataSourceService.get_rows(source, conn, tables, cols)
 
     @staticmethod
     def get_query_result(query, conn):
@@ -109,7 +110,7 @@ class SUBD(object):
             where table_name in {0};
         """.format(tables_str)
 
-        records = SUBD.get_query_result(query, conn)
+        records = Database.get_query_result(query, conn)
 
         result = []
         for key, group in groupby(records, lambda x: x[0]):
@@ -125,11 +126,11 @@ class SUBD(object):
             SELECT {0} FROM {1} LIMIT {2};
         """.format(', '.join(cols), ', '.join(tables), settings.ETL_COLLECTION_PREVIEW_LIMIT)
 
-        records = SUBD.get_query_result(query, conn)
+        records = Database.get_query_result(query, conn)
         return records
 
 
-class Postgresql(SUBD):
+class Postgresql(Database):
     """Управление источником данных Postgres"""
     @staticmethod
     def get_connection(conn_info):
@@ -154,7 +155,7 @@ class Postgresql(SUBD):
         return records
 
 
-class Mysql(SUBD):
+class Mysql(Database):
     """Управление источником данных MySQL"""
     @staticmethod
     def get_connection(conn_info):
