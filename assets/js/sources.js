@@ -158,7 +158,7 @@ function setActive(div_id){
 function getColumns(url, dict){
     $.get(url, dict,
         function(res){
-            if(res.message){
+            if(res.status == 'error'){
                confirmAlert(res.message);
             }
             else{
@@ -274,7 +274,7 @@ function refreshData(url){
             var el = $(this);
             return {
                 "table": el.data("table"),
-                "col": el.data("table")+ '.' +el.data("col"),
+                "col": el.data("col")
             }
         }).get();
 
@@ -287,9 +287,13 @@ function refreshData(url){
         headers.parent('div').css('background-color', '#ddd');
 
         $.get(url, colsInfo, function(res){
-            headers.append(selectedRow({data: res.data}));
-            loader.hide();
-            headers.parent('div').css('background-color', 'white');
+            if (res.status == 'error') {
+              confirmAlert(res.message)
+            } else {
+                headers.append(selectedRow({data: res.data}));
+                loader.hide();
+                headers.parent('div').css('background-color', 'white');  
+            }
         });
     }
 }

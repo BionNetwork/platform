@@ -78,12 +78,6 @@ class NewSourceView(BaseTemplateView):
         if not form.is_valid():
             return self.render_to_response({'form': form, })
 
-        result = helpers.check_connection(post)
-        if not result:
-            return self.render_to_response(
-                {'form': form,
-                 'error_message': 'Подключение не удалось! Подключение не сохранено!'})
-
         source = form.save(commit=False)
         source.user_id = request.user.id
         source.save()
@@ -111,12 +105,6 @@ class EditSourceView(BaseTemplateView):
         if not form.is_valid():
             return self.render_to_response({'form': form, })
 
-        result = helpers.check_connection(post)
-        if not result:
-            return self.render_to_response(
-                {'form': form,
-                 'error_message': 'Подключение не удалось! Подключение не сохранено!'})
-
         if form.has_changed() and settings.USE_REDIS_CACHE:
             # отыскиваем ключи для удаления
             user_db_key = helpers.RedisCacheKeys.get_user_databases(request.user.id)
@@ -143,7 +131,7 @@ class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
         try:
-            result = helpers.check_connection(request.POST)
+            result = helpers.Database.check_connection(request.POST)
             return self.json_response(
                 {'status': 'error' if not result else 'success',
                  'message': 'Проверка соединения прошла успешно' if result else 'Проверка подключения не удалась'})
@@ -159,7 +147,7 @@ class GetConnectionDataView(BaseView):
     def get(self, request, *args, **kwargs):
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
         try:
-            db = helpers.get_db_info(request.user.id, source)
+            db = helpers.Database.get_db_info(request.user.id, source)
         except ValueError as err:
             return self.json_response({'status': 'error', 'message': err.message})
 
@@ -170,7 +158,6 @@ class GetColumnsView(BaseView):
 
     def get(self, request, *args, **kwargs):
         get = request.GET
-        err_mess = ''
         d = {
             "user_id": request.user.id,
             "host": get.get('host', ''),
@@ -183,21 +170,20 @@ class GetColumnsView(BaseView):
             err_mess = 'Такого источника не найдено!'
         else:
             try:
-                columns = helpers.get_columns_info(source, tables)
+                columns = helpers.Database.get_columns_info(source, tables)
+
+                return self.json_response({'status': 'ok', 'data': columns, 'message': ''})
             except ValueError as err:
                 err_mess = err.message
 
         if err_mess:
-            return self.json_response({'message': err_mess})
-
-        return self.json_response({'data': columns, 'message': ''})
+            return self.json_response({'status': 'error', 'message': err_mess})
 
 
 class GetDataRowsView(BaseView):
     def get(self, request, *args, **kwargs):
         get = request.GET
 
-        err_mess = ''
         d = {
             "user_id": request.user.id,
             "host": get.get('host', ''),
@@ -216,14 +202,22 @@ class GetDataRowsView(BaseView):
 
             for t_name, col_group in groupby(cols, lambda x: x["table"]):
                 table_names.append(t_name)
-                col_names += [x["col"] for x in col_group]
+                col_names += [x["table"] + "." + x["col"] for x in col_group]
 
             try:
-                data = helpers.get_rows_info(source, table_names, col_names)
+                data = helpers.Database.get_rows_info(source, table_names, col_names)
+                if len(data) > 0:
+                    data = helpers.DecimalEncoder.encode(data)
+
+                return self.json_response({'status': 'ok', 'data': data})
             except ValueError as err:
                 err_mess = err.message
+            except Exception as e:
+                logger.exception(e.message)
+                err_mess = "Произошла системная ошибка"
 
         if err_mess:
+            return self.json_response({'status': 'error', 'message': err_mess})
             return self.json_response({'message': err_mess})
 
         data = zip(*data)

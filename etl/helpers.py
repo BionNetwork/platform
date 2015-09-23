@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import psycopg2
 import MySQLdb
 import json
+import decimal
 from itertools import groupby
 
 from django.conf import settings
@@ -21,76 +22,77 @@ def get_utf8_string(value):
     return unicode(value)
 
 
-def check_connection(post):
+class Database(object):
     """
-    Проверка соединения источников данных
-    :param data: dict
-    :return: connection obj or None
+    Базовыми возможности для работы с базами данных
+    Получение информации о таблице, список колонок, проверка соединения и т.д.
     """
-    conn_info = {
-        'host': get_utf8_string(post.get('host')),
-        'user': get_utf8_string(post.get('login')),
-        'passwd': get_utf8_string(post.get('password')),
-        'db': get_utf8_string(post.get('db')),
-        'port': get_utf8_string(post.get('port')),
-        'conn_type': get_utf8_string(post.get('conn_type')),
-    }
+    @staticmethod
+    def get_db_info(user_id, source):
 
-    return DataSourceService.get_connection(conn_info)
+        if settings.USE_REDIS_CACHE:
+            user_db_key = RedisCacheKeys.get_user_databases(user_id)
+            user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
 
+            if not r_server.exists(user_datasource_key):
+                conn_info = source.get_connection_dict()
+                conn = DataSourceService.get_connection(conn_info)
+                tables = DataSourceService.get_tables(source, conn)
 
-def get_db_info(user_id, source):
+                new_db = {
+                    "db": source.db,
+                    "host": source.host,
+                    "tables": tables
+                }
+                if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
+                    r_server.rpush(user_db_key, source.id)
+                r_server.set(user_datasource_key, json.dumps(new_db))
+                r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
-    if settings.USE_REDIS_CACHE:
-        user_db_key = RedisCacheKeys.get_user_databases(user_id)
-        user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
+            return json.loads(r_server.get(user_datasource_key))
 
-        if not r_server.exists(user_datasource_key):
+        else:
             conn_info = source.get_connection_dict()
             conn = DataSourceService.get_connection(conn_info)
             tables = DataSourceService.get_tables(source, conn)
 
-            new_db = {
+            return {
                 "db": source.db,
                 "host": source.host,
                 "tables": tables
             }
-            if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
-                r_server.rpush(user_db_key, source.id)
-            r_server.set(user_datasource_key, json.dumps(new_db))
-            r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
-        return json.loads(r_server.get(user_datasource_key))
-
-    else:
-        conn_info = source.get_connection_dict()
-        conn = DataSourceService.get_connection(conn_info)
-        tables = DataSourceService.get_tables(source, conn)
-
-        return {
-            "db": source.db,
-            "host": source.host,
-            "tables": tables
+    @staticmethod
+    def check_connection(post):
+        """
+        Проверка соединения источников данных
+        :param data: dict
+        :return: connection obj or None
+        """
+        conn_info = {
+            'host': get_utf8_string(post.get('host')),
+            'user': get_utf8_string(post.get('login')),
+            'passwd': get_utf8_string(post.get('password')),
+            'db': get_utf8_string(post.get('db')),
+            'port': get_utf8_string(post.get('port')),
+            'conn_type': get_utf8_string(post.get('conn_type')),
         }
 
+        return DataSourceService.get_connection(conn_info)
 
-def get_columns_info(source, tables):
+    @staticmethod
+    def get_columns_info(source, tables):
+        conn_info = source.get_connection_dict()
+        conn = DataSourceService.get_connection(conn_info)
 
-    conn_info = source.get_connection_dict()
-    conn = DataSourceService.get_connection(conn_info)
+        return DataSourceService.get_columns(source, tables, conn)
 
-    return DataSourceService.get_columns(source, tables, conn)
+    @staticmethod
+    def get_rows_info(source, tables, cols):
+        conn_info = source.get_connection_dict()
+        conn = DataSourceService.get_connection(conn_info)
 
-
-def get_rows_info(source, tables, cols):
-
-    conn_info = source.get_connection_dict()
-    conn = DataSourceService.get_connection(conn_info)
-
-    return DataSourceService.get_rows(source, conn, tables, cols)
-
-
-class SUBD(object):
+        return DataSourceService.get_rows(source, conn, tables, cols)
 
     @staticmethod
     def get_query_result(query, conn):
@@ -99,16 +101,15 @@ class SUBD(object):
         return cursor.fetchall()
 
     @staticmethod
-    def get_columns(source, tables, conn):
+    def _get_columns_query(source, tables):
+        raise ValueError("Columns query is not realized")
 
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+    @classmethod
+    def get_columns(cls, source, tables, conn):
 
-        query = """
-            SELECT table_name, column_name FROM information_schema.columns
-            where table_name in {0};
-        """.format(tables_str)
+        query = cls._get_columns_query(source, tables)
 
-        records = SUBD.get_query_result(query, conn)
+        records = Database.get_query_result(query, conn)
 
         result = []
         for key, group in groupby(records, lambda x: x[0]):
@@ -119,16 +120,16 @@ class SUBD(object):
         return result
 
     @staticmethod
-    def get_rows(source, conn, tables, cols):
+    def get_rows(conn, tables, cols):
         query = """
             SELECT {0} FROM {1} LIMIT {2};
         """.format(', '.join(cols), ', '.join(tables), settings.ETL_COLLECTION_PREVIEW_LIMIT)
 
-        records = SUBD.get_query_result(query, conn)
+        records = Database.get_query_result(query, conn)
         return records
 
 
-class Postgresql(SUBD):
+class Postgresql(Database):
     """Управление источником данных Postgres"""
     @staticmethod
     def get_connection(conn_info):
@@ -152,8 +153,19 @@ class Postgresql(SUBD):
 
         return records
 
+    @staticmethod
+    def _get_columns_query(source, tables):
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
-class Mysql(SUBD):
+        # public - default scheme for postgres
+        query = """
+            SELECT table_name, column_name FROM information_schema.columns
+            where table_name in {0} and table_catalog = '{1}' and table_schema = '{2}';
+        """.format(tables_str, source.db, 'public')
+        return query
+
+
+class Mysql(Database):
     """Управление источником данных MySQL"""
     @staticmethod
     def get_connection(conn_info):
@@ -174,6 +186,16 @@ class Mysql(SUBD):
         records = map(lambda x: {'name': x[0], }, records)
 
         return records
+
+    @staticmethod
+    def _get_columns_query(source, tables):
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+
+        query = """
+            SELECT table_name, column_name FROM information_schema.columns
+            where table_name in {0} and table_schema = '{1}';
+        """.format(tables_str, source.db)
+        return query
 
 
 class DataSourceConnectionFactory(object):
@@ -203,7 +225,7 @@ class DataSourceService(object):
     @staticmethod
     def get_rows(source, conn, tables, cols):
         instance = DataSourceConnectionFactory.factory(source.conn_type)
-        return instance.get_rows(source, conn, tables, cols)
+        return instance.get_rows(conn, tables, cols)
 
     @staticmethod
     def get_connection(conn_info):
@@ -229,3 +251,17 @@ class RedisCacheKeys(object):
     @staticmethod
     def get_user_datasource(user_id, datasource_id):
         return 'source_{0}_{1}'.format(user_id, datasource_id)
+
+
+class DecimalEncoder(object):
+    @staticmethod
+    def encode(data):
+        """Преобразуем decimal в строку, чтобы передать ответ клиенту"""
+        res = []
+        for row in data:
+            row = list(row)
+            for k, obj in enumerate(row):
+                if isinstance(obj, decimal.Decimal):
+                    row[k] = float(obj)
+            res.append(row)
+        return res
