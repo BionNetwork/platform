@@ -8,6 +8,9 @@
     </h1>
 {% endblock %}
 
+{% block css %}
+    <link href="{% static 'css/sources.css' %}" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
     <div class="row">
@@ -92,7 +95,7 @@
 
 {% block modal %}
     <div class="modal inmodal" tabindex="1" role="dialog" aria-hidden="true" id="modal-data">
-        <div class="modal-dialog" style="width:1200px;">
+        <div class="modal-dialog" style="width:1100px;">
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal">
@@ -134,7 +137,8 @@
                                 </div>
                             </div>
                             <div style="height:340px;overflow-x:scroll;border: #ddd solid 1px;">
-                                <div id="chosenColsRows">
+                                <i id="loader" class="fa fa-spinner fa-spin loader"></i>
+                                <div style="display:inline-flex;" id="headers">
                                 </div>
                             </div>
                         </div>
@@ -196,10 +200,10 @@
                                     <ul class="dropdown-menu">
                                         <li><a href="javascript:void(0)"
                                                 onclick="addCol('<%= row.tname%>','<%= col %>')">
-                                            Добавить</a></li>
+                                            Включить в набор</a></li>
                                         <li><a href="javascript:void(0)"
                                                 onclick="delCol('col-<%= row.tname%>-<%= col %>')">
-                                            Удалить</a></li>
+                                            Исключить из набора</a></li>
                                     </ul>
                                 </li>
                             </ul>
@@ -213,8 +217,8 @@
 
     <!-- header выборки-->
 
-    <script type="text/html" id="cols-names">
-        <div style="width:10000%;">
+    <script type="text/html" id="cols-headers">
+        <!--<div style="display:inline-flex;" id="headers">-->
             <% _.each(data, function(row, i) { %>
                 <% _.each(row.cols, function(col) { %>
                     <div class="select-col-div" style="float:left;min-width:150px;width:auto;"
@@ -229,25 +233,33 @@
                     </div>
                 <% }); %>
             <% }); %>
-        </div>
+        <!--</div>-->
     </script>
 
-    <!-- строка выборки-->
-
     <script type="text/html" id="selected-rows">
-        <div id="sel-recs" style="width:10000%;">
+        <!--<div style="display:inline-flex;" id="headers">-->
             <% _.each(data, function(row) { %>
-                <div style="width:10000%;float:left;">
-                    <% _.each(row, function(el) { %>
-                        <div class="select-row-div" style="max-width:150px;min-width:150px;float:left">
-                            <div style="text-align:center;border: #ddd solid 1px;min-height:25px;">
+                <div class="select-col-div" style="min-width:150px;width:auto;"
+                     id="col-<%= row.table %>-<%= row.col %>"
+                     data-col="<%= row.col %>" data-table="<%= row.table %>">
+                    <div style="text-align:center;border: black solid 1px;">
+                        <%= row.table %>
+                    </div>
+                    <div style="text-align:center;border: black solid 1px;">
+                        <%= row.col %>
+                    </div>
+
+                    <div class="result-col">
+                        <% _.each(row.cols, function(el) { %>
+                            <div style="width:auto;min-width:150px;text-align:center;
+                                        border: #ddd solid 1px;height:20px;">
                                 <%= el %>
                             </div>
-                        </div>
-                    <% }); %>
+                        <% }); %>
+                    </div>
                 </div>
             <% }); %>
-        </div>
+        <!--</div>-->
     </script>
 
 {% endblock modal %}

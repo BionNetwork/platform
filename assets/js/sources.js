@@ -1,7 +1,7 @@
 
-//function p(m){
-//    console.log(m);
-//}
+function p(m){
+    console.log(m);
+}
 
 function confirmAlert(message){
     $.confirm({
@@ -75,14 +75,17 @@ function removeSource(url){
     });
 }
 
-var chosenTables, chosenColsRows, colsTemplate, colNames,
-    selectedRow;
+var chosenTables, colsTemplate, colNames,
+    selectedRow, headers, loader;
 
 function getConnectionData(dataUrl){
 
     colsTemplate = _.template($('#table-cols').html());
-    colsNames = _.template($('#cols-names').html());
+    colsHeaders = _.template($('#cols-headers').html());
     selectedRow = _.template($('#selected-rows').html());
+
+    loader = $('#loader');
+    loader.hide();
 
     $.get(dataUrl,
         {csrfmiddlewaretoken: csrftoken},
@@ -94,10 +97,13 @@ function getConnectionData(dataUrl){
                 $('#databases').html(rowsTemplate({data: res.data})),
                 dataWindow = $('#modal-data');
 
-            chosenColsRows = $('#chosenColsRows');
             chosenTables = $('#chosenTables');
+
+            headers = $('#headers');
+
             chosenTables.html('');
-            chosenColsRows.html('');
+            headers.html('');
+
             dataWindow.modal('show');
 
             $('#tToR').addClass('disabled');
@@ -157,7 +163,14 @@ function getColumns(url, dict){
             }
             else{
                 chosenTables.append(colsTemplate({data: res.data}));
-                chosenColsRows.append(colsNames({data: res.data}));
+
+                if($('#headers').length){
+                    $('#headers').append(colsHeaders({data: res.data}));
+                }
+                else{
+                    headers.append(colsHeaders({data: res.data}));
+                }
+
                 $('#tToL').removeClass('disabled');
                 $('#tsToL').removeClass('disabled');
             }
@@ -170,9 +183,7 @@ function tableToRight(url){
 
     if(orange.length && !$('#'+orange.attr('id')+'Cols').length){
 
-        if(chosenColsRows.children().length>1){
-            $('#sel-recs').remove();
-        }
+        headers.find('.result-col').remove();
 
         getColumns(url, {
                     csrfmiddlewaretoken: csrftoken,
@@ -201,9 +212,8 @@ function tablesToRight(url){
     }).get();
 
     if(tables.length){
-        if(chosenColsRows.children().length>1){
-            $('#sel-recs').remove();
-        }
+
+        headers.find('.result-col').remove();
 
         dict['tables'] = JSON.stringify(tables);
         getColumns(url, dict);
@@ -216,8 +226,8 @@ function addCol(tName, colName){
     var col = $('#col-'+tName+'-'+colName);
 
     if(!col.length){
-        chosenColsRows.append(
-        colsNames({data: [{tname: tName, cols: [colName]}]}));
+        headers.append(
+            colsHeaders({data: [{tname: tName, cols: [colName]}]}));
     }
     else{
         col.show();
@@ -247,20 +257,19 @@ function tableToLeft(){
 
 function tablesToLeft(){
     chosenTables.html('');
-    chosenColsRows.html('');
+    headers.html('');
     $('#tToL').addClass('disabled');
     $('#tsToL').addClass('disabled');
 }
 
 function refreshData(url){
-    $('#sel-recs').remove();
 
     var source = $('#databases>div'),
         colsInfo = {
             "host": source.data("host"),
             "db": source.data("db"),
         },
-        cols = $('#chosenColsRows>div>.select-col-div'),
+        cols = headers.find('.select-col-div'),
         array = cols.map(function(){
             var el = $(this);
             return {
@@ -271,8 +280,16 @@ function refreshData(url){
 
     if(array.length){
         colsInfo['cols'] = JSON.stringify(array);
+
+        headers.html('');
+
+        loader.show();
+        headers.parent('div').css('background-color', '#ddd');
+
         $.get(url, colsInfo, function(res){
-            $('#chosenColsRows').append(selectedRow({data: res.data}));
+            headers.append(selectedRow({data: res.data}));
+            loader.hide();
+            headers.parent('div').css('background-color', 'white');
         });
     }
 }

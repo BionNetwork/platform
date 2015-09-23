@@ -226,4 +226,16 @@ class GetDataRowsView(BaseView):
         if err_mess:
             return self.json_response({'message': err_mess})
 
-        return self.json_response({'data': data, 'message': ''})
+        data = zip(*data)
+
+        new_data = []
+
+        for i in xrange(len(col_names)):
+            t, c = col_names[i].split('.')
+            new_data.append({
+                "table": t,
+                "col": c,
+                "cols": data[i] if data else []
+            })
+
+        return self.json_response({'data': new_data, 'message': ''})

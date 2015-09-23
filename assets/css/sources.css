@@ -1,0 +1,11 @@
+
+.column-icon {
+    background: url('../icons/column_right.ico');
+}
+
+.loader{
+    position: relative;
+    left:50%;
+    top:50%;
+    font-size:30px;
+}
