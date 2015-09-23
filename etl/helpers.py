@@ -101,14 +101,14 @@ class Database(object):
         return cursor.fetchall()
 
     @staticmethod
-    def get_columns(source, tables, conn):
+    def _get_columns_query(source, tables):
+        raise ValueError("Columns query is not realized")
 
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+    @classmethod
+    def get_columns(cls, source, tables, conn):
 
-        query = """
-            SELECT table_name, column_name FROM information_schema.columns
-            where table_name in {0};
-        """.format(tables_str)
+        query = cls._get_columns_query(source, tables)
+        print query
 
         records = Database.get_query_result(query, conn)
 
@@ -154,6 +154,17 @@ class Postgresql(Database):
 
         return records
 
+    @staticmethod
+    def _get_columns_query(source, tables):
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+
+        # public - default scheme for postgres
+        query = """
+            SELECT table_name, column_name FROM information_schema.columns
+            where table_name in {0} and table_catalog = '{1}' and table_schema = '{2}';
+        """.format(tables_str, source.db, 'public')
+        return query
+
 
 class Mysql(Database):
     """Управление источником данных MySQL"""
@@ -176,6 +187,16 @@ class Mysql(Database):
         records = map(lambda x: {'name': x[0], }, records)
 
         return records
+
+    @staticmethod
+    def _get_columns_query(source, tables):
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+
+        query = """
+            SELECT table_name, column_name FROM information_schema.columns
+            where table_name in {0} and table_schema = '{1}';
+        """.format(tables_str, source.db)
+        return query
 
 
 class DataSourceConnectionFactory(object):
