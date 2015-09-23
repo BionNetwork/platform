@@ -152,15 +152,14 @@ function setActive(div_id){
 function getColumns(url, dict){
     $.get(url, dict,
         function(res){
-            if(res.message){
-               confirmAlert(res.message);
-            }
-            else{
-                chosenTables.append(colsTemplate({data: res.data}));
-                chosenColsRows.append(colsNames({data: res.data}));
-                $('#tToL').removeClass('disabled');
-                $('#tsToL').removeClass('disabled');
-            }
+          if (res.status == 'error') {
+            confirmAlert(res.message);
+          } else {
+            chosenTables.append(colsTemplate({data: res.data}));
+            chosenColsRows.append(colsNames({data: res.data}));
+            $('#tToL').removeClass('disabled');
+            $('#tsToL').removeClass('disabled');
+          }
         }
     );
 }

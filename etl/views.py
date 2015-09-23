@@ -172,12 +172,12 @@ class GetColumnsView(BaseView):
             try:
                 columns = helpers.Database.get_columns_info(source, tables)
 
-                return self.json_response({'data': columns, 'message': ''})
+                return self.json_response({'status': 'ok', 'data': columns, 'message': ''})
             except ValueError as err:
                 err_mess = err.message
 
         if err_mess:
-            return self.json_response({'message': err_mess})
+            return self.json_response({'status': 'error', 'message': err_mess})
 
 
 class GetDataRowsView(BaseView):
