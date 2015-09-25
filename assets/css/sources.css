@@ -9,3 +9,7 @@
     top:50%;
     font-size:30px;
 }
+
+#dbTables .table-selected {
+  background-color: orange;
+}

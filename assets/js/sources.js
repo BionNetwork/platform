@@ -75,7 +75,7 @@ function removeSource(url){
     });
 }
 
-var chosenTables, colsTemplate, colNames,
+var chosenTables, colsTemplate, colsHeaders,
     selectedRow, headers, loader;
 
 function getConnectionData(dataUrl){
@@ -93,9 +93,9 @@ function getConnectionData(dataUrl){
             _.each(res.data.tables,
                 function(el){el['display'] = el['name'].substr(0, 23);});
 
-            var rowsTemplate = _.template($('#database-rows').html());
-                $('#databases').html(rowsTemplate({data: res.data})),
+            var rowsTemplate = _.template($('#database-rows').html()),
                 dataWindow = $('#modal-data');
+            $('#databases').html(rowsTemplate({data: res.data}));
 
             chosenTables = $('#chosenTables');
 
@@ -106,10 +106,10 @@ function getConnectionData(dataUrl){
 
             dataWindow.modal('show');
 
-            $('#tToR').addClass('disabled');
-            $('#tsToR').addClass('disabled');
-            $('#tToL').addClass('disabled');
-            $('#tsToL').addClass('disabled');
+            $('#button-toRight').addClass('disabled');
+            $('#button-allToRight').addClass('disabled');
+            $('#button-toLeft').addClass('disabled');
+            $('#button-allToLeft').addClass('disabled');
 
             if(res.status == 'error'){
                 confirmAlert(res.message);
@@ -118,40 +118,40 @@ function getConnectionData(dataUrl){
     );
 }
 
-function checkChbs(div_id){
-    var d = $('#'+div_id);
-    if(d.attr('style')){
-        d.removeAttr('style');
-        $('#tToR').addClass('disabled');
+function checkTable(table) {
+    var tableRow = $('#' + table);
+    if (tableRow.hasClass('table-selected')) {
+        tableRow.removeClass('table-selected');
+        $('#button-toRight').addClass('disabled');
     }
 
-    var chbs = $('.mychb:checked');
-    if(chbs.length){
-        $('#tsToR').removeClass('disabled');
+    var checkboxes = $('.checkbox-table:checked');
+    if (checkboxes.length) {
+        $('#button-allToRight').removeClass('disabled');
     }
-    else{
-        $('#tsToR').addClass('disabled');
+    else {
+        $('#button-allToRight').addClass('disabled');
     }
 }
 
-function setActive(div_id){
-    var d = $('#'+div_id);
-    if(d.attr('style')){
-        d.removeAttr('style');
-        $('.mychb').prop('checked', false);
-        $('#tToR').addClass('disabled');
+function setActive(table) {
+    var tableRow = $('#' + table);
+    if (tableRow.hasClass('table-selected')) {
+        tableRow.removeClass('table-selected');
+        $('.checkbox-table').prop('checked', false);
+        $('#button-toRight').addClass('disabled');
 
-        var chbs = $('.mychb:checked');
-        if(!chbs.length){
-            $('#tsToR').addClass('disabled');
+        var checkboxes = $('.checkbox-table:checked');
+        if (!checkboxes.length) {
+            $('#button-allToRight').addClass('disabled');
         }
     }
-    else{
-        $('.mychbdiv').removeAttr('style');
-        $('.mychb').prop('checked', false);
-        d.css('background-color', 'orange');
-        d.find('input[type="checkbox"]').prop('checked', true);
-        $('#tToR').removeClass('disabled');
+    else {
+        $('.checkbox-table').prop('checked', false);
+        $(".table-selected").removeClass("table-selected");
+        tableRow.addClass('table-selected');
+        tableRow.find('input[type="checkbox"]').prop('checked', true);
+        $('#button-toRight').removeClass('disabled');
     }
 }
 
@@ -171,32 +171,32 @@ function getColumns(url, dict){
                     headers.append(colsHeaders({data: res.data}));
                 }
 
-                $('#tToL').removeClass('disabled');
-                $('#tsToL').removeClass('disabled');
+                $('#button-toLeft').removeClass('disabled');
+                $('#button-allToLeft').removeClass('disabled');
             }
         }
     );
 }
 
 function tableToRight(url){
-    var orange = $('div[style="background-color: orange;"]');
+    var selectedTable = $('div.table-selected');
 
-    if(orange.length && !$('#'+orange.attr('id')+'Cols').length){
+    if(selectedTable.length && !$('#'+selectedTable.attr('id')+'Cols').length){
 
         headers.find('.result-col').remove();
 
         getColumns(url, {
                     csrfmiddlewaretoken: csrftoken,
-                    host: orange.attr('data-host'),
-                    db : orange.attr('data-db'),
-                    tables: JSON.stringify([orange.attr('data-table'), ])
+                    host: selectedTable.attr('data-host'),
+                    db : selectedTable.attr('data-db'),
+                    tables: JSON.stringify([selectedTable.attr('data-table'), ])
                 }
         );
     }
 }
 
 function tablesToRight(url){
-    var divs = $('.mychb:checked').closest('div'),
+    var divs = $('.checkbox-table:checked').closest('div'),
         dict = {
                 csrfmiddlewaretoken: csrftoken,
                 host: divs.attr('data-host'),
@@ -250,16 +250,16 @@ function tableToLeft(){
     checked.closest('div').remove();
 
     if(!chosenTables.children().length){
-        $('#tToL').addClass('disabled');
-        $('#tsToL').addClass('disabled');
+        $('#button-toLeft').addClass('disabled');
+        $('#button-allToLeft').addClass('disabled');
     }
 }
 
 function tablesToLeft(){
     chosenTables.html('');
     headers.html('');
-    $('#tToL').addClass('disabled');
-    $('#tsToL').addClass('disabled');
+    $('#button-toLeft').addClass('disabled');
+    $('#button-allToLeft').addClass('disabled');
 }
 
 function refreshData(url){
@@ -292,7 +292,7 @@ function refreshData(url){
             } else {
                 headers.append(selectedRow({data: res.data}));
                 loader.hide();
-                headers.parent('div').css('background-color', 'white');  
+                headers.parent('div').css('background-color', 'white');
             }
         });
     }
