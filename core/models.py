@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from djchoices import ChoiceItem, DjangoChoices
 
-from helpers import get_utf8_string
+from .helpers import get_utf8_string
 
 """
 Базовые модели приложения

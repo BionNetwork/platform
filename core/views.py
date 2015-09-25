@@ -22,7 +22,7 @@ from django.core.paginator import Paginator
 from smtplib import SMTPServerDisconnected
 from .models import User
 from .helpers import Settings, CustomJsonEncoder
-import forms as core_forms
+from . import forms as core_forms
 
 logger = logging.getLogger(__name__)
 
@@ -172,11 +172,11 @@ class RegistrationView(BaseView):
             return self.json_response(
                 {'status': 'ok',
                  'message': 'Регистрация прошла успешно! На почту была отправлена инструкция по активации аккаунта.'})
-        except ValueError, e:
+        except ValueError as e:
             return self.json_response(
                 {'status': 'error', 'message': e.message}
             )
-        except SMTPServerDisconnected, e:
+        except SMTPServerDisconnected as e:
             logger.exception(e.message)
             return self.json_response(
                 {'status': 'error', 'message': "Ошибка при отправке почты %s" % e.message}

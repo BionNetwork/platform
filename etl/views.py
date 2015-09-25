@@ -12,10 +12,10 @@ from django.conf import settings
 
 from core.views import BaseView, BaseTemplateView
 from core.models import Datasource
-import forms as etl_forms
+from . import forms as etl_forms
 import logging
 
-import helpers
+from . import helpers
 from . import r_server
 
 
