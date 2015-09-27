@@ -1,8 +1,4 @@
 
-function p(m){
-    console.log(m);
-}
-
 function confirmAlert(message){
     $.confirm({
         width: '100px',
@@ -76,13 +72,14 @@ function removeSource(url){
 }
 
 var chosenTables, colsTemplate, colsHeaders,
-    selectedRow, headers, loader;
+    selectedRow, dataWorkspace, loader, initDataTable;
 
 function getConnectionData(dataUrl){
 
     colsTemplate = _.template($('#table-cols').html());
     colsHeaders = _.template($('#cols-headers').html());
     selectedRow = _.template($('#selected-rows').html());
+    initDataTable = _.template($("#datatable-init").html())
 
     loader = $('#loader');
     loader.hide();
@@ -99,10 +96,10 @@ function getConnectionData(dataUrl){
 
             chosenTables = $('#chosenTables');
 
-            headers = $('#headers');
+            dataWorkspace = $('#data-workspace');
 
             chosenTables.html('');
-            headers.html('');
+            dataWorkspace.html(initDataTable);
 
             dataWindow.modal('show');
 
@@ -155,21 +152,15 @@ function setActive(table) {
     }
 }
 
-function getColumns(url, dict){
+function getColumns(url, dict) {
     $.get(url, dict,
-        function(res){
-            if(res.status == 'error'){
-               confirmAlert(res.message);
-            }
-            else{
+        function (res) {
+            if (res.status == 'error') {
+                confirmAlert(res.message);
+            } else {
                 chosenTables.append(colsTemplate({data: res.data}));
 
-                if($('#headers').length){
-                    $('#headers').append(colsHeaders({data: res.data}));
-                }
-                else{
-                    headers.append(colsHeaders({data: res.data}));
-                }
+                $('#data-table-headers').append(colsHeaders({data: res.data}));
 
                 $('#button-toLeft').removeClass('disabled');
                 $('#button-allToLeft').removeClass('disabled');
@@ -183,7 +174,7 @@ function tableToRight(url){
 
     if(selectedTable.length && !$('#'+selectedTable.attr('id')+'Cols').length){
 
-        headers.find('.result-col').remove();
+        dataWorkspace.find('.result-col').remove();
 
         getColumns(url, {
                     csrfmiddlewaretoken: csrftoken,
@@ -213,7 +204,7 @@ function tablesToRight(url){
 
     if(tables.length){
 
-        headers.find('.result-col').remove();
+        dataWorkspace.find('.result-col').remove();
 
         dict['tables'] = JSON.stringify(tables);
         getColumns(url, dict);
@@ -226,27 +217,54 @@ function addCol(tName, colName){
     var col = $('#col-'+tName+'-'+colName);
 
     if(!col.length){
-        headers.append(
+        dataWorkspace.append(
             colsHeaders({data: [{tname: tName, cols: [colName]}]}));
     }
     else{
         col.show();
-        col.addClass("select-col-div");
+        col.addClass("data-table-column-header");
     }
 }
 
 function delCol(id){
     $('#for-'+id).css('font-weight', 'normal');
     $('#'+id).hide();
-    $('#'+id).removeClass("select-col-div");
+    $('#'+id).removeClass("data-table-column-header");
 }
 
 function tableToLeft(){
     var checked = $('.right-chbs:checked'),
-        divs = checked.siblings('div').find('div');
+        divs = checked.siblings('div').find('div'),
+        indexes = [],// индексы в таблице для удаления
+        columns = [];
+
     $.each(divs, function(i, el){
+        columns.push($('#col-'+$(this).data('table')+'-'+$(this).data('col')).attr("id"));
         $('#col-'+$(this).data('table')+'-'+$(this).data('col')).remove();
     });
+
+    $("#data-table-headers").find("th").each(function(index){
+        var thId = $(this).attr("id");
+        if ($.inArray(thId, columns) != -1) {
+            indexes.push(index)
+        }
+    })
+
+    var workspaceRows = dataWorkspace.find("table tr").not(":first");
+
+    // удаляем ячейки по индексам
+    // @todo доработать
+    $(workspaceRows).each(function(tRow, trIndex){
+        $.each(indexes, function(el, index) {
+            console.log($(tRow));
+            $(tRow).find("td").eq(el).remove();
+            if ($(tRow).length == 0) {
+                $(tRow).remove();
+            }
+        })
+
+    })
+
     checked.closest('div').remove();
 
     if(!chosenTables.children().length){
@@ -257,7 +275,7 @@ function tableToLeft(){
 
 function tablesToLeft(){
     chosenTables.html('');
-    headers.html('');
+    dataWorkspace.html(initDataTable);
     $('#button-toLeft').addClass('disabled');
     $('#button-allToLeft').addClass('disabled');
 }
@@ -269,7 +287,7 @@ function refreshData(url){
             "host": source.data("host"),
             "db": source.data("db"),
         },
-        cols = headers.find('.select-col-div'),
+        cols = dataWorkspace.find('.data-table-column-header'),
         array = cols.map(function(){
             var el = $(this);
             return {
@@ -278,21 +296,23 @@ function refreshData(url){
             }
         }).get();
 
-    if(array.length){
+    if(array.length) {
         colsInfo['cols'] = JSON.stringify(array);
 
-        headers.html('');
+        // удаляем все ячейки с данными
+        dataWorkspace.find("table tr").not(":first").remove();
 
         loader.show();
-        headers.parent('div').css('background-color', '#ddd');
+        dataWorkspace.parent('div').css('background-color', '#ddd');
 
         $.get(url, colsInfo, function(res){
             if (res.status == 'error') {
               confirmAlert(res.message)
             } else {
-                headers.append(selectedRow({data: res.data}));
+                var tableData = dataWorkspace.find("table > tbody");
+                tableData.append(selectedRow({data: res.data}));
                 loader.hide();
-                headers.parent('div').css('background-color', 'white');
+                dataWorkspace.parent('div').css('background-color', 'white');
             }
         });
     }

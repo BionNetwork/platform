@@ -1,6 +1,6 @@
 
-.column-icon {
-    background: url('../icons/column_right.ico');
+.table-columns{
+    list-style-image: url('../icons/column_right2.ico');
 }
 
 .loader{
@@ -12,4 +12,8 @@
 
 #dbTables .table-selected {
   background-color: orange;
+}
+
+#data-table th {
+    text-align: center;
 }
