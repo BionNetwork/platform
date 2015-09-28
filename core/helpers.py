@@ -5,6 +5,7 @@ __author__ = 'damir'
 
 import json
 import datetime
+import decimal
 
 """
 Хелпер настроек
@@ -41,4 +42,6 @@ class CustomJsonEncoder(json.JSONEncoder):
             return obj.strftime('%d.%m.%Y')
         elif isinstance(obj, datetime.date):
             return obj.strftime('%d.%m.%Y')
+        elif isinstance(obj, decimal.Decimal):
+            return float(obj)
         return json.JSONEncoder.default(self, obj)

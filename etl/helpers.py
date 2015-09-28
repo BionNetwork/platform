@@ -252,15 +252,15 @@ class RedisCacheKeys(object):
         return 'source_{0}_{1}'.format(user_id, datasource_id)
 
 
-class DecimalEncoder(object):
-    @staticmethod
-    def encode(data):
-        """Преобразуем decimal в строку, чтобы передать ответ клиенту"""
-        res = []
-        for row in data:
-            row = list(row)
-            for k, obj in enumerate(row):
-                if isinstance(obj, decimal.Decimal):
-                    row[k] = float(obj)
-            res.append(row)
-        return res
+# class DecimalEncoder(object):
+#     @staticmethod
+#     def encode(data):
+#         """Преобразуем decimal в строку, чтобы передать ответ клиенту"""
+#         res = []
+#         for row in data:
+#             row = list(row)
+#             for k, obj in enumerate(row):
+#                 if isinstance(obj, decimal.Decimal):
+#                     row[k] = float(obj)
+#             res.append(row)
+#         return res

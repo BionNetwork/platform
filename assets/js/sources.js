@@ -1,4 +1,8 @@
 
+//function p(m){
+//    console.log(m);
+//}
+
 function confirmAlert(message){
     $.confirm({
         width: '100px',
@@ -88,7 +92,7 @@ function getConnectionData(dataUrl){
         {csrfmiddlewaretoken: csrftoken},
         function(res){
             _.each(res.data.tables,
-                function(el){el['display'] = el['name'].substr(0, 23);});
+                function(el){el['display'] = el['name'].substr(0, 21);});
 
             var rowsTemplate = _.template($('#database-rows').html()),
                 dataWindow = $('#modal-data');
@@ -127,7 +131,9 @@ function checkTable(table) {
         $('#button-allToRight').removeClass('disabled');
     }
     else {
-        $('#button-allToRight').addClass('disabled');
+        $('#button-allToRight').addClass('difunction p(m){
+    console.log(m);
+}sabled');
     }
 }
 
@@ -214,56 +220,72 @@ function tablesToRight(url){
 function addCol(tName, colName){
     $('#for-col-'+tName+'-'+colName).css('font-weight', 'bold');
 
-    var col = $('#col-'+tName+'-'+colName);
+    var col = $('#col-'+tName+'-'+colName),
+        ths = $("#data-table-headers").find("th"),
+        index = ths.index(col),
+        workspaceRows = dataWorkspace.find("table tr").not(":first");
 
-    if(!col.length){
-        dataWorkspace.append(
-            colsHeaders({data: [{tname: tName, cols: [colName]}]}));
-    }
-    else{
-        col.show();
-        col.addClass("data-table-column-header");
-    }
+    $(workspaceRows).each(function(trIndex, tRow){
+
+        if(!index){
+
+        }
+
+        $(tRow).find("td").eq(index).remove();
+        if ($(tRow).length == 0) {
+            $(tRow).prepend('<td></td>');
+        }
+        else{
+            $('<td></td>').insertAfter($(tRow).find('td').eq(index-1));
+        }
+    });
+
+    col.show();
+    col.addClass("data-table-column-header");
 }
 
 function delCol(id){
     $('#for-'+id).css('font-weight', 'normal');
     $('#'+id).hide();
     $('#'+id).removeClass("data-table-column-header");
+
+    var ths = $("#data-table-headers").find("th"),
+        header = $('#'+id),
+        index = ths.index(header),
+        workspaceRows = dataWorkspace.find("table tr").not(":first");
+
+    $(workspaceRows).each(function(trIndex, tRow){
+        $(tRow).find("td").eq(index).remove();
+        if ($(tRow).length == 0) {
+            $(tRow).remove();
+        }
+    });
 }
 
 function tableToLeft(){
     var checked = $('.right-chbs:checked'),
         divs = checked.siblings('div').find('div'),
         indexes = [],// индексы в таблице для удаления
-        columns = [];
+        ths = $("#data-table-headers").find("th");
 
     $.each(divs, function(i, el){
-        columns.push($('#col-'+$(this).data('table')+'-'+$(this).data('col')).attr("id"));
-        $('#col-'+$(this).data('table')+'-'+$(this).data('col')).remove();
+        var header = $('#col-'+$(this).data('table')+'-'+$(this).data('col'));
+        indexes.push(ths.index(header));
+        header.remove();
     });
 
-    $("#data-table-headers").find("th").each(function(index){
-        var thId = $(this).attr("id");
-        if ($.inArray(thId, columns) != -1) {
-            indexes.push(index)
-        }
-    })
-
-    var workspaceRows = dataWorkspace.find("table tr").not(":first");
+    var workspaceRows = dataWorkspace.find("table tr").not(":first"),
+        reversed = indexes.reverse();
 
     // удаляем ячейки по индексам
-    // @todo доработать
-    $(workspaceRows).each(function(tRow, trIndex){
-        $.each(indexes, function(el, index) {
-            console.log($(tRow));
+    $(workspaceRows).each(function(trIndex, tRow){
+        $.each(reversed, function(i, el){
             $(tRow).find("td").eq(el).remove();
-            if ($(tRow).length == 0) {
-                $(tRow).remove();
-            }
-        })
-
-    })
+        });
+        if ($(tRow).length == 0) {
+            $(tRow).remove();
+        }
+    });
 
     checked.closest('div').remove();
 
@@ -306,14 +328,14 @@ function refreshData(url){
         dataWorkspace.parent('div').css('background-color', '#ddd');
 
         $.get(url, colsInfo, function(res){
-            if (res.status == 'error') {
-              confirmAlert(res.message)
+            if(res.status == 'error') {
+                confirmAlert(res.message)
             } else {
                 var tableData = dataWorkspace.find("table > tbody");
                 tableData.append(selectedRow({data: res.data}));
-                loader.hide();
-                dataWorkspace.parent('div').css('background-color', 'white');
             }
+            loader.hide();
+            dataWorkspace.parent('div').css('background-color', 'white');
         });
     }
 }

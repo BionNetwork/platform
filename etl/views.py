@@ -207,9 +207,6 @@ class GetDataRowsView(BaseView):
             try:
                 data = helpers.Database.get_rows_info(source, table_names, col_names)
 
-                if len(data) > 0:
-                    data = helpers.DecimalEncoder.encode(data)
-
                 return self.json_response({'status': 'ok', 'data': data})
             except ValueError as err:
                 err_mess = err.message
