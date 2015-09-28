@@ -114,7 +114,7 @@ class Database(object):
         result = []
         for key, group in groupby(records, lambda x: x[0]):
             result.append({
-                "tname": key[:23], 'db': source.db, 'host': source.host,
+                "tname": key, 'display': key[:21], 'db': source.db, 'host': source.host,
                 "cols": [x[1] for x in group]
             })
         return result

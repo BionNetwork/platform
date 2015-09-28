@@ -211,43 +211,46 @@ function tablesToRight(url){
 }
 
 function addCol(tName, colName){
-    $('#for-col-'+tName+'-'+colName).css('font-weight', 'bold');
 
-    var col = $('#col-'+tName+'-'+colName),
-        ths = $("#data-table-headers").find("th"),
-        index = ths.index(col),
-        workspaceRows = dataWorkspace.find("table tr").not(":first");
+    if(!$('#col-'+tName+'-'+colName+':visible').length){
+        $('#for-col-'+tName+'-'+colName).css('font-weight', 'bold');
+        var col = $('#col-'+tName+'-'+colName),
+            ths = $("#data-table-headers").find("th"),
+            index = ths.index(col),
+            workspaceRows = dataWorkspace.find("table tr").not(":first");
 
-    $(workspaceRows).each(function(trIndex, tRow){
-        $(tRow).find("td").eq(index).remove();
-        if ($(tRow).length == 0) {
-            $(tRow).prepend('<td></td>');
-        }
-        else{
-            $('<td></td>').insertAfter($(tRow).find('td').eq(index-1));
-        }
-    });
-
-    col.show();
-    col.addClass("data-table-column-header");
+        $(workspaceRows).each(function(trIndex, tRow){
+            if (!index) {
+                $(tRow).prepend('<td></td>');
+            }
+            else{
+                $('<td></td>').insertAfter($(tRow).find('td').eq(index-1));
+            }
+        });
+        col.show();
+        col.addClass("data-table-column-header");
+    }
 }
 
 function delCol(id){
-    $('#for-'+id).css('font-weight', 'normal');
-    $('#'+id).hide();
-    $('#'+id).removeClass("data-table-column-header");
 
-    var ths = $("#data-table-headers").find("th"),
-        header = $('#'+id),
-        index = ths.index(header),
-        workspaceRows = dataWorkspace.find("table tr").not(":first");
+    if($('#'+id+':visible').length){
+        $('#for-'+id).css('font-weight', 'normal');
+        $('#'+id).hide();
+        $('#'+id).removeClass("data-table-column-header");
 
-    $(workspaceRows).each(function(trIndex, tRow){
-        $(tRow).find("td").eq(index).remove();
-        if ($(tRow).length == 0) {
-            $(tRow).remove();
-        }
-    });
+        var ths = $("#data-table-headers").find("th"),
+            header = $('#'+id),
+            index = ths.index(header),
+            workspaceRows = dataWorkspace.find("table tr").not(":first");
+
+        $(workspaceRows).each(function(trIndex, tRow){
+            $(tRow).find("td").eq(index).remove();
+            if ($(tRow).length == 0) {
+                $(tRow).remove();
+            }
+        });
+    }
 }
 
 function tableToLeft(){
