@@ -1,8 +1,3 @@
-
-//function p(m){
-//    console.log(m);
-//}
-
 function confirmAlert(message){
     $.confirm({
         width: '100px',
@@ -131,9 +126,7 @@ function checkTable(table) {
         $('#button-allToRight').removeClass('disabled');
     }
     else {
-        $('#button-allToRight').addClass('difunction p(m){
-    console.log(m);
-}sabled');
+        $('#button-allToRight').addClass('disabled');
     }
 }
 
@@ -226,11 +219,6 @@ function addCol(tName, colName){
         workspaceRows = dataWorkspace.find("table tr").not(":first");
 
     $(workspaceRows).each(function(trIndex, tRow){
-
-        if(!index){
-
-        }
-
         $(tRow).find("td").eq(index).remove();
         if ($(tRow).length == 0) {
             $(tRow).prepend('<td></td>');
