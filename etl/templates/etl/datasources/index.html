@@ -190,12 +190,12 @@
 
     <script type="text/html" id="table-cols">
         <% _.each(data, function(row) { %>
-            <div class="panel panel-default col-md-4">
-                <input type="checkbox" class="right-chbs">
+            <div class="panel panel-default col-md-4" style="margin-top:15px">
+                <input type="checkbox" class="right-chbs" onclick="checkRightCheckboxes()">
                 <a class="collapsed fa fa-table" data-toggle="collapse" style="margin-left:5px;"
                     href="#<%= row.tname%>Cols"
                     aria-controls="<%= row.tname%>Cols">
-                    <%= row.display %><br>
+                    <%= row.tname %><br>
                 </a>
                 <div id="<%= row.tname %>Cols" class="panel-collapse collapse">
 
@@ -208,7 +208,7 @@
                                         data-toggle="dropdown" href="javascript:void(0)">
                                         <%= col %>
                                     </a>
-                                    <ul class="dropdown-menu">
+                                    <ul class="dropdown-menu" style="margin:-40px 0 0; font-size:12px">
                                         <li><a href="javascript:void(0)"
                                                 onclick="addCol('<%= row.tname%>','<%= col %>')">
                                             Включить в набор</a></li>

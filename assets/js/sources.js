@@ -151,6 +151,15 @@ function setActive(table) {
     }
 }
 
+function checkRightCheckboxes(){
+    if($('.right-chbs:checked').length){
+        $('#button-toLeft').removeClass('disabled');
+    } else {
+        $('#button-toLeft').addClass('disabled');
+    }
+}
+
+
 function getColumns(url, dict) {
     $.get(url, dict,
         function (res) {
@@ -158,10 +167,7 @@ function getColumns(url, dict) {
                 confirmAlert(res.message);
             } else {
                 chosenTables.append(colsTemplate({data: res.data}));
-
                 $('#data-table-headers').append(colsHeaders({data: res.data}));
-
-                $('#button-toLeft').removeClass('disabled');
                 $('#button-allToLeft').removeClass('disabled');
             }
         }
@@ -280,8 +286,9 @@ function tableToLeft(){
 
     checked.closest('div').remove();
 
+    checkRightCheckboxes();
+
     if(!chosenTables.children().length){
-        $('#button-toLeft').addClass('disabled');
         $('#button-allToLeft').addClass('disabled');
     }
 }
