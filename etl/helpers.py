@@ -174,9 +174,9 @@ class Postgresql(Database):
         exist_result = []
         new_result = []
 
-        str_table = RedisCacheKeys.get_user_source_table(source.id, user.id, '{0}')
-        str_active_tables = RedisCacheKeys.get_active_tables(source.id, user.id)
-        r_max = RedisCacheKeys.get_last_active_table(source.id, user.id)
+        str_table = RedisCacheKeys.get_user_source_table(user.id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(user.id, source.id)
+        r_max = RedisCacheKeys.get_last_active_table(user.id, source.id)
 
         if settings.USE_REDIS_CACHE:
             # выбранные ранее таблицы в редисе
@@ -391,20 +391,20 @@ class RedisCacheKeys(object):
     """Ключи для редиса"""
     @staticmethod
     def get_user_databases(user_id):
-        return '{0}_user_dbs'.format(user_id)
+        return 'user_datasources:{0}'.format(user_id)
 
     @staticmethod
     def get_user_datasource(user_id, datasource_id):
-        return 'source_{0}_{1}'.format(user_id, datasource_id)
+        return '{0}:{1}'.format(RedisCacheKeys.get_user_databases(user_id), datasource_id)
 
     @staticmethod
-    def get_last_active_table(source_id, user_id):
-        return 'source_{0}_user_{1}_collectionactive'.format(source_id, user_id)
+    def get_last_active_table(user_id, datasource_id):
+        return '{0}:collectionactive'.format(RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
-    def get_active_tables(source_id, user_id):
-        return 'source_{0}_user_{1}_active_collections'.format(source_id, user_id)
+    def get_active_tables(user_id, datasource_id):
+        return '{0}:active_collections'.format(RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
-    def get_user_source_table(source_id, user_id, table):
-        return 'source_{0}_user_{1}_table_{2}'.format(source_id, user_id, table)
+    def get_user_source_table(user_id, datasource_id, table):
+        return '{0}:table:{1}'.format(RedisCacheKeys.get_user_datasource(user_id, datasource_id), table)
