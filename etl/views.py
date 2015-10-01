@@ -170,7 +170,7 @@ class GetColumnsView(BaseView):
             err_mess = 'Такого источника не найдено!'
         else:
             try:
-                columns = helpers.Database.get_columns_info(source, tables)
+                columns = helpers.Database.get_columns_info(source, request.user, tables)
 
                 return self.json_response({'status': 'ok', 'data': columns, 'message': ''})
             except ValueError as err:

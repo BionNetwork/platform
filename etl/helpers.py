@@ -4,13 +4,14 @@ from __future__ import unicode_literals
 import psycopg2
 import MySQLdb
 import json
-import decimal
 from itertools import groupby
+from collections import defaultdict
 
 from django.conf import settings
 
 from core.models import ConnectionChoices
 from . import r_server
+from .maps import postgresql as psql_map
 
 
 def get_utf8_string(value):
@@ -81,11 +82,11 @@ class Database(object):
         return DataSourceService.get_connection(conn_info)
 
     @staticmethod
-    def get_columns_info(source, tables):
+    def get_columns_info(source, user, tables):
         conn_info = source.get_connection_dict()
         conn = DataSourceService.get_connection(conn_info)
 
-        return DataSourceService.get_columns(source, tables, conn)
+        return DataSourceService.get_columns(source, user, tables, conn)
 
     @staticmethod
     def get_rows_info(source, tables, cols):
@@ -105,7 +106,7 @@ class Database(object):
         raise ValueError("Columns query is not realized")
 
     @classmethod
-    def get_columns(cls, source, tables, conn):
+    def get_columns(cls, source, user, tables, conn):
 
         query = cls._get_columns_query(source, tables)
 
@@ -157,11 +158,152 @@ class Postgresql(Database):
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
         # public - default scheme for postgres
-        query = """
-            SELECT table_name, column_name FROM information_schema.columns
-            where table_name in {0} and table_catalog = '{1}' and table_schema = '{2}';
-        """.format(tables_str, source.db, 'public')
-        return query
+        cols_query = psql_map.cols_query.format(tables_str, source.db, 'public')
+
+        constraints_query = psql_map.constraints_query.format(tables_str)
+
+        indexes_query = psql_map.indexes_query.format(tables_str)
+
+        return cols_query, constraints_query, indexes_query
+
+    @classmethod
+    def get_columns(cls, source, user, tables, conn):
+
+        max_ = 0
+        active_tables = []
+        exist_result = []
+        new_result = []
+
+        str_table = RedisCacheKeys.get_user_source_table(source.id, user.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(source.id, user.id)
+        r_max = RedisCacheKeys.get_last_active_table(source.id, user.id)
+
+        if settings.USE_REDIS_CACHE:
+            # выбранные ранее таблицы в редисе
+            if not r_server.exists(str_active_tables):
+                r_server.set(str_active_tables, '[]')
+                r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
+            else:
+                active_tables = json.loads(r_server.get(str_active_tables))
+
+            ex_tables = [x for x in tables if r_server.exists(str_table.format(x))]
+            tables = [x for x in tables if x not in ex_tables]
+
+            # наибольшее активное число таблицы
+            if not r_server.exists(r_max):
+                r_server.set(r_max, '{"max": 0}')
+                r_server.expire(r_max, settings.REDIS_EXPIRE)
+            else:
+                max_ = json.loads(r_server.get(r_max))["max"]
+
+            for ex_t in ex_tables:
+                ext_info = json.loads(r_server.get(str_table.format(ex_t)))
+                table = {"tname": ex_t, 'db': source.db, 'host': source.host,
+                         'cols': [x["name"] for x in ext_info['columns']], }
+                exist_result.append(table)
+
+        if tables:
+            columns_query, consts_query, indexes_query = cls._get_columns_query(source, tables)
+
+            col_records = Database.get_query_result(columns_query, conn)
+
+            for key, group in groupby(col_records, lambda x: x[0]):
+                new_result.append({"tname": key, 'db': source.db, 'host': source.host,
+                                   'cols': [x[1] for x in group]})
+
+            if settings.USE_REDIS_CACHE:
+                index_records = Database.get_query_result(indexes_query, conn)
+                indexes = defaultdict(list)
+                itable_name, icol_names, index_name, primary, unique = xrange(5)
+
+                for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
+                    for ig in igroup:
+                        indexes[ikey].append({
+                            "name": ig[index_name],
+                            "columns": ig[icol_names].split(','),
+                            "is_primary": ig[primary] == 't',
+                            "is_unique": ig[unique] == 't',
+                        })
+
+                const_records = Database.get_query_result(consts_query, conn)
+                constraints = {}
+                (c_table_name, c_col_name, c_name, c_type,
+                 c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
+
+                for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
+                    constraints[ikey] = []
+                    for ig in igroup:
+                        constraints[ikey].append({
+                            "c_col_name": ig[c_col_name],
+                            "c_name": ig[c_name],
+                            "c_type": ig[c_type],
+                            "c_f_table": ig[c_foreign_table],
+                            "c_f_col": ig[c_foreign_col],
+                            "c_upd": ig[c_update],
+                            "c_del": ig[c_delete],
+                        })
+
+                columns = defaultdict(list)
+                foreigns = defaultdict(list)
+
+                for key, group in groupby(col_records, lambda x: x[0]):
+
+                    t_indexes = indexes[key]
+                    t_consts = constraints[key]
+
+                    for x in group:
+                        is_index = is_unique = is_primary = False
+                        col = x[1]
+
+                        for i in t_indexes:
+                            if col in i['columns']:
+                                is_index = True
+                                index_name = i['name']
+                                for c in t_consts:
+                                    const_type = c['c_type']
+                                    if index_name == c['c_name']:
+                                        if const_type == 'UNIQUE':
+                                            is_unique = True
+                                        elif const_type == 'PRIMARY KEY':
+                                            is_unique = True
+                                            is_primary = True
+
+                        columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
+                                             "is_index": is_index,
+                                             "is_unique": is_unique, "is_primary": is_primary})
+
+                    # находим внешние ключи
+                    for c in t_consts:
+                        if c['c_type'] == 'FOREIGN KEY':
+                            foreigns[key].append({
+                                "name": c['c_name'],
+                                "source": {"table": key, "column": c["c_col_name"]},
+                                "destination":
+                                    {"table": c["c_f_table"], "column": c["c_f_col"]},
+                                "on_delete": c["c_del"],
+                                "on_update": c["c_upd"],
+                            })
+
+                for ind, t_name in enumerate(tables, start=1):
+                    active_tables.append({"name": t_name, "order": max_ + ind})
+                    r_server.set(str_table.format(t_name), json.dumps(
+                        {
+                            "columns": columns[key],
+                            "indexes": indexes[key],
+                            "foreigns": foreigns[key],
+                        }
+                    ))
+                    r_server.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
+
+                # сохраняем активные таблицы
+                r_server.set(str_active_tables, json.dumps(active_tables))
+                r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
+
+                # сохраняем последнюю таблицу
+                r_server.set(r_max, json.dumps({"name": t_name, "max": ind}))
+                r_server.expire(r_max, settings.REDIS_EXPIRE)
+
+        return exist_result + new_result
 
 
 class Mysql(Database):
@@ -196,6 +338,10 @@ class Mysql(Database):
         """.format(tables_str, source.db)
         return query
 
+    @classmethod
+    def get_columns(cls, source, user, tables, conn):
+        pass
+
 
 class DataSourceConnectionFactory(object):
     """Фабрика для подключения к источникам данных"""
@@ -217,9 +363,9 @@ class DataSourceService(object):
         return instance.get_tables(source, conn)
 
     @staticmethod
-    def get_columns(source, tables, conn):
+    def get_columns(source, user, tables, conn):
         instance = DataSourceConnectionFactory.factory(source.conn_type)
-        return instance.get_columns(source, tables, conn)
+        return instance.get_columns(source, user, tables, conn)
 
     @staticmethod
     def get_rows(source, conn, tables, cols):
@@ -251,16 +397,14 @@ class RedisCacheKeys(object):
     def get_user_datasource(user_id, datasource_id):
         return 'source_{0}_{1}'.format(user_id, datasource_id)
 
+    @staticmethod
+    def get_last_active_table(source_id, user_id):
+        return 'source_{0}_user_{1}_collectionactive'.format(source_id, user_id)
 
-# class DecimalEncoder(object):
-#     @staticmethod
-#     def encode(data):
-#         """Преобразуем decimal в строку, чтобы передать ответ клиенту"""
-#         res = []
-#         for row in data:
-#             row = list(row)
-#             for k, obj in enumerate(row):
-#                 if isinstance(obj, decimal.Decimal):
-#                     row[k] = float(obj)
-#             res.append(row)
-#         return res
+    @staticmethod
+    def get_active_tables(source_id, user_id):
+        return 'source_{0}_user_{1}_active_collections'.format(source_id, user_id)
+
+    @staticmethod
+    def get_user_source_table(source_id, user_id, table):
+        return 'source_{0}_user_{1}_table_{2}'.format(source_id, user_id, table)
