@@ -4,7 +4,8 @@ from __future__ import unicode_literals
 import psycopg2
 import MySQLdb
 import json
-from itertools import groupby
+import operator
+from itertools import groupby, izip_longest, izip
 from collections import defaultdict
 
 from django.conf import settings
@@ -170,46 +171,46 @@ class Postgresql(Database):
     def get_columns(cls, source, user, tables, conn):
 
         max_ = 0
-        active_tables = []
+        active_tables = {}
+
+        #FIXME на данный момент exist_result будет всегда пустой
         exist_result = []
         new_result = []
+        root = None
 
-        str_table = RedisCacheKeys.get_user_source_table(user.id, source.id, '{0}')
+        str_table = RedisCacheKeys.get_active_table(user.id, source.id, '{0}')
+        str_table_by_name = RedisCacheKeys.get_active_table(user.id, source.id, '{0}')
         str_active_tables = RedisCacheKeys.get_active_tables(user.id, source.id)
-        r_max = RedisCacheKeys.get_last_active_table(user.id, source.id)
 
         if settings.USE_REDIS_CACHE:
             # выбранные ранее таблицы в редисе
             if not r_server.exists(str_active_tables):
-                r_server.set(str_active_tables, '[]')
+                # root = tables[0]
+                r_server.set(str_active_tables, '{}')
                 r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
             else:
                 active_tables = json.loads(r_server.get(str_active_tables))
+                for k, v in active_tables.items():
+                    if v == 0:
+                        root = k
+                        break
+                # max_ = max(active_tables.values())
 
-            ex_tables = [x for x in tables if r_server.exists(str_table.format(x))]
-            tables = [x for x in tables if x not in ex_tables]
+            # exist_tables = [name for (name, order) in active_tables.items()
+            #                 if r_server.exists(str_table.format(order))]
+            #
+            # tables = [x for x in tables if x not in exist_tables]
+            #
+            # for ex_t in exist_tables:
+            #     ext_info = json.loads(r_server.get(str_table.format(active_tables[ex_t])))
+            #     table = {"tname": ex_t, 'db': source.db, 'host': source.host,
+            #              'cols': [x["name"] for x in ext_info['columns']], }
+            #     exist_result.append(table)
 
-            # наибольшее активное число таблицы
-            if not r_server.exists(r_max):
-                r_server.set(r_max, '{"max": 0}')
-                r_server.expire(r_max, settings.REDIS_EXPIRE)
-            else:
-                max_ = json.loads(r_server.get(r_max))["max"]
-
-            for ex_t in ex_tables:
-                ext_info = json.loads(r_server.get(str_table.format(ex_t)))
-                table = {"tname": ex_t, 'db': source.db, 'host': source.host,
-                         'cols': [x["name"] for x in ext_info['columns']], }
-                exist_result.append(table)
-
-        if tables:
+        if not active_tables:
             columns_query, consts_query, indexes_query = cls._get_columns_query(source, tables)
 
             col_records = Database.get_query_result(columns_query, conn)
-
-            for key, group in groupby(col_records, lambda x: x[0]):
-                new_result.append({"tname": key, 'db': source.db, 'host': source.host,
-                                   'cols': [x[1] for x in group]})
 
             if settings.USE_REDIS_CACHE:
                 index_records = Database.get_query_result(indexes_query, conn)
@@ -283,27 +284,258 @@ class Postgresql(Database):
                                 "on_delete": c["c_del"],
                                 "on_update": c["c_upd"],
                             })
+                # if root:
+                #     tables.remove(root)
+                #     tables.insert(0, root)
 
-                for ind, t_name in enumerate(tables, start=1):
-                    active_tables.append({"name": t_name, "order": max_ + ind})
-                    r_server.set(str_table.format(t_name), json.dumps(
+                # for ind, t_name in enumerate(tables, start=1):
+                #     order = max_ + ind
+                #     active_tables[t_name] = order
+                #     r_server.set(str_table.format(order), json.dumps(
+                #         {
+                #             "columns": columns[key],
+                #             "indexes": indexes[key],
+                #             "foreigns": foreigns[key],
+                #         }
+                #     ))
+                #     r_server.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
+
+                # # сохраняем активные таблицы
+                # r_server.set(str_active_tables, json.dumps(active_tables))
+                # r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
+                #
+                # cls.set_joins(source, tables, new_result)
+
+                for t_name in tables:
+                    r_server.set(str_table_by_name.format(t_name), json.dumps(
                         {
-                            "columns": columns[key],
-                            "indexes": indexes[key],
-                            "foreigns": foreigns[key],
+                            "columns": columns[t_name],
+                            "indexes": indexes[t_name],
+                            "foreigns": foreigns[t_name],
                         }
                     ))
                     r_server.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
 
-                # сохраняем активные таблицы
-                r_server.set(str_active_tables, json.dumps(active_tables))
-                r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
+                trees, without_bind = cls.build_trees(tuple(tables), source)
 
-                # сохраняем последнюю таблицу
-                r_server.set(r_max, json.dumps({"name": t_name, "max": ind}))
-                r_server.expire(r_max, settings.REDIS_EXPIRE)
+                sel_tree = cls.select_tree(trees)
+                remains = without_bind[sel_tree.root.val]
+                last = remains[0] if remains else None
 
-        return exist_result + new_result
+                cls.insert_tree_to_redis(sel_tree, source)
+
+                new_result += cls.get_final_info(sel_tree, source, last)
+
+        return new_result
+
+    @classmethod
+    def get_final_info(cls, tree, source, last=None):
+        result = []
+        str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
+        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+            source.user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(source.user_id, source.id)
+        ordered_nodes = tree.get_tree_ordered_nodes([tree.root, ])
+        actives = json.loads(r_server.get(str_active_tables))
+        db = source.db
+        host = source.host
+
+        for ind, node in enumerate(ordered_nodes):
+            n_val = node.val
+            n_info = {'tname': n_val, 'db': db, 'host': host,
+                      'dest': getattr(node.parent, 'val', None),
+                      'is_root': not ind
+                      }
+            order = actives.get(n_val)
+            table_info = json.loads(r_server.get(str_table.format(order)))
+            n_info['cols'] = [x['name'] for x in table_info['columns']]
+            result.append(n_info)
+
+        if last:
+            table_info = json.loads(r_server.get(str_table_by_name.format(last)))
+            l_info = {'tname': last, 'db': db, 'host': host,
+                      'dest': n_val, 'is_last': True,
+                      'cols': [x['name'] for x in table_info['columns']]
+                      }
+            result.append(l_info)
+        return result
+
+    @classmethod
+    def insert_tree_to_redis(cls, tree, source):
+
+        str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
+        str_table_by_name = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(source.user_id, source.id)
+        str_joins = RedisCacheKeys.get_source_joins(source.user_id, source.id)
+        ordered_nodes = tree.get_tree_ordered_nodes([tree.root, ])
+
+        actives = {}
+        joins_in_redis = {}
+
+        for ind, node in enumerate(ordered_nodes, start=1):
+            n_val = node.val
+            r_server.set(str_table.format(ind),
+                         r_server.get(str_table_by_name.format(n_val)))
+            r_server.delete(str_table_by_name.format(n_val))
+            actives[n_val] = ind
+
+            joins = cls.get_node_joins_info(node)
+            if joins:
+                joins_in_redis[n_val] = joins
+
+        r_server.set(str_active_tables, json.dumps(actives))
+        r_server.set(str_joins, json.dumps(joins_in_redis))
+
+    @classmethod
+    def get_node_joins_info(cls, node):
+        node_joins = []
+
+        n_val = node.val
+        for join in node.joins:
+            t1, c1, t2, c2 = join
+            if n_val == t1:
+                node_joins.append({
+                    "source": t1, "source_col": c1,
+                    "destination": t2, "destination_col": c2,
+                })
+            else:
+                node_joins.append({
+                    "source": t2, "source_col": c2,
+                    "destination": t1, "destination_col": c1,
+                })
+        return node_joins
+
+    @classmethod
+    def build_trees(cls, tables, source):
+        str_table_by_name = RedisCacheKeys.get_active_table(
+            source.user_id, source.id, '{0}')
+
+        trees = {}
+        without_bind = {}
+
+        for t_name in tables:
+            tree = TablesTree(t_name)
+            without_bind[t_name] = tree.build_tree(
+                [tree.root, ], list(tables), str_table_by_name)
+            trees[t_name] = tree
+
+        # for t in trees.values():
+        #     print t.root.val
+        #     r_chs = [x for x in t.root.childs]
+        #     print [x.val for x in r_chs]
+        #     for c in r_chs:
+        #         print [x.val for x in c.childs]
+        #     print 80*'*'
+
+        return trees, without_bind
+
+    @classmethod
+    def select_tree(cls, trees):
+        counts = {}
+        for tr_name, tree in trees.iteritems():
+            counts[tr_name] = tree.get_nodes_count_by_level([tree.root])
+        root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
+
+        return trees[root_table]
+
+    @classmethod
+    def get_joins(cls, l_t, r_t, l_info, r_info):
+
+        l_cols = l_info['columns']
+        r_cols = r_info['columns']
+
+        joins = set()
+
+        for l_c in l_cols:
+            l_str = '{0}_{1}'.format(l_t, l_c['name'])
+            for r_c in r_cols:
+                r_str = '{0}_{1}'.format(r_t, r_c['name'])
+                if l_c['name'] == r_str:
+                    joins.add((l_t, l_c["name"], r_t, r_c["name"]))
+                    break
+                if l_str == r_c["name"]:
+                    joins.add((l_t, l_c["name"], r_t, r_c["name"]))
+                    break
+
+        l_foreign = l_info['foreigns']
+        r_foreign = r_info['foreigns']
+
+        for f in l_foreign:
+            if f['destination']['table'] == r_t:
+                joins.add((
+                    f['source']['table'],
+                    f['source']['column'],
+                    f['destination']['table'],
+                    f['destination']['column'],
+                ))
+
+        for f in r_foreign:
+            if f['destination']['table'] == l_t:
+                joins.add((
+                    f['source']['table'],
+                    f['source']['column'],
+                    f['destination']['table'],
+                    f['destination']['column'],
+                ))
+
+        return joins
+
+
+class Node(object):
+    def __init__(self, t_name, parent=None, joins=set()):
+        self.val = t_name
+        self.parent = parent
+        self.childs = []
+        self.joins = joins
+
+
+class TablesTree(object):
+    def __init__(self, t_name):
+        self.root = Node(t_name)
+
+    def get_tree_ordered_nodes(self, nodes):
+        all_nodes = []
+        all_nodes += nodes
+        child_nodes = reduce(
+            list.__add__, [x.childs for x in nodes], [])
+        if child_nodes:
+            all_nodes += self.get_tree_ordered_nodes(child_nodes)
+        return all_nodes
+
+    def get_nodes_count_by_level(self, nodes):
+        counts = [len(nodes)]
+
+        child_nodes = reduce(
+            list.__add__, [x.childs for x in nodes], [])
+        if child_nodes:
+            counts += self.get_nodes_count_by_level(child_nodes)
+        return counts
+
+    def build_tree(self, childs, tables, str_table_by_name):
+        child_vals = [x.val for x in childs]
+        tables = [x for x in tables if x not in child_vals]
+
+        new_childs = []
+
+        for child in childs:
+            r_val = child.val
+            l_info = json.loads(r_server.get(str_table_by_name.format(r_val)))
+
+            for t_name in tables[:]:
+                r_info = json.loads(r_server.get(str_table_by_name.format(t_name)))
+                #todo refactor
+                joins = Postgresql.get_joins(r_val, t_name, l_info, r_info)
+
+                if joins:
+                    tables.remove(t_name)
+                    new_node = Node(t_name, child, joins)
+                    child.childs.append(new_node)
+                    new_childs.append(new_node)
+        if new_childs:
+            self.build_tree(new_childs, tables, str_table_by_name)
+
+        # таблицы без связей
+        return tables
 
 
 class Mysql(Database):
@@ -395,16 +627,25 @@ class RedisCacheKeys(object):
 
     @staticmethod
     def get_user_datasource(user_id, datasource_id):
-        return '{0}:{1}'.format(RedisCacheKeys.get_user_databases(user_id), datasource_id)
+        return '{0}:{1}'.format(
+            RedisCacheKeys.get_user_databases(user_id), datasource_id)
 
     @staticmethod
-    def get_last_active_table(user_id, datasource_id):
-        return '{0}:collectionactive'.format(RedisCacheKeys.get_user_datasource(user_id, datasource_id))
+    def get_active_table(user_id, datasource_id, number):
+        return '{0}:collection:{1}'.format(
+            RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
 
     @staticmethod
     def get_active_tables(user_id, datasource_id):
-        return '{0}:active_collections'.format(RedisCacheKeys.get_user_datasource(user_id, datasource_id))
+        return '{0}:active_collections'.format(
+            RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
-    def get_user_source_table(user_id, datasource_id, table):
-        return '{0}:table:{1}'.format(RedisCacheKeys.get_user_datasource(user_id, datasource_id), table)
+    def get_active_table_by_name(user_id, datasource_id, table):
+        return '{0}:collection:{1}'.format(
+            RedisCacheKeys.get_user_datasource(user_id, datasource_id), table)
+
+    @staticmethod
+    def get_source_joins(user_id, datasource_id):
+        return '{0}:joins'.format(
+            RedisCacheKeys.get_user_datasource(user_id, datasource_id))

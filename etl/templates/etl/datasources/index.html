@@ -133,7 +133,7 @@
                         </div>
                         <div class="col-md-8" style="height:550px">
                             <div style="height:200px;border: #ddd solid 1px; overflow-y:auto">
-                                <div id="chosenTables">
+                                <div style="display:inline-flex;" id="chosenTables">
                                 </div>
                             </div>
                             <div style="height:340px;overflow-x:scroll;border: #ddd solid 1px;">
@@ -189,8 +189,16 @@
     <!-- строки колонок таблиц-->
 
     <script type="text/html" id="table-cols">
-        <% _.each(data, function(row) { %>
-            <div class="panel panel-default col-md-4" style="margin-top:15px">
+
+        <div style="display:flex">
+        <div style="padding:0; display:inline-flex;" id="<%= row.tname %>-outer">
+            <% if (!row.is_root) { %>
+                <a class="fa fa-exchange relation" onclick="showJoinWindow('#<%= row.tname %>-outer')">
+                    <% if (row.is_last) { %><span style="color:red;">!!!</span><% } %>
+                </a>
+            <% } %>
+            <div class="panel panel-default"
+                 style="margin-top:10px; padding-left:0;padding-right:0;">
                 <input type="checkbox" class="right-chbs" onclick="checkRightCheckboxes()">
                 <a class="collapsed fa fa-table" data-toggle="collapse" style="margin-left:5px;"
                     href="#<%= row.tname%>Cols"
@@ -220,10 +228,11 @@
                             </ul>
                         </div>
                     <% }); %>
-
                 </div>
             </div>
-        <% }); %>
+        </div>
+        <div id="for-<%= row.tname %>-outer"></div>
+        </div>
     </script>
 
     <!-- header выборки-->

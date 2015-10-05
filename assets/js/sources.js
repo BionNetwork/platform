@@ -166,7 +166,23 @@ function getColumns(url, dict) {
             if (res.status == 'error') {
                 confirmAlert(res.message);
             } else {
-                chosenTables.append(colsTemplate({data: res.data}));
+//                console.log(res.data);
+
+                var data = res.data;
+                if(data[0].is_root){
+                    chosenTables.append(colsTemplate({row: data[0]}));
+                    data = data.slice(1);
+                }
+                _.each(data,
+                    function(el){
+                        $('#for-'+el.dest+'-outer').append(colsTemplate({row: el}))
+                    });
+
+
+
+
+
+
                 $('#data-table-headers').append(colsHeaders({data: res.data}));
                 $('#button-allToLeft').removeClass('disabled');
             }
