@@ -175,6 +175,9 @@ class GetColumnsView(BaseView):
                 return self.json_response({'status': 'ok', 'data': columns, 'message': ''})
             except ValueError as err:
                 err_mess = err.message
+            except Exception as e:
+                logger.exception(e.message)
+                err_mess = "Произошла непредвиденная ошибка"
 
         if err_mess:
             return self.json_response({'status': 'error', 'message': err_mess})
