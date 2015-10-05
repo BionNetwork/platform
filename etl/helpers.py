@@ -227,12 +227,11 @@ class Postgresql(Database):
                         })
 
                 const_records = Database.get_query_result(consts_query, conn)
-                constraints = {}
+                constraints = defaultdict(list)
                 (c_table_name, c_col_name, c_name, c_type,
                  c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
 
                 for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
-                    constraints[ikey] = []
                     for ig in igroup:
                         constraints[ikey].append({
                             "c_col_name": ig[c_col_name],
