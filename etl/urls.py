@@ -15,4 +15,5 @@ urlpatterns = [
     url(r'^datasources/get_data/(?P<id>\d+)/$', views.GetConnectionDataView.as_view(), name='datasources.get_data'),
     url(r'^datasources/get_columns/$', views.GetColumnsView.as_view(), name='datasources.get_columns'),
     url(r'^datasources/get_rows/$', views.GetDataRowsView.as_view(), name='datasources.get_rows'),
+    url(r'^datasources/remove_tables/$', views.RemoveTablesView.as_view(), name='datasources.remove_tables'),
 ]

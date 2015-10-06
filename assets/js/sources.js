@@ -159,15 +159,12 @@ function checkRightCheckboxes(){
     }
 }
 
-
 function getColumns(url, dict) {
     $.get(url, dict,
         function (res) {
             if (res.status == 'error') {
                 confirmAlert(res.message);
             } else {
-//                console.log(res.data);
-
                 var data = res.data;
                 if(data[0].is_root){
                     chosenTables.append(colsTemplate({row: data[0]}));
@@ -175,13 +172,8 @@ function getColumns(url, dict) {
                 }
                 _.each(data,
                     function(el){
-                        $('#for-'+el.dest+'-outer').append(colsTemplate({row: el}))
+                        $('#for-'+el.dest+'-childs').append(colsTemplate({row: el}))
                     });
-
-
-
-
-
 
                 $('#data-table-headers').append(colsHeaders({data: res.data}));
                 $('#button-allToLeft').removeClass('disabled');
@@ -275,7 +267,7 @@ function delCol(id){
     }
 }
 
-function tableToLeft(){
+function tableToLeft(url){
     var checked = $('.right-chbs:checked'),
         divs = checked.siblings('div').find('div'),
         indexes = [],// индексы в таблице для удаления
@@ -300,7 +292,28 @@ function tableToLeft(){
         }
     });
 
-    checked.closest('div').remove();
+    var selTables = checked.closest('.table-part'),
+        tablesToDelete = [];
+
+    $.each(selTables, function(i, el){
+        $(this).closest('.table-part').find('.table-part').remove();
+    });
+    var checked2 = $('.right-chbs:checked'),
+        selTables2 = checked2.closest('.table-part');
+
+    $.each(selTables2, function(i, el){
+       tablesToDelete.push($(this).data('table'));
+       $(this).remove();
+    });
+    var source = $('#databases>div'),
+        info = {
+            "host": source.data("host"),
+            "db": source.data("db"),
+            "tables": JSON.stringify(tablesToDelete)
+        };
+
+    $.get(url, info, function(data){
+    });
 
     checkRightCheckboxes();
 

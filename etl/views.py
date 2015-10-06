@@ -154,18 +154,25 @@ class GetConnectionDataView(BaseView):
         return self.json_response({'data': db, 'status': 'success'})
 
 
-class GetColumnsView(BaseView):
+class BaseEtlView(BaseView):
+
+    def try_to_get_source(self, request):
+        method = request.GET if request.method == 'GET' else request.POST
+        d = {
+            "user_id": request.user.id,
+            "host": method.get('host', ''),
+            "db": method.get('db', '')
+        }
+        return Datasource.objects.get(**d)
+
+
+class GetColumnsView(BaseEtlView):
 
     def get(self, request, *args, **kwargs):
         get = request.GET
-        d = {
-            "user_id": request.user.id,
-            "host": get.get('host', ''),
-            "db": get.get('db', '')
-        }
         tables = json.loads(get.get('tables', ''))
         try:
-            source = Datasource.objects.get(**d)
+            source = self.try_to_get_source(request)
         except Datasource.DoesNotExists:
             err_mess = 'Такого источника не найдено!'
         else:
@@ -183,18 +190,11 @@ class GetColumnsView(BaseView):
             return self.json_response({'status': 'error', 'message': err_mess})
 
 
-class GetDataRowsView(BaseView):
+class GetDataRowsView(BaseEtlView):
     def get(self, request, *args, **kwargs):
         get = request.GET
-
-        d = {
-            "user_id": request.user.id,
-            "host": get.get('host', ''),
-            "db": get.get('db', '')
-        }
-
         try:
-            source = Datasource.objects.get(**d)
+            source = self.try_to_get_source(request)
         except Datasource.DoesNotExists:
             err_mess = 'Такого источника не найдено!'
         else:
@@ -220,3 +220,17 @@ class GetDataRowsView(BaseView):
         if err_mess:
             return self.json_response({'status': 'error', 'message': err_mess})
 
+
+class RemoveTablesView(BaseEtlView):
+
+    def get(self, request, *args, **kwargs):
+        get = request.GET
+        try:
+            source = self.try_to_get_source(request)
+        except Datasource.DoesNotExists:
+            err_mess = 'Такого источника не найдено!'
+        else:
+            tables = json.loads(get.get('tables'))
+            helpers.RedisService.delete_tables_from_redis(source, tables)
+
+        return self.json_response({})

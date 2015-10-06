@@ -121,7 +121,7 @@
                                     onclick="tableToRight('{% url "etl:datasources.get_columns"%}')" id="button-toRight"></button>
                             <button class="btn fa fa-arrow-circle-o-left"
                                     style="margin-bottom:10px"
-                                    onclick="tableToLeft()" id="button-toLeft"></button>
+                                    onclick="tableToLeft('{% url "etl:datasources.remove_tables"%}')" id="button-toLeft"></button>
                             <button class="btn fa fa-angle-double-right"
                                     style="margin-bottom:10px"
                                     onclick="tablesToRight('{% url "etl:datasources.get_columns"%}')" id="button-allToRight"></button>
@@ -190,49 +190,50 @@
 
     <script type="text/html" id="table-cols">
 
-        <div style="display:flex">
-        <div style="padding:0; display:inline-flex;" id="<%= row.tname %>-outer">
-            <% if (!row.is_root) { %>
-                <a class="fa fa-exchange relation" onclick="showJoinWindow('#<%= row.tname %>-outer')">
-                    <% if (row.is_last) { %><span style="color:red;">!!!</span><% } %>
-                </a>
-            <% } %>
-            <div class="panel panel-default"
-                 style="margin-top:10px; padding-left:0;padding-right:0;">
-                <input type="checkbox" class="right-chbs" onclick="checkRightCheckboxes()">
-                <a class="collapsed fa fa-table" data-toggle="collapse" style="margin-left:5px;"
-                    href="#<%= row.tname%>Cols"
-                    aria-controls="<%= row.tname%>Cols">
-                    <%= row.tname %><br>
-                </a>
-                <div id="<%= row.tname %>Cols" class="panel-collapse collapse">
-
-                    <% _.each(row.cols, function(col){ %>
-                        <div data-table="<%= row.tname %>" data-col="<%= col %>">
-                            <ul class="table-columns">
-                                <li class="dropdown messages-menu">
-                                    <a class="dropdown-toggle" style="font-weight:bold;"
-                                        id="for-col-<%= row.tname%>-<%= col %>"
-                                        data-toggle="dropdown" href="javascript:void(0)">
-                                        <%= col %>
-                                    </a>
-                                    <ul class="dropdown-menu" style="margin:-40px 0 0; font-size:12px">
-                                        <li><a href="javascript:void(0)"
-                                                onclick="addCol('<%= row.tname%>','<%= col %>')">
-                                            Включить в набор</a></li>
-                                        <li><a href="javascript:void(0)"
-                                                onclick="delCol('col-<%= row.tname%>-<%= col %>')">
-                                            Исключить из набора</a></li>
-                                    </ul>
-                                </li>
-                            </ul>
-                        </div>
-                    <% }); %>
+        <div class="table-part" style="display:flex" data-table="<%= row.tname %>"
+                 id="table-part-<%= row.tname %>">
+            <div style="padding:0; display:inline-flex;">
+                <% if (!row.is_root) { %>
+                    <a class="fa fa-exchange relation" onclick="showJoinWindow('<%= row.tname %>')">
+                        <% if (row.is_last) { %><span style="color:red;">!!!</span><% } %>
+                    </a>
+                <% } %>
+                <div class="panel panel-default"
+                     style="margin-top:10px; padding-left:0;padding-right:0;">
+                    <input type="checkbox" class="right-chbs" onclick="checkRightCheckboxes()">
+                    <a class="collapsed fa fa-table" data-toggle="collapse" style="margin-left:5px;"
+                        href="#<%= row.tname%>Cols"
+                        aria-controls="<%= row.tname%>Cols">
+                        <%= row.tname %><br>
+                    </a>
+                    <div id="<%= row.tname %>Cols" class="panel-collapse collapse">
+                        <% _.each(row.cols, function(col){ %>
+                            <div data-table="<%= row.tname %>" data-col="<%= col %>">
+                                <ul class="table-columns">
+                                    <li class="dropdown messages-menu">
+                                        <a class="dropdown-toggle" style="font-weight:bold;"
+                                            id="for-col-<%= row.tname%>-<%= col %>"
+                                            data-toggle="dropdown" href="javascript:void(0)">
+                                            <%= col %>
+                                        </a>
+                                        <ul class="dropdown-menu" style="margin:-40px 0 0; font-size:12px">
+                                            <li><a href="javascript:void(0)"
+                                                    onclick="addCol('<%= row.tname%>','<%= col %>')">
+                                                Включить в набор</a></li>
+                                            <li><a href="javascript:void(0)"
+                                                    onclick="delCol('col-<%= row.tname%>-<%= col %>')">
+                                                Исключить из набора</a></li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </div>
+                        <% }); %>
+                    </div>
                 </div>
             </div>
+            <div id="for-<%= row.tname %>-childs"></div>
         </div>
-        <div id="for-<%= row.tname %>-outer"></div>
-        </div>
+
     </script>
 
     <!-- header выборки-->
