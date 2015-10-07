@@ -209,10 +209,7 @@ class GetDataRowsView(BaseEtlView):
 
             try:
                 data = helpers.Database.get_rows_info(source, table_names, col_names)
-
                 return self.json_response({'status': 'ok', 'data': data})
-            except ValueError as err:
-                err_mess = err.message
             except Exception as e:
                 logger.exception(e.message)
                 err_mess = "Произошла системная ошибка"
@@ -230,7 +227,18 @@ class RemoveTablesView(BaseEtlView):
         except Datasource.DoesNotExists:
             err_mess = 'Такого источника не найдено!'
         else:
-            tables = json.loads(get.get('tables'))
-            helpers.RedisService.delete_tables_from_redis(source, tables)
+            try:
+                tables = json.loads(get.get('tables'))
+                sel_tree = helpers.TablesTree.build_tree_by_structure(source)
+                sel_tree.delete_nodes_from_tree(source, tables)
 
-        return self.json_response({})
+                if sel_tree.root:
+                    helpers.RedisService.save_active_tree(sel_tree, source)
+                    helpers.RedisService.delete_tables_from_redis(source, tables)
+
+                return self.json_response({'status': 'ok'})
+            except Exception as e:
+                logger.exception(e.message)
+                err_mess = "Произошла непредвиденная ошибка"
+
+        return self.json_response({'status': 'error', 'message': err_mess})

@@ -165,6 +165,9 @@ function getColumns(url, dict) {
             if (res.status == 'error') {
                 confirmAlert(res.message);
             } else {
+
+                chosenTables.html('');
+
                 var data = res.data;
                 if(data[0].is_root){
                     chosenTables.append(colsTemplate({row: data[0]}));
@@ -312,7 +315,10 @@ function tableToLeft(url){
             "tables": JSON.stringify(tablesToDelete)
         };
 
-    $.get(url, info, function(data){
+    $.get(url, info, function(res){
+        if (res.status == 'error') {
+            confirmAlert(res.message);
+        }
     });
 
     checkRightCheckboxes();
