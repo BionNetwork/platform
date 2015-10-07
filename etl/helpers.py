@@ -24,6 +24,51 @@ def get_utf8_string(value):
     return unicode(value)
 
 
+def get_joins(l_t, r_t, l_info, r_info):
+    """
+        Функция выявляет связи между таблицами
+    """
+
+    l_cols = l_info['columns']
+    r_cols = r_info['columns']
+
+    joins = set()
+
+    for l_c in l_cols:
+        l_str = '{0}_{1}'.format(l_t, l_c['name'])
+        for r_c in r_cols:
+            r_str = '{0}_{1}'.format(r_t, r_c['name'])
+            if l_c['name'] == r_str:
+                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
+                break
+            if l_str == r_c["name"]:
+                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
+                break
+
+    l_foreign = l_info['foreigns']
+    r_foreign = r_info['foreigns']
+
+    for f in l_foreign:
+        if f['destination']['table'] == r_t:
+            joins.add((
+                f['source']['table'],
+                f['source']['column'],
+                f['destination']['table'],
+                f['destination']['column'],
+            ))
+
+    for f in r_foreign:
+        if f['destination']['table'] == l_t:
+            joins.add((
+                f['source']['table'],
+                f['source']['column'],
+                f['destination']['table'],
+                f['destination']['column'],
+            ))
+
+    return joins
+
+
 class Database(object):
     """
     Базовыми возможности для работы с базами данных
@@ -273,8 +318,8 @@ class Postgresql(Database):
                     r_server.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
 
                 if not active_tables:
-                    trees, without_bind = cls.build_trees(tuple(tables), source)
-                    sel_tree = cls.select_tree(trees)
+                    trees, without_bind = TablesTree.build_trees(tuple(tables), source)
+                    sel_tree = TablesTree.select_tree(trees)
                     remains = without_bind[sel_tree.root.val]
                     # таблицы без связей
                     r_server.set(str_remains, json.dumps(remains))
@@ -288,7 +333,7 @@ class Postgresql(Database):
                     # достаем дерево из редиса
                     sel_tree = TablesTree.build_tree_by_structure(source)
                     # перестраиваем дерево
-                    sel_tree.build_tree([sel_tree.root, ], tables, source)
+                    TablesTree.build_tree([sel_tree.root, ], tables, source)
                     # сохраняем дерево
                     RedisService.insert_tree_to_redis(sel_tree, source)
                     # возвращаем результат
@@ -328,70 +373,6 @@ class Postgresql(Database):
             result.append(l_info)
         return result
 
-    @classmethod
-    def build_trees(cls, tables, source):
-
-        trees = {}
-        without_bind = {}
-
-        for t_name in tables:
-            tree = TablesTree(t_name)
-            without_bind[t_name] = tree.build_tree(
-                [tree.root, ], tables, source)
-            trees[t_name] = tree
-
-        return trees, without_bind
-
-    @classmethod
-    def select_tree(cls, trees):
-        counts = {}
-        for tr_name, tree in trees.iteritems():
-            counts[tr_name] = tree.get_nodes_count_by_level([tree.root])
-        root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
-        return trees[root_table]
-
-    @classmethod
-    def get_joins(cls, l_t, r_t, l_info, r_info):
-
-        l_cols = l_info['columns']
-        r_cols = r_info['columns']
-
-        joins = set()
-
-        for l_c in l_cols:
-            l_str = '{0}_{1}'.format(l_t, l_c['name'])
-            for r_c in r_cols:
-                r_str = '{0}_{1}'.format(r_t, r_c['name'])
-                if l_c['name'] == r_str:
-                    joins.add((l_t, l_c["name"], r_t, r_c["name"]))
-                    break
-                if l_str == r_c["name"]:
-                    joins.add((l_t, l_c["name"], r_t, r_c["name"]))
-                    break
-
-        l_foreign = l_info['foreigns']
-        r_foreign = r_info['foreigns']
-
-        for f in l_foreign:
-            if f['destination']['table'] == r_t:
-                joins.add((
-                    f['source']['table'],
-                    f['source']['column'],
-                    f['destination']['table'],
-                    f['destination']['column'],
-                ))
-
-        for f in r_foreign:
-            if f['destination']['table'] == l_t:
-                joins.add((
-                    f['source']['table'],
-                    f['source']['column'],
-                    f['destination']['table'],
-                    f['destination']['column'],
-                ))
-
-        return joins
-
 
 class Node(object):
     def __init__(self, t_name, parent=None, joins=set()):
@@ -420,6 +401,7 @@ class Node(object):
 
 
 class TablesTree(object):
+
     def __init__(self, t_name):
         self.root = Node(t_name)
 
@@ -459,7 +441,8 @@ class TablesTree(object):
             root_info['childs'].append(self.get_tree_structure(ch))
         return root_info
 
-    def build_tree(self, childs, tables, source):
+    @classmethod
+    def build_tree(cls, childs, tables, source):
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
         str_table = RedisCacheKeys.get_active_table(
@@ -486,8 +469,8 @@ class TablesTree(object):
 
                 for t_name in tables[:]:
                     r_info = json.loads(r_server.get(str_table_by_name.format(t_name)))
-                    #todo refactor
-                    joins = Postgresql.get_joins(r_val, t_name, l_info, r_info)
+                    joins = get_joins(r_val, t_name, l_info, r_info)
+
                     if joins:
                         tables.remove(t_name)
                         new_node = Node(t_name, child, joins)
@@ -503,6 +486,28 @@ class TablesTree(object):
         tables = inner_build_tree(childs, tables)
 
         return tables
+
+    @classmethod
+    def build_trees(cls, tables, source):
+
+        trees = {}
+        without_bind = {}
+
+        for t_name in tables:
+            tree = TablesTree(t_name)
+            without_bind[t_name] = cls.build_tree(
+                [tree.root, ], tables, source)
+            trees[t_name] = tree
+
+        return trees, without_bind
+
+    @classmethod
+    def select_tree(cls, trees):
+        counts = {}
+        for tr_name, tree in trees.iteritems():
+            counts[tr_name] = tree.get_nodes_count_by_level([tree.root])
+        root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
+        return trees[root_table]
 
     @classmethod
     def build_tree_by_structure(cls, source):
@@ -818,8 +823,9 @@ class RedisService(object):
         for item in json.loads(r_server.get(str_active_tables)):
             r_server.delete(str_table.format(item['order']))
 
-        for item in json.loads(r_server.get(str_remains)):
-            r_server.delete(str_table_by_name.format(item))
+        if r_server.exists(str_remains):
+            for item in json.loads(r_server.get(str_remains)):
+                r_server.delete(str_table_by_name.format(item))
 
         r_server.delete(str_active_tables)
         r_server.delete(str_joins)

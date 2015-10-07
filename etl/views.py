@@ -165,80 +165,66 @@ class BaseEtlView(BaseView):
         }
         return Datasource.objects.get(**d)
 
+    def get(self, request, *args, **kwargs):
+        try:
+            source = self.try_to_get_source(request)
+        except Datasource.DoesNotExists:
+            err_mess = 'Такого источника не найдено!'
+        else:
+            # try:
+                data = self.start_action(request, source)
+                return self.json_response({'status': 'ok', 'data': data, 'message': ''})
+            # except Exception as e:
+            #     logger.exception(e.message)
+            #     err_mess = "Произошла непредвиденная ошибка"
+
+        if err_mess:
+            return self.json_response({'status': 'error', 'message': err_mess})
+
+    def start_action(self, request, source):
+        return []
+
 
 class GetColumnsView(BaseEtlView):
 
-    def get(self, request, *args, **kwargs):
-        get = request.GET
-        tables = json.loads(get.get('tables', ''))
-        try:
-            source = self.try_to_get_source(request)
-        except Datasource.DoesNotExists:
-            err_mess = 'Такого источника не найдено!'
-        else:
-            try:
-                columns = helpers.Database.get_columns_info(source, request.user, tables)
-
-                return self.json_response({'status': 'ok', 'data': columns, 'message': ''})
-            except ValueError as err:
-                err_mess = err.message
-            except Exception as e:
-                logger.exception(e.message)
-                err_mess = "Произошла непредвиденная ошибка"
-
-        if err_mess:
-            return self.json_response({'status': 'error', 'message': err_mess})
+    def start_action(self, request, source):
+        tables = json.loads(request.GET.get('tables', ''))
+        columns = helpers.Database.get_columns_info(source, request.user, tables)
+        return columns
 
 
 class GetDataRowsView(BaseEtlView):
-    def get(self, request, *args, **kwargs):
-        get = request.GET
-        try:
-            source = self.try_to_get_source(request)
-        except Datasource.DoesNotExists:
-            err_mess = 'Такого источника не найдено!'
-        else:
-            cols = json.loads(get.get('cols', ''))
 
-            table_names = []
-            col_names = []
+    def start_action(self, request, source):
+        cols = json.loads(request.GET.get('cols', ''))
+        table_names = []
+        col_names = []
 
-            for t_name, col_group in groupby(cols, lambda x: x["table"]):
-                table_names.append(t_name)
-                col_names += [x["table"] + "." + x["col"] for x in col_group]
+        for t_name, col_group in groupby(cols, lambda x: x["table"]):
+            table_names.append(t_name)
+            col_names += [x["table"] + "." + x["col"] for x in col_group]
 
-            try:
-                data = helpers.Database.get_rows_info(source, table_names, col_names)
-                return self.json_response({'status': 'ok', 'data': data})
-            except Exception as e:
-                logger.exception(e.message)
-                err_mess = "Произошла системная ошибка"
+        data = helpers.Database.get_rows_info(source, table_names, col_names)
 
-        if err_mess:
-            return self.json_response({'status': 'error', 'message': err_mess})
+        return data
 
 
 class RemoveTablesView(BaseEtlView):
 
-    def get(self, request, *args, **kwargs):
-        get = request.GET
-        try:
-            source = self.try_to_get_source(request)
-        except Datasource.DoesNotExists:
-            err_mess = 'Такого источника не найдено!'
-        else:
-            try:
-                tables = json.loads(get.get('tables'))
-                sel_tree = helpers.TablesTree.build_tree_by_structure(source)
-                sel_tree.delete_nodes_from_tree(source, tables)
+    def start_action(self, request, source):
+        tables = json.loads(request.GET.get('tables'))
+        sel_tree = helpers.TablesTree.build_tree_by_structure(source)
+        sel_tree.delete_nodes_from_tree(source, tables)
 
-                if sel_tree.root:
-                    helpers.RedisService.save_active_tree(sel_tree, source)
-                    helpers.RedisService.delete_tables_from_redis(source, tables)
+        if sel_tree.root:
+            helpers.RedisService.save_active_tree(sel_tree, source)
+            helpers.RedisService.delete_tables_from_redis(source, tables)
 
-                return self.json_response({'status': 'ok'})
-            except Exception as e:
-                logger.exception(e.message)
-                err_mess = "Произошла непредвиденная ошибка"
+        return []
 
-        return self.json_response({'status': 'error', 'message': err_mess})
+
+class RemoveAllTablesView(BaseEtlView):
+
+    def start_action(self, request, source):
+        helpers.RedisService.tree_full_clean(source)
+        return []

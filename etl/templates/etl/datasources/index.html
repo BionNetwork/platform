@@ -127,7 +127,7 @@
                                     onclick="tablesToRight('{% url "etl:datasources.get_columns"%}')" id="button-allToRight"></button>
                             <button class="btn fa fa-angle-double-left"
                                     style="margin-bottom:10px"
-                                    onclick="tablesToLeft()" id="button-allToLeft"></button>
+                                    onclick="tablesToLeft('{% url "etl:datasources.remove_all_tables"%}')" id="button-allToLeft"></button>
                             <button class="fa fa-refresh" style="margin-top:140px"
                                     onclick="refreshData('{% url "etl:datasources.get_rows"%}')"></button>
                         </div>

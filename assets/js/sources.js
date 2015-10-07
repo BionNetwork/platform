@@ -270,6 +270,17 @@ function delCol(id){
     }
 }
 
+
+function getSourceInfo(){
+    var source = $('#databases>div'),
+        info = {
+            "host": source.data("host"),
+            "db": source.data("db")
+        };
+    return info;
+}
+
+
 function tableToLeft(url){
     var checked = $('.right-chbs:checked'),
         divs = checked.siblings('div').find('div'),
@@ -308,12 +319,9 @@ function tableToLeft(url){
        tablesToDelete.push($(this).data('table'));
        $(this).remove();
     });
-    var source = $('#databases>div'),
-        info = {
-            "host": source.data("host"),
-            "db": source.data("db"),
-            "tables": JSON.stringify(tablesToDelete)
-        };
+
+    var info = getSourceInfo();
+    info['tables'] = JSON.stringify(tablesToDelete);
 
     $.get(url, info, function(res){
         if (res.status == 'error') {
@@ -328,11 +336,22 @@ function tableToLeft(url){
     }
 }
 
-function tablesToLeft(){
-    chosenTables.html('');
-    dataWorkspace.html(initDataTable);
-    $('#button-toLeft').addClass('disabled');
-    $('#button-allToLeft').addClass('disabled');
+
+function tablesToLeft(url){
+
+    var info = getSourceInfo();
+
+    $.get(url, info, function(res){
+        if (res.status == 'error') {
+            confirmAlert(res.message);
+        }
+        else{
+            chosenTables.html('');
+            dataWorkspace.html(initDataTable);
+            $('#button-toLeft').addClass('disabled');
+            $('#button-allToLeft').addClass('disabled');
+        }
+    });
 }
 
 function refreshData(url){
