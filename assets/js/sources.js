@@ -2,7 +2,7 @@ function confirmAlert(message){
     $.confirm({
         width: '100px',
         text: message,
-        title:"Внимание",
+        title:"Внимание!",
         confirmButtonClass: "btn-danger",
         cancelButtonClass: "hidden",
         confirmButton: "Ок"
@@ -73,7 +73,7 @@ function removeSource(url){
 var chosenTables, colsTemplate, colsHeaders,
     selectedRow, dataWorkspace, loader, initDataTable;
 
-function getConnectionData(dataUrl){
+function getConnectionData(dataUrl, closeUrl){
 
     colsTemplate = _.template($('#table-cols').html());
     colsHeaders = _.template($('#cols-headers').html());
@@ -101,6 +101,16 @@ function getConnectionData(dataUrl){
             dataWorkspace.html(initDataTable);
 
             dataWindow.modal('show');
+
+            dataWindow.on('hidden.bs.modal', function(e){
+
+                var info = getSourceInfo();
+                $.get(closeUrl, info, function(res){
+                    if (res.status == 'error'){
+                        confirmAlert(res.message);
+                    }
+                });
+            });
 
             $('#button-toRight').addClass('disabled');
             $('#button-allToRight').addClass('disabled');
@@ -186,6 +196,14 @@ function getColumns(url, dict) {
 }
 
 function tableToRight(url){
+
+    // если есть талица без связи, то внимание
+    if($('#without_bind').length){
+        confirmAlert('Имеется таблица без связи! '+
+        'Выберите связь у таблицы, либо удалите ее!');
+        return;
+    }
+
     var selectedTable = $('div.table-selected');
 
     if(selectedTable.length && !$('#'+selectedTable.attr('id')+'Cols').length){
@@ -203,6 +221,14 @@ function tableToRight(url){
 }
 
 function tablesToRight(url){
+
+    // если есть талица без связи, то внимание
+    if($('#without_bind').length){
+        confirmAlert('Имеется таблица без связи! '+
+        'Выберите связь у таблицы, либо удалите ее!');
+        return;
+    }
+
     var divs = $('.checkbox-table:checked').closest('div'),
         dict = {
                 csrfmiddlewaretoken: csrftoken,

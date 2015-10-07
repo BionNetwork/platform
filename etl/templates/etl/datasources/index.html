@@ -56,7 +56,10 @@
                                        onclick="removeSource('{% url "etl:datasources.delete" row.id %}')">
                                     <i class="fa fa-remove text-danger"></i></a>&nbsp;&nbsp;
                                     <a href="javascript:;"
-                                       onclick="getConnectionData('{% url "etl:datasources.get_data" row.id %}')">
+                                       onclick="getConnectionData(
+                                       '{% url "etl:datasources.get_data" row.id %}',
+                                       '{% url "etl:datasources.remove_all_tables" %}'
+                                    )">
                                     <i class="fa fa-database text-orange"></i></a>
                                 </td>
                             </tr>
@@ -195,7 +198,7 @@
             <div style="padding:0; display:inline-flex;">
                 <% if (!row.is_root) { %>
                     <a class="fa fa-exchange relation" onclick="showJoinWindow('<%= row.tname %>')">
-                        <% if (row.is_last) { %><span style="color:red;">!!!</span><% } %>
+                        <% if (row.without_bind) { %><span id="without_bind" style="color:red;">!!!</span><% } %>
                     </a>
                 <% } %>
                 <div class="panel panel-default"

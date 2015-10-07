@@ -321,10 +321,13 @@ class Postgresql(Database):
                     trees, without_bind = TablesTree.build_trees(tuple(tables), source)
                     sel_tree = TablesTree.select_tree(trees)
                     remains = without_bind[sel_tree.root.val]
-                    # таблицы без связей
-                    r_server.set(str_remains, json.dumps(remains))
 
+                    # таблица без связей
+                    r_server.set(str_remains, json.dumps(remains[:1]))
+                    # первая таблица без связей
                     last = remains[0] if remains else None
+                    # удаляем таблицы без связей, кроме первой
+                    RedisService.delete_unneeded_remains(source, remains[1:])
 
                     RedisService.insert_tree_to_redis(sel_tree, source)
                     new_result = cls.get_final_info(sel_tree, source, last)
@@ -333,11 +336,19 @@ class Postgresql(Database):
                     # достаем дерево из редиса
                     sel_tree = TablesTree.build_tree_by_structure(source)
                     # перестраиваем дерево
-                    TablesTree.build_tree([sel_tree.root, ], tables, source)
+                    remains = TablesTree.build_tree([sel_tree.root, ], tables, source)
+
+                    # таблица без связей
+                    r_server.set(str_remains, json.dumps(remains[:1]))
+                    # первая таблица без связей
+                    last = remains[0] if remains else None
+                    # удаляем таблицы без связей, кроме первой
+                    RedisService.delete_unneeded_remains(source, remains[1:])
+
                     # сохраняем дерево
                     RedisService.insert_tree_to_redis(sel_tree, source)
                     # возвращаем результат
-                    new_result = cls.get_final_info(sel_tree, source, None)
+                    new_result = cls.get_final_info(sel_tree, source, last)
 
         return new_result
 
@@ -367,7 +378,7 @@ class Postgresql(Database):
         if last:
             table_info = json.loads(r_server.get(str_table_by_name.format(last)))
             l_info = {'tname': last, 'db': db, 'host': host,
-                      'dest': n_val, 'is_last': True,
+                      'dest': n_val, 'without_bind': True,
                       'cols': [x['name'] for x in table_info['columns']]
                       }
             result.append(l_info)
@@ -831,3 +842,11 @@ class RedisService(object):
         r_server.delete(str_joins)
         r_server.delete(str_remains)
         r_server.delete(str_tree)
+
+    @classmethod
+    def delete_unneeded_remains(cls, source, remains):
+        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+            source.user_id, source.id, '{0}')
+
+        for t_name in remains:
+            r_server.delete(str_table_by_name.format(t_name))
