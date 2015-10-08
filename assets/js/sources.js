@@ -1,3 +1,4 @@
+
 function confirmAlert(message){
     $.confirm({
         width: '100px',
@@ -70,15 +71,28 @@ function removeSource(url){
     });
 }
 
-var chosenTables, colsTemplate, colsHeaders,
-    selectedRow, dataWorkspace, loader, initDataTable;
+var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
+    selectedRow, dataWorkspace, loader, initDataTable, closeUrl;
 
-function getConnectionData(dataUrl, closeUrl){
+// событие на закрытие модального окна
+$('#modal-data').on('hidden.bs.modal', function(e){
+    var info = getSourceInfo();
+    $.get(closeUrl, info, function(res){
+        if (res.status == 'error'){
+            confirmAlert(res.message);
+        }
+    });
+});
 
+function getConnectionData(dataUrl, closingUrl){
+    closeUrl = closingUrl;
     colsTemplate = _.template($('#table-cols').html());
     colsHeaders = _.template($('#cols-headers').html());
     selectedRow = _.template($('#selected-rows').html());
-    initDataTable = _.template($("#datatable-init").html())
+    initDataTable = _.template($("#datatable-init").html());
+    joinWinRow = _.template($("#join-win-row").html());
+
+    joinWin = $('#join-window')
 
     loader = $('#loader');
     loader.hide();
@@ -101,16 +115,6 @@ function getConnectionData(dataUrl, closeUrl){
             dataWorkspace.html(initDataTable);
 
             dataWindow.modal('show');
-
-            dataWindow.on('hidden.bs.modal', function(e){
-
-                var info = getSourceInfo();
-                $.get(closeUrl, info, function(res){
-                    if (res.status == 'error'){
-                        confirmAlert(res.message);
-                    }
-                });
-            });
 
             $('#button-toRight').addClass('disabled');
             $('#button-allToRight').addClass('disabled');
@@ -169,24 +173,29 @@ function checkRightCheckboxes(){
     }
 }
 
+
+function drawTables(data){
+
+    chosenTables.html('');
+
+    if(data[0].is_root){
+        chosenTables.append(colsTemplate({row: data[0]}));
+        data = data.slice(1);
+    }
+    _.each(data,
+        function(el){
+            $('#for-'+el.dest+'-childs').append(colsTemplate({row: el}))
+        });
+}
+
+
 function getColumns(url, dict) {
     $.get(url, dict,
         function (res) {
             if (res.status == 'error') {
                 confirmAlert(res.message);
             } else {
-
-                chosenTables.html('');
-
-                var data = res.data;
-                if(data[0].is_root){
-                    chosenTables.append(colsTemplate({row: data[0]}));
-                    data = data.slice(1);
-                }
-                _.each(data,
-                    function(el){
-                        $('#for-'+el.dest+'-childs').append(colsTemplate({row: el}))
-                    });
+                drawTables(res.data);
 
                 $('#data-table-headers').append(colsHeaders({data: res.data}));
                 $('#button-allToLeft').removeClass('disabled');
@@ -416,4 +425,123 @@ function refreshData(url){
             dataWorkspace.parent('div').css('background-color', 'white');
         });
     }
+}
+
+
+function showJoinWindow(url, parent, child, isWithoutBind){
+
+    var info = getSourceInfo();
+    info['parent'] = parent;
+    info['child_bind'] = child;
+    info['is_without_bind'] = isWithoutBind;
+
+    $.get(url, info, function(res){
+        if (res.status == 'error') {
+            confirmAlert(res.message);
+        }
+        else{
+            var joinRows = $('#joinRows'),
+                data = res.data;
+            joinRows.html('');
+            joinRows.data('table-left', parent);
+            joinRows.data('table-right', child);
+
+            if(data['without_bind']){
+                joinRows.append(joinWinRow({
+                    parentCols: data[parent],
+                    childCols: data[child],
+                    i: 0
+                }));
+            } else {
+                $.each(data.joins, function(i, join){
+                    var newRow = joinWinRow({
+                        parentCols: data[parent],
+                        childCols: data[child],
+                        i: i
+                    });
+                    joinRows.append($(newRow));
+                    $('[name="joinradio"][value='+join['join_type']+']').prop('checked');
+
+                    $('.with-select-'+i).find('select[name="parent"]').val(join['source_col']);
+                    $('.with-select-'+i).find('select[name="child"]').val(join['destination_col']);
+                    $('.with-select-'+i).find('select[name="joinType"]').val(join['join_val']);
+                });
+            }
+
+            $('#parentLabel').text(parent);
+            $('#childLabel').text(child);
+            joinWin.modal('show');
+        }
+    });
+}
+
+
+function addNewJoin(){
+    var joinRows = $('#joinRows'),
+        parentCols = [],
+        childCols = [],
+        parOptions = joinWin.find('select[name="parent"]').first().find('option');
+        wobOptions = joinWin.find('select[name="child"]').first().find('option');
+
+    $.each(parOptions, function(i, el){
+       parentCols.push($(el).attr('value'));
+    });
+
+    $.each(wobOptions, function(i, el){
+       childCols.push($(el).attr('value'));
+    });
+
+    joinRows.append(joinWinRow({
+        parentCols: parentCols,
+        childCols: childCols,
+        i: 0
+    }));
+}
+
+
+function deleteJoins(){
+    $('.checkbox-joins:checked').closest('.join-row').remove();
+}
+
+
+function saveJoins(url){
+
+    var joins = $('.join-row'),
+        joinsArray = [];
+
+    if(!joins.length){
+        confirmAlert('Пожалуйста, выберите связь!');
+        return;
+    }
+
+    $.each(joins, function(i, row){
+        var selects = $(row).find('select'),
+            vals = [];
+        $.each(selects, function(j, sel){
+            vals.push($(sel).val());
+        });
+        joinsArray.push(vals);
+    });
+
+    var joinRows = $('#joinRows'),
+        info = getSourceInfo();
+
+    info['joins'] = JSON.stringify(joinsArray);
+    info['left'] = joinRows.data('table-left');
+    info['right'] = joinRows.data('table-right');
+    info['joinType'] = $('[name="joinradio"]:checked').val();
+
+    $.get(url, info, function(res){
+        if(res.status == 'error') {
+                confirmAlert(res.message)
+        } else {
+            joinWin.modal('hide');
+            drawTables(res.data);
+        }
+    });
+}
+
+
+function closeJoins(){
+    joinWin.modal('hide');
 }

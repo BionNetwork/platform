@@ -146,6 +146,10 @@ class GetConnectionDataView(BaseView):
 
     def get(self, request, *args, **kwargs):
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
+
+        # очищаем из редиса инфу дерева перед созданием нового
+        helpers.RedisService.tree_full_clean(source)
+
         try:
             db = helpers.Database.get_db_info(request.user.id, source)
         except ValueError as err:
@@ -171,12 +175,12 @@ class BaseEtlView(BaseView):
         except Datasource.DoesNotExists:
             err_mess = 'Такого источника не найдено!'
         else:
-            # try:
+            try:
                 data = self.start_action(request, source)
                 return self.json_response({'status': 'ok', 'data': data, 'message': ''})
-            # except Exception as e:
-            #     logger.exception(e.message)
-            #     err_mess = "Произошла непредвиденная ошибка"
+            except Exception as e:
+                logger.exception(e.message)
+                err_mess = "Произошла непредвиденная ошибка"
 
         if err_mess:
             return self.json_response({'status': 'error', 'message': err_mess})
@@ -228,3 +232,39 @@ class RemoveAllTablesView(BaseEtlView):
     def start_action(self, request, source):
         helpers.RedisService.tree_full_clean(source)
         return []
+
+
+class GetColumnsForChoicesView(BaseEtlView):
+
+    def start_action(self, request, source):
+        parent_table = request.GET.get('parent')
+        child_table = request.GET.get('child_bind')
+        is_without_bind = json.loads(request.GET.get('is_without_bind'))
+
+        if is_without_bind:
+            data = helpers.RedisService.get_columns_for_tables_without_bind(
+                source, parent_table, child_table)
+        else:
+            data = helpers.RedisService.get_columns_for_tables_with_bind(
+                source, parent_table, child_table)
+
+        return data
+
+
+class SaveNewJoinsView(BaseEtlView):
+
+    def start_action(self, request, source):
+        get = request.GET
+        left_table = get.get('left')
+        right_table = get.get('right')
+        join_type = get.get('joinType')
+        joins = json.loads(get.get('joins'))
+
+        sel_tree = helpers.TablesTree.build_tree_by_structure(source)
+        helpers.TablesTree.update_node_joins(
+            sel_tree, left_table, right_table, join_type, joins)
+
+        helpers.RedisService.insert_tree_to_redis(sel_tree, source)
+        data = helpers.RedisService.get_final_info(sel_tree, source)
+
+        return data

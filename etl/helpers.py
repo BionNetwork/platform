@@ -15,6 +15,31 @@ from . import r_server
 from .maps import postgresql as psql_map
 
 
+class JoinTypes(object):
+
+    INNER, LEFT, RIGHT = ('inner', 'left', 'right')
+
+    values = {
+        INNER: "inner join",
+        LEFT: "left join",
+        RIGHT: "right join",
+    }
+
+
+class Operations(object):
+
+    EQ, LT, GT, LTE, GTE, NEQ = ('eq', 'lt', 'gt', 'lte', 'gte', 'neq')
+
+    values = {
+        EQ: '=',
+        LT: '<',
+        GT: '>',
+        LTE: '<=',
+        GTE: '>=',
+        NEQ: '<>',
+    }
+
+
 def get_utf8_string(value):
     """
     Кодирование в utf-8 строки
@@ -22,6 +47,12 @@ def get_utf8_string(value):
     :return: string
     """
     return unicode(value)
+
+
+# FIXME достаем из списка диктов по имени, смущает!
+# FIXME сделать диктом actives {t_name: ind, }
+def get_order_from_actives(t_name, actives):
+    return [x for x in actives if x['name'] == t_name][0]['order']
 
 
 def get_joins(l_t, r_t, l_info, r_info):
@@ -39,10 +70,12 @@ def get_joins(l_t, r_t, l_info, r_info):
         for r_c in r_cols:
             r_str = '{0}_{1}'.format(r_t, r_c['name'])
             if l_c['name'] == r_str:
-                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
+                #todo лишняя избыточность таблиц откуда и куда в каждой связи этих таблиц
+                #todo joins переделать из сета в дикт
+                joins.add((l_t, l_c["name"], r_t, r_c["name"], Operations.EQ))
                 break
             if l_str == r_c["name"]:
-                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
+                joins.add((l_t, l_c["name"], r_t, r_c["name"], Operations.EQ))
                 break
 
     l_foreign = l_info['foreigns']
@@ -55,6 +88,7 @@ def get_joins(l_t, r_t, l_info, r_info):
                 f['source']['column'],
                 f['destination']['table'],
                 f['destination']['column'],
+                Operations.EQ,
             ))
 
     for f in r_foreign:
@@ -64,6 +98,7 @@ def get_joins(l_t, r_t, l_info, r_info):
                 f['source']['column'],
                 f['destination']['table'],
                 f['destination']['column'],
+                Operations.EQ,
             ))
 
     return joins
@@ -221,7 +256,7 @@ class Postgresql(Database):
         str_table = RedisCacheKeys.get_active_table(user.id, source.id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table(user.id, source.id, '{0}')
         str_active_tables = RedisCacheKeys.get_active_tables(user.id, source.id)
-        str_remains = RedisCacheKeys.get_source_remains(user.id, source.id)
+        str_remain = RedisCacheKeys.get_source_remain(user.id, source.id)
 
         if settings.USE_REDIS_CACHE:
             # выбранные ранее таблицы в редисе
@@ -322,91 +357,59 @@ class Postgresql(Database):
                     sel_tree = TablesTree.select_tree(trees)
                     remains = without_bind[sel_tree.root.val]
 
-                    # таблица без связей
-                    r_server.set(str_remains, json.dumps(remains[:1]))
-                    # первая таблица без связей
-                    last = remains[0] if remains else None
-                    # удаляем таблицы без связей, кроме первой
-                    RedisService.delete_unneeded_remains(source, remains[1:])
-
-                    RedisService.insert_tree_to_redis(sel_tree, source)
-                    new_result = cls.get_final_info(sel_tree, source, last)
-
                 else:
                     # достаем дерево из редиса
                     sel_tree = TablesTree.build_tree_by_structure(source)
                     # перестраиваем дерево
                     remains = TablesTree.build_tree([sel_tree.root, ], tables, source)
 
-                    # таблица без связей
-                    r_server.set(str_remains, json.dumps(remains[:1]))
+                if remains:
                     # первая таблица без связей
-                    last = remains[0] if remains else None
+                    last = remains[0]
+                    # таблица без связей
+                    r_server.set(str_remain, last)
+
                     # удаляем таблицы без связей, кроме первой
                     RedisService.delete_unneeded_remains(source, remains[1:])
+                else:
+                    last = None
+                    r_server.set(str_remain, '')
 
-                    # сохраняем дерево
-                    RedisService.insert_tree_to_redis(sel_tree, source)
-                    # возвращаем результат
-                    new_result = cls.get_final_info(sel_tree, source, last)
+                # сохраняем дерево
+                RedisService.insert_tree_to_redis(sel_tree, source)
+                # возвращаем результат
+                new_result = RedisService.get_final_info(sel_tree, source, last)
 
         return new_result
 
-    @classmethod
-    def get_final_info(cls, tree, source, last=None):
-        result = []
-        str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
-        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
-            source.user_id, source.id, '{0}')
-        str_active_tables = RedisCacheKeys.get_active_tables(source.user_id, source.id)
-        ordered_nodes = tree.get_tree_ordered_nodes([tree.root, ])
-        actives = json.loads(r_server.get(str_active_tables))
-        db = source.db
-        host = source.host
-
-        for ind, node in enumerate(ordered_nodes):
-            n_val = node.val
-            n_info = {'tname': n_val, 'db': db, 'host': host,
-                      'dest': getattr(node.parent, 'val', None),
-                      'is_root': not ind
-                      }
-            order = [x for x in actives if x['name'] == n_val][0]['order']
-            table_info = json.loads(r_server.get(str_table.format(order)))
-            n_info['cols'] = [x['name'] for x in table_info['columns']]
-            result.append(n_info)
-
-        if last:
-            table_info = json.loads(r_server.get(str_table_by_name.format(last)))
-            l_info = {'tname': last, 'db': db, 'host': host,
-                      'dest': n_val, 'without_bind': True,
-                      'cols': [x['name'] for x in table_info['columns']]
-                      }
-            result.append(l_info)
-        return result
-
 
 class Node(object):
-    def __init__(self, t_name, parent=None, joins=set()):
+    def __init__(self, t_name, parent=None, joins=set(), join_type='inner'):
         self.val = t_name
         self.parent = parent
         self.childs = []
         self.joins = joins
+        self.join_type = join_type
 
     def get_node_joins_info(self):
         node_joins = defaultdict(list)
 
         n_val = self.val
         for join in self.joins:
-            t1, c1, t2, c2 = join
+            t1, c1, t2, c2, oper = join
             if n_val == t1:
                 node_joins[t2].append({
                     "source": t2, "source_col": c2,
                     "destination": t1, "destination_col": c1,
+                    "join_val": oper,
+                    "join_type": self.join_type,
                 })
             else:
                 node_joins[t1].append({
                     "source": t1, "source_col": c1,
                     "destination": t2, "destination_col": c2,
+                    "join_val": oper,
+                    "join_type": self.join_type,
                 })
         return node_joins
 
@@ -446,8 +449,8 @@ class TablesTree(object):
         return counts
 
     def get_tree_structure(self, root):
-        root_info = {'val': root.val, 'childs': [],
-                     'joins': list(root.joins)}
+        root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
+                     'join_type': root.join_type}
         for ch in root.childs:
             root_info['childs'].append(self.get_tree_structure(ch))
         return root_info
@@ -527,7 +530,8 @@ class TablesTree(object):
 
         def inner_build(root, childs):
             for ch in childs:
-                new_node = Node(ch['val'], root, ch['joins'])
+                new_node = Node(ch['val'], root, ch['joins'],
+                                ch['join_type'])
                 root.childs.append(new_node)
                 inner_build(new_node, ch['childs'])
 
@@ -551,6 +555,29 @@ class TablesTree(object):
             self.root = None
         else:
             inner_delete(self.root)
+
+    @classmethod
+    def update_node_joins(cls, sel_tree, left_table,
+                          right_table, join_type, joins):
+
+        nodes = sel_tree.get_tree_ordered_nodes([sel_tree.root, ])
+        parent = [x for x in nodes if x.val == left_table][0]
+        childs = [x for x in parent.childs if x.val == right_table]
+
+        # случай, когда две таблицы не имели связей
+        if not childs:
+            node = Node(right_table, parent, set(), join_type)
+            parent.childs.append(node)
+        else:
+            # меняем существующие связи
+            node = childs[0]
+            node.joins = set()
+
+        for came_join in joins:
+            parent_col, oper, child_col = came_join
+            # todo опять переисбыточность!!!
+            node.joins.add(
+                (right_table, child_col, left_table, parent_col, oper))
 
 
 class Mysql(Database):
@@ -667,8 +694,8 @@ class RedisCacheKeys(object):
 
     # таблицы без связей
     @staticmethod
-    def get_source_remains(user_id, datasource_id):
-        return '{0}:remains'.format(
+    def get_source_remain(user_id, datasource_id):
+        return '{0}:remain'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
@@ -822,7 +849,7 @@ class RedisService(object):
             source.user_id, source.id)
         str_joins = RedisCacheKeys.get_source_joins(
             source.user_id, source.id)
-        str_remains = RedisCacheKeys.get_source_remains(
+        str_remain = RedisCacheKeys.get_source_remain(
             source.user_id, source.id)
         str_tree = RedisCacheKeys.get_active_tree(
             source.user_id, source.id)
@@ -831,16 +858,16 @@ class RedisService(object):
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
 
-        for item in json.loads(r_server.get(str_active_tables)):
-            r_server.delete(str_table.format(item['order']))
+        if r_server.exists(str_active_tables):
+            for item in json.loads(r_server.get(str_active_tables)):
+                str_t = str_table.format(item['order'])
+                if r_server.exists(str_t):
+                    r_server.delete(str_t)
 
-        if r_server.exists(str_remains):
-            for item in json.loads(r_server.get(str_remains)):
-                r_server.delete(str_table_by_name.format(item))
-
+        r_server.delete(str_table_by_name.format(r_server.get(str_remain)))
+        r_server.delete(str_remain)
         r_server.delete(str_active_tables)
         r_server.delete(str_joins)
-        r_server.delete(str_remains)
         r_server.delete(str_tree)
 
     @classmethod
@@ -850,3 +877,105 @@ class RedisService(object):
 
         for t_name in remains:
             r_server.delete(str_table_by_name.format(t_name))
+
+    @classmethod
+    def get_columns_for_tables_without_bind(
+            cls, source, parent_table, without_bind_table):
+        str_active_tables = RedisCacheKeys.get_active_tables(
+            source.user_id, source.id)
+        str_remain = RedisCacheKeys.get_source_remain(
+            source.user_id, source.id)
+        str_table = RedisCacheKeys.get_active_table(
+            source.user_id, source.id, '{0}')
+        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+            source.user_id, source.id, '{0}')
+
+        err_msg = 'Истекло время хранения ключей в редисе!'
+
+        if (not r_server.exists(str_active_tables) or
+                not r_server.exists(str_remain)):
+            raise Exception(err_msg)
+
+        wo_bind_columns = json.loads(r_server.get(str_table_by_name.format(
+            without_bind_table)))['columns']
+
+        actives = json.loads(r_server.get(str_active_tables))
+
+        parent_columns = json.loads(r_server.get(str_table.format(
+            get_order_from_actives(parent_table, actives)
+        )))['columns']
+
+        return {
+            without_bind_table: [x['name'] for x in wo_bind_columns],
+            parent_table: [x['name'] for x in parent_columns],
+            'without_bind': True,
+        }
+
+    @classmethod
+    def get_columns_for_tables_with_bind(
+            cls, source, parent_table, child_table):
+        str_active_tables = RedisCacheKeys.get_active_tables(
+            source.user_id, source.id)
+        str_table = RedisCacheKeys.get_active_table(
+            source.user_id, source.id, '{0}')
+        str_joins = RedisCacheKeys.get_source_joins(
+            source.user_id, source.id)
+
+        err_msg = 'Истекло время хранения ключей в редисе!'
+
+        if (not r_server.exists(str_active_tables) or
+                not r_server.exists(str_joins)):
+            raise Exception(err_msg)
+
+        actives = json.loads(r_server.get(str_active_tables))
+
+        parent_columns = json.loads(r_server.get(str_table.format(
+            get_order_from_actives(parent_table, actives)
+        )))['columns']
+
+        child_columns = json.loads(r_server.get(str_table.format(
+            get_order_from_actives(child_table, actives)
+        )))['columns']
+
+        exist_joins = json.loads(r_server.get(str_joins))
+        parent_joins = exist_joins[parent_table]
+        child_joins = [x for x in parent_joins if x['destination'] == child_table]
+
+        return {
+            child_table: [x['name'] for x in child_columns],
+            parent_table: [x['name'] for x in parent_columns],
+            'without_bind': False,
+            'joins': child_joins,
+        }
+
+    @classmethod
+    def get_final_info(cls, tree, source, last=None):
+        result = []
+        str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
+        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+            source.user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(source.user_id, source.id)
+        ordered_nodes = tree.get_tree_ordered_nodes([tree.root, ])
+        actives = json.loads(r_server.get(str_active_tables))
+        db = source.db
+        host = source.host
+
+        for ind, node in enumerate(ordered_nodes):
+            n_val = node.val
+            n_info = {'tname': n_val, 'db': db, 'host': host,
+                      'dest': getattr(node.parent, 'val', None),
+                      'is_root': not ind, 'without_bind': False,
+                      }
+            order = get_order_from_actives(n_val, actives)
+            table_info = json.loads(r_server.get(str_table.format(order)))
+            n_info['cols'] = [x['name'] for x in table_info['columns']]
+            result.append(n_info)
+
+        if last:
+            table_info = json.loads(r_server.get(str_table_by_name.format(last)))
+            l_info = {'tname': last, 'db': db, 'host': host,
+                      'dest': n_val, 'without_bind': True,
+                      'cols': [x['name'] for x in table_info['columns']]
+                      }
+            result.append(l_info)
+        return result

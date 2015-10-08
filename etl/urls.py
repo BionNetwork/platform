@@ -18,4 +18,8 @@ urlpatterns = [
     url(r'^datasources/remove_tables/$', views.RemoveTablesView.as_view(), name='datasources.remove_tables'),
     url(r'^datasources/remove_all_tables/$', views.RemoveAllTablesView.as_view(),
         name='datasources.remove_all_tables'),
+    url(r'^datasources/cols_for_choices/$', views.GetColumnsForChoicesView.as_view(),
+        name='datasources.cols_for_choices'),
+    url(r'^datasources/save_new_joins/$', views.SaveNewJoinsView.as_view(),
+        name='datasources.save_new_joins'),
 ]
