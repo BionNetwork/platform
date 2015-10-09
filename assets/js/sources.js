@@ -196,7 +196,7 @@ function getColumns(url, dict) {
                 confirmAlert(res.message);
             } else {
                 drawTables(res.data);
-
+                $('#data-table-headers').html('');
                 $('#data-table-headers').append(colsHeaders({data: res.data}));
                 $('#button-allToLeft').removeClass('disabled');
             }
@@ -205,6 +205,10 @@ function getColumns(url, dict) {
 }
 
 function tableToRight(url){
+
+    if($('#button-toRight').hasClass('disabled')){
+        return;
+    }
 
     // если есть талица без связи, то внимание
     if($('#without_bind').length){
@@ -230,6 +234,10 @@ function tableToRight(url){
 }
 
 function tablesToRight(url){
+
+    if($('#button-allToRight').hasClass('disabled')){
+        return;
+    }
 
     // если есть талица без связи, то внимание
     if($('#without_bind').length){
@@ -317,10 +325,16 @@ function getSourceInfo(){
 
 
 function tableToLeft(url){
-    var checked = $('.right-chbs:checked'),
+
+    if($('#button-toLeft').hasClass('disabled')){
+        return;
+    }
+
+    // чекбоксы с дочерними чекбоксами
+    var checked = $('.right-chbs:checked').closest('.table-part').find('.right-chbs'),
         divs = checked.siblings('div').find('div'),
         indexes = [],// индексы в таблице для удаления
-        ths = $("#data-table-headers").find("th");
+        ths = $("#data-table-headers").find("th").not(':hidden');
 
     $.each(divs, function(i, el){
         var header = $('#col-'+$(this).data('table')+'-'+$(this).data('col'));
@@ -331,15 +345,18 @@ function tableToLeft(url){
     var workspaceRows = dataWorkspace.find("table tr").not(":first"),
         reversed = indexes.reverse();
 
-    // удаляем ячейки по индексам
-    $(workspaceRows).each(function(trIndex, tRow){
-        $.each(reversed, function(i, el){
-            $(tRow).find("td").eq(el).remove();
-        });
-        if ($(tRow).length == 0) {
-            $(tRow).remove();
-        }
-    });
+    // удаляем все строки данных
+    workspaceRows.remove();
+
+    // удаляем ячейки по индексам (функция работает некорректно)
+//    $(workspaceRows).each(function(trIndex, tRow){
+//        $.each(reversed, function(i, el){
+//            $(tRow).find("td").eq(el).remove();
+//        });
+//        if ($(tRow).length == 0) {
+//            $(tRow).remove();
+//        }
+//    });
 
     var selTables = checked.closest('.table-part'),
         tablesToDelete = [];
@@ -373,6 +390,10 @@ function tableToLeft(url){
 
 
 function tablesToLeft(url){
+
+    if($('#button-allToLeft').hasClass('disabled')){
+        return;
+    }
 
     var info = getSourceInfo();
 
