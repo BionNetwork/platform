@@ -16,6 +16,7 @@ from . import forms as etl_forms
 import logging
 
 from . import helpers
+from . import r_server
 
 
 logger = logging.getLogger(__name__)

@@ -5,7 +5,7 @@ import psycopg2
 import MySQLdb
 import json
 import operator
-from itertools import groupby, izip_longest, izip
+from itertools import groupby
 from collections import defaultdict
 
 from django.conf import settings
@@ -594,14 +594,14 @@ class RedisSourceService(object):
                     destinations += cls.delete_joins_from_redis(destinations, joins)
         return destinations
 
-    @classmethod
-    def delete_tables_info(cls, tables, actives, str_table):
-        names = [x['name'] for x in actives]
-        for table in tables:
-            if table in names:
-                found = [x for x in actives if x['name'] == table][0]
-                r_server.delete(str_table.format(found['order']))
-                actives.remove(found)
+    # @classmethod
+    # def delete_tables_info(cls, tables, actives, str_table):
+    #     names = [x['name'] for x in actives]
+    #     for table in tables:
+    #         if table in names:
+    #             found = [x for x in actives if x['name'] == table][0]
+    #             r_server.delete(str_table.format(found['order']))
+    #             actives.remove(found)
 
     @classmethod
     def get_table_full_info(cls, source, table):
@@ -1030,7 +1030,6 @@ class DataSourceService(object):
         sel_tree.delete_nodes_from_tree(source, tables)
 
         if sel_tree.root:
-            # TODO AHTUNG CHECK
             # RedisSourceService.save_active_tree(sel_tree, source)
             # RedisSourceService.delete_tables_from_redis(source, tables)
             RedisSourceService.insert_tree_to_redis(sel_tree, source)
