@@ -16,7 +16,6 @@ from . import forms as etl_forms
 import logging
 
 from . import helpers
-from . import r_server
 
 
 logger = logging.getLogger(__name__)
@@ -98,21 +97,17 @@ class EditSourceView(BaseTemplateView):
     def post(self, request, *args, **kwargs):
 
         post = request.POST
-        source_id = kwargs.get('id')
-        source = get_object_or_404(Datasource, pk=source_id)
+        source = get_object_or_404(Datasource, pk=kwargs.get('id'))
         form = etl_forms.SourceForm(post, instance=source)
 
         if not form.is_valid():
             return self.render_to_response({'form': form, })
 
         if form.has_changed() and settings.USE_REDIS_CACHE:
-            # отыскиваем ключи для удаления
-            user_db_key = helpers.RedisCacheKeys.get_user_databases(request.user.id)
-            user_datasource_key = helpers.RedisCacheKeys.get_user_datasource(request.user.id, source_id)
-
-            r_server.lrem(user_db_key, 1, source_id)
-            r_server.delete(user_datasource_key)
-
+            # если что-то изменилось, то удаляем инфу о датасорсе
+            helpers.DataSourceService.delete_datasource(source)
+            # дополнительно удаляем инфу о таблицах, джоинах, дереве
+            helpers.DataSourceService.tree_full_clean(source)
         form.save()
 
         return self.redirect('etl:datasources.index')
@@ -121,8 +116,13 @@ class EditSourceView(BaseTemplateView):
 class RemoveSourceView(BaseView):
 
     def post(self, request, *args, **kwargs):
-        user = get_object_or_404(Datasource, pk=kwargs.get('id'))
-        user.delete()
+        source = get_object_or_404(Datasource, pk=kwargs.get('id'))
+        source.delete()
+
+        # удаляем инфу о датасорсе
+        helpers.DataSourceService.delete_datasource(source)
+        # дополнительно удаляем инфу о таблицах, джоинах, дереве
+        helpers.DataSourceService.tree_full_clean(source)
 
         return self.json_response({'redirect_url': reverse('etl:datasources.index')})
 
@@ -131,10 +131,11 @@ class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
         try:
-            result = helpers.Database.check_connection(request.POST)
+            result = helpers.DataSourceService.check_connection(request.POST)
             return self.json_response(
                 {'status': 'error' if not result else 'success',
-                 'message': 'Проверка соединения прошла успешно' if result else 'Проверка подключения не удалась'})
+                 'message': ('Проверка соединения прошла успешно'
+                             if result else 'Проверка подключения не удалась')})
         except Exception as e:
             logger.exception(e.message)
             return self.json_response(
@@ -148,10 +149,10 @@ class GetConnectionDataView(BaseView):
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
 
         # очищаем из редиса инфу дерева перед созданием нового
-        helpers.RedisService.tree_full_clean(source)
+        helpers.DataSourceService.tree_full_clean(source)
 
         try:
-            db = helpers.Database.get_db_info(request.user.id, source)
+            db = helpers.DataSourceService.get_database_info(source)
         except ValueError as err:
             return self.json_response({'status': 'error', 'message': err.message})
 
@@ -193,7 +194,8 @@ class GetColumnsView(BaseEtlView):
 
     def start_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
-        columns = helpers.Database.get_columns_info(source, request.user, tables)
+        columns = helpers.DataSourceService.get_columns_info(
+            source, tables)
         return columns
 
 
@@ -208,7 +210,8 @@ class GetDataRowsView(BaseEtlView):
             table_names.append(t_name)
             col_names += [x["table"] + "." + x["col"] for x in col_group]
 
-        data = helpers.Database.get_rows_info(source, table_names, col_names)
+        data = helpers.DataSourceService.get_rows_info(
+            source, table_names, col_names)
 
         return data
 
@@ -217,20 +220,15 @@ class RemoveTablesView(BaseEtlView):
 
     def start_action(self, request, source):
         tables = json.loads(request.GET.get('tables'))
-        sel_tree = helpers.TablesTree.build_tree_by_structure(source)
-        sel_tree.delete_nodes_from_tree(source, tables)
-
-        if sel_tree.root:
-            helpers.RedisService.save_active_tree(sel_tree, source)
-            helpers.RedisService.delete_tables_from_redis(source, tables)
-
+        helpers.DataSourceService.remove_tables_from_tree(
+            source, tables)
         return []
 
 
 class RemoveAllTablesView(BaseEtlView):
 
     def start_action(self, request, source):
-        helpers.RedisService.tree_full_clean(source)
+        helpers.RedisSourceService.tree_full_clean(source)
         return []
 
 
@@ -241,12 +239,8 @@ class GetColumnsForChoicesView(BaseEtlView):
         child_table = request.GET.get('child_bind')
         is_without_bind = json.loads(request.GET.get('is_without_bind'))
 
-        if is_without_bind:
-            data = helpers.RedisService.get_columns_for_tables_without_bind(
-                source, parent_table, child_table)
-        else:
-            data = helpers.RedisService.get_columns_for_tables_with_bind(
-                source, parent_table, child_table)
+        data = helpers.DataSourceService.get_columns_for_choices(
+            source, parent_table, child_table, is_without_bind)
 
         return data
 
@@ -260,11 +254,7 @@ class SaveNewJoinsView(BaseEtlView):
         join_type = get.get('joinType')
         joins = json.loads(get.get('joins'))
 
-        sel_tree = helpers.TablesTree.build_tree_by_structure(source)
-        helpers.TablesTree.update_node_joins(
-            sel_tree, left_table, right_table, join_type, joins)
-
-        helpers.RedisService.insert_tree_to_redis(sel_tree, source)
-        data = helpers.RedisService.get_final_info(sel_tree, source)
+        data = helpers.DataSourceService.save_new_joins(
+            source, left_table, right_table, join_type, joins)
 
         return data

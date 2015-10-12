@@ -109,72 +109,6 @@ class Database(object):
     Базовыми возможности для работы с базами данных
     Получение информации о таблице, список колонок, проверка соединения и т.д.
     """
-    @staticmethod
-    def get_db_info(user_id, source):
-
-        if settings.USE_REDIS_CACHE:
-            user_db_key = RedisCacheKeys.get_user_databases(user_id)
-            user_datasource_key = RedisCacheKeys.get_user_datasource(user_id, source.id)
-
-            if not r_server.exists(user_datasource_key):
-                conn_info = source.get_connection_dict()
-                conn = DataSourceService.get_connection(conn_info)
-                tables = DataSourceService.get_tables(source, conn)
-
-                new_db = {
-                    "db": source.db,
-                    "host": source.host,
-                    "tables": tables
-                }
-                if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
-                    r_server.rpush(user_db_key, source.id)
-                r_server.set(user_datasource_key, json.dumps(new_db))
-                r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
-
-            return json.loads(r_server.get(user_datasource_key))
-
-        else:
-            conn_info = source.get_connection_dict()
-            conn = DataSourceService.get_connection(conn_info)
-            tables = DataSourceService.get_tables(source, conn)
-
-            return {
-                "db": source.db,
-                "host": source.host,
-                "tables": tables
-            }
-
-    @staticmethod
-    def check_connection(post):
-        """
-        Проверка соединения источников данных
-        :param data: dict
-        :return: connection obj or None
-        """
-        conn_info = {
-            'host': get_utf8_string(post.get('host')),
-            'user': get_utf8_string(post.get('login')),
-            'passwd': get_utf8_string(post.get('password')),
-            'db': get_utf8_string(post.get('db')),
-            'port': get_utf8_string(post.get('port')),
-            'conn_type': get_utf8_string(post.get('conn_type')),
-        }
-
-        return DataSourceService.get_connection(conn_info)
-
-    @staticmethod
-    def get_columns_info(source, user, tables):
-        conn_info = source.get_connection_dict()
-        conn = DataSourceService.get_connection(conn_info)
-
-        return DataSourceService.get_columns(source, user, tables, conn)
-
-    @staticmethod
-    def get_rows_info(source, tables, cols):
-        conn_info = source.get_connection_dict()
-        conn = DataSourceService.get_connection(conn_info)
-
-        return DataSourceService.get_rows(source, conn, tables, cols)
 
     @staticmethod
     def get_query_result(query, conn):
@@ -186,26 +120,12 @@ class Database(object):
     def _get_columns_query(source, tables):
         raise ValueError("Columns query is not realized")
 
-    @classmethod
-    def get_columns(cls, source, user, tables, conn):
-
-        query = cls._get_columns_query(source, tables)
-
-        records = Database.get_query_result(query, conn)
-
-        result = []
-        for key, group in groupby(records, lambda x: x[0]):
-            result.append({
-                "tname": key, 'db': source.db, 'host': source.host,
-                "cols": [x[1] for x in group]
-            })
-        return result
-
     @staticmethod
     def get_rows(conn, tables, cols):
         query = """
             SELECT {0} FROM {1} LIMIT {2};
-        """.format(', '.join(cols), ', '.join(tables), settings.ETL_COLLECTION_PREVIEW_LIMIT)
+        """.format(', '.join(cols), ', '.join(tables),
+                   settings.ETL_COLLECTION_PREVIEW_LIMIT)
         records = Database.get_query_result(query, conn)
         return records
 
@@ -222,13 +142,13 @@ class Postgresql(Database):
             return None
         return conn
 
-    @staticmethod
-    def get_tables(source, conn):
+    @classmethod
+    def get_tables(cls, source, conn):
         query = """
             SELECT table_name FROM information_schema.tables
             where table_schema='public' order by table_name;
         """
-        records = Postgresql.get_query_result(query, conn)
+        records = cls.get_query_result(query, conn)
         records = map(lambda x: {'name': x[0], },
                       sorted(records, key=lambda y: y[0]))
 
@@ -248,139 +168,99 @@ class Postgresql(Database):
         return cols_query, constraints_query, indexes_query
 
     @classmethod
-    def get_columns(cls, source, user, tables, conn):
+    def get_columns(cls, source, tables, conn):
 
-        active_tables = []
-        new_result = []
+        columns_query, consts_query, indexes_query = cls._get_columns_query(
+            source, tables)
 
-        str_table = RedisCacheKeys.get_active_table(user.id, source.id, '{0}')
-        str_table_by_name = RedisCacheKeys.get_active_table(user.id, source.id, '{0}')
-        str_active_tables = RedisCacheKeys.get_active_tables(user.id, source.id)
-        str_remain = RedisCacheKeys.get_source_remain(user.id, source.id)
+        col_records = Database.get_query_result(columns_query, conn)
+        index_records = Database.get_query_result(indexes_query, conn)
+        const_records = Database.get_query_result(consts_query, conn)
 
-        if settings.USE_REDIS_CACHE:
-            # выбранные ранее таблицы в редисе
-            if not r_server.exists(str_active_tables):
-                r_server.set(str_active_tables, '[]')
-                r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
-            else:
-                active_tables = json.loads(r_server.get(str_active_tables))
+        return col_records, index_records, const_records
 
-            columns_query, consts_query, indexes_query = cls._get_columns_query(source, tables)
 
-            col_records = Database.get_query_result(columns_query, conn)
+class Mysql(Database):
+    """Управление источником данных MySQL"""
+    @staticmethod
+    def get_connection(conn_info):
+        try:
+            conn = MySQLdb.connect(**conn_info)
+        except MySQLdb.OperationalError:
+            return None
+        return conn
 
-            if settings.USE_REDIS_CACHE:
-                index_records = Database.get_query_result(indexes_query, conn)
-                indexes = defaultdict(list)
-                itable_name, icol_names, index_name, primary, unique = xrange(5)
+    @classmethod
+    def get_tables(cls, source, conn):
+        query = """
+            SELECT table_name FROM information_schema.tables
+            where table_schema='{0}' order by table_name;
+        """.format(source.db)
 
-                for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
-                    for ig in igroup:
-                        indexes[ikey].append({
-                            "name": ig[index_name],
-                            "columns": ig[icol_names].split(','),
-                            "is_primary": ig[primary] == 't',
-                            "is_unique": ig[unique] == 't',
-                        })
+        records = cls.get_query_result(query, conn)
+        records = map(lambda x: {'name': x[0], }, records)
 
-                const_records = Database.get_query_result(consts_query, conn)
-                constraints = defaultdict(list)
-                (c_table_name, c_col_name, c_name, c_type,
-                 c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
+        return records
 
-                for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
-                    for ig in igroup:
-                        constraints[ikey].append({
-                            "c_col_name": ig[c_col_name],
-                            "c_name": ig[c_name],
-                            "c_type": ig[c_type],
-                            "c_f_table": ig[c_foreign_table],
-                            "c_f_col": ig[c_foreign_col],
-                            "c_upd": ig[c_update],
-                            "c_del": ig[c_delete],
-                        })
+    @staticmethod
+    def _get_columns_query(source, tables):
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
-                columns = defaultdict(list)
-                foreigns = defaultdict(list)
+        query = """
+            SELECT table_name, column_name FROM information_schema.columns
+            where table_name in {0} and table_schema = '{1}';
+        """.format(tables_str, source.db)
+        return query
 
-                for key, group in groupby(col_records, lambda x: x[0]):
+    @classmethod
+    def get_columns(cls, source, tables, conn):
+        pass
 
-                    t_indexes = indexes[key]
-                    t_consts = constraints[key]
 
-                    for x in group:
-                        is_index = is_unique = is_primary = False
-                        col = x[1]
+class DatabaseService(object):
+    """Сервис для источников данных"""
 
-                        for i in t_indexes:
-                            if col in i['columns']:
-                                is_index = True
-                                index_name = i['name']
-                                for c in t_consts:
-                                    const_type = c['c_type']
-                                    if index_name == c['c_name']:
-                                        if const_type == 'UNIQUE':
-                                            is_unique = True
-                                        elif const_type == 'PRIMARY KEY':
-                                            is_unique = True
-                                            is_primary = True
+    @staticmethod
+    def factory(conn_type):
+        if conn_type == ConnectionChoices.POSTGRESQL:
+            return Postgresql()
+        elif conn_type == ConnectionChoices.MYSQL:
+            return Mysql()
+        else:
+            raise ValueError("Неизвестный тип подключения!")
 
-                        columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
-                                             "is_index": is_index,
-                                             "is_unique": is_unique, "is_primary": is_primary})
+    @classmethod
+    def get_tables(cls, source, conn):
+        instance = cls.factory(source.conn_type)
+        return instance.get_tables(source, conn)
 
-                    # находим внешние ключи
-                    for c in t_consts:
-                        if c['c_type'] == 'FOREIGN KEY':
-                            foreigns[key].append({
-                                "name": c['c_name'],
-                                "source": {"table": key, "column": c["c_col_name"]},
-                                "destination":
-                                    {"table": c["c_f_table"], "column": c["c_f_col"]},
-                                "on_delete": c["c_del"],
-                                "on_update": c["c_upd"],
-                            })
+    @classmethod
+    def get_columns_info(cls, source, tables, conn):
+        instance = cls.factory(source.conn_type)
+        return instance.get_columns(source, tables, conn)
 
-                for t_name in tables:
-                    r_server.set(str_table_by_name.format(t_name), json.dumps(
-                        {
-                            "columns": columns[t_name],
-                            "indexes": indexes[t_name],
-                            "foreigns": foreigns[t_name],
-                        }
-                    ))
-                    r_server.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
+    @classmethod
+    def get_rows(cls, source, conn, tables, cols):
+        instance = cls.factory(source.conn_type)
+        return instance.get_rows(conn, tables, cols)
 
-                if not active_tables:
-                    trees, without_bind = TablesTree.build_trees(tuple(tables), source)
-                    sel_tree = TablesTree.select_tree(trees)
-                    remains = without_bind[sel_tree.root.val]
+    @classmethod
+    def get_connection(cls, source):
+        conn_info = source.get_connection_dict()
+        return cls.get_connection_by_dict(conn_info)
 
-                else:
-                    # достаем дерево из редиса
-                    sel_tree = TablesTree.build_tree_by_structure(source)
-                    # перестраиваем дерево
-                    remains = TablesTree.build_tree([sel_tree.root, ], tables, source)
+    @classmethod
+    def get_connection_by_dict(cls, conn_info):
+        instance = cls.factory(
+            int(conn_info.get('conn_type', '')))
 
-                if remains:
-                    # первая таблица без связей
-                    last = remains[0]
-                    # таблица без связей
-                    r_server.set(str_remain, last)
+        del conn_info['conn_type']
+        conn_info['port'] = int(conn_info['port'])
 
-                    # удаляем таблицы без связей, кроме первой
-                    RedisService.delete_unneeded_remains(source, remains[1:])
-                else:
-                    last = None
-                    r_server.set(str_remain, '')
-
-                # сохраняем дерево
-                RedisService.insert_tree_to_redis(sel_tree, source)
-                # возвращаем результат
-                new_result = RedisService.get_final_info(sel_tree, source, last)
-
-        return new_result
+        conn = instance.get_connection(conn_info)
+        if conn is None:
+            raise ValueError("Сбой при подключении!")
+        return conn
 
 
 class Node(object):
@@ -419,16 +299,16 @@ class TablesTree(object):
     def __init__(self, t_name):
         self.root = Node(t_name)
 
-    def display(self):
-        if self.root:
-            print self.root.val, self.root.joins
-            r_chs = [x for x in self.root.childs]
-            print [(x.val, x.joins) for x in r_chs]
-            for c in r_chs:
-                print [x.val for x in c.childs]
-            print 80*'*'
-        else:
-            print 'Empty Tree!!!'
+    # def display(self):
+    #     if self.root:
+    #         print self.root.val, self.root.joins
+    #         r_chs = [x for x in self.root.childs]
+    #         print [(x.val, x.joins) for x in r_chs]
+    #         for c in r_chs:
+    #             print [x.val for x in c.childs]
+    #         print 80*'*'
+    #     else:
+    #         print 'Empty Tree!!!'
 
     def get_tree_ordered_nodes(self, nodes):
         all_nodes = []
@@ -525,7 +405,7 @@ class TablesTree(object):
 
     @classmethod
     def build_tree_by_structure(cls, source):
-        structure = RedisService.get_active_tree_structure(source)
+        structure = RedisSourceService.get_active_tree_structure(source)
         tree = TablesTree(structure['val'])
 
         def inner_build(root, childs):
@@ -551,7 +431,7 @@ class TablesTree(object):
 
         r_val = self.root.val
         if r_val in tables:
-            RedisService.tree_full_clean(source)
+            RedisSourceService.tree_full_clean(source)
             self.root = None
         else:
             inner_delete(self.root)
@@ -578,87 +458,6 @@ class TablesTree(object):
             # todo опять переисбыточность!!!
             node.joins.add(
                 (right_table, child_col, left_table, parent_col, oper))
-
-
-class Mysql(Database):
-    """Управление источником данных MySQL"""
-    @staticmethod
-    def get_connection(conn_info):
-        try:
-            conn = MySQLdb.connect(**conn_info)
-        except MySQLdb.OperationalError:
-            return None
-        return conn
-
-    @staticmethod
-    def get_tables(source, conn):
-        query = """
-            SELECT table_name FROM information_schema.tables
-            where table_schema='{0}' order by table_name;
-        """.format(source.db)
-
-        records = Mysql.get_query_result(query, conn)
-        records = map(lambda x: {'name': x[0], }, records)
-
-        return records
-
-    @staticmethod
-    def _get_columns_query(source, tables):
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-
-        query = """
-            SELECT table_name, column_name FROM information_schema.columns
-            where table_name in {0} and table_schema = '{1}';
-        """.format(tables_str, source.db)
-        return query
-
-    @classmethod
-    def get_columns(cls, source, user, tables, conn):
-        pass
-
-
-class DataSourceConnectionFactory(object):
-    """Фабрика для подключения к источникам данных"""
-    @staticmethod
-    def factory(conn_type):
-        if conn_type == ConnectionChoices.POSTGRESQL:
-            return Postgresql()
-        elif conn_type == ConnectionChoices.MYSQL:
-            return Mysql()
-        else:
-            raise ValueError("Неизвестный тип подключения!")
-
-
-class DataSourceService(object):
-    """Сервис для источников данных"""
-    @staticmethod
-    def get_tables(source, conn):
-        instance = DataSourceConnectionFactory.factory(source.conn_type)
-        return instance.get_tables(source, conn)
-
-    @staticmethod
-    def get_columns(source, user, tables, conn):
-        instance = DataSourceConnectionFactory.factory(source.conn_type)
-        return instance.get_columns(source, user, tables, conn)
-
-    @staticmethod
-    def get_rows(source, conn, tables, cols):
-        instance = DataSourceConnectionFactory.factory(source.conn_type)
-        return instance.get_rows(conn, tables, cols)
-
-    @staticmethod
-    def get_connection(conn_info):
-
-        instance = DataSourceConnectionFactory.factory(
-            int(conn_info.get('conn_type', '')))
-
-        del conn_info['conn_type']
-        conn_info['port'] = int(conn_info['port'])
-
-        conn = instance.get_connection(conn_info)
-        if conn is None:
-            raise ValueError("Сбой при подключении!")
-        return conn
 
 
 class RedisCacheKeys(object):
@@ -704,36 +503,71 @@ class RedisCacheKeys(object):
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
 
-class RedisService(object):
+class RedisSourceService(object):
 
     @classmethod
-    def delete_tables_from_redis(cls, source, tables):
-        rck = RedisCacheKeys
+    def delete_datasource(cls, source):
+        """ удаляет информацию о датасосре из редиса
+        """
+        user_db_key = RedisCacheKeys.get_user_databases(source.user_id)
+        user_datasource_key = RedisCacheKeys.get_user_datasource(
+            source.user_id, source.id)
 
-        str_table = rck.get_active_table(source.user_id, source.id, '{0}')
-        str_table_by_name = rck.get_active_table(source.user_id, source.id, '{0}')
-        str_active_tables = rck.get_active_tables(source.user_id, source.id)
-        str_joins = rck.get_source_joins(source.user_id, source.id)
+        r_server.lrem(user_db_key, 1, source.id)
+        r_server.delete(user_datasource_key)
 
-        actives = json.loads(r_server.get(str_active_tables))
-        joins = json.loads(r_server.get(str_joins))
+    @classmethod
+    def get_tables_from_redis(cls, source, tables):
+        user_db_key = RedisCacheKeys.get_user_databases(source.user_id)
+        user_datasource_key = RedisCacheKeys.get_user_datasource(source.user_id, source.id)
 
-        # если есть, то удаляем таблицу без связей
-        for t_name in tables:
-            r_server.delete(str_table_by_name.format(t_name))
+        def inner_save_tables_to_redis():
+            new_db = {
+                "db": source.db,
+                "host": source.host,
+                "tables": tables
+            }
+            if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
+                r_server.rpush(user_db_key, source.id)
+            r_server.set(user_datasource_key, json.dumps(new_db))
+            r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
+            return new_db
 
-        # удаляем все джоины пришедших таблиц
-        cls.initial_delete_joins_from_redis(tables, joins)
-        child_tables = cls.delete_joins_from_redis(tables, joins)
+        if not r_server.exists(user_datasource_key):
+            return inner_save_tables_to_redis()
 
-        # добавляем к основным таблицам, их дочерние для дальнейшего удаления
-        tables += child_tables
+        return json.loads(r_server.get(user_datasource_key))
 
-        r_server.set(str_joins, json.dumps(joins))
-
-        # удаляем полную инфу пришедших таблиц
-        cls.delete_tables_info(tables, actives, str_table)
-        r_server.set(str_active_tables, json.dumps(actives))
+    # FIXME Функция удаления таблиц из памяти, при переносе их влево
+    # FIXME временно отключена
+    # @classmethod
+    # def delete_tables_from_redis(cls, source, tables):
+    #     rck = RedisCacheKeys
+    #
+    #     str_table = rck.get_active_table(source.user_id, source.id, '{0}')
+    #     str_table_by_name = rck.get_active_table(source.user_id, source.id, '{0}')
+    #     str_active_tables = rck.get_active_tables(source.user_id, source.id)
+    #     str_joins = rck.get_source_joins(source.user_id, source.id)
+    #
+    #     actives = json.loads(r_server.get(str_active_tables))
+    #     joins = json.loads(r_server.get(str_joins))
+    #
+    #     # если есть, то удаляем таблицу без связей
+    #     for t_name in tables:
+    #         r_server.delete(str_table_by_name.format(t_name))
+    #
+    #     # удаляем все джоины пришедших таблиц
+    #     cls.initial_delete_joins_from_redis(tables, joins)
+    #     child_tables = cls.delete_joins_from_redis(tables, joins)
+    #
+    #     # добавляем к основным таблицам, их дочерние для дальнейшего удаления
+    #     tables += child_tables
+    #
+    #     r_server.set(str_joins, json.dumps(joins))
+    #
+    #     # удаляем полную инфу пришедших таблиц
+    #     cls.delete_tables_info(tables, actives, str_table)
+    #     r_server.set(str_active_tables, json.dumps(actives))
 
     @classmethod
     def initial_delete_joins_from_redis(cls, tables, joins):
@@ -825,7 +659,7 @@ class RedisService(object):
 
             # достаем инфу либо по имени, либо по порядковому номеру
             r_server.set(str_table.format(ind),
-                         RedisService.get_table_full_info(source, n_val))
+                         RedisSourceService.get_table_full_info(source, n_val))
             # удаляем таблицы с именованными ключами
             r_server.delete(str_table_by_name.format(n_val))
 
@@ -841,10 +675,13 @@ class RedisService(object):
         r_server.set(str_joins, json.dumps(joins_in_redis))
 
         # сохраняем само дерево
-        RedisService.save_active_tree(tree, source)
+        RedisSourceService.save_active_tree(tree, source)
 
     @classmethod
     def tree_full_clean(cls, source):
+        """ удаляет информацию о таблицах, джоинах, дереве
+            из редиса
+        """
         str_active_tables = RedisCacheKeys.get_active_tables(
             source.user_id, source.id)
         str_joins = RedisCacheKeys.get_source_joins(
@@ -869,6 +706,23 @@ class RedisService(object):
         r_server.delete(str_active_tables)
         r_server.delete(str_joins)
         r_server.delete(str_tree)
+
+    @classmethod
+    def insert_remains(cls, source, remains):
+        str_remain = RedisCacheKeys.get_source_remain(source.user_id, source.id)
+        if remains:
+            # первая таблица без связей
+            last = remains[0]
+            # таблица без связей
+            r_server.set(str_remain, last)
+
+            # удаляем таблицы без связей, кроме первой
+            cls.delete_unneeded_remains(source, remains[1:])
+        else:
+            last = None
+            r_server.set(str_remain, '')
+        # либо таблица без связи, либо None
+        return last
 
     @classmethod
     def delete_unneeded_remains(cls, source, remains):
@@ -979,3 +833,228 @@ class RedisService(object):
                       }
             result.append(l_info)
         return result
+
+    @classmethod
+    def insert_columns_info_to_redis(cls, source, tables, columns, indexes, foreigns):
+        active_tables = []
+        user_id = source.user_id
+
+        str_table = RedisCacheKeys.get_active_table(user_id, source.id, '{0}')
+        str_table_by_name = RedisCacheKeys.get_active_table(user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(user_id, source.id)
+
+        # выбранные ранее таблицы в редисе
+        if not r_server.exists(str_active_tables):
+            r_server.set(str_active_tables, '[]')
+            r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
+        else:
+            active_tables = json.loads(r_server.get(str_active_tables))
+
+        for t_name in tables:
+            r_server.set(str_table_by_name.format(t_name), json.dumps(
+                {
+                    "columns": columns[t_name],
+                    "indexes": indexes[t_name],
+                    "foreigns": foreigns[t_name],
+                }
+            ))
+            r_server.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
+        return active_tables
+
+
+class DataSourceService(object):
+    """
+        Сервис управляет сервисами БД и Редиса
+    """
+    @classmethod
+    def delete_datasource(cls, source):
+        """ удаляет информацию о датасосре
+        """
+        RedisSourceService.delete_datasource(source)
+
+    @classmethod
+    def tree_full_clean(cls, source):
+        """ удаляет информацию о таблицах, джоинах, дереве
+        """
+        RedisSourceService.tree_full_clean(source)
+
+    @staticmethod
+    def get_database_info(source):
+        """ Возвращает таблицы истоника данных
+        """
+        conn = DatabaseService.get_connection(source)
+        tables = DatabaseService.get_tables(source, conn)
+
+        if settings.USE_REDIS_CACHE:
+            return RedisSourceService.get_tables_from_redis(source, tables)
+        else:
+            return {
+                "db": source.db,
+                "host": source.host,
+                "tables": tables
+            }
+
+    @staticmethod
+    def check_connection(post):
+        """ Проверяет подключение
+        """
+        conn_info = {
+            'host': get_utf8_string(post.get('host')),
+            'user': get_utf8_string(post.get('login')),
+            'passwd': get_utf8_string(post.get('password')),
+            'db': get_utf8_string(post.get('db')),
+            'port': get_utf8_string(post.get('port')),
+            'conn_type': get_utf8_string(post.get('conn_type')),
+        }
+
+        return DatabaseService.get_connection_by_dict(conn_info)
+
+    @classmethod
+    def get_columns_info(cls, source, tables):
+
+        conn = DatabaseService.get_connection(source)
+        col_records, index_records, const_records = (
+            DatabaseService.get_columns_info(source, tables, conn))
+
+        cols, indexes, foreigns = cls.processing_records(
+            col_records, index_records, const_records)
+
+        if settings.USE_REDIS_CACHE:
+            active_tables = RedisSourceService.insert_columns_info_to_redis(
+                source, tables, cols, indexes, foreigns)
+            # работа с деревьями
+            if not active_tables:
+                trees, without_bind = TablesTree.build_trees(tuple(tables), source)
+                sel_tree = TablesTree.select_tree(trees)
+                remains = without_bind[sel_tree.root.val]
+            else:
+                # достаем дерево из редиса
+                sel_tree = TablesTree.build_tree_by_structure(source)
+                # перестраиваем дерево
+                remains = TablesTree.build_tree([sel_tree.root, ], tables, source)
+
+            # таблица без связи
+            last = RedisSourceService.insert_remains(source, remains)
+
+            # сохраняем дерево
+            RedisSourceService.insert_tree_to_redis(sel_tree, source)
+
+            # возвращаем результат
+            return RedisSourceService.get_final_info(sel_tree, source, last)
+
+        return []
+
+    @staticmethod
+    def processing_records(col_records, index_records, const_records):
+
+        indexes = defaultdict(list)
+        itable_name, icol_names, index_name, primary, unique = xrange(5)
+
+        for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
+            for ig in igroup:
+                indexes[ikey].append({
+                    "name": ig[index_name],
+                    "columns": ig[icol_names].split(','),
+                    "is_primary": ig[primary] == 't',
+                    "is_unique": ig[unique] == 't',
+                })
+
+        constraints = defaultdict(list)
+        (c_table_name, c_col_name, c_name, c_type,
+         c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
+
+        for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
+            for ig in igroup:
+                constraints[ikey].append({
+                    "c_col_name": ig[c_col_name],
+                    "c_name": ig[c_name],
+                    "c_type": ig[c_type],
+                    "c_f_table": ig[c_foreign_table],
+                    "c_f_col": ig[c_foreign_col],
+                    "c_upd": ig[c_update],
+                    "c_del": ig[c_delete],
+                })
+
+        columns = defaultdict(list)
+        foreigns = defaultdict(list)
+
+        for key, group in groupby(col_records, lambda x: x[0]):
+
+            t_indexes = indexes[key]
+            t_consts = constraints[key]
+
+            for x in group:
+                is_index = is_unique = is_primary = False
+                col = x[1]
+
+                for i in t_indexes:
+                    if col in i['columns']:
+                        is_index = True
+                        index_name = i['name']
+                        for c in t_consts:
+                            const_type = c['c_type']
+                            if index_name == c['c_name']:
+                                if const_type == 'UNIQUE':
+                                    is_unique = True
+                                elif const_type == 'PRIMARY KEY':
+                                    is_unique = True
+                                    is_primary = True
+
+                columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
+                                     "is_index": is_index,
+                                     "is_unique": is_unique, "is_primary": is_primary})
+
+            # находим внешние ключи
+            for c in t_consts:
+                if c['c_type'] == 'FOREIGN KEY':
+                    foreigns[key].append({
+                        "name": c['c_name'],
+                        "source": {"table": key, "column": c["c_col_name"]},
+                        "destination":
+                            {"table": c["c_f_table"], "column": c["c_f_col"]},
+                        "on_delete": c["c_del"],
+                        "on_update": c["c_upd"],
+                    })
+        return columns, indexes, foreigns
+
+    @classmethod
+    def get_rows_info(cls, source, tables, cols):
+
+        conn = DatabaseService.get_connection(source)
+        return DatabaseService.get_rows(source, conn, tables, cols)
+
+    @classmethod
+    def remove_tables_from_tree(cls, source, tables):
+
+        sel_tree = TablesTree.build_tree_by_structure(source)
+        sel_tree.delete_nodes_from_tree(source, tables)
+
+        if sel_tree.root:
+            # TODO AHTUNG CHECK
+            # RedisSourceService.save_active_tree(sel_tree, source)
+            # RedisSourceService.delete_tables_from_redis(source, tables)
+            RedisSourceService.insert_tree_to_redis(sel_tree, source)
+
+    @classmethod
+    def get_columns_for_choices(cls, source, parent_table,
+                                child_table, is_without_bind):
+        if is_without_bind:
+            data = RedisSourceService.get_columns_for_tables_without_bind(
+                source, parent_table, child_table)
+        else:
+            data = RedisSourceService.get_columns_for_tables_with_bind(
+                source, parent_table, child_table)
+
+        return data
+
+    @classmethod
+    def save_new_joins(cls, source, left_table, right_table, join_type, joins):
+
+        sel_tree = TablesTree.build_tree_by_structure(source)
+        TablesTree.update_node_joins(
+            sel_tree, left_table, right_table, join_type, joins)
+
+        RedisSourceService.insert_tree_to_redis(sel_tree, source)
+        data = RedisSourceService.get_final_info(sel_tree, source)
+
+        return data
