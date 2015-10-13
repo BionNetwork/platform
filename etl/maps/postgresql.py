@@ -1,10 +1,11 @@
 # coding: utf-8
 
-__author__ = 'damir(GDR)'
 
 from collections import defaultdict
 
+
 PSQL_TYPES = defaultdict(lambda: 0)
+
 
 ints = [
     'smallint',

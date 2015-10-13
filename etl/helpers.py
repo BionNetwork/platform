@@ -13,6 +13,7 @@ from django.conf import settings
 from core.models import ConnectionChoices
 from . import r_server
 from .maps import postgresql as psql_map
+from .maps import mysql as mysql_map
 
 
 class JoinTypes(object):
@@ -179,6 +180,78 @@ class Postgresql(Database):
 
         return col_records, index_records, const_records
 
+    @classmethod
+    def processing_records(cls, col_records, index_records, const_records):
+        indexes = defaultdict(list)
+        itable_name, icol_names, index_name, primary, unique = xrange(5)
+
+        for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
+            for ig in igroup:
+                indexes[ikey].append({
+                    "name": ig[index_name],
+                    "columns": ig[icol_names].split(','),
+                    "is_primary": ig[primary] == 't',
+                    "is_unique": ig[unique] == 't',
+                })
+
+        constraints = defaultdict(list)
+        (c_table_name, c_col_name, c_name, c_type,
+         c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
+
+        for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
+            for ig in igroup:
+                constraints[ikey].append({
+                    "c_col_name": ig[c_col_name],
+                    "c_name": ig[c_name],
+                    "c_type": ig[c_type],
+                    "c_f_table": ig[c_foreign_table],
+                    "c_f_col": ig[c_foreign_col],
+                    "c_upd": ig[c_update],
+                    "c_del": ig[c_delete],
+                })
+
+        columns = defaultdict(list)
+        foreigns = defaultdict(list)
+
+        for key, group in groupby(col_records, lambda x: x[0]):
+
+            t_indexes = indexes[key]
+            t_consts = constraints[key]
+
+            for x in group:
+                is_index = is_unique = is_primary = False
+                col = x[1]
+
+                for i in t_indexes:
+                    if col in i['columns']:
+                        is_index = True
+                        index_name = i['name']
+                        for c in t_consts:
+                            const_type = c['c_type']
+                            if index_name == c['c_name']:
+                                if const_type == 'UNIQUE':
+                                    is_unique = True
+                                elif const_type == 'PRIMARY KEY':
+                                    is_unique = True
+                                    is_primary = True
+
+                columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
+                                     "is_index": is_index,
+                                     "is_unique": is_unique, "is_primary": is_primary})
+
+            # находим внешние ключи
+            for c in t_consts:
+                if c['c_type'] == 'FOREIGN KEY':
+                    foreigns[key].append({
+                        "name": c['c_name'],
+                        "source": {"table": key, "column": c["c_col_name"]},
+                        "destination":
+                            {"table": c["c_f_table"], "column": c["c_f_col"]},
+                        "on_delete": c["c_del"],
+                        "on_update": c["c_upd"],
+                    })
+        return columns, indexes, foreigns
+
 
 class Mysql(Database):
     """Управление источником данных MySQL"""
@@ -206,15 +279,95 @@ class Mysql(Database):
     def _get_columns_query(source, tables):
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
-        query = """
-            SELECT table_name, column_name FROM information_schema.columns
-            where table_name in {0} and table_schema = '{1}';
-        """.format(tables_str, source.db)
-        return query
+        cols_query = mysql_map.cols_query.format(tables_str, source.db)
+
+        constraints_query = mysql_map.constraints_query.format(tables_str, source.db)
+
+        indexes_query = mysql_map.indexes_query.format(tables_str, source.db)
+
+        return cols_query, constraints_query, indexes_query
 
     @classmethod
     def get_columns(cls, source, tables, conn):
-        pass
+        columns_query, consts_query, indexes_query = cls._get_columns_query(
+            source, tables)
+
+        col_records = Database.get_query_result(columns_query, conn)
+        index_records = Database.get_query_result(indexes_query, conn)
+        const_records = Database.get_query_result(consts_query, conn)
+
+        return col_records, index_records, const_records
+
+    @classmethod
+    def processing_records(cls, col_records, index_records, const_records):
+        indexes = defaultdict(list)
+        itable_name, icol_names, index_name, primary, unique = xrange(5)
+
+        for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
+            for ig in igroup:
+                indexes[ikey].append({
+                    "name": ig[index_name],
+                    "columns": ig[icol_names].split(','),
+                    "is_primary": ig[primary] == 't',
+                    "is_unique": ig[unique] == 't',
+                })
+
+        constraints = defaultdict(list)
+        (c_table_name, c_col_name, c_name, c_type,
+         c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
+
+        for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
+            for ig in igroup:
+                constraints[ikey].append({
+                    "c_col_name": ig[c_col_name],
+                    "c_name": ig[c_name],
+                    "c_type": ig[c_type],
+                    "c_f_table": ig[c_foreign_table],
+                    "c_f_col": ig[c_foreign_col],
+                    "c_upd": ig[c_update],
+                    "c_del": ig[c_delete],
+                })
+
+        columns = defaultdict(list)
+        foreigns = defaultdict(list)
+
+        for key, group in groupby(col_records, lambda x: x[0]):
+
+            t_indexes = indexes[key]
+            t_consts = constraints[key]
+
+            for x in group:
+                is_index = is_unique = is_primary = False
+                col = x[1]
+
+                for i in t_indexes:
+                    if col in i['columns']:
+                        is_index = True
+                        for c in t_consts:
+                            const_type = c['c_type']
+                            if col == c['c_col_name']:
+                                if const_type == 'UNIQUE':
+                                    is_unique = True
+                                elif const_type == 'PRIMARY KEY':
+                                    is_unique = True
+                                    is_primary = True
+
+                columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
+                                     "is_index": is_index,
+                                     "is_unique": is_unique, "is_primary": is_primary})
+
+            # находим внешние ключи
+            for c in t_consts:
+                if c['c_type'] == 'FOREIGN KEY':
+                    foreigns[key].append({
+                        "name": c['c_name'],
+                        "source": {"table": key, "column": c["c_col_name"]},
+                        "destination":
+                            {"table": c["c_f_table"], "column": c["c_f_col"]},
+                        "on_delete": c["c_del"],
+                        "on_update": c["c_upd"],
+                    })
+        return columns, indexes, foreigns
 
 
 class DatabaseService(object):
@@ -261,6 +414,11 @@ class DatabaseService(object):
         if conn is None:
             raise ValueError("Сбой при подключении!")
         return conn
+
+    @classmethod
+    def processing_records(cls, source, col_records, index_records, const_records):
+        instance = cls.factory(source.conn_type)
+        return instance.processing_records(col_records, index_records, const_records)
 
 
 class Node(object):
@@ -865,6 +1023,7 @@ class RedisSourceService(object):
                 }
             ))
             pipe.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
+        pipe.execute()
         return active_tables
 
 
@@ -922,8 +1081,8 @@ class DataSourceService(object):
         col_records, index_records, const_records = (
             DatabaseService.get_columns_info(source, tables, conn))
 
-        cols, indexes, foreigns = cls.processing_records(
-            col_records, index_records, const_records)
+        cols, indexes, foreigns = DatabaseService.processing_records(
+            source, col_records, index_records, const_records)
 
         if settings.USE_REDIS_CACHE:
             active_tables = RedisSourceService.insert_columns_info_to_redis(
@@ -949,79 +1108,6 @@ class DataSourceService(object):
             return RedisSourceService.get_final_info(sel_tree, source, last)
 
         return []
-
-    @staticmethod
-    def processing_records(col_records, index_records, const_records):
-
-        indexes = defaultdict(list)
-        itable_name, icol_names, index_name, primary, unique = xrange(5)
-
-        for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
-            for ig in igroup:
-                indexes[ikey].append({
-                    "name": ig[index_name],
-                    "columns": ig[icol_names].split(','),
-                    "is_primary": ig[primary] == 't',
-                    "is_unique": ig[unique] == 't',
-                })
-
-        constraints = defaultdict(list)
-        (c_table_name, c_col_name, c_name, c_type,
-         c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
-
-        for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
-            for ig in igroup:
-                constraints[ikey].append({
-                    "c_col_name": ig[c_col_name],
-                    "c_name": ig[c_name],
-                    "c_type": ig[c_type],
-                    "c_f_table": ig[c_foreign_table],
-                    "c_f_col": ig[c_foreign_col],
-                    "c_upd": ig[c_update],
-                    "c_del": ig[c_delete],
-                })
-
-        columns = defaultdict(list)
-        foreigns = defaultdict(list)
-
-        for key, group in groupby(col_records, lambda x: x[0]):
-
-            t_indexes = indexes[key]
-            t_consts = constraints[key]
-
-            for x in group:
-                is_index = is_unique = is_primary = False
-                col = x[1]
-
-                for i in t_indexes:
-                    if col in i['columns']:
-                        is_index = True
-                        index_name = i['name']
-                        for c in t_consts:
-                            const_type = c['c_type']
-                            if index_name == c['c_name']:
-                                if const_type == 'UNIQUE':
-                                    is_unique = True
-                                elif const_type == 'PRIMARY KEY':
-                                    is_unique = True
-                                    is_primary = True
-
-                columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
-                                     "is_index": is_index,
-                                     "is_unique": is_unique, "is_primary": is_primary})
-
-            # находим внешние ключи
-            for c in t_consts:
-                if c['c_type'] == 'FOREIGN KEY':
-                    foreigns[key].append({
-                        "name": c['c_name'],
-                        "source": {"table": key, "column": c["c_col_name"]},
-                        "destination":
-                            {"table": c["c_f_table"], "column": c["c_f_col"]},
-                        "on_delete": c["c_del"],
-                        "on_update": c["c_upd"],
-                    })
-        return columns, indexes, foreigns
 
     @classmethod
     def get_rows_info(cls, source, tables, cols):
