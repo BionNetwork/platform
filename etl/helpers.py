@@ -948,7 +948,7 @@ class RedisSourceService(object):
         str_joins = RedisCacheKeys.get_source_joins(
             source.user_id, source.id)
 
-        err_msg = 'Истекло время хранения ключей в редисе!'
+        err_msg = 'Истекло время хранения ключей!'
 
         if (not r_server.exists(str_active_tables) or
                 not r_server.exists(str_joins)):
