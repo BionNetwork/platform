@@ -41,6 +41,11 @@ class Operations(object):
     }
 
 
+# типы колонок приходят типа bigint(20), убираем скобки
+def lose_brackets(str_):
+    return str_.split('(')[0].lower()
+
+
 def get_utf8_string(value):
     """
     Кодирование в utf-8 строки
@@ -213,14 +218,16 @@ class Postgresql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        for key, group in groupby(col_records, lambda x: x[0]):
+        table_name, col_name, col_type = xrange(3)
+
+        for key, group in groupby(col_records, lambda x: x[table_name]):
 
             t_indexes = indexes[key]
             t_consts = constraints[key]
 
             for x in group:
                 is_index = is_unique = is_primary = False
-                col = x[1]
+                col = x[col_name]
 
                 for i in t_indexes:
                     if col in i['columns']:
@@ -235,7 +242,9 @@ class Postgresql(Database):
                                     is_unique = True
                                     is_primary = True
 
-                columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
+                columns[key].append({"name": col,
+                                     "type": (psql_map.PSQL_TYPES[lose_brackets(x[col_type])]
+                                              or x[col_type]),
                                      "is_index": is_index,
                                      "is_unique": is_unique, "is_primary": is_primary})
 
@@ -331,14 +340,16 @@ class Mysql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        for key, group in groupby(col_records, lambda x: x[0]):
+        table_name, col_name, col_type = xrange(3)
+
+        for key, group in groupby(col_records, lambda x: x[table_name]):
 
             t_indexes = indexes[key]
             t_consts = constraints[key]
 
             for x in group:
                 is_index = is_unique = is_primary = False
-                col = x[1]
+                col = x[col_name]
 
                 for i in t_indexes:
                     if col in i['columns']:
@@ -352,7 +363,9 @@ class Mysql(Database):
                                     is_unique = True
                                     is_primary = True
 
-                columns[key].append({"name": col, "type": psql_map.PSQL_TYPES[x[2]] or x[2],
+                columns[key].append({"name": col,
+                                     "type": (mysql_map.MYSQL_TYPES[lose_brackets(x[col_type])]
+                                              or x[col_type]),
                                      "is_index": is_index,
                                      "is_unique": is_unique, "is_primary": is_primary})
 
@@ -696,36 +709,34 @@ class RedisSourceService(object):
 
         return json.loads(r_server.get(user_datasource_key))
 
-    # FIXME Функция удаления таблиц из памяти, при переносе их влево
-    # FIXME временно отключена
-    # @classmethod
-    # def delete_tables_from_redis(cls, source, tables):
-    #     rck = RedisCacheKeys
-    #
-    #     str_table = rck.get_active_table(source.user_id, source.id, '{0}')
-    #     str_table_by_name = rck.get_active_table(source.user_id, source.id, '{0}')
-    #     str_active_tables = rck.get_active_tables(source.user_id, source.id)
-    #     str_joins = rck.get_source_joins(source.user_id, source.id)
-    #
-    #     actives = json.loads(r_server.get(str_active_tables))
-    #     joins = json.loads(r_server.get(str_joins))
-    #
-    #     # если есть, то удаляем таблицу без связей
-    #     for t_name in tables:
-    #         r_server.delete(str_table_by_name.format(t_name))
-    #
-    #     # удаляем все джоины пришедших таблиц
-    #     cls.initial_delete_joins_from_redis(tables, joins)
-    #     child_tables = cls.delete_joins_from_redis(tables, joins)
-    #
-    #     # добавляем к основным таблицам, их дочерние для дальнейшего удаления
-    #     tables += child_tables
-    #
-    #     r_server.set(str_joins, json.dumps(joins))
-    #
-    #     # удаляем полную инфу пришедших таблиц
-    #     cls.delete_tables_info(tables, actives, str_table)
-    #     r_server.set(str_active_tables, json.dumps(actives))
+    @classmethod
+    def delete_tables_from_redis(cls, source, tables):
+        rck = RedisCacheKeys
+
+        str_table = rck.get_active_table(source.user_id, source.id, '{0}')
+        str_table_by_name = rck.get_active_table(source.user_id, source.id, '{0}')
+        str_active_tables = rck.get_active_tables(source.user_id, source.id)
+        str_joins = rck.get_source_joins(source.user_id, source.id)
+
+        actives = json.loads(r_server.get(str_active_tables))
+        joins = json.loads(r_server.get(str_joins))
+
+        # если есть, то удаляем таблицу без связей
+        for t_name in tables:
+            r_server.delete(str_table_by_name.format(t_name))
+
+        # удаляем все джоины пришедших таблиц
+        cls.initial_delete_joins_from_redis(tables, joins)
+        child_tables = cls.delete_joins_from_redis(tables, joins)
+
+        # добавляем к основным таблицам, их дочерние для дальнейшего удаления
+        tables += child_tables
+
+        r_server.set(str_joins, json.dumps(joins))
+
+        # удаляем полную инфу пришедших таблиц
+        cls.delete_tables_info(tables, actives, str_table)
+        r_server.set(str_active_tables, json.dumps(actives))
 
     @classmethod
     def initial_delete_joins_from_redis(cls, tables, joins):
@@ -752,14 +763,14 @@ class RedisSourceService(object):
                     destinations += cls.delete_joins_from_redis(destinations, joins)
         return destinations
 
-    # @classmethod
-    # def delete_tables_info(cls, tables, actives, str_table):
-    #     names = [x['name'] for x in actives]
-    #     for table in tables:
-    #         if table in names:
-    #             found = [x for x in actives if x['name'] == table][0]
-    #             r_server.delete(str_table.format(found['order']))
-    #             actives.remove(found)
+    @classmethod
+    def delete_tables_info(cls, tables, actives, str_table):
+        names = [x['name'] for x in actives]
+        for table in tables:
+            if table in names:
+                found = [x for x in actives if x['name'] == table][0]
+                r_server.delete(str_table.format(found['order']))
+                actives.remove(found)
 
     @classmethod
     def get_table_full_info(cls, source, table):
@@ -1122,9 +1133,9 @@ class DataSourceService(object):
         sel_tree.delete_nodes_from_tree(source, tables)
 
         if sel_tree.root:
-            # RedisSourceService.save_active_tree(sel_tree, source)
-            # RedisSourceService.delete_tables_from_redis(source, tables)
-            RedisSourceService.insert_tree_to_redis(sel_tree, source)
+            RedisSourceService.save_active_tree(sel_tree, source)
+            RedisSourceService.delete_tables_from_redis(source, tables)
+            # RedisSourceService.insert_tree_to_redis(sel_tree, source)
 
     @classmethod
     def get_columns_for_choices(cls, source, parent_table,

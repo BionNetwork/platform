@@ -8,10 +8,34 @@ MYSQL_TYPES = defaultdict(lambda: 0)
 
 
 ints = [
+    'int',
+    'tinyint',
+    'smallint',
+    'mediumint',
+    'bigint',
+    'float',
+    'double',
+    'decimal',
 ]
 texts = [
+    'char',
+    'varchar',
+    'text',
+    'blob',
+    'tinytext',
+    'tinyblob',
+    'mediumtext',
+    'mediumblob',
+    'longtext',
+    'longblob',
+    'enum',
 ]
 dates = [
+    'date',
+    'datetime',
+    'timestamp',
+    'time',
+    'year',
 ]
 
 for i in ints:
@@ -41,8 +65,9 @@ indexes_query = """
 
 constraints_query = """
     select b.TABLE_NAME, b.column_name, a.constraint_name, a.constraint_type,
-    b.referenced_table_name, b.REFERENCED_COLUMN_NAME, 'no info', 'no info'
+    b.referenced_table_name, b.REFERENCED_COLUMN_NAME, r.update_rule, r.delete_rule
     from information_schema.TABLE_CONSTRAINTS as a
     inner join information_schema.KEY_COLUMN_USAGE as b on a.CONSTRAINT_NAME=b.CONSTRAINT_NAME
+    left JOIN information_schema.REFERENTIAL_CONSTRAINTS as r ON b.CONSTRAINT_NAME = r.CONSTRAINT_NAME
     WHERE a.TABLE_NAME = b.TABLE_NAME and a.TABLE_NAME in {0} and a.TABLE_SCHEMA = '{1}';
 """
