@@ -654,14 +654,16 @@ class RedisSourceService(object):
         new_actives = []
         joins_in_redis = defaultdict(list)
 
+        pipe = r_server.pipeline()
+
         for ind, node in enumerate(ordered_nodes, start=1):
             n_val = node.val
 
             # достаем инфу либо по имени, либо по порядковому номеру
-            r_server.set(str_table.format(ind),
+            pipe.set(str_table.format(ind),
                          RedisSourceService.get_table_full_info(source, n_val))
             # удаляем таблицы с именованными ключами
-            r_server.delete(str_table_by_name.format(n_val))
+            pipe.delete(str_table_by_name.format(n_val))
 
             # строим новую карту активных таблиц
             new_actives.append({'name': n_val, 'order': ind})
@@ -671,8 +673,10 @@ class RedisSourceService(object):
             for k, v in joins.iteritems():
                 joins_in_redis[k] += v
 
-        r_server.set(str_active_tables, json.dumps(new_actives))
-        r_server.set(str_joins, json.dumps(joins_in_redis))
+        pipe.set(str_active_tables, json.dumps(new_actives))
+        pipe.set(str_joins, json.dumps(joins_in_redis))
+
+        pipe.execute()
 
         # сохраняем само дерево
         RedisSourceService.save_active_tree(tree, source)
@@ -843,22 +847,24 @@ class RedisSourceService(object):
         str_table_by_name = RedisCacheKeys.get_active_table(user_id, source.id, '{0}')
         str_active_tables = RedisCacheKeys.get_active_tables(user_id, source.id)
 
+        pipe = r_server.pipeline()
+
         # выбранные ранее таблицы в редисе
         if not r_server.exists(str_active_tables):
-            r_server.set(str_active_tables, '[]')
-            r_server.expire(str_active_tables, settings.REDIS_EXPIRE)
+            pipe.set(str_active_tables, '[]')
+            pipe.expire(str_active_tables, settings.REDIS_EXPIRE)
         else:
             active_tables = json.loads(r_server.get(str_active_tables))
 
         for t_name in tables:
-            r_server.set(str_table_by_name.format(t_name), json.dumps(
+            pipe.set(str_table_by_name.format(t_name), json.dumps(
                 {
                     "columns": columns[t_name],
                     "indexes": indexes[t_name],
                     "foreigns": foreigns[t_name],
                 }
             ))
-            r_server.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
+            pipe.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
         return active_tables
 
 
