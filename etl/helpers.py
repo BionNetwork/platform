@@ -80,10 +80,10 @@ def get_joins(l_t, r_t, l_info, r_info):
             if l_c['name'] == r_str:
                 #todo лишняя избыточность таблиц откуда и куда в каждой связи этих таблиц
                 #todo joins переделать из сета в дикт
-                joins.add((l_t, l_c["name"], r_t, r_c["name"], Operations.EQ))
+                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
                 break
             if l_str == r_c["name"]:
-                joins.add((l_t, l_c["name"], r_t, r_c["name"], Operations.EQ))
+                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
                 break
 
     l_foreign = l_info['foreigns']
@@ -96,7 +96,6 @@ def get_joins(l_t, r_t, l_info, r_info):
                 f['source']['column'],
                 f['destination']['table'],
                 f['destination']['column'],
-                Operations.EQ,
             ))
 
     for f in r_foreign:
@@ -106,10 +105,18 @@ def get_joins(l_t, r_t, l_info, r_info):
                 f['source']['column'],
                 f['destination']['table'],
                 f['destination']['column'],
-                Operations.EQ,
             ))
 
-    return joins
+    dict_joins = []
+
+    for join in joins:
+        dict_joins.append({
+            'left': {'table': join[0], 'column': join[1]},
+            'right': {'table': join[2], 'column': join[3]},
+            'operation': {"type": JoinTypes.INNER, "value": Operations.EQ},
+        })
+
+    return dict_joins
 
 
 class Database(object):
@@ -437,32 +444,55 @@ class DatabaseService(object):
 
 
 class Node(object):
-    def __init__(self, t_name, parent=None, joins=set(), join_type='inner'):
+    def __init__(self, t_name, parent=None, joins=[], join_type='inner'):
         self.val = t_name
         self.parent = parent
         self.childs = []
         self.joins = joins
         self.join_type = join_type
 
+    # def get_node_joins_info(self):
+    #     node_joins = defaultdict(list)
+    #
+    #     n_val = self.val
+    #     for join in self.joins:
+    #         t1, c1, t2, c2, oper = join
+    #         if n_val == t1:
+    #             node_joins[t2].append({
+    #                 "source": t2, "source_col": c2,
+    #                 "destination": t1, "destination_col": c1,
+    #                 "join_val": oper,
+    #                 "join_type": self.join_type,
+    #             })
+    #         else:
+    #             node_joins[t1].append({
+    #                 "source": t1, "source_col": c1,
+    #                 "destination": t2, "destination_col": c2,
+    #                 "join_val": oper,
+    #                 "join_type": self.join_type,
+    #             })
+    #     return node_joins
+
     def get_node_joins_info(self):
         node_joins = defaultdict(list)
 
         n_val = self.val
         for join in self.joins:
-            t1, c1, t2, c2, oper = join
-            if n_val == t1:
-                node_joins[t2].append({
-                    "source": t2, "source_col": c2,
-                    "destination": t1, "destination_col": c1,
-                    "join_val": oper,
-                    "join_type": self.join_type,
+            left = join['left']
+            right = join['right']
+            operation = join['operation']
+            if n_val == right['table']:
+                node_joins[left['table']].append({
+                    "left": left,
+                    "right": right,
+                    "join_val": operation['value'],
+                    "join_type": operation['type'],
                 })
             else:
-                node_joins[t1].append({
-                    "source": t1, "source_col": c1,
-                    "destination": t2, "destination_col": c2,
-                    "join_val": oper,
-                    "join_type": self.join_type,
+                node_joins[right['table']].append({
+                    "left": right, "right": left,
+                    "join_val": operation['value'],
+                    "join_type": operation['type'],
                 })
         return node_joins
 
@@ -617,18 +647,21 @@ class TableTreeRepository(object):
 
         # случай, когда две таблицы не имели связей
         if not childs:
-            node = Node(right_table, parent, set(), join_type)
+            node = Node(right_table, parent, [], join_type)
             parent.childs.append(node)
         else:
             # меняем существующие связи
             node = childs[0]
-            node.joins = set()
+            node.joins = []
 
         for came_join in joins:
             parent_col, oper, child_col = came_join
             # todo опять переисбыточность!!!
-            node.joins.add(
-                (right_table, child_col, left_table, parent_col, oper))
+            node.joins.append({
+                'left': {'table': left_table, 'column': parent_col},
+                'right': {'table': right_table, 'column': child_col},
+                'operation': {"type": join_type, "value": oper},
+            })
 
 
 class RedisCacheKeys(object):
@@ -745,7 +778,7 @@ class RedisSourceService(object):
         """
         for v in joins.values():
             for j in v[:]:
-                if j['destination'] in tables:
+                if j['right']['table'] in tables:
                     v.remove(j)
 
     @classmethod
@@ -757,7 +790,7 @@ class RedisSourceService(object):
         destinations = []
         for table in tables:
             if table in joins:
-                destinations += [x['destination'] for x in joins[table]]
+                destinations += [x['right']['table'] for x in joins[table]]
                 del joins[table]
                 if destinations:
                     destinations += cls.delete_joins(destinations, joins)
@@ -848,6 +881,10 @@ class RedisSourceService(object):
         # сохраняем само дерево
         RedisSourceService.save_active_tree(structure, source)
 
+        # удаляем инфу о таблице без связи, если она есть
+        # TODO почему-то если раскоментить, то не работает, разобраться!!!
+        # RedisSourceService.delete_last_remain(source)
+
     @classmethod
     def tree_full_clean(cls, source):
         """ удаляет информацию о таблицах, джоинах, дереве
@@ -891,7 +928,7 @@ class RedisSourceService(object):
             cls.delete_unneeded_remains(source, remains[1:])
         else:
             last = None
-            r_server.set(str_remain, '')
+            # r_server.set(str_remain, '')
         # либо таблица без связи, либо None
         return last
 
@@ -902,6 +939,17 @@ class RedisSourceService(object):
 
         for t_name in remains:
             r_server.delete(str_table_by_name.format(t_name))
+
+    @classmethod
+    def delete_last_remain(cls, source):
+        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+            source.user_id, source.id, '{0}')
+        str_remain = RedisCacheKeys.get_source_remain(
+            source.user_id, source.id)
+        if r_server.exists(str_remain):
+            last = r_server.get(str_remain)
+            r_server.delete(str_table_by_name.format(last))
+            r_server.delete(str_remain)
 
     @classmethod
     def get_columns_for_tables_without_bind(
@@ -964,7 +1012,7 @@ class RedisSourceService(object):
 
         exist_joins = json.loads(r_server.get(str_joins))
         parent_joins = exist_joins[parent_table]
-        child_joins = [x for x in parent_joins if x['destination'] == child_table]
+        child_joins = [x for x in parent_joins if x['right']['table'] == child_table]
 
         return {
             child_table: [x['name'] for x in child_columns],
@@ -1126,7 +1174,6 @@ class DataSourceService(object):
                 trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
                 sel_tree = TableTreeRepository.select_tree(trees)
 
-                # ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
                 remains = without_bind[sel_tree.root.val]
             else:
                 # достаем структуру дерева из редиса
@@ -1171,9 +1218,11 @@ class DataSourceService(object):
         TableTreeRepository.delete_nodes_from_tree(sel_tree, source, tables)
 
         if sel_tree.root:
-            RedisSourceService.save_active_tree(structure, source)
             RedisSourceService.delete_tables(source, tables)
-            # RedisSourceService.insert_tree(sel_tree, source)
+
+            ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
+            structure = TableTreeRepository.get_tree_structure(sel_tree.root)
+            RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
     @classmethod
     def get_columns_for_choices(cls, source, parent_table,
@@ -1198,6 +1247,7 @@ class DataSourceService(object):
 
         # сохраняем дерево
         ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
+        structure = TableTreeRepository.get_tree_structure(sel_tree.root)
         RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
         data = RedisSourceService.get_final_info(ordered_nodes, source)
