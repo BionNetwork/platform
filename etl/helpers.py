@@ -16,6 +16,8 @@ from .maps import postgresql as psql_map
 from .maps import mysql as mysql_map
 
 
+# FIXME use redis_collection
+
 class JoinTypes(object):
 
     INNER, LEFT, RIGHT = ('inner', 'left', 'right')
@@ -481,41 +483,39 @@ class TablesTree(object):
     #     else:
     #         print 'Empty Tree!!!'
 
-    def get_tree_ordered_nodes(self, nodes):
+
+class TableTreeRepository(object):
+
+    @classmethod
+    def get_tree_ordered_nodes(cls, nodes):
         all_nodes = []
         all_nodes += nodes
         child_nodes = reduce(
             list.__add__, [x.childs for x in nodes], [])
         if child_nodes:
-            all_nodes += self.get_tree_ordered_nodes(child_nodes)
+            all_nodes += cls.get_tree_ordered_nodes(child_nodes)
         return all_nodes
 
-    def get_nodes_count_by_level(self, nodes):
+    @classmethod
+    def get_nodes_count_by_level(cls, nodes):
         counts = [len(nodes)]
 
         child_nodes = reduce(
             list.__add__, [x.childs for x in nodes], [])
         if child_nodes:
-            counts += self.get_nodes_count_by_level(child_nodes)
+            counts += cls.get_nodes_count_by_level(child_nodes)
         return counts
 
-    def get_tree_structure(self, root):
+    @classmethod
+    def get_tree_structure(cls, root):
         root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
                      'join_type': root.join_type}
         for ch in root.childs:
-            root_info['childs'].append(self.get_tree_structure(ch))
+            root_info['childs'].append(cls.get_tree_structure(ch))
         return root_info
 
     @classmethod
-    def build_tree(cls, childs, tables, source):
-        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
-            source.user_id, source.id, '{0}')
-        str_table = RedisCacheKeys.get_active_table(
-            source.user_id, source.id, '{0}')
-        str_active_tables = RedisCacheKeys.get_active_tables(
-            source.user_id, source.id)
-
-        actives = json.loads(r_server.get(str_active_tables))
+    def build_tree(cls, childs, tables, tables_info):
 
         def inner_build_tree(childs, tables):
             child_vals = [x.val for x in childs]
@@ -526,14 +526,10 @@ class TablesTree(object):
             for child in childs:
                 new_childs += child.childs
                 r_val = child.val
-                if r_server.exists(str_table_by_name.format(r_val)):
-                    l_info = json.loads(r_server.get(str_table_by_name.format(r_val)))
-                else:
-                    order = [x for x in actives if x['name'] == r_val][0]['order']
-                    l_info = json.loads(r_server.get(str_table.format(order)))
+                l_info = tables_info[r_val]
 
                 for t_name in tables[:]:
-                    r_info = json.loads(r_server.get(str_table_by_name.format(t_name)))
+                    r_info = tables_info[t_name]
                     joins = get_joins(r_val, t_name, l_info, r_info)
 
                     if joins:
@@ -560,8 +556,12 @@ class TablesTree(object):
 
         for t_name in tables:
             tree = TablesTree(t_name)
+
+            tables_info = RedisSourceService.info_for_tree_building(
+                (), tables, source)
+
             without_bind[t_name] = cls.build_tree(
-                [tree.root, ], tables, source)
+                [tree.root, ], tables, tables_info)
             trees[t_name] = tree
 
         return trees, without_bind
@@ -570,13 +570,12 @@ class TablesTree(object):
     def select_tree(cls, trees):
         counts = {}
         for tr_name, tree in trees.iteritems():
-            counts[tr_name] = tree.get_nodes_count_by_level([tree.root])
+            counts[tr_name] = cls.get_nodes_count_by_level([tree.root])
         root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
         return trees[root_table]
 
     @classmethod
-    def build_tree_by_structure(cls, source):
-        structure = RedisSourceService.get_active_tree_structure(source)
+    def build_tree_by_structure(cls, structure):
         tree = TablesTree(structure['val'])
 
         def inner_build(root, childs):
@@ -590,7 +589,8 @@ class TablesTree(object):
 
         return tree
 
-    def delete_nodes_from_tree(self, source, tables):
+    @classmethod
+    def delete_nodes_from_tree(cls, tree, source, tables):
 
         def inner_delete(node):
             for child in node.childs[:]:
@@ -600,18 +600,18 @@ class TablesTree(object):
                 else:
                     inner_delete(child)
 
-        r_val = self.root.val
+        r_val = tree.root.val
         if r_val in tables:
             RedisSourceService.tree_full_clean(source)
-            self.root = None
+            tree.root = None
         else:
-            inner_delete(self.root)
+            inner_delete(tree.root)
 
     @classmethod
     def update_node_joins(cls, sel_tree, left_table,
                           right_table, join_type, joins):
 
-        nodes = sel_tree.get_tree_ordered_nodes([sel_tree.root, ])
+        nodes = cls.get_tree_ordered_nodes([sel_tree.root, ])
         parent = [x for x in nodes if x.val == left_table][0]
         childs = [x for x in parent.childs if x.val == right_table]
 
@@ -792,14 +792,13 @@ class RedisSourceService(object):
 
     # сохраняем структуру дерева
     @classmethod
-    def save_active_tree(cls, tree, source):
+    def save_active_tree(cls, tree_structure, source):
         str_active_tree = RedisCacheKeys.get_active_tree(
             source.user_id, source.id)
 
-        tree_structure = tree.get_tree_structure(tree.root)
         r_server.set(str_active_tree, json.dumps(tree_structure))
 
-    # строим структуру дерева из редиса
+    # достаем структуру дерева из редиса
     @classmethod
     def get_active_tree_structure(cls, source):
         str_active_tree = RedisCacheKeys.get_active_tree(
@@ -808,7 +807,7 @@ class RedisSourceService(object):
         return json.loads(r_server.get(str_active_tree))
 
     @classmethod
-    def insert_tree_to_redis(cls, tree, source):
+    def insert_tree_to_redis(cls, structure, ordered_nodes, source):
 
         str_table = RedisCacheKeys.get_active_table(
             source.user_id, source.id, '{0}')
@@ -818,7 +817,6 @@ class RedisSourceService(object):
             source.user_id, source.id)
         str_joins = RedisCacheKeys.get_source_joins(
             source.user_id, source.id)
-        ordered_nodes = tree.get_tree_ordered_nodes([tree.root, ])
 
         new_actives = []
         joins_in_redis = defaultdict(list)
@@ -830,7 +828,7 @@ class RedisSourceService(object):
 
             # достаем инфу либо по имени, либо по порядковому номеру
             pipe.set(str_table.format(ind),
-                         RedisSourceService.get_table_full_info(source, n_val))
+                     RedisSourceService.get_table_full_info(source, n_val))
             # удаляем таблицы с именованными ключами
             pipe.delete(str_table_by_name.format(n_val))
 
@@ -848,7 +846,7 @@ class RedisSourceService(object):
         pipe.execute()
 
         # сохраняем само дерево
-        RedisSourceService.save_active_tree(tree, source)
+        RedisSourceService.save_active_tree(structure, source)
 
     @classmethod
     def tree_full_clean(cls, source):
@@ -976,13 +974,12 @@ class RedisSourceService(object):
         }
 
     @classmethod
-    def get_final_info(cls, tree, source, last=None):
+    def get_final_info(cls, ordered_nodes, source, last=None):
         result = []
         str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
         str_active_tables = RedisCacheKeys.get_active_tables(source.user_id, source.id)
-        ordered_nodes = tree.get_tree_ordered_nodes([tree.root, ])
         actives = json.loads(r_server.get(str_active_tables))
         db = source.db
         host = source.host
@@ -1036,6 +1033,32 @@ class RedisSourceService(object):
             pipe.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
         pipe.execute()
         return active_tables
+
+    @classmethod
+    def info_for_tree_building(cls, ordered_nodes, tables, source):
+        user_id = source.user_id
+        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+            user_id, source.id, '{0}')
+        str_table = RedisCacheKeys.get_active_table(
+            user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(
+            user_id, source.id)
+        actives = json.loads(r_server.get(str_active_tables))
+
+        final_info = {}
+
+        # инфа таблиц из существующего дерева
+        for child in ordered_nodes:
+            ch_val = child.val
+            order = [x for x in actives if x['name'] == ch_val][0]['order']
+            final_info[ch_val] = json.loads(r_server.get(str_table.format(order)))
+        # инфа таблиц не из дерева
+        for t_name in tables:
+            if r_server.exists(str_table_by_name.format(t_name)):
+                final_info[t_name] = json.loads(
+                    r_server.get(str_table_by_name.format(t_name)))
+
+        return final_info
 
 
 class DataSourceService(object):
@@ -1100,23 +1123,36 @@ class DataSourceService(object):
                 source, tables, cols, indexes, foreigns)
             # работа с деревьями
             if not active_tables:
-                trees, without_bind = TablesTree.build_trees(tuple(tables), source)
-                sel_tree = TablesTree.select_tree(trees)
+                trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
+                sel_tree = TableTreeRepository.select_tree(trees)
+
+                # ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
                 remains = without_bind[sel_tree.root.val]
             else:
-                # достаем дерево из редиса
-                sel_tree = TablesTree.build_tree_by_structure(source)
+                # достаем структуру дерева из редиса
+                structure = RedisSourceService.get_active_tree_structure(source)
+                # строим дерево
+                sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+
+                ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
+
+                tables_info = RedisSourceService.info_for_tree_building(
+                    ordered_nodes, tables, source)
+
                 # перестраиваем дерево
-                remains = TablesTree.build_tree([sel_tree.root, ], tables, source)
+                remains = TableTreeRepository.build_tree(
+                    [sel_tree.root, ], tuple(tables), tables_info)
 
             # таблица без связи
             last = RedisSourceService.insert_remains(source, remains)
 
             # сохраняем дерево
-            RedisSourceService.insert_tree_to_redis(sel_tree, source)
+            structure = TableTreeRepository.get_tree_structure(sel_tree.root)
+            ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
+            RedisSourceService.insert_tree_to_redis(structure, ordered_nodes, source)
 
             # возвращаем результат
-            return RedisSourceService.get_final_info(sel_tree, source, last)
+            return RedisSourceService.get_final_info(ordered_nodes, source, last)
 
         return []
 
@@ -1128,12 +1164,14 @@ class DataSourceService(object):
 
     @classmethod
     def remove_tables_from_tree(cls, source, tables):
-
-        sel_tree = TablesTree.build_tree_by_structure(source)
-        sel_tree.delete_nodes_from_tree(source, tables)
+        # достаем структуру дерева из редиса
+        structure = RedisSourceService.get_active_tree_structure(source)
+        # строим дерево
+        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+        TableTreeRepository.delete_nodes_from_tree(sel_tree, source, tables)
 
         if sel_tree.root:
-            RedisSourceService.save_active_tree(sel_tree, source)
+            RedisSourceService.save_active_tree(structure, source)
             RedisSourceService.delete_tables_from_redis(source, tables)
             # RedisSourceService.insert_tree_to_redis(sel_tree, source)
 
@@ -1151,12 +1189,17 @@ class DataSourceService(object):
 
     @classmethod
     def save_new_joins(cls, source, left_table, right_table, join_type, joins):
-
-        sel_tree = TablesTree.build_tree_by_structure(source)
-        TablesTree.update_node_joins(
+        # достаем структуру дерева из редиса
+        structure = RedisSourceService.get_active_tree_structure(source)
+        # строим дерево
+        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+        TableTreeRepository.update_node_joins(
             sel_tree, left_table, right_table, join_type, joins)
 
-        RedisSourceService.insert_tree_to_redis(sel_tree, source)
-        data = RedisSourceService.get_final_info(sel_tree, source)
+        # сохраняем дерево
+        ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
+        RedisSourceService.insert_tree_to_redis(structure, ordered_nodes, source)
+
+        data = RedisSourceService.get_final_info(ordered_nodes, source)
 
         return data

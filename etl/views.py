@@ -174,7 +174,7 @@ class BaseEtlView(BaseView):
     def get(self, request, *args, **kwargs):
         try:
             source = self.try_to_get_source(request)
-        except Datasource.DoesNotExists:
+        except Datasource.DoesNotExist:
             err_mess = 'Такого источника не найдено!'
         else:
             try:
