@@ -688,11 +688,11 @@ class RedisSourceService(object):
         r_server.delete(user_datasource_key)
 
     @classmethod
-    def get_tables_from_redis(cls, source, tables):
+    def get_tables(cls, source, tables):
         user_db_key = RedisCacheKeys.get_user_databases(source.user_id)
         user_datasource_key = RedisCacheKeys.get_user_datasource(source.user_id, source.id)
 
-        def inner_save_tables_to_redis():
+        def inner_save_tables():
             new_db = {
                 "db": source.db,
                 "host": source.host,
@@ -705,12 +705,12 @@ class RedisSourceService(object):
             return new_db
 
         if not r_server.exists(user_datasource_key):
-            return inner_save_tables_to_redis()
+            return inner_save_tables()
 
         return json.loads(r_server.get(user_datasource_key))
 
     @classmethod
-    def delete_tables_from_redis(cls, source, tables):
+    def delete_tables(cls, source, tables):
         rck = RedisCacheKeys
 
         str_table = rck.get_active_table(source.user_id, source.id, '{0}')
@@ -726,8 +726,8 @@ class RedisSourceService(object):
             r_server.delete(str_table_by_name.format(t_name))
 
         # удаляем все джоины пришедших таблиц
-        cls.initial_delete_joins_from_redis(tables, joins)
-        child_tables = cls.delete_joins_from_redis(tables, joins)
+        cls.initial_delete_joins(tables, joins)
+        child_tables = cls.delete_joins(tables, joins)
 
         # добавляем к основным таблицам, их дочерние для дальнейшего удаления
         tables += child_tables
@@ -739,7 +739,7 @@ class RedisSourceService(object):
         r_server.set(str_active_tables, json.dumps(actives))
 
     @classmethod
-    def initial_delete_joins_from_redis(cls, tables, joins):
+    def initial_delete_joins(cls, tables, joins):
         """
             удаляем связи таблиц, из таблиц, стоящих левее выбранных
         """
@@ -749,7 +749,7 @@ class RedisSourceService(object):
                     v.remove(j)
 
     @classmethod
-    def delete_joins_from_redis(cls, tables, joins):
+    def delete_joins(cls, tables, joins):
         """
             удаляем связи таблиц, плюс связи таблиц, стоящих правее выбранных!
             возвращает имена дочерних таблиц на удаление
@@ -760,7 +760,7 @@ class RedisSourceService(object):
                 destinations += [x['destination'] for x in joins[table]]
                 del joins[table]
                 if destinations:
-                    destinations += cls.delete_joins_from_redis(destinations, joins)
+                    destinations += cls.delete_joins(destinations, joins)
         return destinations
 
     @classmethod
@@ -807,7 +807,7 @@ class RedisSourceService(object):
         return json.loads(r_server.get(str_active_tree))
 
     @classmethod
-    def insert_tree_to_redis(cls, structure, ordered_nodes, source):
+    def insert_tree(cls, structure, ordered_nodes, source):
 
         str_table = RedisCacheKeys.get_active_table(
             source.user_id, source.id, '{0}')
@@ -1005,7 +1005,7 @@ class RedisSourceService(object):
         return result
 
     @classmethod
-    def insert_columns_info_to_redis(cls, source, tables, columns, indexes, foreigns):
+    def insert_columns_info(cls, source, tables, columns, indexes, foreigns):
         active_tables = []
         user_id = source.user_id
 
@@ -1085,7 +1085,7 @@ class DataSourceService(object):
         tables = DatabaseService.get_tables(source, conn)
 
         if settings.USE_REDIS_CACHE:
-            return RedisSourceService.get_tables_from_redis(source, tables)
+            return RedisSourceService.get_tables(source, tables)
         else:
             return {
                 "db": source.db,
@@ -1119,7 +1119,7 @@ class DataSourceService(object):
             source, col_records, index_records, const_records)
 
         if settings.USE_REDIS_CACHE:
-            active_tables = RedisSourceService.insert_columns_info_to_redis(
+            active_tables = RedisSourceService.insert_columns_info(
                 source, tables, cols, indexes, foreigns)
             # работа с деревьями
             if not active_tables:
@@ -1149,7 +1149,7 @@ class DataSourceService(object):
             # сохраняем дерево
             structure = TableTreeRepository.get_tree_structure(sel_tree.root)
             ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
-            RedisSourceService.insert_tree_to_redis(structure, ordered_nodes, source)
+            RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
             # возвращаем результат
             return RedisSourceService.get_final_info(ordered_nodes, source, last)
@@ -1172,8 +1172,8 @@ class DataSourceService(object):
 
         if sel_tree.root:
             RedisSourceService.save_active_tree(structure, source)
-            RedisSourceService.delete_tables_from_redis(source, tables)
-            # RedisSourceService.insert_tree_to_redis(sel_tree, source)
+            RedisSourceService.delete_tables(source, tables)
+            # RedisSourceService.insert_tree(sel_tree, source)
 
     @classmethod
     def get_columns_for_choices(cls, source, parent_table,
@@ -1198,7 +1198,7 @@ class DataSourceService(object):
 
         # сохраняем дерево
         ordered_nodes = TableTreeRepository.get_tree_ordered_nodes([sel_tree.root, ])
-        RedisSourceService.insert_tree_to_redis(structure, ordered_nodes, source)
+        RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
         data = RedisSourceService.get_final_info(ordered_nodes, source)
 
