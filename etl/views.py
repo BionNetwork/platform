@@ -188,6 +188,10 @@ class BaseEtlView(BaseView):
             return self.json_response({'status': 'error', 'message': err_mess})
 
     def start_action(self, request, source):
+        """
+
+        :type source: Datasource
+        """
         return []
 
 
@@ -203,6 +207,10 @@ class GetColumnsView(BaseEtlView):
 class GetDataRowsView(BaseEtlView):
 
     def start_action(self, request, source):
+        """
+
+        :type source: Datasource
+        """
         cols = json.loads(request.GET.get('cols', ''))
         table_names = []
         col_names = []

@@ -14,6 +14,7 @@ from core.models import ConnectionChoices
 from . import r_server
 from .maps import postgresql as psql_map
 from .maps import mysql as mysql_map
+from core.models import Datasource
 
 
 class JoinTypes(object):
@@ -126,18 +127,22 @@ class Database(object):
     def _get_columns_query(source, tables):
         raise ValueError("Columns query is not realized")
 
-    @staticmethod
-    def get_rows(conn, tables, cols):
+    def get_rows(self, tables, cols):
         query = """
             SELECT {0} FROM {1} LIMIT {2};
         """.format(', '.join(cols), ', '.join(tables),
                    settings.ETL_COLLECTION_PREVIEW_LIMIT)
-        records = Database.get_query_result(query, conn)
+        print query
+        return []
+        records = Database.get_query_result(query)
         return records
 
 
 class Postgresql(Database):
     """Управление источником данных Postgres"""
+    def __init__(self, connection):
+        self.connection = self.get_connection(connection)
+
     @staticmethod
     def get_connection(conn_info):
         try:
@@ -264,6 +269,9 @@ class Postgresql(Database):
 
 class Mysql(Database):
     """Управление источником данных MySQL"""
+    def __init__(self, connection):
+        self.connection = self.get_connection(connection)
+
     @staticmethod
     def get_connection(conn_info):
         try:
@@ -387,28 +395,42 @@ class DatabaseService(object):
     """Сервис для источников данных"""
 
     @staticmethod
-    def factory(conn_type):
+    def factory(**connection):
+        conn_type = int(connection.get('conn_type', ''))
+        del connection['conn_type']
+
         if conn_type == ConnectionChoices.POSTGRESQL:
-            return Postgresql()
+            return Postgresql(connection)
         elif conn_type == ConnectionChoices.MYSQL:
-            return Mysql()
+            return Mysql(connection)
         else:
             raise ValueError("Неизвестный тип подключения!")
 
     @classmethod
     def get_tables(cls, source, conn):
-        instance = cls.factory(source.conn_type)
+        instance = cls.factory(**source)
         return instance.get_tables(source, conn)
 
     @classmethod
     def get_columns_info(cls, source, tables, conn):
-        instance = cls.factory(source.conn_type)
+        instance = cls.factory(**source)
         return instance.get_columns(source, tables, conn)
 
     @classmethod
-    def get_rows(cls, source, conn, tables, cols):
-        instance = cls.factory(source.conn_type)
-        return instance.get_rows(conn, tables, cols)
+    def get_rows(cls, source, tables, cols, structure):
+        """
+        Получение значений выбранных колонок из указанных таблиц и выбранного источника
+        :param source: Datasource
+        :param tables: list
+        :param cols: list
+        :param structure: dict
+        :return:
+        """
+
+        instance = cls.factory(db=source.db, host=source.host, port=source.port, login=source.login,
+                               password=source.password, conn_type=source.conn_type)
+
+        return instance.get_rows(tables, cols)
 
     @classmethod
     def get_connection(cls, source):
@@ -417,8 +439,7 @@ class DatabaseService(object):
 
     @classmethod
     def get_connection_by_dict(cls, conn_info):
-        instance = cls.factory(
-            int(conn_info.get('conn_type', '')))
+        instance = cls.factory(**conn_info)
 
         del conn_info['conn_type']
         conn_info['port'] = int(conn_info['port'])
@@ -430,7 +451,7 @@ class DatabaseService(object):
 
     @classmethod
     def processing_records(cls, source, col_records, index_records, const_records):
-        instance = cls.factory(source.conn_type)
+        instance = cls.factory(**source)
         return instance.processing_records(col_records, index_records, const_records)
 
 
@@ -1122,9 +1143,16 @@ class DataSourceService(object):
 
     @classmethod
     def get_rows_info(cls, source, tables, cols):
+        """
+        Получение списка значений указанных колонок и таблиц в выбранном источнике данных
 
-        conn = DatabaseService.get_connection(source)
-        return DatabaseService.get_rows(source, conn, tables, cols)
+        :param source: Datasource
+        :param tables: list
+        :param cols: list
+        :return: list
+        """
+        structure = RedisSourceService.get_active_tree_structure(source)
+        return DatabaseService.get_rows(source, tables, cols, structure)
 
     @classmethod
     def remove_tables_from_tree(cls, source, tables):
