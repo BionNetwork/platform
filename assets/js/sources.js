@@ -483,8 +483,8 @@ function showJoinWindow(url, parent, child, isWithoutBind){
                     joinRows.append($(newRow));
                     $('[name="joinradio"][value='+join['join_type']+']').prop('checked');
 
-                    $('.with-select-'+i).find('select[name="parent"]').val(join['source_col']);
-                    $('.with-select-'+i).find('select[name="child"]').val(join['destination_col']);
+                    $('.with-select-'+i).find('select[name="parent"]').val(join['left']['column']);
+                    $('.with-select-'+i).find('select[name="child"]').val(join['right']['column']);
                     $('.with-select-'+i).find('select[name="joinType"]').val(join['join_val']);
                 });
             }
