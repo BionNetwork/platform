@@ -881,10 +881,6 @@ class RedisSourceService(object):
         # сохраняем само дерево
         RedisSourceService.save_active_tree(structure, source)
 
-        # удаляем инфу о таблице без связи, если она есть
-        # TODO почему-то если раскоментить, то не работает, разобраться!!!
-        # RedisSourceService.delete_last_remain(source)
-
     @classmethod
     def tree_full_clean(cls, source):
         """ удаляет информацию о таблицах, джоинах, дереве
@@ -1251,5 +1247,8 @@ class DataSourceService(object):
         RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
         data = RedisSourceService.get_final_info(ordered_nodes, source)
+
+        # удаляем инфу о таблице без связи, если она есть
+        RedisSourceService.delete_last_remain(source)
 
         return data
