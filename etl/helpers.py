@@ -125,10 +125,15 @@ class Database(object):
     Базовыми возможности для работы с базами данных
     Получение информации о таблице, список колонок, проверка соединения и т.д.
     """
+    def __init__(self, connection):
+        self.connection = self.get_connection(connection)
 
     @staticmethod
-    def get_query_result(query, conn):
-        cursor = conn.cursor()
+    def get_connection(conn_info):
+        raise NotImplementedError("Method get connection is not implemented")
+
+    def get_query_result(self, query):
+        cursor = self.connection.cursor()
         cursor.execute(query)
         return cursor.fetchall()
 
@@ -141,34 +146,29 @@ class Database(object):
             SELECT {0} FROM {1} LIMIT {2};
         """.format(', '.join(cols), ', '.join(tables),
                    settings.ETL_COLLECTION_PREVIEW_LIMIT)
-        print query
-        return []
-        records = Database.get_query_result(query)
+        records = self.get_query_result(query)
         return records
 
 
 class Postgresql(Database):
     """Управление источником данных Postgres"""
-    def __init__(self, connection):
-        self.connection = self.get_connection(connection)
 
     @staticmethod
     def get_connection(conn_info):
         try:
-            conn_str = (u"host='{host}' dbname='{db}' user='{user}' "
-                        u"password='{passwd}' port={port}").format(**conn_info)
+            conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
+                        u"password='{password}' port={port}").format(**conn_info)
             conn = psycopg2.connect(conn_str)
         except psycopg2.OperationalError:
             return None
         return conn
 
-    @classmethod
-    def get_tables(cls, source, conn):
+    def get_tables(self, source):
         query = """
             SELECT table_name FROM information_schema.tables
             where table_schema='public' order by table_name;
         """
-        records = cls.get_query_result(query, conn)
+        records = self.get_query_result(query)
         records = map(lambda x: {'name': x[0], },
                       sorted(records, key=lambda y: y[0]))
 
@@ -187,15 +187,19 @@ class Postgresql(Database):
 
         return cols_query, constraints_query, indexes_query
 
-    @classmethod
-    def get_columns(cls, source, tables, conn):
-
-        columns_query, consts_query, indexes_query = cls._get_columns_query(
+    def get_columns(self, source, tables):
+        """
+        Получение списка колонок в таблицах
+        :param source:
+        :param tables:
+        :return:
+        """
+        columns_query, consts_query, indexes_query = self._get_columns_query(
             source, tables)
 
-        col_records = Database.get_query_result(columns_query, conn)
-        index_records = Database.get_query_result(indexes_query, conn)
-        const_records = Database.get_query_result(consts_query, conn)
+        col_records = self.get_query_result(columns_query)
+        index_records = self.get_query_result(indexes_query)
+        const_records = self.get_query_result(consts_query)
 
         return col_records, index_records, const_records
 
@@ -278,25 +282,30 @@ class Postgresql(Database):
 
 class Mysql(Database):
     """Управление источником данных MySQL"""
-    def __init__(self, connection):
-        self.connection = self.get_connection(connection)
 
     @staticmethod
     def get_connection(conn_info):
         try:
-            conn = MySQLdb.connect(**conn_info)
+            connection = {'db': str(conn_info['db']), 'host': str(conn_info['host']), 'port': int(conn_info['port']),
+                          'user': str(conn_info['login']),
+                          'passwd': str(conn_info['password'])}
+            conn = MySQLdb.connect(**connection)
         except MySQLdb.OperationalError:
             return None
         return conn
 
-    @classmethod
-    def get_tables(cls, source, conn):
+    def get_tables(self, source):
+        """
+        Получение списка таблиц
+        :param source:
+        :return:
+        """
         query = """
             SELECT table_name FROM information_schema.tables
             where table_schema='{0}' order by table_name;
         """.format(source.db)
 
-        records = cls.get_query_result(query, conn)
+        records = self.get_query_result(query)
         records = map(lambda x: {'name': x[0], }, records)
 
         return records
@@ -313,14 +322,19 @@ class Mysql(Database):
 
         return cols_query, constraints_query, indexes_query
 
-    @classmethod
-    def get_columns(cls, source, tables, conn):
-        columns_query, consts_query, indexes_query = cls._get_columns_query(
+    def get_columns(self, source, tables):
+        """
+        Получение списка колонок в таблицах
+        :param source:
+        :param tables:
+        :return:
+        """
+        columns_query, consts_query, indexes_query = self._get_columns_query(
             source, tables)
 
-        col_records = Database.get_query_result(columns_query, conn)
-        index_records = Database.get_query_result(indexes_query, conn)
-        const_records = Database.get_query_result(consts_query, conn)
+        col_records = self.get_query_result(columns_query)
+        index_records = self.get_query_result(indexes_query)
+        const_records = self.get_query_result(consts_query)
 
         return col_records, index_records, const_records
 
@@ -416,29 +430,49 @@ class DatabaseService(object):
             raise ValueError("Неизвестный тип подключения!")
 
     @classmethod
-    def get_tables(cls, source, conn):
-        instance = cls.factory(**source)
-        return instance.get_tables(source, conn)
+    def get_tables(cls, source):
+        """
+
+        :type source: Datasource
+        """
+        data = cls.get_source_data(source)
+        instance = cls.factory(**data)
+
+        return instance.get_tables(source)
 
     @classmethod
-    def get_columns_info(cls, source, tables, conn):
-        instance = cls.factory(**source)
-        return instance.get_columns(source, tables, conn)
+    def get_source_data(cls, source):
+        """
+        Возвращает список модели источника данных
+        :type source: Datasource
+        :return list
+        """
+        return dict({'db': source.db, 'host': source.host, 'port': source.port, 'login': source.login,
+                     'password': source.password, 'conn_type': source.conn_type})
 
     @classmethod
-    def get_rows(cls, source, tables, cols, structure):
+    def get_columns_info(cls, source, tables):
+        """
+        Получение списка колонок
+        :param source: Datasource
+        :param tables:
+        :return:
+        """
+        data = cls.get_source_data(source)
+        instance = cls.factory(**data)
+        return instance.get_columns(source, tables)
+
+    @classmethod
+    def get_rows(cls, source, tables, cols):
         """
         Получение значений выбранных колонок из указанных таблиц и выбранного источника
         :param source: Datasource
         :param tables: list
         :param cols: list
-        :param structure: dict
         :return:
         """
-
-        instance = cls.factory(db=source.db, host=source.host, port=source.port, login=source.login,
-                               password=source.password, conn_type=source.conn_type)
-
+        data = cls.get_source_data(source)
+        instance = cls.factory(**data)
         return instance.get_rows(tables, cols)
 
     @classmethod
@@ -460,7 +494,8 @@ class DatabaseService(object):
 
     @classmethod
     def processing_records(cls, source, col_records, index_records, const_records):
-        instance = cls.factory(**source)
+        data = cls.get_source_data(source)
+        instance = cls.factory(**data)
         return instance.processing_records(col_records, index_records, const_records)
 
 
@@ -855,6 +890,11 @@ class RedisSourceService(object):
     # достаем структуру дерева из редиса
     @classmethod
     def get_active_tree_structure(cls, source):
+        """
+        Получение текущей структуры дерева источника
+        :param source: Datasource
+        :return:
+        """
         str_active_tree = RedisCacheKeys.get_active_tree(
             source.user_id, source.id)
 
@@ -1145,9 +1185,9 @@ class DataSourceService(object):
     @staticmethod
     def get_database_info(source):
         """ Возвращает таблицы истоника данных
+        :type source: Datasource
         """
-        conn = DatabaseService.get_connection(source)
-        tables = DatabaseService.get_tables(source, conn)
+        tables = DatabaseService.get_tables(source)
 
         if settings.USE_REDIS_CACHE:
             return RedisSourceService.get_tables(source, tables)
@@ -1176,9 +1216,14 @@ class DataSourceService(object):
     @classmethod
     def get_columns_info(cls, source, tables):
 
-        conn = DatabaseService.get_connection(source)
+        """
+        Получение информации по колонкам
+        :param source: Datasource
+        :param tables:
+        :return:
+        """
         col_records, index_records, const_records = (
-            DatabaseService.get_columns_info(source, tables, conn))
+            DatabaseService.get_columns_info(source, tables))
 
         cols, indexes, foreigns = DatabaseService.processing_records(
             source, col_records, index_records, const_records)
@@ -1230,8 +1275,7 @@ class DataSourceService(object):
         :param cols: list
         :return: list
         """
-        structure = RedisSourceService.get_active_tree_structure(source)
-        return DatabaseService.get_rows(source, tables, cols, structure)
+        return DatabaseService.get_rows(source, tables, cols)
 
     @classmethod
     def remove_tables_from_tree(cls, source, tables):
