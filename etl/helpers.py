@@ -12,6 +12,7 @@ from django.conf import settings
 
 from core.models import ConnectionChoices
 from . import r_server
+from redis_collections import List
 from .maps import postgresql as psql_map
 from .maps import mysql as mysql_map
 from core.models import Datasource
@@ -156,8 +157,8 @@ class Postgresql(Database):
     @staticmethod
     def get_connection(conn_info):
         try:
-            conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
-                        u"password='{password}' port={port}").format(**conn_info)
+            conn_str = (u"host='{host}' dbname='{db}' user='{user}' "
+                        u"password='{passwd}' port={port}").format(**conn_info)
             conn = psycopg2.connect(conn_str)
         except psycopg2.OperationalError:
             return None
@@ -286,9 +287,10 @@ class Mysql(Database):
     @staticmethod
     def get_connection(conn_info):
         try:
-            connection = {'db': str(conn_info['db']), 'host': str(conn_info['host']), 'port': int(conn_info['port']),
-                          'user': str(conn_info['login']),
-                          'passwd': str(conn_info['password'])}
+            connection = {'db': str(conn_info['db']), 'host': str(conn_info['host']),
+                          'port': int(conn_info['port']),
+                          'user': str(conn_info['user']),
+                          'passwd': str(conn_info['passwd'])}
             conn = MySQLdb.connect(**connection)
         except MySQLdb.OperationalError:
             return None
@@ -447,8 +449,8 @@ class DatabaseService(object):
         :type source: Datasource
         :return list
         """
-        return dict({'db': source.db, 'host': source.host, 'port': source.port, 'login': source.login,
-                     'password': source.password, 'conn_type': source.conn_type})
+        return dict({'db': source.db, 'host': source.host, 'port': source.port, 'user': source.login,
+                     'passwd': source.password, 'conn_type': source.conn_type})
 
     @classmethod
     def get_columns_info(cls, source, tables):
@@ -737,6 +739,13 @@ class RedisCacheKeys(object):
         return '{0}:active:tree'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
+    @staticmethod
+    def get_task_counter():
+        return 'tasks_counter'
+
+    @staticmethod
+    def get_user_task_list(user_id):
+        return 'user_tasks:{0}'.format(user_id)
 
 class RedisSourceService(object):
 
@@ -1139,6 +1148,26 @@ class RedisSourceService(object):
                     r_server.get(str_table_by_name.format(t_name)))
 
         return final_info
+
+    @classmethod
+    def get_max_task_counter(cls):
+        counter = RedisCacheKeys.get_task_counter()
+        if not r_server.exists(counter):
+            r_server.set(counter, 1)
+            return 1
+        return r_server.incr(counter)
+
+    @staticmethod
+    def add_user_task(user_id, task_id):
+        tasks_str = RedisCacheKeys.get_user_task_list(user_id)
+        tasks = List(key=tasks_str, redis=r_server)
+        tasks.append(task_id)
+
+    @staticmethod
+    def get_user_tasks(user_id):
+        tasks_str = RedisCacheKeys.get_user_task_list(user_id)
+        tasks = List(key=tasks_str, redis=r_server)
+        return list(tasks)
 
 
 class DataSourceService(object):
