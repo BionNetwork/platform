@@ -24,10 +24,16 @@ class JoinTypes(object):
     INNER, LEFT, RIGHT = ('inner', 'left', 'right')
 
     values = {
-        INNER: "inner join",
-        LEFT: "left join",
-        RIGHT: "right join",
+        INNER: "INNER JOIN",
+        LEFT: "LEFT JOIN",
+        RIGHT: "RIGHT JOIN",
     }
+
+    @staticmethod
+    def get_value(join_type):
+        if join_type not in JoinTypes.values:
+            raise ValueError("Unknown join type provided " + join_type)
+        return JoinTypes.values[join_type]
 
 
 class Operations(object):
@@ -42,6 +48,12 @@ class Operations(object):
         GTE: '>=',
         NEQ: '<>',
     }
+
+    @staticmethod
+    def get_value(operation_type):
+        if operation_type not in Operations.values:
+            raise ValueError("Unknown operation type provided " + operation_type)
+        return Operations.values[operation_type]
 
 
 # типы колонок приходят типа bigint(20), убираем скобки
@@ -141,10 +153,36 @@ class Database(object):
     def _get_columns_query(source, tables):
         raise ValueError("Columns query is not realized")
 
-    def get_rows(self, tables, cols):
+    def generate_join(self, structure):
+        """
+        Генерация соединения таблиц для реляционных источников
+        :type structure: dict
+        """
+        query_join = ''
+        for child in structure['childs']:
+            for joinElement in child['joins']:
+                # начальная таблица
+                query_join += joinElement['left']['table']
+                # определяем тип соединения
+                query_join += " " + JoinTypes.get_value(joinElement['join']['type'])
+                # присоединяем таблицу
+                query_join += " " + joinElement['right']['table']
+
+                query_join += " ON %s.%s %s %s.%s" % (
+                    joinElement['left']['table'], joinElement['left']['column'],
+                    Operations.get_value(joinElement['join']['value']),
+                    joinElement['right']['table'], joinElement['right']['column'])
+            # рекурсивно обходим остальные элементы
+            query_join += self.generate_join(child)
+
+        return query_join
+
+    def get_rows(self, cols, structure):
+        query_join = self.generate_join(structure)
+
         query = """
             SELECT {0} FROM {1} LIMIT {2};
-        """.format(', '.join(cols), ', '.join(tables),
+        """.format(', '.join(cols), query_join,
                    settings.ETL_COLLECTION_PREVIEW_LIMIT)
         records = self.get_query_result(query)
         return records
@@ -463,17 +501,17 @@ class DatabaseService(object):
         return instance.get_columns(source, tables)
 
     @classmethod
-    def get_rows(cls, source, tables, cols):
+    def get_rows(cls, source, cols, structure):
         """
         Получение значений выбранных колонок из указанных таблиц и выбранного источника
+        :type structure: dict
         :param source: Datasource
-        :param tables: list
         :param cols: list
         :return:
         """
         data = cls.get_source_data(source)
         instance = cls.factory(**data)
-        return instance.get_rows(tables, cols)
+        return instance.get_rows(cols, structure)
 
     @classmethod
     def get_connection(cls, source):
@@ -1241,16 +1279,16 @@ class DataSourceService(object):
         return []
 
     @classmethod
-    def get_rows_info(cls, source, tables, cols):
+    def get_rows_info(cls, source, cols):
         """
         Получение списка значений указанных колонок и таблиц в выбранном источнике данных
 
         :param source: Datasource
-        :param tables: list
         :param cols: list
         :return: list
         """
-        return DatabaseService.get_rows(source, tables, cols)
+        structure = RedisSourceService.get_active_tree_structure(source)
+        return DatabaseService.get_rows(source, cols, structure)
 
     @classmethod
     def remove_tables_from_tree(cls, source, tables):

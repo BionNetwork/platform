@@ -220,7 +220,7 @@ class GetDataRowsView(BaseEtlView):
             col_names += [x["table"] + "." + x["col"] for x in col_group]
 
         data = helpers.DataSourceService.get_rows_info(
-            source, table_names, col_names)
+            source, col_names)
 
         return data
 
