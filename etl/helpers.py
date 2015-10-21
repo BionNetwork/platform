@@ -18,8 +18,6 @@ from .maps import mysql as mysql_map
 from core.models import Datasource
 
 
-# FIXME use redis_collection
-
 class JoinTypes(object):
 
     INNER, LEFT, RIGHT = ('inner', 'left', 'right')
@@ -86,40 +84,58 @@ def get_joins(l_t, r_t, l_info, r_info):
     r_cols = r_info['columns']
 
     joins = set()
+    # избавляет от дублей
+    unique_set = set()
 
     for l_c in l_cols:
         l_str = '{0}_{1}'.format(l_t, l_c['name'])
         for r_c in r_cols:
             r_str = '{0}_{1}'.format(r_t, r_c['name'])
             if l_c['name'] == r_str:
-                #todo лишняя избыточность таблиц откуда и куда в каждой связи этих таблиц
-                #todo joins переделать из сета в дикт
-                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
-                break
+                j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
+                sort_j_tuple = tuple(sorted(j_tuple))
+                if sort_j_tuple not in unique_set:
+                    joins.add(j_tuple)
+                    unique_set.add(sort_j_tuple)
+                    break
             if l_str == r_c["name"]:
-                joins.add((l_t, l_c["name"], r_t, r_c["name"]))
-                break
+                j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
+                sort_j_tuple = tuple(sorted(j_tuple))
+                if sort_j_tuple not in unique_set:
+                    joins.add(j_tuple)
+                    unique_set.add(sort_j_tuple)
+                    break
 
     l_foreign = l_info['foreigns']
     r_foreign = r_info['foreigns']
 
     for f in l_foreign:
         if f['destination']['table'] == r_t:
-            joins.add((
+            j_tuple = (
                 f['source']['table'],
                 f['source']['column'],
                 f['destination']['table'],
                 f['destination']['column'],
-            ))
+            )
+            sort_j_tuple = tuple(sorted(j_tuple))
+            if sort_j_tuple not in unique_set:
+                joins.add(j_tuple)
+                unique_set.add(sort_j_tuple)
+                break
 
     for f in r_foreign:
         if f['destination']['table'] == l_t:
-            joins.add((
+            j_tuple = (
                 f['source']['table'],
                 f['source']['column'],
                 f['destination']['table'],
                 f['destination']['column'],
-            ))
+            )
+            sort_j_tuple = tuple(sorted(j_tuple))
+            if sort_j_tuple not in unique_set:
+                joins.add(j_tuple)
+                unique_set.add(sort_j_tuple)
+                break
 
     dict_joins = []
 

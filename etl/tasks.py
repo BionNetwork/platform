@@ -25,4 +25,4 @@ def load_data(user_id, task_id):
         client.publish('jobs:etl:extract:{0}:{1}'.format(user_id, task_id), i*10)
         time.sleep(3)
 
-# write in console: celery -A tasks worker
+# write in console: python manage.py celery -A etl.tasks worker
