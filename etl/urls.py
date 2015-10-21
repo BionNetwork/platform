@@ -22,4 +22,10 @@ urlpatterns = [
         name='datasources.cols_for_choices'),
     url(r'^datasources/save_new_joins/$', views.SaveNewJoinsView.as_view(),
         name='datasources.save_new_joins'),
+    url(r'^datasources/task_max/$', views.GetMaxTaskNumberView.as_view(),
+        name='datasources.task_max'),
+    url(r'^datasources/loading_data/$', views.LoadDataView.as_view(),
+        name='datasources.load_data'),
+    url(r'^datasources/user_tasks/$', views.GetUserTasksView.as_view(),
+        name='datasources.user_tasks'),
 ]

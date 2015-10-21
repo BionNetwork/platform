@@ -72,7 +72,8 @@ function removeSource(url){
 }
 
 var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
-    selectedRow, dataWorkspace, loader, initDataTable, closeUrl;
+    selectedRow, dataWorkspace, loader, initDataTable, closeUrl,
+    dataWindow;
 
 // событие на закрытие модального окна
 $('#modal-data').on('hidden.bs.modal', function(e){
@@ -92,6 +93,7 @@ function getConnectionData(dataUrl, closingUrl){
     initDataTable = _.template($("#datatable-init").html());
     joinWinRow = _.template($("#join-win-row").html());
 
+    dataWindow = $('#modal-data');
     joinWin = $('#join-window')
 
     loader = $('#loader');
@@ -103,8 +105,8 @@ function getConnectionData(dataUrl, closingUrl){
             _.each(res.data.tables,
                 function(el){el['display'] = el['name'].substr(0, 21);});
 
-            var rowsTemplate = _.template($('#database-rows').html()),
-                dataWindow = $('#modal-data');
+            var rowsTemplate = _.template($('#database-rows').html());
+
             $('#databases').html(rowsTemplate({data: res.data}));
 
             chosenTables = $('#chosenTables');
@@ -565,4 +567,37 @@ function saveJoins(url){
 
 function closeJoins(){
     joinWin.modal('hide');
+}
+
+
+function startLoading(userId, taskNumUrl, loadUrl){
+
+    dataWindow.modal('hide');
+
+    $.get(taskNumUrl, {}, function(res){
+        if(res.status == 'error') {
+                confirmAlert(res.message)
+        } else {
+            var tasksUl = $('#user_tasks_bar'),
+                ws = new WebSocket(
+                "ws://"+tasksUl.data('host')+"user/"+userId+"/task/"+res.task_id);
+
+            ws.onopen = function(){
+                var taskTmpl = _.template($('#tasks_progress').html());
+                tasksUl.append(taskTmpl({data: [res.task_id, ]}));
+            };
+            ws.onmessage = function (evt){
+                $('#task-text-'+res.task_id).text(evt.data+'%')
+                $('#task-measure-'+res.task_id).css('width', evt.data+'%')
+            };
+            ws.onclose = function(){
+            };
+
+            $.get(loadUrl, {'task_id': res.task_id}, function(res){
+                if(res.status == 'error') {
+                        confirmAlert(res.message)
+                }
+            });
+        }
+    });
 }

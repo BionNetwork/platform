@@ -16,7 +16,7 @@ from . import forms as etl_forms
 import logging
 
 from . import helpers
-from . import r_server
+from . import tasks
 
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class SourcesListView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
 
         get = request.GET
-        or_cond = Q()
+        or_cond = Q(user_id=request.user.id)
 
         search = get.get('search', None)
 
@@ -267,3 +267,26 @@ class SaveNewJoinsView(BaseEtlView):
             source, left_table, right_table, join_type, joins)
 
         return data
+
+
+class GetMaxTaskNumberView(BaseView):
+    def get(self, request, *args, **kwargs):
+        task_id = helpers.RedisSourceService.get_max_task_counter()
+        return self.json_response({'task_id': task_id, 'status': 'success'})
+
+
+class LoadDataView(BaseView):
+    def get(self, request, *args, **kwargs):
+        task_id = request.GET.get('task_id')
+        # добавляем задачу юзеру в список задач
+        helpers.RedisSourceService.add_user_task(request.user.id, task_id)
+
+        tasks.load_data.apply_async((request.user.id, task_id), )
+
+        return self.json_response({'status': 'ok', })
+
+
+class GetUserTasksView(BaseView):
+    def get(self, request, *args, **kwargs):
+        tasks = helpers.RedisSourceService.get_user_tasks(request.user.id)
+        return self.json_response({'userId': request.user.id, 'tasks': tasks})

@@ -43,6 +43,7 @@ INSTALLED_APPS = (
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'djcelery',
     'core',
     'etl',
 )
@@ -73,6 +74,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processor.settings_processor',
             ],
         },
     },
@@ -103,6 +105,11 @@ EMAIL_HOST = 'smtp.mail.ru'
 EMAIL_PORT = 25
 EMAIL_HOST_USER = ''
 EMAIL_HOST_PASSWORD = ''
+
+
+import djcelery
+djcelery.setup_loader()
+
 
 # logging
 LOGGING = {
@@ -188,6 +195,13 @@ USE_REDIS_CACHE = False
 
 # rows select limit
 ETL_COLLECTION_PREVIEW_LIMIT = 1000
+
+
+# host, port for websockets
+SOCKET_HOST = ''
+SOCKET_PORT = ''
+SOCKET_URL = SOCKET_HOST + (SOCKET_PORT and (':' + SOCKET_PORT)) + '/socket/'
+
 
 try:
     from .local import *
