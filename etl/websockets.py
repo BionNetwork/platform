@@ -53,5 +53,5 @@ application = Application([
 
 
 if __name__ == "__main__":
-    application.listen(settings.SOCKET_PORT)
+    application.listen(int(settings.SOCKET_PORT))
     ioloop.IOLoop.instance().start()
