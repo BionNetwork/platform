@@ -153,27 +153,37 @@ class Database(object):
     def _get_columns_query(source, tables):
         raise ValueError("Columns query is not realized")
 
-    def generate_join(self, structure):
+    def generate_join(self, structure, main_table=None):
         """
         Генерация соединения таблиц для реляционных источников
         :type structure: dict
         """
-        query_join = ''
+        # определяем начальную таблицу
+        if main_table is None:
+            main_table = structure['val']
+            query_join = main_table
+        else:
+            query_join = ''
         for child in structure['childs']:
             for joinElement in child['joins']:
-                # начальная таблица
-                query_join += joinElement['left']['table']
+                left_table = joinElement['left']['table']
+                right_table = joinElement['right']['table']
+                # определяем таблицу для связи
+                if left_table == main_table:
+                    join_table = right_table
+                else:
+                    join_table = left_table
                 # определяем тип соединения
                 query_join += " " + JoinTypes.get_value(joinElement['join']['type'])
                 # присоединяем таблицу
-                query_join += " " + joinElement['right']['table']
+                query_join += " " + join_table
 
                 query_join += " ON %s.%s %s %s.%s" % (
                     joinElement['left']['table'], joinElement['left']['column'],
                     Operations.get_value(joinElement['join']['value']),
                     joinElement['right']['table'], joinElement['right']['column'])
             # рекурсивно обходим остальные элементы
-            query_join += self.generate_join(child)
+            query_join += self.generate_join(child, child['val'])
 
         return query_join
 
