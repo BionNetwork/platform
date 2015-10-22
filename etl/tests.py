@@ -181,11 +181,8 @@ class TablesTreeTest(TestCase):
                 }
         }
 
-        self.tree = TablesTree('auth_group_permissions')  # root
-        self.structure = ''
-
     # тест построения дерева
-    def tree_build(self):
+    def test_tree_build(self):
 
         #       auth_group_permissions
         #         /                \
@@ -193,6 +190,7 @@ class TablesTreeTest(TestCase):
         #                           \!!!(without bind)
         #                       datasources
 
+        self.tree = TablesTree('auth_group_permissions')
         remains = TablesTree.build_tree(
             [self.tree.root, ], self.tables, self.tables_info)
 
@@ -200,7 +198,11 @@ class TablesTreeTest(TestCase):
                          'Должна быть 1 таблица без связей datasources!')
 
     # тест проверки количества, порядка обхода,  нодов и  дерева
-    def tree_nodes_order_and_count(self):
+    def test_tree_nodes_order_and_count(self):
+
+        self.tree = TablesTree('auth_group_permissions')
+        TablesTree.build_tree(
+            [self.tree.root, ], self.tables, self.tables_info)
 
         ordered_nodes = TablesTree.get_tree_ordered_nodes([self.tree.root, ])
         self.assertEqual(len(ordered_nodes), 3, 'Количество нодов в дереве не 3!')
@@ -214,8 +216,13 @@ class TablesTreeTest(TestCase):
         self.assertEqual(counts, [1, 2], 'Дерево построено неправильно!')
 
     # тест построения структуры дерева
-    def tree_structure(self):
-        self.structure = TablesTree.get_tree_structure(self.tree.root)
+    def test_tree_structure(self):
+
+        self.tree = TablesTree('auth_group_permissions')
+        TablesTree.build_tree(
+            [self.tree.root, ], self.tables, self.tables_info)
+
+        structure = TablesTree.get_tree_structure(self.tree.root)
 
         expected_structure = {
             'childs': [
@@ -240,12 +247,18 @@ class TablesTreeTest(TestCase):
             'val': 'auth_group_permissions'
         }
 
-        self.assertEqual(self.structure, expected_structure, 'Структура дерева построена неправильно!')
+        self.assertEqual(structure, expected_structure, 'Структура дерева построена неправильно!')
 
     # тест на построение нового дерева
-    def build_new_tree(self):
+    def test_build_new_tree(self):
 
-        new_tree = TablesTree.build_tree_by_structure(self.structure)
+        self.tree = TablesTree('auth_group_permissions')
+        TablesTree.build_tree(
+            [self.tree.root, ], self.tables, self.tables_info)
+
+        structure = TablesTree.get_tree_structure(self.tree.root)
+
+        new_tree = TablesTree.build_tree_by_structure(structure)
 
         ordered_nodes = TablesTree.get_tree_ordered_nodes([new_tree.root, ])
         self.assertEqual(len(ordered_nodes), 3, 'Количество нодов в новом дереве не 3!')
@@ -275,7 +288,12 @@ class TablesTreeTest(TestCase):
         self.assertEqual(counts, [1, 2, 1], 'Дерево построено неправильно!')
 
     # тест на добавление новых джойнов таблиц
-    def update_joins(self):
+    def test_update_joins(self):
+
+        self.tree = TablesTree('auth_group_permissions')
+        TablesTree.build_tree(
+            [self.tree.root, ], self.tables, self.tables_info)
+
         TablesTree.update_node_joins(
             self.tree, 'auth_group_permissions', 'auth_group', 'right',
             [['group_id', 'eq', 'id'], ['id', 'lt', 'name']]
@@ -293,16 +311,7 @@ class TablesTreeTest(TestCase):
                       'left': {'column': 'id', 'table': 'auth_group_permissions'}}
                  ],
                  'val': 'auth_group'},
-                {'childs': [
-                    {'childs': [],
-                     'join_type': 'inner',
-                     'joins': [
-                         {'right': {'column': 'db', 'table': 'datasources'},
-                          'join': {'type': 'inner', 'value': 'eq'},
-                          'left': {'column': 'codename', 'table': 'auth_permission'}}
-                     ],
-                     'val': 'datasources'}
-                ],
+                {'childs': [],
                     'join_type': 'inner',
                     'joins': [
                         {'right': {'column': 'id', 'table': 'auth_permission'},
@@ -317,10 +326,3 @@ class TablesTreeTest(TestCase):
 
         structure = TablesTree.get_tree_structure(self.tree.root)
         self.assertEqual(structure, expected_structure, 'Структура дерева построена неправильно!')
-
-    def test_bla(self):
-        self.tree_build()
-        self.tree_nodes_order_and_count()
-        self.tree_structure()
-        self.build_new_tree()
-        self.update_joins()
