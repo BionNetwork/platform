@@ -15,14 +15,9 @@ from etl.helpers import Postgresql, TablesTree
 class DatabaseTest(TestCase):
 
     def setUp(self):
-        connection = {'host': 'localhost', 'port': 5432, 'db': 'test', 'user': 'foo', 'passwd': 'bar'}
-        # connection = {'host': 'localhost', 'port': 5432, 'db': 'biplatform',
-        #               'user': 'biplatform', 'passwd': 'biplatform'}
+        connection = {'host': 'localhost', 'port': 5432, 'db': 'test', 'login': 'foo', 'password': 'bar'}
         self.database = Postgresql(connection)
         self.maxDiff = None
-
-    def test_check_connection(self):
-        self.assertNotEqual(self.database.connection, None, u"Подключение к СУБД не удалось!")
 
     def test_generate_join(self):
         structure = {'childs': [{'childs': [], 'joins': [
