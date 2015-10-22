@@ -714,7 +714,6 @@ class TablesTree(object):
 
         for came_join in joins:
             parent_col, oper, child_col = came_join
-            # todo опять переисбыточность!!!
             node.joins.append({
                 'left': {'table': left_table, 'column': parent_col},
                 'right': {'table': right_table, 'column': child_col},
@@ -730,11 +729,11 @@ class TableTreeRepository(object):
         trees = {}
         without_bind = {}
 
+        tables_info = RedisSourceService.info_for_tree_building(
+                (), tables, source)
+
         for t_name in tables:
             tree = TablesTree(t_name)
-
-            tables_info = RedisSourceService.info_for_tree_building(
-                (), tables, source)
 
             without_bind[t_name] = TablesTree.build_tree(
                 [tree.root, ], tables, tables_info)
@@ -810,6 +809,7 @@ class RedisCacheKeys(object):
     @staticmethod
     def get_user_task_list(user_id):
         return 'user_tasks:{0}'.format(user_id)
+
 
 class RedisSourceService(object):
 
