@@ -221,8 +221,8 @@ class Postgresql(Database):
     @staticmethod
     def get_connection(conn_info):
         try:
-            conn_str = (u"host='{host}' dbname='{db}' user='{user}' "
-                        u"password='{passwd}' port={port}").format(**conn_info)
+            conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
+                        u"password='{password}' port={port}").format(**conn_info)
             conn = psycopg2.connect(conn_str)
         except psycopg2.OperationalError:
             return None
@@ -353,8 +353,8 @@ class Mysql(Database):
         try:
             connection = {'db': str(conn_info['db']), 'host': str(conn_info['host']),
                           'port': int(conn_info['port']),
-                          'user': str(conn_info['user']),
-                          'passwd': str(conn_info['passwd'])}
+                          'user': str(conn_info['login']),
+                          'passwd': str(conn_info['password'])}
             conn = MySQLdb.connect(**connection)
         except MySQLdb.OperationalError:
             return None
@@ -513,8 +513,8 @@ class DatabaseService(object):
         :type source: Datasource
         :return list
         """
-        return dict({'db': source.db, 'host': source.host, 'port': source.port, 'user': source.login,
-                     'passwd': source.password, 'conn_type': source.conn_type})
+        return dict({'db': source.db, 'host': source.host, 'port': source.port, 'login': source.login,
+                     'password': source.password, 'conn_type': source.conn_type})
 
     @classmethod
     def get_columns_info(cls, source, tables):
@@ -1272,8 +1272,8 @@ class DataSourceService(object):
         """
         conn_info = {
             'host': get_utf8_string(post.get('host')),
-            'user': get_utf8_string(post.get('login')),
-            'passwd': get_utf8_string(post.get('password')),
+            'login': get_utf8_string(post.get('login')),
+            'password': get_utf8_string(post.get('password')),
             'db': get_utf8_string(post.get('db')),
             'port': get_utf8_string(post.get('port')),
             'conn_type': get_utf8_string(post.get('conn_type')),
