@@ -91,6 +91,16 @@ class DatabaseTest(TestCase):
                                "billing_bank_packet_operation.billing_bank_packet_id = billing_bank_packet.id")
         self.assertEqual(' '.join(expected_join_query), join_query)
 
+    def test_statistic(self):
+        data = [('first', 5, 5), ('second', 0, 0), ]
+        result = self.database.processing_statistic(data)
+        self.assertEqual(result,
+                         {
+                             'first': {'count': 5, 'size': 5},
+                             'second': None,
+                         },
+                         "Результат статистики неверен!")
+
 
 class TablesTreeTest(TestCase):
     """
