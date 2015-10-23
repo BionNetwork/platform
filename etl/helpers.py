@@ -214,6 +214,20 @@ class Database(object):
         records = self.get_query_result(query)
         return records
 
+    @staticmethod
+    def get_statistic_query(source, tables):
+        raise NotImplementedError("Method get connection is not implemented")
+
+    def get_statistic(self, source, tables):
+        stats_query = self.get_statistic_query(source, tables)
+        stat_records = self.get_query_result(stats_query)
+        stat_records = self.processing_statistic(stat_records)
+        return stat_records
+
+    @staticmethod
+    def processing_statistic(records):
+        return {x[0]: {'count': int(x[1]), 'size': x[2]} for x in records}
+
 
 class Postgresql(Database):
     """Управление источником данных Postgres"""
@@ -343,6 +357,12 @@ class Postgresql(Database):
                         "on_update": c["c_upd"],
                     })
         return columns, indexes, foreigns
+
+    @staticmethod
+    def get_statistic_query(source, tables):
+        tables_str = '(' + ', '.join(["'{0}'::regclass::oid".format(y) for y in tables]) + ')'
+        stats_query = psql_map.stat_query.format(tables_str)
+        return stats_query
 
 
 class Mysql(Database):
@@ -479,6 +499,12 @@ class Mysql(Database):
                     })
         return columns, indexes, foreigns
 
+    @staticmethod
+    def get_statistic_query(source, tables):
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+        stats_query = mysql_map.stat_query.format(tables_str, source.db)
+        return stats_query
+
 
 class DatabaseService(object):
     """Сервис для источников данных"""
@@ -527,6 +553,18 @@ class DatabaseService(object):
         data = cls.get_source_data(source)
         instance = cls.factory(**data)
         return instance.get_columns(source, tables)
+
+    @classmethod
+    def get_stats_info(cls, source, tables):
+        """
+        Получение списка размера и кол-ва строк таблиц
+        :param source: Datasource
+        :param tables:
+        :return:
+        """
+        data = cls.get_source_data(source)
+        instance = cls.factory(**data)
+        return instance.get_statistic(source, tables)
 
     @classmethod
     def get_rows(cls, source, cols, structure):
@@ -1158,7 +1196,8 @@ class RedisSourceService(object):
         return result
 
     @classmethod
-    def insert_columns_info(cls, source, tables, columns, indexes, foreigns):
+    def insert_columns_info(cls, source, tables, columns,
+                            indexes, foreigns, stats):
         active_tables = []
         user_id = source.user_id
 
@@ -1181,6 +1220,7 @@ class RedisSourceService(object):
                     "columns": columns[t_name],
                     "indexes": indexes[t_name],
                     "foreigns": foreigns[t_name],
+                    "stats": stats[t_name],
                 }
             ))
             pipe.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
@@ -1293,12 +1333,14 @@ class DataSourceService(object):
         col_records, index_records, const_records = (
             DatabaseService.get_columns_info(source, tables))
 
+        stat_records = DatabaseService.get_stats_info(source, tables)
+
         cols, indexes, foreigns = DatabaseService.processing_records(
             source, col_records, index_records, const_records)
 
         if settings.USE_REDIS_CACHE:
             active_tables = RedisSourceService.insert_columns_info(
-                source, tables, cols, indexes, foreigns)
+                source, tables, cols, indexes, foreigns, stat_records)
             # работа с деревьями
             if not active_tables:
                 trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)

@@ -97,3 +97,8 @@ indexes_query = """
         WHERE a.attnum = ANY(ix.indkey) AND  t.relkind = 'r' AND  t.relname in {0}
         group by t.relname, i.relname, ix.indisprimary, ix.indisunique order by t.relname
     """
+
+stat_query = """
+    SELECT relname, reltuples as count, relpages*8192 as size FROM pg_class
+    where oid in {0};
+"""
