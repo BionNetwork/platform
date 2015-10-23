@@ -226,7 +226,8 @@ class Database(object):
 
     @staticmethod
     def processing_statistic(records):
-        return {x[0]: {'count': int(x[1]), 'size': x[2]} for x in records}
+        return {x[0]: ({'count': int(x[1]), 'size': x[2]}
+                       if x[1] and x[2] else None) for x in records}
 
 
 class Postgresql(Database):
