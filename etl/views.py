@@ -3,6 +3,8 @@ from __future__ import unicode_literals
 
 import json
 from itertools import groupby
+import operator
+import binascii
 
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -160,6 +162,14 @@ class GetConnectionDataView(BaseView):
         return self.json_response({'data': db, 'status': 'success'})
 
 
+class ErrorResponse(object):
+    """
+        Класс ответа с ошибкой
+    """
+    def __init__(self, msg):
+        self.message = msg
+
+
 class BaseEtlView(BaseView):
 
     def try_to_get_source(self, request):
@@ -177,12 +187,18 @@ class BaseEtlView(BaseView):
         except Datasource.DoesNotExist:
             err_mess = 'Такого источника не найдено!'
         else:
-            try:
+            # try:
                 data = self.start_action(request, source)
+
+                # возвращаем свое сообщение
+                if isinstance(data, ErrorResponse):
+                    return self.json_response({'status': 'error', 'message': data.message})
+
                 return self.json_response({'status': 'ok', 'data': data, 'message': ''})
-            except Exception as e:
-                logger.exception(e.message)
-                err_mess = "Произошла непредвиденная ошибка"
+            # except Exception as e:
+            #     print e.message
+            #     logger.exception(e.message)
+            #     err_mess = "Произошла непредвиденная ошибка"
 
         if err_mess:
             return self.json_response({'status': 'error', 'message': err_mess})
@@ -275,15 +291,75 @@ class GetMaxTaskNumberView(BaseView):
         return self.json_response({'task_id': task_id, 'status': 'success'})
 
 
-class LoadDataView(BaseView):
-    def get(self, request, *args, **kwargs):
-        task_id = request.GET.get('task_id')
+class LoadDataView(BaseEtlView):
+
+    def start_action(self, request, source):
+
+        # подключение к локальной БД
+        if not tasks.get_local_connection():
+            return ErrorResponse('Не удалось подключиться к хранилищу данных!')
+
+        # подключение к пользовательской БД
+        source_conn = helpers.DataSourceService.get_source_connection(source)
+        if not source_conn:
+            return ErrorResponse('Не удалось подключиться к источнику данных!')
+
+        get = request.GET
+        cols = json.loads(get.get('cols'))
+        tables = json.loads(get.get('tables'))
+
+        col_types = helpers.DataSourceService.get_columns_types(source, tables)
+
+        columns = []
+        col_names_select = []
+        col_names_create = []
+
+        for obj in cols:
+            t = obj['table']
+            c = obj['col']
+
+            formatted = '{0}.{1}'.format(t, c)
+
+            if c in columns:
+                col_names_create.append('{0}_{1} {2}'.format(t, c, col_types[formatted]))
+            else:
+                col_names_create.append('{0} {1}'.format(c, col_types[formatted]))
+                columns.append(c)
+            col_names_select.append('{0}.{1}'.format(t, c))
+
+        # название новой таблицы
+        key = binascii.crc32(
+            reduce(operator.add,
+                   [source.host, str(source.port), str(source.user_id),
+                    ','.join(sorted(tables))], ''))
+
+        table_key = '{0}{1}{2}'.format('sttm_datasoruce_', '_' if key < 0 else '', abs(key))
+
+        table_exists = helpers.DataSourceService.check_existing_table(table_key)
+        if table_exists:
+            return ErrorResponse('Данные уже существуют в системе!')
+
+        task_id = get.get('task_id')
         # добавляем задачу юзеру в список задач
         helpers.RedisSourceService.add_user_task(request.user.id, task_id)
 
-        tasks.load_data.apply_async((request.user.id, task_id), )
+        rows_query = helpers.DataSourceService.get_rows_query_for_loading_task(
+            source, col_names_select)
+        print rows_query
 
-        return self.json_response({'status': 'ok', })
+        create_table_query = helpers.DataSourceService.table_create_query_for_loading_task(
+            table_key, ', '.join(col_names_create))
+        print create_table_query
+
+        insert_table_query = helpers.DataSourceService.table_insert_query_for_loading_task(
+            table_key)
+        print insert_table_query
+
+        tasks.load_data.apply_async(
+            (request.user.id, task_id, source_conn, create_table_query,
+             rows_query, insert_table_query), )
+
+        return []
 
 
 class GetUserTasksView(BaseView):

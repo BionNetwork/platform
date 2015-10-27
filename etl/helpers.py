@@ -204,13 +204,18 @@ class Database(object):
 
         return query_join
 
+    @staticmethod
+    def get_rows_query():
+        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query
+
     def get_rows(self, cols, structure):
         query_join = self.generate_join(structure)
 
-        query = """
-            SELECT {0} FROM {1} LIMIT {2};
-        """.format(', '.join(cols), query_join,
-                   settings.ETL_COLLECTION_PREVIEW_LIMIT)
+        query = self.get_rows_query().format(
+            ', '.join(cols), query_join,
+            settings.ETL_COLLECTION_PREVIEW_LIMIT, 0)
+
         records = self.get_query_result(query)
         return records
 
@@ -523,14 +528,18 @@ class DatabaseService(object):
             raise ValueError("Неизвестный тип подключения!")
 
     @classmethod
+    def get_source_instance(cls, source):
+        data = cls.get_source_data(source)
+        instance = cls.factory(**data)
+        return instance
+
+    @classmethod
     def get_tables(cls, source):
         """
 
         :type source: Datasource
         """
-        data = cls.get_source_data(source)
-        instance = cls.factory(**data)
-
+        instance = cls.get_source_instance(source)
         return instance.get_tables(source)
 
     @classmethod
@@ -551,8 +560,7 @@ class DatabaseService(object):
         :param tables:
         :return:
         """
-        data = cls.get_source_data(source)
-        instance = cls.factory(**data)
+        instance = cls.get_source_instance(source)
         return instance.get_columns(source, tables)
 
     @classmethod
@@ -563,9 +571,18 @@ class DatabaseService(object):
         :param tables:
         :return:
         """
-        data = cls.get_source_data(source)
-        instance = cls.factory(**data)
+        instance = cls.get_source_instance(source)
         return instance.get_statistic(source, tables)
+
+    @classmethod
+    def get_rows_query(cls, source):
+        """
+        Получение запроса выбранных колонок из указанных таблиц выбранного источника
+        :param source: Datasource
+        :return:
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_rows_query()
 
     @classmethod
     def get_rows(cls, source, cols, structure):
@@ -576,9 +593,29 @@ class DatabaseService(object):
         :param cols: list
         :return:
         """
-        data = cls.get_source_data(source)
-        instance = cls.factory(**data)
+        instance = cls.get_source_instance(source)
         return instance.get_rows(cols, structure)
+
+    @classmethod
+    def get_table_create_query(cls, key_str, cols_str):
+        """
+            Получение запроса на создание новой таблицы
+        """
+        create_query = "CREATE TABLE {0} ({1})".format(key_str, cols_str)
+        return create_query
+
+    @classmethod
+    def get_table_insert_query(cls, key_str):
+        """
+            Получение запроса на заполнение таблицы
+        """
+        insert_query = "INSERT INTO {0} VALUES {1}".format(key_str, '{0}')
+        return insert_query
+
+    @classmethod
+    def get_generated_joins(cls, source, structure):
+        instance = cls.get_source_instance(source)
+        return instance.generate_join(structure)
 
     @classmethod
     def get_connection(cls, source):
@@ -599,8 +636,7 @@ class DatabaseService(object):
 
     @classmethod
     def processing_records(cls, source, col_records, index_records, const_records):
-        data = cls.get_source_data(source)
-        instance = cls.factory(**data)
+        instance = cls.get_source_instance(source)
         return instance.processing_records(col_records, index_records, const_records)
 
 
@@ -1435,3 +1471,47 @@ class DataSourceService(object):
         RedisSourceService.delete_last_remain(source)
 
         return data
+
+    @classmethod
+    def get_columns_types(cls, source, tables):
+
+        types_dict = {}
+
+        for table in tables:
+            t_cols = json.loads(
+                RedisSourceService.get_table_full_info(source, table))['columns']
+            for col in t_cols:
+                types_dict['{0}.{1}'.format(table, col['name'])] = col['type']
+
+        return types_dict
+
+    @classmethod
+    def get_rows_query_for_loading_task(cls, source, cols):
+        """
+            Получение предзапроса указанных колонок и таблиц для селери задачи
+        """
+        structure = RedisSourceService.get_active_tree_structure(source)
+        query_join = DatabaseService.get_generated_joins(source, structure)
+
+        rows_query = DatabaseService.get_rows_query(source).format(
+            ', '.join(cols), query_join, '{0}', '{1}')
+        return rows_query
+
+    @classmethod
+    def check_existing_table(cls, table_name):
+        from django.db import connection
+        return table_name in connection.introspection.table_names()
+
+    @classmethod
+    def table_create_query_for_loading_task(cls, table_key, cols_str):
+        create_query = DatabaseService.get_table_create_query(table_key, cols_str)
+        return create_query
+
+    @classmethod
+    def table_insert_query_for_loading_task(cls, table_key):
+        insert_query = DatabaseService.get_table_insert_query(table_key)
+        return insert_query
+
+    @classmethod
+    def get_source_connection(cls, source):
+        return DatabaseService.get_connection(source)

@@ -11,14 +11,18 @@ ints = [
     'smallint',
     'integer',
     'bigint',
-    'decimal',
-    'numeric',
-    'real',
-    'double precision',
     'smallserial',
     'serial',
     'bigserial',
 ]
+
+floats = [
+    'decimal',
+    'numeric',
+    'real',
+    'double precision',
+]
+
 texts = [
     'character varying',
     'character',
@@ -36,7 +40,10 @@ dates = [
 ]
 
 for i in ints:
-    PSQL_TYPES[i] = 'int'
+    PSQL_TYPES[i] = 'integer'
+
+for i in ints:
+    PSQL_TYPES[i] = 'double precision'
 
 for i in texts:
     PSQL_TYPES[i] = 'text'

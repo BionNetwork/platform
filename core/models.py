@@ -47,8 +47,8 @@ class Datasource(models.Model):
     def get_connection_dict(self):
         return {
             'host': get_utf8_string(self.host),
-            'user': get_utf8_string(self.login or ''),
-            'passwd': get_utf8_string(self.password or ''),
+            'login': get_utf8_string(self.login or ''),
+            'password': get_utf8_string(self.password or ''),
             'db': get_utf8_string(self.db),
             'port': self.port,
             'conn_type': self.conn_type

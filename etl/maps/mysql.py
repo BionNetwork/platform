@@ -39,7 +39,7 @@ dates = [
 ]
 
 for i in ints:
-    MYSQL_TYPES[i] = 'int'
+    MYSQL_TYPES[i] = 'integer'
 
 for i in texts:
     MYSQL_TYPES[i] = 'text'

@@ -159,7 +159,11 @@ LOGGING = {
             'handlers': ['etl'],
             'level': 'ERROR',
             'propagate': True
-        }
+        },
+        'celery': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
     }
 }
 
@@ -195,7 +199,8 @@ USE_REDIS_CACHE = False
 
 # rows select limit
 ETL_COLLECTION_PREVIEW_LIMIT = 1000
-
+# rows load limit
+ETL_COLLECTION_LOAD_ROWS_LIMIT = 1000
 
 # host, port for websockets
 SOCKET_HOST = ''

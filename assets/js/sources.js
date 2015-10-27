@@ -572,8 +572,6 @@ function closeJoins(){
 
 function startLoading(userId, taskNumUrl, loadUrl){
 
-    dataWindow.modal('hide');
-
     $.get(taskNumUrl, {}, function(res){
         if(res.status == 'error') {
                 confirmAlert(res.message)
@@ -593,9 +591,32 @@ function startLoading(userId, taskNumUrl, loadUrl){
             ws.onclose = function(){
             };
 
-            $.get(loadUrl, {'task_id': res.task_id}, function(res){
+            var info = getSourceInfo(),
+                tables = new Set(),
+                cols = dataWorkspace.find('.data-table-column-header'),
+                array = cols.map(function(){
+                    var el = $(this);
+                    tables.add(el.data("table"));
+                    return {
+                        "table": el.data("table"),
+                        "col": el.data("col")
+                    }
+                }).get();
+
+            if(!array.length){
+                confirmAlert("Выберите таблицы для загрузки!");
+                return
+            }
+
+            info['task_id'] = res.task_id;
+            info['cols'] = JSON.stringify(array);
+            info['tables'] = JSON.stringify(Array.from(tables));
+
+            $.get(loadUrl, info, function(res){
                 if(res.status == 'error') {
-                        confirmAlert(res.message)
+                        confirmAlert(res.message);
+                } else {
+                    dataWindow.modal('hide');
                 }
             });
         }
