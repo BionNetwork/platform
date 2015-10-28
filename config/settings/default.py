@@ -207,3 +207,6 @@ try:
     from .local import *
 except ImportError:
     pass
+
+RETRY_COUNT = 3
+WAIT_TIMEOUT = 300  # sec

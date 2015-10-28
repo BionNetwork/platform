@@ -9,11 +9,18 @@ from django.utils import timezone
 
 from djchoices import ChoiceItem, DjangoChoices
 
-from .helpers import get_utf8_string
+from .helpers import get_utf8_string, retry_query
 
 """
 Базовые модели приложения
 """
+
+
+class RetryQueryset(models.QuerySet):
+
+    @retry_query
+    def update(self, **kwargs):
+        return super(RetryQueryset, self).update(**kwargs)
 
 
 class ConnectionChoices(DjangoChoices):
@@ -43,6 +50,8 @@ class Datasource(models.Model):
     conn_type = models.SmallIntegerField(
         verbose_name='Тип подключения', choices=ConnectionChoices.choices,
         default=ConnectionChoices.POSTGRESQL)
+    
+    objects = RetryQueryset.as_manager()
 
     def get_connection_dict(self):
         return {
@@ -92,4 +101,3 @@ class User(AbstractUser):
         db_table = "users"
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
-
