@@ -209,4 +209,4 @@ except ImportError:
     pass
 
 RETRY_COUNT = 3
-WAIT_TIMEOUT = 300  # sec
+WAIT_TIMEOUT = 0.5  # sec

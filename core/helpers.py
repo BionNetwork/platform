@@ -68,5 +68,4 @@ def retry_query(func):
                         raise OperationalError()
                     else:
                         continue
-            return func(*args, **kwargs)
     return wrapper

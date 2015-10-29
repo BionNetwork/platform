@@ -3,7 +3,10 @@ from __future__ import unicode_literals
 
 import datetime
 
-from django.db import models
+from django.db import models, connections
+from django.db.models.sql import Query
+from django.db.models.manager import BaseManager
+from django.db.models.sql.compiler import MULTI
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
@@ -16,11 +19,38 @@ from .helpers import get_utf8_string, retry_query
 """
 
 
+class RetryQuery(Query):
+
+    def get_compiler(self, using=None, connection=None):
+        """получение компилятора запроса"""
+        if using is None and connection is None:
+            raise ValueError("Need either using or connection")
+        if using:
+            connection = connections[using]
+
+        compiler = connection.ops.compiler(self.compiler)
+
+        class RetryCompiler(compiler):
+            @retry_query
+            def execute_sql(self, result_type=MULTI):
+                """Переопределяем выполение запроса"""
+                return super(RetryCompiler, self).execute_sql(
+                    result_type=result_type)
+
+        return RetryCompiler(self, connection, using)
+
+
 class RetryQueryset(models.QuerySet):
 
-    @retry_query
-    def update(self, **kwargs):
-        return super(RetryQueryset, self).update(**kwargs)
+    def __init__(self, model=None, query=None, using=None, hints=None):
+        super(RetryQueryset, self).__init__(
+            model=model, query=query, using=using, hints=hints)
+        self.query = query or RetryQuery(self.model)
+
+
+class RetryManager(models.Manager):
+    def get_queryset(self):
+        return RetryQueryset()
 
 
 class ConnectionChoices(DjangoChoices):
@@ -50,8 +80,8 @@ class Datasource(models.Model):
     conn_type = models.SmallIntegerField(
         verbose_name='Тип подключения', choices=ConnectionChoices.choices,
         default=ConnectionChoices.POSTGRESQL)
-    
-    objects = RetryQueryset.as_manager()
+
+    objects = models.Manager.from_queryset(RetryQueryset)()
 
     def get_connection_dict(self):
         return {
