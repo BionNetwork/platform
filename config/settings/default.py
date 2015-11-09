@@ -197,6 +197,10 @@ REDIS_DB = '0'
 REDIS_EXPIRE = 60 * 5
 USE_REDIS_CACHE = False
 
+# mongo conf
+MONGO_HOST = 'localhost'
+MONGO_PORT = 27017
+
 # rows select limit
 ETL_COLLECTION_PREVIEW_LIMIT = 1000
 # rows load limit
