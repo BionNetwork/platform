@@ -14,6 +14,7 @@ from django.db import models, connections
 from django.db.models.sql import (
     Query, UpdateQuery, DeleteQuery, InsertQuery, AggregateQuery)
 from django.db.models.sql.compiler import MULTI
+from redis.exceptions import LockError
 
 logger = logging.getLogger(__name__)
 
@@ -180,3 +181,23 @@ class RetryQueryset(models.QuerySet):
         super(RetryQueryset, self).__init__(
             model=model, query=query, using=using, hints=hints)
         self.query = query or RetryQuery(self.model)
+
+
+def check_redis_lock(func):
+    """Повторный запрос при блокировке в редис"""
+    def wrap(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except LockError:
+            for i in range(0, settings.RETRY_COUNT):
+                time.sleep(settings.REDIS_LOCK_TIMEOUT)
+                try:
+                    return func(*args, **kwargs)
+                except LockError, e:
+                    if i == settings.RETRY_COUNT-1:
+                        logger.exception(e.message)
+                        raise
+                    else:
+                        continue
+    return wrap
+
