@@ -345,15 +345,12 @@ class LoadDataView(BaseEtlView):
 
         rows_query = helpers.DataSourceService.get_rows_query_for_loading_task(
             source, col_names_select)
-        print rows_query
 
         create_table_query = helpers.DataSourceService.table_create_query_for_loading_task(
             table_key, ', '.join(col_names_create))
-        print create_table_query
 
         insert_table_query = helpers.DataSourceService.table_insert_query_for_loading_task(
             table_key)
-        print insert_table_query
 
         tasks.load_data.apply_async(
             (request.user.id, task_id, source_conn, create_table_query,
