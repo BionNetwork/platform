@@ -56,7 +56,7 @@ class Datasource(models.Model):
 
     class Meta:
         db_table = "datasources"
-        unique_together = ('host', 'db')
+        unique_together = ('host', 'db', 'user_id')
 
 
 class DatasourceMeta(models.Model):

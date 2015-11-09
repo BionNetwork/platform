@@ -42,14 +42,14 @@ dates = [
 for i in ints:
     PSQL_TYPES[i] = 'integer'
 
-for i in ints:
+for i in floats:
     PSQL_TYPES[i] = 'double precision'
 
 for i in texts:
     PSQL_TYPES[i] = 'text'
 
 for i in dates:
-    PSQL_TYPES[i] = 'date'
+    PSQL_TYPES[i] = 'timestamp'
 
 cols_query = """
     SELECT table_name, column_name, data_type FROM information_schema.columns

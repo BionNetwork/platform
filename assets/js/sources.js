@@ -75,15 +75,16 @@ var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
     selectedRow, dataWorkspace, loader, initDataTable, closeUrl,
     dataWindow;
 
+// FIXME убрал очищение редиса при закрытии модального окна
 // событие на закрытие модального окна
-$('#modal-data').on('hidden.bs.modal', function(e){
-    var info = getSourceInfo();
-    $.get(closeUrl, info, function(res){
-        if (res.status == 'error'){
-            confirmAlert(res.message);
-        }
-    });
-});
+//$('#modal-data').on('hidden.bs.modal', function(e){
+//    var info = getSourceInfo();
+//    $.get(closeUrl, info, function(res){
+//        if (res.status == 'error'){
+//            confirmAlert(res.message);
+//        }
+//    });
+//});
 
 function getConnectionData(dataUrl, closingUrl){
     closeUrl = closingUrl;
@@ -576,6 +577,37 @@ function startLoading(userId, taskNumUrl, loadUrl){
         if(res.status == 'error') {
                 confirmAlert(res.message)
         } else {
+
+            var info = getSourceInfo(),
+                tables = new Set(),
+                cols = dataWorkspace.find('.data-table-column-header'),
+                array = cols.map(function(){
+                    var el = $(this);
+                    tables.add(el.data("table"));
+                    return {
+                        "table": el.data("table"),
+                        "col": el.data("col")
+                    }
+                }).get();
+
+            if($('#without_bind').length){
+                confirmAlert('Имеется таблица без связи! '+
+                'Выберите связь у таблицы, либо удалите ее!');
+                return;
+            }
+
+            if(!array.length){
+                confirmAlert("Выберите таблицы для загрузки!");
+                return
+            }
+
+            var workspaceRows = dataWorkspace.find("table tr").not(":first");
+            if(!workspaceRows.length){
+                confirmAlert("Создайте превью запрос!");
+                return
+            }
+
+            // создание веб сокета
             var tasksUl = $('#user_tasks_bar'),
                 ws = new WebSocket(
                 "ws://"+tasksUl.data('host')+"user/"+userId+"/task/"+res.task_id);
@@ -591,26 +623,14 @@ function startLoading(userId, taskNumUrl, loadUrl){
             ws.onclose = function(){
             };
 
-            var info = getSourceInfo(),
-                tables = new Set(),
-                cols = dataWorkspace.find('.data-table-column-header'),
-                array = cols.map(function(){
-                    var el = $(this);
-                    tables.add(el.data("table"));
-                    return {
-                        "table": el.data("table"),
-                        "col": el.data("col")
-                    }
-                }).get();
-
-            if(!array.length){
-                confirmAlert("Выберите таблицы для загрузки!");
-                return
-            }
+            var tablesArray = [];
+            tables.forEach(function(el){
+                tablesArray.push(el);
+            });
 
             info['task_id'] = res.task_id;
             info['cols'] = JSON.stringify(array);
-            info['tables'] = JSON.stringify(Array.from(tables));
+            info['tables'] = JSON.stringify(tablesArray);
 
             $.get(loadUrl, info, function(res){
                 if(res.status == 'error') {

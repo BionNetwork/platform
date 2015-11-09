@@ -296,7 +296,7 @@ class LoadDataView(BaseEtlView):
     def start_action(self, request, source):
 
         # подключение к локальной БД
-        if not tasks.get_local_connection():
+        if not helpers.DataSourceService.get_local_connection():
             return ErrorResponse('Не удалось подключиться к хранилищу данных!')
 
         # подключение к пользовательской БД
@@ -353,13 +353,13 @@ class LoadDataView(BaseEtlView):
             table_key)
 
         tasks.load_data.apply_async(
-            (request.user.id, task_id, source_conn, create_table_query,
-             rows_query, insert_table_query), )
+            (request.user.id, task_id, source, table_key, create_table_query,
+             rows_query, insert_table_query, cols), )
 
         return []
 
 
 class GetUserTasksView(BaseView):
     def get(self, request, *args, **kwargs):
-        tasks = helpers.RedisSourceService.get_user_tasks(request.user.id)
-        return self.json_response({'userId': request.user.id, 'tasks': tasks})
+        tasks_ = helpers.RedisSourceService.get_user_tasks(request.user.id)
+        return self.json_response({'userId': request.user.id, 'tasks': tasks_})
