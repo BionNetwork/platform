@@ -160,6 +160,11 @@ LOGGING = {
             'handlers': ['etl'],
             'level': 'ERROR',
             'propagate': True
+        },
+        'core.helpers': {
+            'handlers': ['core'],
+            'level': 'ERROR',
+            'propagate': True
         }
     }
 }

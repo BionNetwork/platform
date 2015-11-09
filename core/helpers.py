@@ -5,6 +5,7 @@ import json
 import datetime
 import decimal
 import time
+import logging
 
 from django.conf import settings
 from django.db import OperationalError
@@ -13,6 +14,8 @@ from django.db import models, connections
 from django.db.models.sql import (
     Query, UpdateQuery, DeleteQuery, InsertQuery, AggregateQuery)
 from django.db.models.sql.compiler import MULTI
+
+logger = logging.getLogger(__name__)
 
 """
 Хелпер настроек
@@ -82,6 +85,7 @@ def retry_query(using):
                             return func(*args, **kwargs)
                         except OperationalError, e:
                             if i == settings.RETRY_COUNT-1:
+                                logger.exception(e.message)
                                 raise OperationalError(e)
                             else:
                                 continue
