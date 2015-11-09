@@ -28,7 +28,7 @@ class Datasource(models.Model):
     """
 
     def __str__(self):
-        return "Datasource " + self.host + " " + self.db
+        return "<Datasource object> " + self.host + " " + self.db
 
     def was_created_recently(self):
         return self.create_date >= timezone.now() - datetime.timedelta(days=1)
@@ -53,6 +53,12 @@ class Datasource(models.Model):
             'port': self.port,
             'conn_type': self.conn_type
         }
+
+    def set_from_dict(self, **data):
+        """Заполнение объекта из словаря"""
+        self.__dict__.update(data)
+        if 'id' in data:
+            self.id = data['id']
 
     class Meta:
         db_table = "datasources"

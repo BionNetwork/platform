@@ -1,10 +1,9 @@
 from __future__ import absolute_import, unicode_literals
 
-__author__ = 'damir'
-
 from django.conf.urls import url
 from . import views
 
+__author__ = 'damir'
 
 urlpatterns = [
     url(r'^datasources/$', views.SourcesListView.as_view(), name='datasources.index'),
@@ -22,8 +21,6 @@ urlpatterns = [
         name='datasources.cols_for_choices'),
     url(r'^datasources/save_new_joins/$', views.SaveNewJoinsView.as_view(),
         name='datasources.save_new_joins'),
-    url(r'^datasources/task_max/$', views.GetMaxTaskNumberView.as_view(),
-        name='datasources.task_max'),
     url(r'^datasources/loading_data/$', views.LoadDataView.as_view(),
         name='datasources.load_data'),
     url(r'^datasources/user_tasks/$', views.GetUserTasksView.as_view(),

@@ -5,6 +5,8 @@ import psycopg2
 import MySQLdb
 import json
 import operator
+import datetime
+import decimal
 from itertools import groupby
 from collections import defaultdict
 
@@ -12,7 +14,7 @@ from django.conf import settings
 
 from core.models import ConnectionChoices
 from . import r_server
-from redis_collections import List
+from redis_collections import Dict as RedisDict
 from .maps import postgresql as psql_map
 from .maps import mysql as mysql_map
 from core.models import Datasource
@@ -619,6 +621,10 @@ class DatabaseService(object):
 
     @classmethod
     def get_connection(cls, source):
+        """
+        Получение соединения источника
+        :type source: Datasource
+        """
         conn_info = source.get_connection_dict()
         return cls.get_connection_by_dict(conn_info)
 
@@ -986,7 +992,12 @@ class RedisSourceService(object):
 
     @classmethod
     def get_table_full_info(cls, source, table):
-
+        """
+        Получение полной информации по источнику из хранилища
+        :param source: Datasource
+        :param table: string
+        :return:
+        """
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
         str_table = RedisCacheKeys.get_active_table(
@@ -1070,30 +1081,25 @@ class RedisSourceService(object):
         """ удаляет информацию о таблицах, джоинах, дереве
             из редиса
         """
-        str_active_tables = RedisCacheKeys.get_active_tables(
+        active_tables_key = RedisCacheKeys.get_active_tables(
             source.user_id, source.id)
-        str_joins = RedisCacheKeys.get_source_joins(
+        tables_joins_key = RedisCacheKeys.get_source_joins(
             source.user_id, source.id)
-        str_remain = RedisCacheKeys.get_source_remain(
+        tables_remain_key = RedisCacheKeys.get_source_remain(
             source.user_id, source.id)
-        str_tree = RedisCacheKeys.get_active_tree(
+        active_tree_key = RedisCacheKeys.get_active_tree(
             source.user_id, source.id)
-        str_table = RedisCacheKeys.get_active_table(
-            source.user_id, source.id, '{0}')
-        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+        table_by_name_key = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
 
-        if r_server.exists(str_active_tables):
-            for item in json.loads(r_server.get(str_active_tables)):
-                str_t = str_table.format(item['order'])
-                if r_server.exists(str_t):
-                    r_server.delete(str_t)
-
-        r_server.delete(str_table_by_name.format(r_server.get(str_remain)))
-        r_server.delete(str_remain)
-        r_server.delete(str_active_tables)
-        r_server.delete(str_joins)
-        r_server.delete(str_tree)
+        # delete keys in redis
+        pipe = r_server.pipeline()
+        pipe.delete(table_by_name_key.format(r_server.get(tables_remain_key)))
+        pipe.delete(tables_remain_key)
+        pipe.delete(active_tables_key)
+        pipe.delete(tables_joins_key)
+        pipe.delete(active_tree_key)
+        pipe.execute()
 
     @classmethod
     def insert_remains(cls, source, remains):
@@ -1291,7 +1297,7 @@ class RedisSourceService(object):
         return final_info
 
     @classmethod
-    def get_max_task_counter(cls):
+    def get_next_task_counter(cls):
         counter = RedisCacheKeys.get_task_counter()
         if not r_server.exists(counter):
             r_server.set(counter, 1)
@@ -1299,16 +1305,27 @@ class RedisSourceService(object):
         return r_server.incr(counter)
 
     @staticmethod
-    def add_user_task(user_id, task_id):
-        tasks_str = RedisCacheKeys.get_user_task_list(user_id)
-        tasks = List(key=tasks_str, redis=r_server)
-        tasks.append(task_id)
+    def add_user_task(user_id, task_id, data):
+        key = RedisCacheKeys.get_user_task_list(user_id)
+        storage = RedisStorage(r_server)
+        storage.set_dict(key, task_id, data)
 
     @staticmethod
     def get_user_tasks(user_id):
-        tasks_str = RedisCacheKeys.get_user_task_list(user_id)
-        tasks = List(key=tasks_str, redis=r_server)
+        key = RedisCacheKeys.get_user_task_list(user_id)
+        storage = RedisStorage(r_server)
+        tasks = storage.get_dict(key)
         return list(tasks)
+
+    @staticmethod
+    def get_user_task_by_id(user_id, task_id):
+        """Получение пользовательской задачи"""
+        key = RedisCacheKeys.get_user_task_list(user_id)
+        storage = RedisStorage(r_server)
+        tasks = storage.get_dict(key)
+        if task_id not in tasks:
+            return None
+        return tasks[task_id]
 
 
 class DataSourceService(object):
@@ -1486,11 +1503,10 @@ class DataSourceService(object):
         return types_dict
 
     @classmethod
-    def get_rows_query_for_loading_task(cls, source, cols):
+    def get_rows_query_for_loading_task(cls, source, structure, cols):
         """
             Получение предзапроса указанных колонок и таблиц для селери задачи
         """
-        structure = RedisSourceService.get_active_tree_structure(source)
         query_join = DatabaseService.get_generated_joins(source, structure)
 
         rows_query = DatabaseService.get_rows_query(source).format(
@@ -1514,4 +1530,63 @@ class DataSourceService(object):
 
     @classmethod
     def get_source_connection(cls, source):
+        """
+        Получить объект соединения источника данных
+        :type source: Datasource
+        """
         return DatabaseService.get_connection(source)
+
+
+class TaskService:
+    """
+    Добавление новых задач в очередь
+    Управление пользовательскими задачами
+    """
+    def __init__(self, name):
+        self.name = name
+
+    def add_task(self, user_id, data, tree, source):
+        """
+        Добавляем задачу юзеру в список задач и возвращаем идентификатор заадчи
+        :type tree: dict дерево источника
+        :param user_id: integer
+        :param data: dict
+        :param source: dict
+        :return: integer
+        """
+        task_id = RedisSourceService.get_next_task_counter()
+        task = {'name': self.name, 'data': {'cols': data['cols'], 'tables': data['tables'], 'tree': tree},
+                'source': source}
+
+        RedisSourceService.add_user_task(user_id, task_id, task)
+        return task_id
+
+
+class RedisStorage:
+    """
+    Обертка над методами сохранения информации в redis
+    Позволяет работать с объектами в python стиле, при этом информация сохраняется в redis
+    Пока поддерживаются словари
+    """
+    def __init__(self, client):
+        self.client = client
+
+    def set_dict(self, redis_key, key, value):
+        task = RedisDict(key=redis_key, redis=self.client, pickler=json)
+        task[key] = value
+
+    def get_dict(self, key):
+        task = RedisDict(key=key, redis=self.client, pickler=json)
+        return task
+
+
+class EtlEncoder:
+    @staticmethod
+    def encode(obj):
+        if isinstance(obj, datetime.datetime):
+            return obj.strftime('%d.%m.%Y')
+        elif isinstance(obj, datetime.date):
+            return obj.strftime('%d.%m.%Y')
+        elif isinstance(obj, decimal.Decimal):
+            return float(obj)
+        return obj

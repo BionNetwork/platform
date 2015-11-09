@@ -39,15 +39,15 @@ class Command(BaseCommand):
                 self.client.listen(self.on_messages_published)
 
             def on_messages_published(self, message):
+                print message.body
                 self.write_message(message.body)
 
             def on_close(self):
                 self.client.unsubscribe(self.channel)
 
-
         application = Application([
             (r"/socket/user/(\d+)/task/(\d+)", SocketHandler),
-        ], {})
+        ], {}, debug=settings.DEBUG)
 
         # if __name__ == "__main__":
         print 'Tornado is started'

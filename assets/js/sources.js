@@ -317,12 +317,11 @@ function delCol(id){
 
 
 function getSourceInfo(){
-    var source = $('#databases>div'),
-        info = {
-            "host": source.data("host"),
-            "db": source.data("db")
-        };
-    return info;
+    var source = $('#databases>div');
+    return {
+        "host": source.data("host"),
+        "db": source.data("db")
+    };
 }
 
 
@@ -417,7 +416,7 @@ function refreshData(url){
     var source = $('#databases>div'),
         colsInfo = {
             "host": source.data("host"),
-            "db": source.data("db"),
+            "db": source.data("db")
         },
         cols = dataWorkspace.find('.data-table-column-header'),
         array = cols.map(function(){
@@ -437,7 +436,7 @@ function refreshData(url){
         loader.show();
         dataWorkspace.parent('div').css('background-color', '#ddd');
 
-        $.get(url, colsInfo, function(res){
+        $.post(url, colsInfo, function(res){
             if(res.status == 'error') {
                 confirmAlert(res.message)
             } else {
@@ -570,55 +569,47 @@ function closeJoins(){
 }
 
 
-function startLoading(userId, taskNumUrl, loadUrl){
+function startLoading(userId, loadUrl){
+    var info = getSourceInfo(),
+        tables = new Set(),
+        cols = dataWorkspace.find('.data-table-column-header'),
+        array = cols.map(function(){
+            var el = $(this);
+            tables.add(el.data("table"));
+            return {
+                "table": el.data("table"),
+                "col": el.data("col")
+            }
+        }).get();
 
-    $.get(taskNumUrl, {}, function(res){
-        if(res.status == 'error') {
-                confirmAlert(res.message)
+    if(!array.length){
+        confirmAlert("Выберите таблицы для загрузки!");
+        return
+    }
+
+    info['cols'] = JSON.stringify(array);
+    info['tables'] = JSON.stringify(Array.from(tables));
+
+    $.post(loadUrl, info, function(response){
+        if(response.status == 'error') {
+                confirmAlert(response.message);
         } else {
+            dataWindow.modal('hide');// clear data
+            var task_id = response.data['task_id'];
             var tasksUl = $('#user_tasks_bar'),
                 ws = new WebSocket(
-                "ws://"+tasksUl.data('host')+"user/"+userId+"/task/"+res.task_id);
+                    "ws://"+tasksUl.data('host')+"user/"+userId+"/task/"+task_id);
 
             ws.onopen = function(){
                 var taskTmpl = _.template($('#tasks_progress').html());
-                tasksUl.append(taskTmpl({data: [res.task_id, ]}));
+                tasksUl.append(taskTmpl({data: [task_id ]}));
             };
             ws.onmessage = function (evt){
-                $('#task-text-'+res.task_id).text(evt.data+'%')
-                $('#task-measure-'+res.task_id).css('width', evt.data+'%')
+                $('#task-text-'+task_id).text(evt.data+'%');
+                $('#task-measure-'+task_id).css('width', evt.data+'%')
             };
             ws.onclose = function(){
             };
-
-            var info = getSourceInfo(),
-                tables = new Set(),
-                cols = dataWorkspace.find('.data-table-column-header'),
-                array = cols.map(function(){
-                    var el = $(this);
-                    tables.add(el.data("table"));
-                    return {
-                        "table": el.data("table"),
-                        "col": el.data("col")
-                    }
-                }).get();
-
-            if(!array.length){
-                confirmAlert("Выберите таблицы для загрузки!");
-                return
-            }
-
-            info['task_id'] = res.task_id;
-            info['cols'] = JSON.stringify(array);
-            info['tables'] = JSON.stringify(Array.from(tables));
-
-            $.get(loadUrl, info, function(res){
-                if(res.status == 'error') {
-                        confirmAlert(res.message);
-                } else {
-                    dataWindow.modal('hide');
-                }
-            });
         }
     });
 }

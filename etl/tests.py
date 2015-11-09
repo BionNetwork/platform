@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 from django.test import TestCase
 from etl.helpers import Postgresql, TablesTree
+from core.models import Datasource
 
 """
 Тестирование etl методов
@@ -331,3 +332,12 @@ class TablesTreeTest(TestCase):
 
         structure = TablesTree.get_tree_structure(self.tree.root)
         self.assertEqual(structure, expected_structure, 'Структура дерева построена неправильно!')
+
+
+class DatasourceTest(TestCase):
+    def test_set_from_dict(self):
+        source = Datasource()
+        data = {"db": "test", "conn_type": 1, "host": "localhost", "login": "foo", "password": "bar", "port": 5432}
+        source.set_from_dict(**data)
+        for k, v in data.items():
+            self.assertEquals(v, source.__dict__[k], "attribute %s does not valid" % k)

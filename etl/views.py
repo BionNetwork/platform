@@ -3,8 +3,6 @@ from __future__ import unicode_literals
 
 import json
 from itertools import groupby
-import operator
-import binascii
 
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -171,6 +169,10 @@ class ErrorResponse(object):
 
 
 class BaseEtlView(BaseView):
+    # get запрос для действия
+    get_enabled = True
+    # post запрос для действия
+    post_enabled = False
 
     def try_to_get_source(self, request):
         method = request.GET if request.method == 'GET' else request.POST
@@ -183,11 +185,36 @@ class BaseEtlView(BaseView):
 
     def get(self, request, *args, **kwargs):
         try:
+            if self.get_enabled:
+                return self.request_method(request, *args, **kwargs)
+            else:
+                raise Exception("Метод GET не определен")
+        except Exception as e:
+            return self.json_response({'status': 'error', 'message': e.message})
+
+    def post(self, request, *args, **kwargs):
+        try:
+            if self.post_enabled:
+                return self.request_method(request, *args, **kwargs)
+            else:
+                raise Exception("Метод POST не определен")
+        except Exception as e:
+            return self.json_response({'status': 'error', 'message': e.message})
+
+    def request_method(self, request, *args, **kwargs):
+        """
+        Выполнение запроса с проверкой на существование источника и обработкой ошибок при действии
+        :param request: WSGIRequest
+        :param args: list
+        :param kwargs: dict
+        :return: string
+        """
+        try:
             source = self.try_to_get_source(request)
         except Datasource.DoesNotExist:
             err_mess = 'Такого источника не найдено!'
         else:
-            # try:
+            try:
                 data = self.start_action(request, source)
 
                 # возвращаем свое сообщение
@@ -195,10 +222,9 @@ class BaseEtlView(BaseView):
                     return self.json_response({'status': 'error', 'message': data.message})
 
                 return self.json_response({'status': 'ok', 'data': data, 'message': ''})
-            # except Exception as e:
-            #     print e.message
-            #     logger.exception(e.message)
-            #     err_mess = "Произошла непредвиденная ошибка"
+            except Exception as e:
+                logger.exception(e.message)
+                err_mess = "Произошла непредвиденная ошибка"
 
         if err_mess:
             return self.json_response({'status': 'error', 'message': err_mess})
@@ -227,7 +253,12 @@ class GetDataRowsView(BaseEtlView):
 
         :type source: Datasource
         """
-        cols = json.loads(request.GET.get('cols', ''))
+        data = request.POST.get('cols', '')
+
+        if len(data) == 0:
+            raise ValueError("Неверный запрос")
+
+        cols = json.loads(data)
         table_names = []
         col_names = []
 
@@ -237,8 +268,13 @@ class GetDataRowsView(BaseEtlView):
 
         data = helpers.DataSourceService.get_rows_info(
             source, col_names)
-
         return data
+
+    def post(self, request, *args, **kwargs):
+        try:
+            return self.request_method(request, *args, **kwargs)
+        except Exception as e:
+            return self.json_response({'status': 'error', 'message': e.message})
 
 
 class RemoveTablesView(BaseEtlView):
@@ -285,84 +321,35 @@ class SaveNewJoinsView(BaseEtlView):
         return data
 
 
-class GetMaxTaskNumberView(BaseView):
-    def get(self, request, *args, **kwargs):
-        task_id = helpers.RedisSourceService.get_max_task_counter()
-        return self.json_response({'task_id': task_id, 'status': 'success'})
-
-
 class LoadDataView(BaseEtlView):
 
+    post_enabled = True
+    get_enabled = False
+
     def start_action(self, request, source):
-
-        # подключение к локальной БД
-        if not tasks.get_local_connection():
-            return ErrorResponse('Не удалось подключиться к хранилищу данных!')
-
-        # подключение к пользовательской БД
+        # подключение к источнику данных
+        """
+        Постановка задачи в очередь на загрузку данных в хранилище
+        :type request: WSGIRequest
+        :type source: Datasource
+        """
         source_conn = helpers.DataSourceService.get_source_connection(source)
         if not source_conn:
             return ErrorResponse('Не удалось подключиться к источнику данных!')
 
-        get = request.GET
-        cols = json.loads(get.get('cols'))
-        tables = json.loads(get.get('tables'))
+        data = request.POST
 
-        col_types = helpers.DataSourceService.get_columns_types(source, tables)
+        # добавляем задачу в очередь
+        task = helpers.TaskService('etl:load_data:mongo')
+        structure = helpers.RedisSourceService.get_active_tree_structure(source)
+        task_id = task.add_task(request.user.id, data, structure, source.get_connection_dict())
 
-        columns = []
-        col_names_select = []
-        col_names_create = []
+        tasks.load_data.apply_async((request.user.id, task_id),)
 
-        for obj in cols:
-            t = obj['table']
-            c = obj['col']
-
-            formatted = '{0}.{1}'.format(t, c)
-
-            if c in columns:
-                col_names_create.append('{0}_{1} {2}'.format(t, c, col_types[formatted]))
-            else:
-                col_names_create.append('{0} {1}'.format(c, col_types[formatted]))
-                columns.append(c)
-            col_names_select.append('{0}.{1}'.format(t, c))
-
-        # название новой таблицы
-        key = binascii.crc32(
-            reduce(operator.add,
-                   [source.host, str(source.port), str(source.user_id),
-                    ','.join(sorted(tables))], ''))
-
-        table_key = '{0}{1}{2}'.format('sttm_datasoruce_', '_' if key < 0 else '', abs(key))
-
-        table_exists = helpers.DataSourceService.check_existing_table(table_key)
-        if table_exists:
-            return ErrorResponse('Данные уже существуют в системе!')
-
-        task_id = get.get('task_id')
-        # добавляем задачу юзеру в список задач
-        helpers.RedisSourceService.add_user_task(request.user.id, task_id)
-
-        rows_query = helpers.DataSourceService.get_rows_query_for_loading_task(
-            source, col_names_select)
-        print rows_query
-
-        create_table_query = helpers.DataSourceService.table_create_query_for_loading_task(
-            table_key, ', '.join(col_names_create))
-        print create_table_query
-
-        insert_table_query = helpers.DataSourceService.table_insert_query_for_loading_task(
-            table_key)
-        print insert_table_query
-
-        tasks.load_data.apply_async(
-            (request.user.id, task_id, source_conn, create_table_query,
-             rows_query, insert_table_query), )
-
-        return []
+        return {'task_id': task_id}
 
 
 class GetUserTasksView(BaseView):
     def get(self, request, *args, **kwargs):
-        tasks = helpers.RedisSourceService.get_user_tasks(request.user.id)
-        return self.json_response({'userId': request.user.id, 'tasks': tasks})
+        user_tasks = helpers.RedisSourceService.get_user_tasks(request.user.id)
+        return self.json_response({'userId': request.user.id, 'tasks': user_tasks})
