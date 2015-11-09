@@ -88,7 +88,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'ENGINE': 'core.db_connection.postgresql_psycopg2',
         'NAME': 'biplatform',
         'USER': 'biplatform',
         'PASSWORD': '',
@@ -164,6 +164,11 @@ LOGGING = {
             'handlers': ['console'],
             'level': 'DEBUG',
         },
+        'core.helpers': {
+            'handlers': ['core'],
+            'level': 'ERROR',
+            'propagate': True
+        }
     }
 }
 
@@ -211,6 +216,9 @@ SOCKET_HOST = ''
 SOCKET_PORT = ''
 SOCKET_URL = SOCKET_HOST + (SOCKET_PORT and (':' + SOCKET_PORT)) + '/socket/'
 
+RETRY_COUNT = 3
+DEADLOCK_WAIT_TIMEOUT = 0.5
+DATABASE_WAIT_TIMEOUT = 10
 
 try:
     from .local import *
