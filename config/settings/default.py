@@ -207,3 +207,5 @@ try:
     from .local import *
 except ImportError:
     pass
+
+REDIS_LOCK_TIMEOUT = 0.5
