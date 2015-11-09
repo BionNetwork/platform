@@ -27,21 +27,6 @@ client = brukva.Client(host=settings.REDIS_HOST,
                        selected_db=settings.REDIS_DB)
 client.connect()
 
-# подключение к локальной БД
-DB_INFO = settings.DATABASES['default']
-conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
-            u"password='{password}' port={port}").format(
-    host=DB_INFO['HOST'], db=DB_INFO['NAME'], login=DB_INFO['USER'],
-    password=DB_INFO['PASSWORD'], port=str(DB_INFO['PORT']), )
-
-
-def get_local_connection():
-    try:
-        conn = psycopg2.connect(conn_str)
-    except psycopg2.OperationalError:
-        conn = None
-    return conn
-
 
 def load_data_mongo(user_id, task_id, data, source):
     """
