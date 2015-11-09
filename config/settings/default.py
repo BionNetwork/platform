@@ -88,7 +88,6 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        # 'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'ENGINE': 'core.db_connection.postgresql_psycopg2',
         'NAME': 'biplatform',
         'USER': 'biplatform',
@@ -218,9 +217,3 @@ RETRY_COUNT = 3
 DEADLOCK_WAIT_TIMEOUT = 0.5
 DATABASE_WAIT_TIMEOUT = 10
 
-RETRY_ERRORS = {
-    'default': {
-        'deadlock': (['40P01'], DEADLOCK_WAIT_TIMEOUT),
-        'db_lock': (['55P03'], DATABASE_WAIT_TIMEOUT)
-    }
-}

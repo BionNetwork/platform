@@ -34,7 +34,7 @@ class PostgresDatabaseErrorWrapper(DatabaseErrorWrapper):
             if issubclass(exc_type, db_exc_type):
                 #  Добавляем код ошибки
                 dj_exc_value = dj_exc_type(
-                    *exc_value.args + (exc_value.pgcode,))
+                    *((exc_value.pgcode,) + exc_value.args))
                 dj_exc_value.__cause__ = exc_value
                 if dj_exc_type not in (DataError, IntegrityError):
                     self.wrapper.errors_occurred = True

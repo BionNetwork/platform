@@ -22,6 +22,18 @@ logger = logging.getLogger(__name__)
 """
 
 
+RETRY_ERRORS = {
+    'mysql': {
+        'deadlock': (['1213'], settings.DEADLOCK_WAIT_TIMEOUT),
+        'db_lock': (['1205'], settings.DATABASE_WAIT_TIMEOUT)
+    },
+    'postgresql_psycopg2': {
+        'deadlock': (['40P01'], settings.DEADLOCK_WAIT_TIMEOUT),
+        'db_lock': (['55P03'], settings.DATABASE_WAIT_TIMEOUT)
+    }
+}
+
+
 class Settings:
     @classmethod
     def get_host(cls, request):
@@ -60,7 +72,9 @@ class CustomJsonEncoder(json.JSONEncoder):
 def get_error(using, error_code):
     """Проверка типа ошибки
     """
-    errs = settings.RETRY_ERRORS[using]
+    db_backend = settings.DATABASES[using]['ENGINE'].split('.')[-1]
+    error_code = str(error_code)
+    errs = RETRY_ERRORS[db_backend]
     for key, value in errs.iteritems():
         if error_code in errs[key][0]:
             return True, errs[key][1]
@@ -69,24 +83,22 @@ def get_error(using, error_code):
 
 def retry_query(using):
     def wrap(func):
-        """Перезапуск запроса"""
+        """Перезапуск запроса
+        """
         def wrapper(*args, **kwargs):
             try:
-                print 'decor', using
                 return func(*args, **kwargs)
             except OperationalError, e:
-                print 'exc'
-                lock_error_check, timeout = get_error(using, e.args[1])
+                lock_error_check, timeout = get_error(using, e.args[0])
                 if lock_error_check:
                     for i in range(0, settings.RETRY_COUNT):
-                        print 'step'
                         time.sleep(timeout)
                         try:
                             return func(*args, **kwargs)
                         except OperationalError, e:
                             if i == settings.RETRY_COUNT-1:
                                 logger.exception(e.message)
-                                raise OperationalError(e)
+                                raise
                             else:
                                 continue
         return wrapper
@@ -100,7 +112,7 @@ class RetryQueryMixin(object):
         obj = super(RetryQueryMixin, self).clone(
             klass=klass, memo=memo, **kwargs)
         if klass:
-            obj.__class__ = class_dict[klass]
+            obj.__class__ = query_class_according[klass]
         return obj
 
     def get_compiler(self, using=None, connection=None):
@@ -153,7 +165,8 @@ class RetryInsertQuery(RetryInsertQueryMixin, InsertQuery):
 class RetryAggregateQuery(RetryQueryMixin, AggregateQuery):
     pass
 
-class_dict = {
+# соответсвие классов запроса в базу ORM
+query_class_according = {
     DeleteQuery: RetryDeleteQuery,
     UpdateQuery: RetryUpdateQuery,
     InsertQuery: RetryInsertQuery,
