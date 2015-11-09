@@ -13,6 +13,8 @@ ints = [
     'smallint',
     'mediumint',
     'bigint',
+]
+floats = [
     'float',
     'double',
     'decimal',
@@ -41,11 +43,14 @@ dates = [
 for i in ints:
     MYSQL_TYPES[i] = 'integer'
 
+for i in floats:
+    MYSQL_TYPES[i] = 'double precision'
+
 for i in texts:
     MYSQL_TYPES[i] = 'text'
 
 for i in dates:
-    MYSQL_TYPES[i] = 'date'
+    MYSQL_TYPES[i] = 'timestamp'
 
 cols_query = """
     SELECT table_name, column_name, column_type FROM information_schema.columns

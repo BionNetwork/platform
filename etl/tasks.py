@@ -4,19 +4,19 @@ import os
 import sys
 import brukva
 import psycopg2
+import psycopg2.extensions
 import pymongo
 import json
 
 import operator
 import binascii
 
-from . import r_server
 from .helpers import RedisSourceService, DataSourceService, EtlEncoder
 from core.models import Datasource
 from django.conf import settings
 
 from djcelery import celery
-from itertools import groupby
+from itertools import groupby, izip
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
@@ -113,87 +113,73 @@ def load_data(user_id, task_id):
     if task['name'] == 'etl:load_data:mongo':
         load_data_mongo(user_id, task_id, task['data'], task['source'])
 
-    # rows_query = helpers.DataSourceService.get_rows_query_for_loading_task(
-    #     source, col_names_select)
-    # print rows_query
-    #
-    # create_table_query = helpers.DataSourceService.table_create_query_for_loading_task(
-    #     table_key, ', '.join(col_names_create))
-    # print create_table_query
-    #
-    # insert_table_query = helpers.DataSourceService.table_insert_query_for_loading_task(
-    #     table_key)
-    # print insert_table_query
-    #
-    # tasks.load_data.apply_async(
-    #     (request.user.id, task_id, source_conn, create_table_query,
-    #      rows_query, insert_table_query), )
 
-# from django.db import connection as djc
-# @celery.task(name='etl.tasks.load_data')
-# def load_data(user_id, task_id, source_conn, create_query, rows_query, insert_query):
-#     pass
+def load_data_database(user_id, task_id, source, table_name, create_query,
+              rows_query, insert_query, cols):
+
     # сокет канал
-    # chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
+    chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
     # for i in range(1, 11):
-    #     client.publish(chanel, i*10)
-    #     time.sleep(3)
+    client.publish(chanel, 10*10)
+    # time.sleep(2)
 
-    # FIXME смущает правильность работы функции!!!
-    # FIXME проверить на разных данных!!!
-    # FIXME возможно нужна отдельная обработка каждого типа!!!
-    # def processing(rows_):
-    #     str_ = ''
-    #     for t in rows_:
-    #         l = []
-    #         for el in t:
-    #             # обработка None
-    #             if el is None:
-    #                 l.append('')
-    #                 continue
-    #             l.append(str(el))
-    #
-    #         str_ += '(' + str(l)[1:-1] + '),'
-    #     return str_
-    # print 'start1'
-    # connection = get_local_connection()
-    # cursor = connection.cursor()
-    # print 'asdfa2'
-    # # print djc.introspection.table_names()
-    # # create new table
-    # cursor.execute(create_query)
-    # print 'asdfa3'
-    # connection.commit()
-    # print 'asdfa'
-    # # print djc.introspection.table_names()
-    # # достаем первую порцию данных
-    # limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-    # offset = 0
-    #
-    # # курсор пользовательского коннекта
-    # print source_conn
-    #
-    # rows_cursor = source_conn.cursor()
-    # print rows_cursor
-    # rows_cursor.execute(rows_query.format(limit, offset))
-    # rows = rows_cursor.fetchall()
-    #
-    # while rows:
-    #     # формируем данные для инсерта
-    #     str_rows = processing(rows)
-    #     if str_rows.endswith(','):
-    #         str_rows = str_rows[:-1]
-    #
-    #     # суем данные
-    #     cursor.execute(insert_query.format(str_rows))
-    #
-    #     # достаем новую порцию данных
-    #     offset += limit
-    #     rows_cursor.execute(rows_query.format(limit, offset))
-    #     rows = rows_cursor.fetchall()
-    #
-    # connection.commit()
-    # cursor.close()
-    # connection.close()
+    connection = DataSourceService.get_local_connection()
+    cursor = connection.cursor()
+
+    # для юникода
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, connection)
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, connection)
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, cursor)
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, cursor)
+
+    # create new table
+    cursor.execute(create_query)
+    connection.commit()
+
+    # достаем первую порцию данных
+    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+    offset = 0
+
+    # конекшн, курсор пользовательского коннекта
+    source_conn = DataSourceService.get_source_connection(source)
+    rows_cursor = source_conn.cursor()
+
+    # для юникода
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, source_conn)
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, source_conn)
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, rows_cursor)
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, rows_cursor)
+
+    rows_cursor.execute(rows_query.format(limit, offset))
+    rows = rows_cursor.fetchall()
+    len_ = len(rows[0])
+
+    # преобразуем строку инсерта в зависимости длины вставляемой строки
+    insert_query = insert_query.format('(' + ','.join(['%({0})s'.format(i) for i in xrange(len_)]) + ')')
+
+    last_row = None
+
+    while rows:
+        try:
+            # приходит [(1, 'name'), ...], преобразуем в [{0: 1, 1: 'name'}, ...]
+            dicted = map(lambda x: {str(k): v for (k, v) in izip(xrange(len_), x)}, rows)
+            cursor.executemany(insert_query, dicted)
+        except Exception:
+            # FIXME обработать еррор
+            print 'Exception'
+            rows = []
+        else:
+            # коммитим пачку в бд
+            connection.commit()
+            # достаем последнюю запись
+            last_row = rows[-1]
+            # достаем новую порцию данных
+            offset += limit
+            rows_cursor.execute(rows_query.format(limit, offset))
+            rows = rows_cursor.fetchall()
+
+    # работа с datasource_meta
+    DataSourceService.update_datasource_meta(table_name, source, cols, last_row)
+
 
 # write in console: python manage.py celery -A etl.tasks worker

@@ -17,7 +17,7 @@ from . import r_server
 from redis_collections import Dict as RedisDict
 from .maps import postgresql as psql_map
 from .maps import mysql as mysql_map
-from core.models import Datasource
+from core.models import Datasource, DatasourceMeta
 
 
 class JoinTypes(object):
@@ -1535,6 +1535,92 @@ class DataSourceService(object):
         :type source: Datasource
         """
         return DatabaseService.get_connection(source)
+
+    # подключение к локальному хранилищу данных
+    @classmethod
+    def get_local_connection(cls):
+
+        db_info = settings.DATABASES['default']
+        conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
+                    u"password='{password}' port={port}").format(
+            host=db_info['HOST'], db=db_info['NAME'], login=db_info['USER'],
+            password=db_info['PASSWORD'], port=str(db_info['PORT']), )
+
+        try:
+            conn = psycopg2.connect(conn_str)
+        except psycopg2.OperationalError:
+            conn = None
+        return conn
+
+    @staticmethod
+    def update_datasource_meta(table_name, source, cols, last_row):
+
+        try:
+            source_meta = DatasourceMeta.objects.get(
+                datasource=source,
+                collection_name=table_name,
+            )
+        except DatasourceMeta.DoesNotExist:
+            source_meta = DatasourceMeta(
+                datasource=source,
+                collection_name=table_name,
+            )
+
+        str_table = RedisCacheKeys.get_active_table(
+            source.user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(
+            source.user_id, source.id)
+        actives_list = json.loads(r_server.get(str_active_tables))
+
+        actives = sorted(actives_list,
+                         key=lambda (k, v): operator.itemgetter(1))
+        stats = {}
+        fields = {
+            'columns': defaultdict(list),
+            'row_key': {},
+            'row_key_value': defaultdict(list)
+        }
+        # избавляет от дублей
+        row_keys = defaultdict(set)
+
+        for table, col_group in groupby(cols, lambda x: x['table']):
+            table_info = json.loads(r_server.get(str_table.format(
+                get_order_from_actives(table, actives)
+            )))
+
+            stats[table] = table_info['stats']
+            t_cols = table_info['columns']
+
+            for sel_col in col_group:
+                for col in t_cols:
+                    # cols info
+                    if sel_col['col'] == col['name']:
+                        fields['columns'][table].append(col)
+
+                    # primary keys
+                    if col['is_primary']:
+                        row_keys[table].add(col['name'])
+
+        for k, v in row_keys.iteritems():
+            fields['row_key'][k] = list(v)
+
+        if last_row:
+            # корневая таблица
+            root_table = cols[0]['table']
+            mapped = filter(
+                lambda x: x[0]['table'] == root_table, zip(cols, last_row))
+            primaries = fields['row_key'][root_table]
+
+            for pri in primaries:
+                for (k, v) in mapped:
+                    if pri == k['col']:
+                        fields['row_key_value'][root_table].append(
+                            {pri: v})
+
+        source_meta.update_date = datetime.datetime.now()
+        source_meta.fields = json.dumps(fields)
+        source_meta.stats = json.dumps(stats)
+        source_meta.save()
 
 
 class TaskService:
