@@ -88,7 +88,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'core.db_connection.postgresql_psycopg2',
+        'ENGINE': 'core.db.postgresql_psycopg2',
         'NAME': 'biplatform',
         'USER': 'biplatform',
         'PASSWORD': '',
