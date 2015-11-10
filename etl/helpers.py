@@ -1514,11 +1514,6 @@ class DataSourceService(object):
         return rows_query
 
     @classmethod
-    def check_existing_table(cls, table_name):
-        from django.db import connection
-        return table_name in connection.introspection.table_names()
-
-    @classmethod
     def table_create_query_for_loading_task(cls, table_key, cols_str):
         create_query = DatabaseService.get_table_create_query(table_key, cols_str)
         return create_query
