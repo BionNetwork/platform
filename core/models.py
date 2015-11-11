@@ -103,3 +103,24 @@ class User(AbstractUser):
         db_table = "users"
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+
+
+class Dimension(models.Model):
+    """
+    Размерности для кубов
+    """
+    name = models.CharField(verbose_name="название измерения", max_length=255, null=False, blank=False, db_index=True)
+    title = models.CharField(verbose_name="название", max_length=255, null=False, blank=False)
+    type = models.CharField(verbose_name="тип измерения", max_length=255, null=False, blank=False)
+    visible = models.BooleanField(verbose_name="виден", null=False, default=True)
+    high_cardinality = models.BooleanField(verbose_name="cardinality", null=False, default=False)
+    data = models.TextField(verbose_name="иерархии", null=True, blank=True)
+    create_date = models.DateTimeField(verbose_name="дата создания", db_index=True)
+    update_date = models.DateTimeField(verbose_name="дата обновления", db_index=True)
+    user = models.ForeignKey(User)
+    datasources_meta = models.ForeignKey(DatasourceMeta)
+
+    class Meta:
+        db_table = "dimensions"
+        verbose_name = 'Размерности'
+        verbose_name_plural = 'Размерности'
