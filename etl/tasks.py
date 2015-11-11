@@ -29,6 +29,15 @@ client = brukva.Client(host=settings.REDIS_HOST,
 client.connect()
 
 
+def get_table_key(key):
+    """
+    название новой таблицы
+    :param key: str
+    :return:
+    """
+    return '{0}{1}{2}'.format('sttm_datasoruce_', '_' if key < 0 else '', abs(key))
+
+
 def load_data_mongo(user_id, task_id, data, source):
     """
     Загрузка данных в mongo
@@ -60,7 +69,7 @@ def load_data_mongo(user_id, task_id, data, source):
                 ','.join(sorted(tables))], ''))
 
     # collection
-    collection_name = '{0}{1}{2}'.format('sttm_datasoruce_', '_' if key < 0 else '', abs(key))
+    collection_name = get_table_key(key)
     connection = pymongo.MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
     # database name
     db = connection.etl
@@ -115,14 +124,12 @@ def load_data_database(user_id, task_id, data, source_dict):
     # time.sleep(2)
 
     cols = json.loads(data['cols'])
-    # tables = json.loads(data['tables'])
     col_types = json.loads(data['col_types'])
     structure = data['tree']
     tables_info_for_meta = json.loads(data['tables_info_for_meta'])
     source = Datasource()
     source.set_from_dict(**source_dict)
 
-    columns = []
     col_names_select = []
     col_names_create = []
 
@@ -134,14 +141,10 @@ def load_data_database(user_id, task_id, data, source_dict):
 
         cols_str += '{0}-{1};'.format(t, c)
 
-        formatted = '{0}.{1}'.format(t, c)
+        dotted = '{0}.{1}'.format(t, c)
 
-        if c in columns:
-            col_names_create.append('{0}_{1} {2}'.format(t, c, col_types[formatted]))
-        else:
-            col_names_create.append('{0} {1}'.format(c, col_types[formatted]))
-            columns.append(c)
-        col_names_select.append('{0}.{1}'.format(t, c))
+        col_names_create.append('{0}__{1} {2}'.format(t, c, col_types[dotted]))
+        col_names_select.append(dotted)
 
     # название новой таблицы
     key = binascii.crc32(
@@ -149,7 +152,7 @@ def load_data_database(user_id, task_id, data, source_dict):
                [source.host, str(source.port),
                 str(source.user_id), cols_str], ''))
 
-    table_key = '{0}{1}{2}'.format('sttm_datasoruce_', '_' if key < 0 else '', abs(key))
+    table_key = get_table_key(key)
 
     rows_query = DataSourceService.get_rows_query_for_loading_task(
             source, structure,  col_names_select)
