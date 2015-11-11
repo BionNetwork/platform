@@ -1142,6 +1142,16 @@ class RedisCacheKeys(object):
             RedisCacheKeys.get_user_databases(user_id), datasource_id)
 
     @staticmethod
+    def get_user_datasource_counter(user_id, datasource_id):
+        """
+        Счетчик для коллекций пользователя (автоинкрементное значение)
+        :param user_id:
+        :param datasource_id:
+        :return:
+        """
+        return '{0}:{1}'.format(RedisCacheKeys.get_user_datasource(user_id, datasource_id), 'counter')
+
+    @staticmethod
     def get_active_table(user_id, datasource_id, number):
         """
         фулл инфа таблицы, которая в дереве
