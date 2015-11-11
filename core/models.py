@@ -6,10 +6,11 @@ import datetime
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from .db.services import RetryQueryset
 
 from djchoices import ChoiceItem, DjangoChoices
 
-from .helpers import get_utf8_string, RetryQueryset
+from .helpers import get_utf8_string
 
 """
 Базовые модели приложения
@@ -23,8 +24,8 @@ class ConnectionChoices(DjangoChoices):
 
 
 class Datasource(models.Model):
-    """
-    Источники данных содержат список всех подключений для сбора данных из разных источников
+    """Источники данных содержат список всех подключений
+    для сбора данных из разных источников
     """
 
     def __str__(self):
@@ -71,8 +72,7 @@ class Datasource(models.Model):
 
 
 class DatasourceMeta(models.Model):
-    """
-    Мета информация для источников данных
+    """Мета информация для источников данных
     """
 
     collection_name = models.CharField(max_length=255, help_text="название коллекции")
@@ -82,13 +82,14 @@ class DatasourceMeta(models.Model):
     update_date = models.DateTimeField('update_date', help_text="дата обновления", db_index=True)
     datasource = models.ForeignKey(Datasource, on_delete=models.CASCADE)
 
+    objects = models.Manager.from_queryset(RetryQueryset)()
+
     class Meta:
         db_table = "datasources_meta"
 
 
 class User(AbstractUser):
-    """
-        Модель пользователей, унаследованная от Django User
+    """Модель пользователей, унаследованная от Django User
     """
 
     phone = models.CharField(verbose_name='Телефон', max_length=32, null=True, blank=True)
@@ -98,6 +99,8 @@ class User(AbstractUser):
     middle_name = models.CharField(max_length=50, blank=True, verbose_name='Отчество', default='')
     birth_date = models.DateField(verbose_name='Дата рождения', null=True, blank=True)
     verify_email_uuid = models.CharField(max_length=50, null=True, blank=True)
+
+    objects = models.Manager.from_queryset(RetryQueryset)()
 
     class Meta:
         db_table = "users"
