@@ -53,7 +53,10 @@ class Datasource(models.Model):
             'password': get_utf8_string(self.password or ''),
             'db': get_utf8_string(self.db),
             'port': self.port,
-            'conn_type': self.conn_type
+            'conn_type': self.conn_type,
+            # доп параметры для селери тасков юзера
+            'id': self.id,
+            'user_id': self.user_id,
         }
 
     def set_from_dict(self, **data):

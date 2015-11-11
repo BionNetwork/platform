@@ -413,6 +413,12 @@ function tablesToLeft(url){
 
 function refreshData(url){
 
+    if($('#without_bind').length){
+        confirmAlert('Имеется таблица без связи! '+
+        'Выберите связь у таблицы, либо удалите ее!');
+        return;
+    }
+
     var source = $('#databases>div'),
         colsInfo = {
             "host": source.data("host"),
@@ -582,13 +588,24 @@ function startLoading(userId, loadUrl){
             }
         }).get();
 
+    if($('#without_bind').length){
+        confirmAlert('Имеется таблица без связи! '+
+        'Выберите связь у таблицы, либо удалите ее!');
+        return;
+    }
+
     if(!array.length){
         confirmAlert("Выберите таблицы для загрузки!");
         return
     }
 
+    var tablesArray = [];
+    tables.forEach(function(el){
+        tablesArray.push(el);
+    });
+
     info['cols'] = JSON.stringify(array);
-    info['tables'] = JSON.stringify(Array.from(tables));
+    info['tables'] = JSON.stringify(tablesArray);
 
     $.post(loadUrl, info, function(response){
         if(response.status == 'error') {

@@ -57,11 +57,6 @@ class Operations(object):
         return Operations.values[operation_type]
 
 
-# типы колонок приходят типа bigint(20), убираем скобки
-def lose_brackets(str_):
-    return str_.split('(')[0].lower()
-
-
 def get_utf8_string(value):
     """
     Кодирование в utf-8 строки
@@ -69,86 +64,6 @@ def get_utf8_string(value):
     :return: string
     """
     return unicode(value)
-
-
-# FIXME достаем из списка диктов по имени, смущает!
-# FIXME сделать диктом actives {t_name: ind, }
-def get_order_from_actives(t_name, actives):
-    return [x for x in actives if x['name'] == t_name][0]['order']
-
-
-def get_joins(l_t, r_t, l_info, r_info):
-    """
-        Функция выявляет связи между таблицами
-    """
-
-    l_cols = l_info['columns']
-    r_cols = r_info['columns']
-
-    joins = set()
-    # избавляет от дублей
-    unique_set = set()
-
-    for l_c in l_cols:
-        l_str = '{0}_{1}'.format(l_t, l_c['name'])
-        for r_c in r_cols:
-            r_str = '{0}_{1}'.format(r_t, r_c['name'])
-            if l_c['name'] == r_str:
-                j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
-                sort_j_tuple = tuple(sorted(j_tuple))
-                if sort_j_tuple not in unique_set:
-                    joins.add(j_tuple)
-                    unique_set.add(sort_j_tuple)
-                    break
-            if l_str == r_c["name"]:
-                j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
-                sort_j_tuple = tuple(sorted(j_tuple))
-                if sort_j_tuple not in unique_set:
-                    joins.add(j_tuple)
-                    unique_set.add(sort_j_tuple)
-                    break
-
-    l_foreign = l_info['foreigns']
-    r_foreign = r_info['foreigns']
-
-    for f in l_foreign:
-        if f['destination']['table'] == r_t:
-            j_tuple = (
-                f['source']['table'],
-                f['source']['column'],
-                f['destination']['table'],
-                f['destination']['column'],
-            )
-            sort_j_tuple = tuple(sorted(j_tuple))
-            if sort_j_tuple not in unique_set:
-                joins.add(j_tuple)
-                unique_set.add(sort_j_tuple)
-                break
-
-    for f in r_foreign:
-        if f['destination']['table'] == l_t:
-            j_tuple = (
-                f['source']['table'],
-                f['source']['column'],
-                f['destination']['table'],
-                f['destination']['column'],
-            )
-            sort_j_tuple = tuple(sorted(j_tuple))
-            if sort_j_tuple not in unique_set:
-                joins.add(j_tuple)
-                unique_set.add(sort_j_tuple)
-                break
-
-    dict_joins = []
-
-    for join in joins:
-        dict_joins.append({
-            'left': {'table': join[0], 'column': join[1]},
-            'right': {'table': join[2], 'column': join[3]},
-            'join': {"type": JoinTypes.INNER, "value": Operations.EQ},
-        })
-
-    return dict_joins
 
 
 class Database(object):
@@ -161,9 +76,28 @@ class Database(object):
 
     @staticmethod
     def get_connection(conn_info):
+        """
+        достает коннекшн бд
+        :param conn_info: dict
+        :raise NotImplementedError:
+        """
         raise NotImplementedError("Method get connection is not implemented")
 
+    @staticmethod
+    def lose_brackets(str_):
+        """
+        типы колонок приходят типа bigint(20), убираем скобки
+        :param str_:
+        :return: str
+        """
+        return str_.split('(')[0].lower()
+
     def get_query_result(self, query):
+        """
+        достает результат запроса
+        :param query: str
+        :return: list
+        """
         cursor = self.connection.cursor()
         cursor.execute(query)
         return cursor.fetchall()
@@ -208,10 +142,19 @@ class Database(object):
 
     @staticmethod
     def get_rows_query():
-        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
-        return query
+        """
+        возвращает селект запрос
+        :raise: NotImplementedError
+        """
+        raise NotImplementedError("Method get connection is not implemented")
 
     def get_rows(self, cols, structure):
+        """
+        достает строки из соурса для превью
+        :param cols: list
+        :param structure: dict
+        :return: list
+        """
         query_join = self.generate_join(structure)
 
         query = self.get_rows_query().format(
@@ -223,9 +166,21 @@ class Database(object):
 
     @staticmethod
     def get_statistic_query(source, tables):
+        """
+        строка для статистики таблицы
+        :param source: Datasource
+        :param tables: list
+        :raise NotImplementedError:
+        """
         raise NotImplementedError("Method get connection is not implemented")
 
     def get_statistic(self, source, tables):
+        """
+        возвращает статистику таблиц
+        :param source:
+        :param tables:
+        :return: list
+        """
         stats_query = self.get_statistic_query(source, tables)
         stat_records = self.get_query_result(stats_query)
         stat_records = self.processing_statistic(stat_records)
@@ -233,8 +188,32 @@ class Database(object):
 
     @staticmethod
     def processing_statistic(records):
+        """
+        обработка статистики
+        :param records: list
+        :return: dict
+        """
         return {x[0]: ({'count': int(x[1]), 'size': x[2]}
                        if (x[1] and x[2]) else None) for x in records}
+
+    @staticmethod
+    def local_table_create_query(key_str, cols_str):
+        """
+        запрос создания таблицы в локал хранилище
+        :param key_str:
+        :param cols_str:
+        :raise NotImplementedError:
+        """
+        raise NotImplementedError("Method get connection is not implemented")
+
+    @staticmethod
+    def local_table_insert_query(key_str):
+        """
+        запрос инсерта в таблицу локал хранилища
+        :param key_str: str
+        :raise NotImplementedError:
+        """
+        raise NotImplementedError("Method get connection is not implemented")
 
 
 class Postgresql(Database):
@@ -242,6 +221,11 @@ class Postgresql(Database):
 
     @staticmethod
     def get_connection(conn_info):
+        """
+        возвращает коннект бд
+        :param conn_info: dict
+        :return: connection
+        """
         try:
             conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
                         u"password='{password}' port={port}").format(**conn_info)
@@ -251,6 +235,11 @@ class Postgresql(Database):
         return conn
 
     def get_tables(self, source):
+        """
+        возвращает таблицы соурса
+        :param source: Datasource
+        :return: list
+        """
         query = """
             SELECT table_name FROM information_schema.tables
             where table_schema='public' order by table_name;
@@ -263,6 +252,12 @@ class Postgresql(Database):
 
     @staticmethod
     def _get_columns_query(source, tables):
+        """
+        запросы для колонок, констраинтов, индексов соурса
+        :param source: Datasource
+        :param tables:
+        :return: tuple
+        """
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
         # public - default scheme for postgres
@@ -292,6 +287,13 @@ class Postgresql(Database):
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
+        """
+        обработка колонок, констраинтов, индексов соурса
+        :param col_records: str
+        :param index_records: str
+        :param const_records: str
+        :return: tuple
+        """
         indexes = defaultdict(list)
         itable_name, icol_names, index_name, primary, unique = xrange(5)
 
@@ -348,7 +350,7 @@ class Postgresql(Database):
                                     is_primary = True
 
                 columns[key].append({"name": col,
-                                     "type": (psql_map.PSQL_TYPES[lose_brackets(x[col_type])]
+                                     "type": (psql_map.PSQL_TYPES[cls.lose_brackets(x[col_type])]
                                               or x[col_type]),
                                      "is_index": is_index,
                                      "is_unique": is_unique, "is_primary": is_primary})
@@ -367,10 +369,47 @@ class Postgresql(Database):
         return columns, indexes, foreigns
 
     @staticmethod
+    def get_rows_query():
+        """
+        возвращает селект запрос
+        :return: str
+        """
+        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query
+
+    @staticmethod
     def get_statistic_query(source, tables):
+        """
+        запрос для статистики
+        :param source: Datasource
+        :param tables: list
+        :return: str
+        """
         tables_str = '(' + ', '.join(["'{0}'::regclass::oid".format(y) for y in tables]) + ')'
         stats_query = psql_map.stat_query.format(tables_str)
         return stats_query
+
+    @staticmethod
+    def local_table_create_query(key_str, cols_str):
+        """
+        запрос на создание новой таблицы в локал хранилище
+        :param key_str:
+        :param cols_str:
+        :return:
+        """
+        create_query = "CREATE TABLE {0} ({1})".format(key_str, cols_str)
+
+        return create_query
+
+    @staticmethod
+    def local_table_insert_query(key_str):
+        """
+        запрос на инсерт в новую таблицу локал хранилища
+        :param key_str:
+        :return:
+        """
+        insert_query = "INSERT INTO {0} VALUES {1}".format(key_str, '{0}')
+        return insert_query
 
 
 class Mysql(Database):
@@ -378,6 +417,11 @@ class Mysql(Database):
 
     @staticmethod
     def get_connection(conn_info):
+        """
+        connection бд соурса
+        :param conn_info:
+        :return: connection
+        """
         try:
             connection = {'db': str(conn_info['db']), 'host': str(conn_info['host']),
                           'port': int(conn_info['port']),
@@ -406,6 +450,12 @@ class Mysql(Database):
 
     @staticmethod
     def _get_columns_query(source, tables):
+        """
+        запросы для колонок, констраинтов, индексов соурса
+        :param source: Datasource
+        :param tables:
+        :return: tuple
+        """
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
         cols_query = mysql_map.cols_query.format(tables_str, source.db)
@@ -434,6 +484,13 @@ class Mysql(Database):
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
+        """
+        обработка колонок, констраинтов, индексов соурса
+        :param col_records: str
+        :param index_records: str
+        :param const_records: str
+        :return: tuple
+        """
         indexes = defaultdict(list)
         itable_name, icol_names, index_name, primary, unique = xrange(5)
 
@@ -489,7 +546,7 @@ class Mysql(Database):
                                     is_primary = True
 
                 columns[key].append({"name": col,
-                                     "type": (mysql_map.MYSQL_TYPES[lose_brackets(x[col_type])]
+                                     "type": (mysql_map.MYSQL_TYPES[cls.lose_brackets(x[col_type])]
                                               or x[col_type]),
                                      "is_index": is_index,
                                      "is_unique": is_unique, "is_primary": is_primary})
@@ -508,7 +565,22 @@ class Mysql(Database):
         return columns, indexes, foreigns
 
     @staticmethod
+    def get_rows_query():
+        """
+        возвращает селект запрос
+        :return: str
+        """
+        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query
+
+    @staticmethod
     def get_statistic_query(source, tables):
+        """
+        запрос для статистики
+        :param source: Datasource
+        :param tables: list
+        :return: str
+        """
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
         stats_query = mysql_map.stat_query.format(tables_str, source.db)
         return stats_query
@@ -519,6 +591,11 @@ class DatabaseService(object):
 
     @staticmethod
     def factory(**connection):
+        """
+        фабрика для инстанса бд
+        :param connection: **dict
+        :return: instance :raise ValueError:
+        """
         conn_type = int(connection.get('conn_type', ''))
         del connection['conn_type']
 
@@ -531,6 +608,11 @@ class DatabaseService(object):
 
     @classmethod
     def get_source_instance(cls, source):
+        """
+        инстанс бд соурса
+        :param source: Datasource
+        :return: instance
+        """
         data = cls.get_source_data(source)
         instance = cls.factory(**data)
         return instance
@@ -538,7 +620,7 @@ class DatabaseService(object):
     @classmethod
     def get_tables(cls, source):
         """
-
+        возвращает таблицы соурса
         :type source: Datasource
         """
         instance = cls.get_source_instance(source)
@@ -599,23 +681,38 @@ class DatabaseService(object):
         return instance.get_rows(cols, structure)
 
     @classmethod
-    def get_table_create_query(cls, key_str, cols_str):
+    def get_table_create_query(cls, local_instance, key_str, cols_str):
         """
-            Получение запроса на создание новой таблицы
+        Получение запроса на создание новой таблицы
+        для локального хранилища данных
+        :param local_instance: Database
+        :param key_str: str
+        :param cols_str: str
+        :return: str
         """
-        create_query = "CREATE TABLE {0} ({1})".format(key_str, cols_str)
+        create_query = local_instance.local_table_create_query(key_str, cols_str)
         return create_query
 
     @classmethod
-    def get_table_insert_query(cls, key_str):
+    def get_table_insert_query(cls, local_instance, key_str):
         """
-            Получение запроса на заполнение таблицы
+        Получение запроса на заполнение таблицы
+        для локального хранилища данных
+        :param local_instance: Database
+        :param key_str: str
+        :return: str
         """
-        insert_query = "INSERT INTO {0} VALUES {1}".format(key_str, '{0}')
+        insert_query = local_instance.local_table_insert_query(key_str)
         return insert_query
 
     @classmethod
     def get_generated_joins(cls, source, structure):
+        """
+        связи таблиц
+        :param source: Datasource
+        :param structure: dict
+        :return: str
+        """
         instance = cls.get_source_instance(source)
         return instance.generate_join(structure)
 
@@ -630,6 +727,10 @@ class DatabaseService(object):
 
     @classmethod
     def get_connection_by_dict(cls, conn_info):
+        """
+        Получение соединения источника
+        :type conn_info: dict
+        """
         instance = cls.factory(**conn_info)
 
         del conn_info['conn_type']
@@ -642,11 +743,49 @@ class DatabaseService(object):
 
     @classmethod
     def processing_records(cls, source, col_records, index_records, const_records):
+        """
+        обработка колонок, констраинтов, индексов соурса
+        :param col_records: str
+        :param index_records: str
+        :param const_records: str
+        :return: tuple
+        """
         instance = cls.get_source_instance(source)
         return instance.processing_records(col_records, index_records, const_records)
 
+    @classmethod
+    def get_local_connection_dict(cls):
+        """
+        возвращает словарь параметров подключения
+        к локальному хранилищу данных(Postgresql)
+        :rtype : dict
+        :return:
+        """
+        db_info = settings.DATABASES['default']
+        return {
+            'host': db_info['HOST'], 'db': db_info['NAME'],
+            'login': db_info['USER'], 'password': db_info['PASSWORD'],
+            'port': str(db_info['PORT']),
+            # жестко постгрес
+            'conn_type': ConnectionChoices.POSTGRESQL,
+        }
+
+    @classmethod
+    def get_local_instance(cls):
+        """
+        возвращает инстанс локального хранилища данных(Postgresql)
+        :rtype : object Postgresql()
+        :return:
+        """
+        local_data = cls.get_local_connection_dict()
+        instance = cls.factory(**local_data)
+        return instance
+
 
 class Node(object):
+    """
+        Узел дерева таблиц
+    """
     def __init__(self, t_name, parent=None, joins=[], join_type='inner'):
         self.val = t_name
         self.parent = parent
@@ -655,6 +794,10 @@ class Node(object):
         self.join_type = join_type
 
     def get_node_joins_info(self):
+        """
+        связи узла
+        :return: defaultdict
+        """
         node_joins = defaultdict(list)
 
         n_val = self.val
@@ -676,6 +819,9 @@ class Node(object):
 
 
 class TablesTree(object):
+    """
+        Дерево Таблиц
+    """
 
     def __init__(self, t_name):
         self.root = Node(t_name)
@@ -693,6 +839,11 @@ class TablesTree(object):
 
     @classmethod
     def get_tree_ordered_nodes(cls, nodes):
+        """
+        узлы дерева по порядку от корня вниз слева направо
+        :param nodes: list
+        :return: list
+        """
         all_nodes = []
         all_nodes += nodes
         child_nodes = reduce(
@@ -703,6 +854,11 @@ class TablesTree(object):
 
     @classmethod
     def get_nodes_count_by_level(cls, nodes):
+        """
+        список количества нодов на каждом уровне дерева
+        :param nodes: list
+        :return: list
+        """
         counts = [len(nodes)]
 
         child_nodes = reduce(
@@ -713,6 +869,11 @@ class TablesTree(object):
 
     @classmethod
     def get_tree_structure(cls, root):
+        """
+        структура дерева
+        :param root: Node
+        :return: dict
+        """
         root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
                      'join_type': root.join_type}
         for ch in root.childs:
@@ -721,6 +882,13 @@ class TablesTree(object):
 
     @classmethod
     def build_tree(cls, childs, tables, tables_info):
+        """
+        строит дерево таблиц, возвращает таблицы без свяезй
+        :param childs:
+        :param tables:
+        :param tables_info:
+        :return: list
+        """
 
         def inner_build_tree(childs, tables):
             child_vals = [x.val for x in childs]
@@ -735,7 +903,7 @@ class TablesTree(object):
 
                 for t_name in tables[:]:
                     r_info = tables_info[t_name]
-                    joins = get_joins(r_val, t_name, l_info, r_info)
+                    joins = cls.get_joins(r_val, t_name, l_info, r_info)
 
                     if joins:
                         tables.remove(t_name)
@@ -755,6 +923,12 @@ class TablesTree(object):
 
     @classmethod
     def select_tree(cls, trees):
+        """
+        возвращает из списка деревьев лучшее дерево по насыщенности
+        детей сверху вниз
+        :param trees: list
+        :return: list
+        """
         counts = {}
         for tr_name, tree in trees.iteritems():
             counts[tr_name] = cls.get_nodes_count_by_level([tree.root])
@@ -763,6 +937,11 @@ class TablesTree(object):
 
     @classmethod
     def build_tree_by_structure(cls, structure):
+        """
+        строит дерево по структуре дерева
+        :param structure: dict
+        :return: TablesTree
+        """
         tree = TablesTree(structure['val'])
 
         def inner_build(root, childs):
@@ -779,7 +958,14 @@ class TablesTree(object):
     @classmethod
     def update_node_joins(cls, sel_tree, left_table,
                           right_table, join_type, joins):
-
+        """
+        добавляет/меняет связи между таблицами
+        :param sel_tree: TablesTree
+        :param left_table: str
+        :param right_table: str
+        :param join_type: str
+        :param joins: list
+        """
         nodes = cls.get_tree_ordered_nodes([sel_tree.root, ])
         parent = [x for x in nodes if x.val == left_table][0]
         childs = [x for x in parent.childs if x.val == right_table]
@@ -801,12 +987,98 @@ class TablesTree(object):
                 'join': {"type": join_type, "value": oper},
             })
 
+    @classmethod
+    def get_joins(cls, l_t, r_t, l_info, r_info):
+        """
+        Функция выявляет связи между таблицами
+        :param l_t:
+        :param r_t:
+        :param l_info:
+        :param r_info:
+        :return: list
+        """
+        l_cols = l_info['columns']
+        r_cols = r_info['columns']
+
+        joins = set()
+        # избавляет от дублей
+        unique_set = set()
+
+        for l_c in l_cols:
+            l_str = '{0}_{1}'.format(l_t, l_c['name'])
+            for r_c in r_cols:
+                r_str = '{0}_{1}'.format(r_t, r_c['name'])
+                if l_c['name'] == r_str:
+                    j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
+                    sort_j_tuple = tuple(sorted(j_tuple))
+                    if sort_j_tuple not in unique_set:
+                        joins.add(j_tuple)
+                        unique_set.add(sort_j_tuple)
+                        break
+                if l_str == r_c["name"]:
+                    j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
+                    sort_j_tuple = tuple(sorted(j_tuple))
+                    if sort_j_tuple not in unique_set:
+                        joins.add(j_tuple)
+                        unique_set.add(sort_j_tuple)
+                        break
+
+        l_foreign = l_info['foreigns']
+        r_foreign = r_info['foreigns']
+
+        for f in l_foreign:
+            if f['destination']['table'] == r_t:
+                j_tuple = (
+                    f['source']['table'],
+                    f['source']['column'],
+                    f['destination']['table'],
+                    f['destination']['column'],
+                )
+                sort_j_tuple = tuple(sorted(j_tuple))
+                if sort_j_tuple not in unique_set:
+                    joins.add(j_tuple)
+                    unique_set.add(sort_j_tuple)
+                    break
+
+        for f in r_foreign:
+            if f['destination']['table'] == l_t:
+                j_tuple = (
+                    f['source']['table'],
+                    f['source']['column'],
+                    f['destination']['table'],
+                    f['destination']['column'],
+                )
+                sort_j_tuple = tuple(sorted(j_tuple))
+                if sort_j_tuple not in unique_set:
+                    joins.add(j_tuple)
+                    unique_set.add(sort_j_tuple)
+                    break
+
+        dict_joins = []
+
+        for join in joins:
+            dict_joins.append({
+                'left': {'table': join[0], 'column': join[1]},
+                'right': {'table': join[2], 'column': join[3]},
+                'join': {"type": JoinTypes.INNER, "value": Operations.EQ},
+            })
+
+        return dict_joins
+
 
 class TableTreeRepository(object):
+    """
+        Обработчик деревьев TablesTree
+    """
 
     @classmethod
     def build_trees(cls, tables, source):
-
+        """
+        строит всевозможные деревья
+        :param tables: list
+        :param source: Datasource
+        :return:
+        """
         trees = {}
         without_bind = {}
 
@@ -824,6 +1096,12 @@ class TableTreeRepository(object):
 
     @classmethod
     def delete_nodes_from_tree(cls, tree, source, tables):
+        """
+        удаляет узлы дерева
+        :param tree: TablesTree
+        :param source: Datasource
+        :param tables: list
+        """
 
         def inner_delete(node):
             for child in node.childs[:]:
@@ -845,58 +1123,122 @@ class RedisCacheKeys(object):
     """Ключи для редиса"""
     @staticmethod
     def get_user_databases(user_id):
+        """
+        бд юзера
+        :param user_id:
+        :return:
+        """
         return 'user_datasources:{0}'.format(user_id)
 
     @staticmethod
     def get_user_datasource(user_id, datasource_id):
+        """
+        соурс юзера
+        :param user_id:
+        :param datasource_id:
+        :return:
+        """
         return '{0}:{1}'.format(
             RedisCacheKeys.get_user_databases(user_id), datasource_id)
 
     @staticmethod
     def get_active_table(user_id, datasource_id, number):
+        """
+        фулл инфа таблицы, которая в дереве
+        :param user_id:
+        :param datasource_id:
+        :param number:
+        :return:
+        """
         return '{0}:collection:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
 
     @staticmethod
     def get_active_tables(user_id, datasource_id):
+        """
+        список таблиц из дерева
+        :param user_id:
+        :param datasource_id:
+        :return:
+        """
         return '{0}:active_collections'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
     def get_active_table_by_name(user_id, datasource_id, table):
+        """
+        фулл инфа таблицы, которая НЕ в дереве
+        :param user_id:
+        :param datasource_id:
+        :param table:
+        :return:
+        """
         return '{0}:collection:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), table)
 
     @staticmethod
     def get_source_joins(user_id, datasource_id):
+        """
+        инфа о джоинах дерева
+        :param user_id:
+        :param datasource_id:
+        :return:
+        """
         return '{0}:joins'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
-    # таблицы без связей
+
     @staticmethod
     def get_source_remain(user_id, datasource_id):
+        """
+        таблица без связей
+        :param user_id:
+        :param datasource_id:
+        :return:
+        """
         return '{0}:remain'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
     def get_active_tree(user_id, datasource_id):
+        """
+        структура дерева
+        :param user_id:
+        :param datasource_id:
+        :return:
+        """
         return '{0}:active:tree'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
     def get_task_counter():
+        """
+        счетчик задач
+        :return:
+        """
         return 'tasks_counter'
 
     @staticmethod
     def get_user_task_list(user_id):
+        """
+        список задач юзера
+        :param user_id:
+        :return:
+        """
         return 'user_tasks:{0}'.format(user_id)
 
 
 class RedisSourceService(object):
+    """
+        Сервис по работе с редисом
+    """
 
     @classmethod
     def delete_datasource(cls, source):
-        """ удаляет информацию о датасосре из редиса
+        """
+        удаляет информацию о датасосре из редиса
+        :param cls:
+        :param source: Datasource
         """
         user_db_key = RedisCacheKeys.get_user_databases(source.user_id)
         user_datasource_key = RedisCacheKeys.get_user_datasource(
@@ -907,6 +1249,12 @@ class RedisSourceService(object):
 
     @classmethod
     def get_tables(cls, source, tables):
+        """
+        достает информацию о таблицах из редиса
+        :param source: Datasource
+        :param tables: list
+        :return: list
+        """
         user_db_key = RedisCacheKeys.get_user_databases(source.user_id)
         user_datasource_key = RedisCacheKeys.get_user_datasource(source.user_id, source.id)
 
@@ -929,6 +1277,11 @@ class RedisSourceService(object):
 
     @classmethod
     def delete_tables(cls, source, tables):
+        """
+        удаляет инфу о таблицах
+        :param source: Datasource
+        :param tables: list
+        """
         rck = RedisCacheKeys
 
         str_table = rck.get_active_table(source.user_id, source.id, '{0}')
@@ -983,6 +1336,12 @@ class RedisSourceService(object):
 
     @classmethod
     def delete_tables_info(cls, tables, actives, str_table):
+        """
+        удаляет инфу о таблицах
+        :param tables: list
+        :param actives: list
+        :param str_table: str
+        """
         names = [x['name'] for x in actives]
         for table in tables:
             if table in names:
@@ -1013,9 +1372,13 @@ class RedisSourceService(object):
             order = [x for x in active_tables if x['name'] == table][0]['order']
             return r_server.get(str_table.format(order))
 
-    # сохраняем структуру дерева
     @classmethod
     def save_active_tree(cls, tree_structure, source):
+        """
+        сохраняем структуру дерева
+        :param tree_structure: string
+        :param source: Datasource
+        """
         str_active_tree = RedisCacheKeys.get_active_tree(
             source.user_id, source.id)
 
@@ -1036,7 +1399,12 @@ class RedisSourceService(object):
 
     @classmethod
     def insert_tree(cls, structure, ordered_nodes, source):
-
+        """
+        сохраняем полную инфу о дереве
+        :param structure:
+        :param ordered_nodes:
+        :param source:
+        """
         str_table = RedisCacheKeys.get_active_table(
             source.user_id, source.id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
@@ -1103,6 +1471,12 @@ class RedisSourceService(object):
 
     @classmethod
     def insert_remains(cls, source, remains):
+        """
+        сохраняет таблицу без связей
+        :param source: Datasource
+        :param remains: list
+        :return:
+        """
         str_remain = RedisCacheKeys.get_source_remain(source.user_id, source.id)
         if remains:
             # первая таблица без связей
@@ -1120,6 +1494,11 @@ class RedisSourceService(object):
 
     @classmethod
     def delete_unneeded_remains(cls, source, remains):
+        """
+        удаляет таблицы без связей,(все кроме первой)
+        :param source: Datasource
+        :param remains: list
+        """
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
 
@@ -1128,6 +1507,10 @@ class RedisSourceService(object):
 
     @classmethod
     def delete_last_remain(cls, source):
+        """
+        удаляет единственную таблицу без связей
+        :param source: Datasource
+        """
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
         str_remain = RedisCacheKeys.get_source_remain(
@@ -1140,6 +1523,13 @@ class RedisSourceService(object):
     @classmethod
     def get_columns_for_tables_without_bind(
             cls, source, parent_table, without_bind_table):
+        """
+        колонки таблиц, которым хотим добавить джойны
+        :param source:
+        :param parent_table:
+        :param without_bind_table:
+        :return: :raise Exception:
+        """
         str_active_tables = RedisCacheKeys.get_active_tables(
             source.user_id, source.id)
         str_remain = RedisCacheKeys.get_source_remain(
@@ -1161,7 +1551,7 @@ class RedisSourceService(object):
         actives = json.loads(r_server.get(str_active_tables))
 
         parent_columns = json.loads(r_server.get(str_table.format(
-            get_order_from_actives(parent_table, actives)
+            cls.get_order_from_actives(parent_table, actives)
         )))['columns']
 
         return {
@@ -1173,6 +1563,13 @@ class RedisSourceService(object):
     @classmethod
     def get_columns_for_tables_with_bind(
             cls, source, parent_table, child_table):
+        """
+        колонки таблиц, у которых есть связи
+        :param source:
+        :param parent_table:
+        :param child_table:
+        :return: :raise Exception:
+        """
         str_active_tables = RedisCacheKeys.get_active_tables(
             source.user_id, source.id)
         str_table = RedisCacheKeys.get_active_table(
@@ -1189,11 +1586,11 @@ class RedisSourceService(object):
         actives = json.loads(r_server.get(str_active_tables))
 
         parent_columns = json.loads(r_server.get(str_table.format(
-            get_order_from_actives(parent_table, actives)
+            cls.get_order_from_actives(parent_table, actives)
         )))['columns']
 
         child_columns = json.loads(r_server.get(str_table.format(
-            get_order_from_actives(child_table, actives)
+            cls.get_order_from_actives(child_table, actives)
         )))['columns']
 
         exist_joins = json.loads(r_server.get(str_joins))
@@ -1209,6 +1606,13 @@ class RedisSourceService(object):
 
     @classmethod
     def get_final_info(cls, ordered_nodes, source, last=None):
+        """
+        инфа дерева для отрисовки на фронте
+        :param ordered_nodes:
+        :param source:
+        :param last:
+        :return:
+        """
         result = []
         str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
@@ -1224,7 +1628,7 @@ class RedisSourceService(object):
                       'dest': getattr(node.parent, 'val', None),
                       'is_root': not ind, 'without_bind': False,
                       }
-            order = get_order_from_actives(n_val, actives)
+            order = cls.get_order_from_actives(n_val, actives)
             table_info = json.loads(r_server.get(str_table.format(order)))
             n_info['cols'] = [x['name'] for x in table_info['columns']]
             result.append(n_info)
@@ -1241,6 +1645,16 @@ class RedisSourceService(object):
     @classmethod
     def insert_columns_info(cls, source, tables, columns,
                             indexes, foreigns, stats):
+        """
+        инфа о колонках, констраинтах, индексах в редис
+        :param source:
+        :param tables:
+        :param columns:
+        :param indexes:
+        :param foreigns:
+        :param stats:
+        :return:
+        """
         active_tables = []
         user_id = source.user_id
 
@@ -1272,6 +1686,13 @@ class RedisSourceService(object):
 
     @classmethod
     def info_for_tree_building(cls, ordered_nodes, tables, source):
+        """
+        инфа для построения дерева
+        :param ordered_nodes:
+        :param tables:
+        :param source:
+        :return:
+        """
         user_id = source.user_id
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             user_id, source.id, '{0}')
@@ -1297,7 +1718,50 @@ class RedisSourceService(object):
         return final_info
 
     @classmethod
+    def get_order_from_actives(cls, t_name, actives):
+        """
+        возвращает порядок таблицы по имени
+        :param t_name:
+        :param actives:
+        :return: list
+        """
+        return [x for x in actives if x['name'] == t_name][0]['order']
+
+    @classmethod
+    def tables_info_for_metasource(cls, source, tables):
+        """
+        Достает инфу о колонках, выбранных таблиц,
+        для хранения в DatasourceMeta
+        :param source: Datasource
+        :param columns: list список вида [{'table': 'name', 'col': 'name'}]
+        """
+
+        tables_info_for_meta = {}
+
+        str_table = RedisCacheKeys.get_active_table(
+            source.user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(
+            source.user_id, source.id)
+        actives_list = json.loads(r_server.get(str_active_tables))
+
+        # fixme maybe need
+        # actives = sorted(actives_list,
+        #                  key=lambda (k, v): operator.itemgetter(1))
+
+        for table in tables:
+            tables_info_for_meta[table] = json.loads(
+                r_server.get(str_table.format(
+                    RedisSourceService.get_order_from_actives(
+                        table, actives_list)
+                )))
+        return tables_info_for_meta
+
+    @classmethod
     def get_next_task_counter(cls):
+        """
+        порядковый номер задачи
+        :return:
+        """
         counter = RedisCacheKeys.get_task_counter()
         if not r_server.exists(counter):
             r_server.set(counter, 1)
@@ -1312,6 +1776,11 @@ class RedisSourceService(object):
 
     @staticmethod
     def get_user_tasks(user_id):
+        """
+        список задач юзера
+        :param user_id:
+        :return:
+        """
         key = RedisCacheKeys.get_user_task_list(user_id)
         storage = RedisStorage(r_server)
         tasks = storage.get_dict(key)
@@ -1443,6 +1912,11 @@ class DataSourceService(object):
 
     @classmethod
     def remove_tables_from_tree(cls, source, tables):
+        """
+        удаление таблиц из дерева
+        :param source:
+        :param tables:
+        """
         # достаем структуру дерева из редиса
         structure = RedisSourceService.get_active_tree_structure(source)
         # строим дерево
@@ -1459,6 +1933,14 @@ class DataSourceService(object):
     @classmethod
     def get_columns_for_choices(cls, source, parent_table,
                                 child_table, is_without_bind):
+        """
+        список колонок таблиц для создания джойнов
+        :param source:
+        :param parent_table:
+        :param child_table:
+        :param is_without_bind:
+        :return:
+        """
         if is_without_bind:
             data = RedisSourceService.get_columns_for_tables_without_bind(
                 source, parent_table, child_table)
@@ -1470,6 +1952,15 @@ class DataSourceService(object):
 
     @classmethod
     def save_new_joins(cls, source, left_table, right_table, join_type, joins):
+        """
+        сохранение новых джойнов
+        :param source:
+        :param left_table:
+        :param right_table:
+        :param join_type:
+        :param joins:
+        :return:
+        """
         # достаем структуру дерева из редиса
         structure = RedisSourceService.get_active_tree_structure(source)
         # строим дерево
@@ -1491,7 +1982,12 @@ class DataSourceService(object):
 
     @classmethod
     def get_columns_types(cls, source, tables):
-
+        """
+        типы колонок таблиц
+        :param source:
+        :param tables:
+        :return:
+        """
         types_dict = {}
 
         for table in tables:
@@ -1505,7 +2001,12 @@ class DataSourceService(object):
     @classmethod
     def get_rows_query_for_loading_task(cls, source, structure, cols):
         """
-            Получение предзапроса указанных колонок и таблиц для селери задачи
+        Получение предзапроса данных указанных
+        колонок и таблиц для селери задачи
+        :param source:
+        :param structure:
+        :param cols:
+        :return:
         """
         query_join = DatabaseService.get_generated_joins(source, structure)
 
@@ -1515,18 +2016,13 @@ class DataSourceService(object):
 
     @classmethod
     def check_existing_table(cls, table_name):
+        """
+        проверка существования таблицы с именем при создании
+        :param table_name:
+        :return:
+        """
         from django.db import connection
         return table_name in connection.introspection.table_names()
-
-    @classmethod
-    def table_create_query_for_loading_task(cls, table_key, cols_str):
-        create_query = DatabaseService.get_table_create_query(table_key, cols_str)
-        return create_query
-
-    @classmethod
-    def table_insert_query_for_loading_task(cls, table_key):
-        insert_query = DatabaseService.get_table_insert_query(table_key)
-        return insert_query
 
     @classmethod
     def get_source_connection(cls, source):
@@ -1536,44 +2032,48 @@ class DataSourceService(object):
         """
         return DatabaseService.get_connection(source)
 
-    # подключение к локальному хранилищу данных
     @classmethod
-    def get_local_connection(cls):
+    def get_local_instance(cls):
+        """
+        возвращает инстанс локального хранилища данных(Postgresql)
+        :rtype : object Postgresql()
+        :return:
+        """
+        return DatabaseService.get_local_instance()
 
-        db_info = settings.DATABASES['default']
-        conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
-                    u"password='{password}' port={port}").format(
-            host=db_info['HOST'], db=db_info['NAME'], login=db_info['USER'],
-            password=db_info['PASSWORD'], port=str(db_info['PORT']), )
-
-        try:
-            conn = psycopg2.connect(conn_str)
-        except psycopg2.OperationalError:
-            conn = None
-        return conn
+    @classmethod
+    def tables_info_for_metasource(cls, source, tables):
+        """
+        Достает инфу о колонках, выбранных таблиц,
+        для хранения в DatasourceMeta
+        :param source: Datasource
+        :param columns: list список вида [{'table': 'name', 'col': 'name'}]
+        """
+        tables_info_for_meta = RedisSourceService.tables_info_for_metasource(
+            source, tables)
+        return tables_info_for_meta
 
     @staticmethod
-    def update_datasource_meta(table_name, source, cols, last_row):
-
+    def update_datasource_meta(table_name, source, cols,
+                               tables_info_for_meta, last_row):
+        """
+        Создание DatasourceMeta для Datasource
+        :param table_name: str
+        :param source: Datasource
+        :param cols: lsit
+        :param last_row: str or None
+        """
         try:
             source_meta = DatasourceMeta.objects.get(
-                datasource=source,
+                datasource_id=source.id,
                 collection_name=table_name,
             )
         except DatasourceMeta.DoesNotExist:
             source_meta = DatasourceMeta(
-                datasource=source,
+                datasource_id=source.id,
                 collection_name=table_name,
             )
 
-        str_table = RedisCacheKeys.get_active_table(
-            source.user_id, source.id, '{0}')
-        str_active_tables = RedisCacheKeys.get_active_tables(
-            source.user_id, source.id)
-        actives_list = json.loads(r_server.get(str_active_tables))
-
-        actives = sorted(actives_list,
-                         key=lambda (k, v): operator.itemgetter(1))
         stats = {}
         fields = {
             'columns': defaultdict(list),
@@ -1584,9 +2084,7 @@ class DataSourceService(object):
         row_keys = defaultdict(set)
 
         for table, col_group in groupby(cols, lambda x: x['table']):
-            table_info = json.loads(r_server.get(str_table.format(
-                get_order_from_actives(table, actives)
-            )))
+            table_info = tables_info_for_meta[table]
 
             stats[table] = table_info['stats']
             t_cols = table_info['columns']
@@ -1631,21 +2129,48 @@ class TaskService:
     def __init__(self, name):
         self.name = name
 
-    def add_task(self, user_id, data, tree, source):
+    def add_task(self, user_id, data, tree, source_dict):
         """
         Добавляем задачу юзеру в список задач и возвращаем идентификатор заадчи
         :type tree: dict дерево источника
         :param user_id: integer
         :param data: dict
-        :param source: dict
+        :param source_dict: dict
         :return: integer
         """
         task_id = RedisSourceService.get_next_task_counter()
-        task = {'name': self.name, 'data': {'cols': data['cols'], 'tables': data['tables'], 'tree': tree},
-                'source': source}
+        task = {'name': self.name,
+                'data': {
+                    'cols': data['cols'], 'tables': data['tables'],
+                    'tree': tree, 'col_types': data['col_types'],
+                    'tables_info_for_meta': data['tables_info_for_meta'],
+                },
+                'source': source_dict,
+                }
 
         RedisSourceService.add_user_task(user_id, task_id, task)
         return task_id
+
+    @classmethod
+    def table_create_query_for_loading_task(
+            cls, local_instance, table_key, cols_str):
+        """
+            Получение запроса на создание новой таблицы
+            для локального хранилища данных
+        """
+        create_query = DatabaseService.get_table_create_query(
+            local_instance, table_key, cols_str)
+        return create_query
+
+    @classmethod
+    def table_insert_query_for_loading_task(cls, local_instance, table_key):
+        """
+            Получение запроса на заполнение таблицы
+            для локального хранилища данных
+        """
+        insert_query = DatabaseService.get_table_insert_query(
+            local_instance, table_key)
+        return insert_query
 
 
 class RedisStorage:
@@ -1658,12 +2183,12 @@ class RedisStorage:
         self.client = client
 
     def set_dict(self, redis_key, key, value):
-        task = RedisDict(key=redis_key, redis=self.client, pickler=json)
-        task[key] = value
+        tasks = RedisDict(key=redis_key, redis=self.client, pickler=json)
+        tasks[key] = value
 
     def get_dict(self, key):
-        task = RedisDict(key=key, redis=self.client, pickler=json)
-        return task
+        tasks = RedisDict(key=key, redis=self.client, pickler=json)
+        return tasks
 
 
 class EtlEncoder:

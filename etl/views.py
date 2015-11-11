@@ -169,12 +169,9 @@ class ErrorResponse(object):
 
 
 class BaseEtlView(BaseView):
-    # get запрос для действия
-    get_enabled = True
-    # post запрос для действия
-    post_enabled = False
 
-    def try_to_get_source(self, request):
+    @staticmethod
+    def try_to_get_source(request):
         method = request.GET if request.method == 'GET' else request.POST
         d = {
             "user_id": request.user.id,
@@ -185,19 +182,13 @@ class BaseEtlView(BaseView):
 
     def get(self, request, *args, **kwargs):
         try:
-            if self.get_enabled:
-                return self.request_method(request, *args, **kwargs)
-            else:
-                raise Exception("Метод GET не определен")
+            return self.request_method(request, *args, **kwargs)
         except Exception as e:
             return self.json_response({'status': 'error', 'message': e.message})
 
     def post(self, request, *args, **kwargs):
         try:
-            if self.post_enabled:
-                return self.request_method(request, *args, **kwargs)
-            else:
-                raise Exception("Метод POST не определен")
+            return self.request_method(request, *args, **kwargs)
         except Exception as e:
             return self.json_response({'status': 'error', 'message': e.message})
 
@@ -215,7 +206,10 @@ class BaseEtlView(BaseView):
             err_mess = 'Такого источника не найдено!'
         else:
             try:
-                data = self.start_action(request, source)
+                if request.method == 'GET':
+                    data = self.start_get_action(request, source)
+                else:
+                    data = self.start_post_action(request, source)
 
                 # возвращаем свое сообщение
                 if isinstance(data, ErrorResponse):
@@ -229,9 +223,16 @@ class BaseEtlView(BaseView):
         if err_mess:
             return self.json_response({'status': 'error', 'message': err_mess})
 
-    def start_action(self, request, source):
+    def start_get_action(self, request, source):
         """
+        for get
+        :type source: Datasource
+        """
+        return []
 
+    def start_post_action(self, request, source):
+        """
+        for post
         :type source: Datasource
         """
         return []
@@ -239,7 +240,7 @@ class BaseEtlView(BaseView):
 
 class GetColumnsView(BaseEtlView):
 
-    def start_action(self, request, source):
+    def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
         columns = helpers.DataSourceService.get_columns_info(
             source, tables)
@@ -248,7 +249,7 @@ class GetColumnsView(BaseEtlView):
 
 class GetDataRowsView(BaseEtlView):
 
-    def start_action(self, request, source):
+    def start_post_action(self, request, source):
         """
 
         :type source: Datasource
@@ -270,16 +271,10 @@ class GetDataRowsView(BaseEtlView):
             source, col_names)
         return data
 
-    def post(self, request, *args, **kwargs):
-        try:
-            return self.request_method(request, *args, **kwargs)
-        except Exception as e:
-            return self.json_response({'status': 'error', 'message': e.message})
-
 
 class RemoveTablesView(BaseEtlView):
 
-    def start_action(self, request, source):
+    def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables'))
         helpers.DataSourceService.remove_tables_from_tree(
             source, tables)
@@ -288,14 +283,14 @@ class RemoveTablesView(BaseEtlView):
 
 class RemoveAllTablesView(BaseEtlView):
 
-    def start_action(self, request, source):
+    def start_get_action(self, request, source):
         helpers.RedisSourceService.tree_full_clean(source)
         return []
 
 
 class GetColumnsForChoicesView(BaseEtlView):
 
-    def start_action(self, request, source):
+    def start_get_action(self, request, source):
         parent_table = request.GET.get('parent')
         child_table = request.GET.get('child_bind')
         is_without_bind = json.loads(request.GET.get('is_without_bind'))
@@ -308,7 +303,7 @@ class GetColumnsForChoicesView(BaseEtlView):
 
 class SaveNewJoinsView(BaseEtlView):
 
-    def start_action(self, request, source):
+    def start_get_action(self, request, source):
         get = request.GET
         left_table = get.get('left')
         right_table = get.get('right')
@@ -323,33 +318,55 @@ class SaveNewJoinsView(BaseEtlView):
 
 class LoadDataView(BaseEtlView):
 
-    post_enabled = True
-    get_enabled = False
-
-    def start_action(self, request, source):
-        # подключение к источнику данных
+    def start_post_action(self, request, source):
         """
         Постановка задачи в очередь на загрузку данных в хранилище
         :type request: WSGIRequest
         :type source: Datasource
         """
+
+        # подключение к источнику данных
         source_conn = helpers.DataSourceService.get_source_connection(source)
         if not source_conn:
             return ErrorResponse('Не удалось подключиться к источнику данных!')
 
-        data = request.POST
+        # копия, чтобы могли добавлять
+        data = request.POST.copy()
 
-        # добавляем задачу в очередь
-        task = helpers.TaskService('etl:load_data:mongo')
+        tables = json.loads(data.get('tables'))
+        # cols = json.loads(data.get('cols'))
+
+        # достаем типы колонок
+        col_types = helpers.DataSourceService.get_columns_types(source, tables)
+        data.appendlist('col_types', json.dumps(col_types))
+
+        # достаем инфу колонок (статистика, типы, )
+        tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
+            source, tables)
+        data.appendlist('tables_info_for_meta', json.dumps(tables_info_for_meta))
+
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
-        task_id = task.add_task(request.user.id, data, structure, source.get_connection_dict())
+        conn_dict = source.get_connection_dict()
 
-        tasks.load_data.apply_async((request.user.id, task_id),)
+        # добавляем задачу mongo в очередь
+        task = helpers.TaskService('etl:load_data:mongo')
+        task_id1 = task.add_task(request.user.id, data, structure, conn_dict)
+        tasks.load_data.apply_async((request.user.id, task_id1),)
 
-        return {'task_id': task_id}
+        # добавляем задачу database в очередь
+        task = helpers.TaskService('etl:load_data:database')
+        task_id2 = task.add_task(request.user.id, data, structure, conn_dict)
+        tasks.load_data.apply_async((request.user.id, task_id2),)
+
+        # FIXME double task_id, need task_ids
+
+        return {'task_id': task_id2, }
 
 
 class GetUserTasksView(BaseView):
+    """
+        Cписок юзеровских тасков
+    """
     def get(self, request, *args, **kwargs):
         user_tasks = helpers.RedisSourceService.get_user_tasks(request.user.id)
         return self.json_response({'userId': request.user.id, 'tasks': user_tasks})

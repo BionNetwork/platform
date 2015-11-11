@@ -11,7 +11,8 @@ import json
 import operator
 import binascii
 
-from .helpers import RedisSourceService, DataSourceService, EtlEncoder
+from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
+                      TaskService)
 from core.models import Datasource
 from django.conf import settings
 
@@ -82,7 +83,7 @@ def load_data_mongo(user_id, task_id, data, source):
         # заполняем массив для вставки
         for record in result:
             record_normalized = [EtlEncoder.encode(rec_field) for rec_field in record]
-            record_row = dict(zip(col_names, record_normalized))
+            record_row = dict(izip(col_names, record_normalized))
             data_to_insert.append(record_row)
         try:
             collection.insert_many(data_to_insert, ordered=False)
@@ -94,31 +95,79 @@ def load_data_mongo(user_id, task_id, data, source):
 
 @celery.task(name='etl.tasks.load_data')
 def load_data(user_id, task_id):
+
     task = RedisSourceService.get_user_task_by_id(user_id, task_id)
+
     if task['name'] == 'etl:load_data:mongo':
         load_data_mongo(user_id, task_id, task['data'], task['source'])
+    elif task['name'] == 'etl:load_data:database':
+        load_data_database(user_id, task_id, task['data'], task['source'])
 
 
-def load_data_database(user_id, task_id, source, table_name, create_query,
-              rows_query, insert_query, cols):
+def load_data_database(user_id, task_id, data, source_dict):
+
+    print 'load_data_database'
 
     # сокет канал
-    chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
+    # chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
     # for i in range(1, 11):
-    client.publish(chanel, 10*10)
+    # client.publish(chanel, 10*10)
     # time.sleep(2)
 
-    connection = DataSourceService.get_local_connection()
+    cols = json.loads(data['cols'])
+    tables = json.loads(data['tables'])
+    col_types = json.loads(data['col_types'])
+    structure = data['tree']
+    tables_info_for_meta = json.loads(data['tables_info_for_meta'])
+    source = Datasource()
+    source.set_from_dict(**source_dict)
+
+    columns = []
+    col_names_select = []
+    col_names_create = []
+
+    cols_str = ''
+
+    for obj in cols:
+        t = obj['table']
+        c = obj['col']
+
+        cols_str += '{0}-{1};'.format(t, c)
+
+        formatted = '{0}.{1}'.format(t, c)
+
+        if c in columns:
+            col_names_create.append('{0}_{1} {2}'.format(t, c, col_types[formatted]))
+        else:
+            col_names_create.append('{0} {1}'.format(c, col_types[formatted]))
+            columns.append(c)
+        col_names_select.append('{0}.{1}'.format(t, c))
+
+    # название новой таблицы
+    key = binascii.crc32(
+        reduce(operator.add,
+               [source.host, str(source.port),
+                str(source.user_id), cols_str], ''))
+
+    table_key = '{0}{1}{2}'.format('sttm_datasoruce_', '_' if key < 0 else '', abs(key))
+
+    rows_query = DataSourceService.get_rows_query_for_loading_task(
+            source, structure,  col_names_select)
+
+    # инстанс подключения к локальному хранилищу данных
+    local_instance = DataSourceService.get_local_instance()
+
+    create_table_query = TaskService.table_create_query_for_loading_task(
+        local_instance, table_key, ', '.join(col_names_create))
+
+    insert_table_query = TaskService.table_insert_query_for_loading_task(
+        local_instance, table_key)
+
+    connection = local_instance.connection
     cursor = connection.cursor()
 
-    # для юникода
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, connection)
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, connection)
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, cursor)
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, cursor)
-
     # create new table
-    cursor.execute(create_query)
+    cursor.execute(create_table_query)
     connection.commit()
 
     # достаем первую порцию данных
@@ -129,18 +178,13 @@ def load_data_database(user_id, task_id, source, table_name, create_query,
     source_conn = DataSourceService.get_source_connection(source)
     rows_cursor = source_conn.cursor()
 
-    # для юникода
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, source_conn)
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, source_conn)
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, rows_cursor)
-    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, rows_cursor)
-
     rows_cursor.execute(rows_query.format(limit, offset))
     rows = rows_cursor.fetchall()
     len_ = len(rows[0])
 
     # преобразуем строку инсерта в зависимости длины вставляемой строки
-    insert_query = insert_query.format('(' + ','.join(['%({0})s'.format(i) for i in xrange(len_)]) + ')')
+    insert_query = insert_table_query.format(
+        '(' + ','.join(['%({0})s'.format(i) for i in xrange(len_)]) + ')')
 
     last_row = None
 
@@ -148,6 +192,7 @@ def load_data_database(user_id, task_id, source, table_name, create_query,
         try:
             # приходит [(1, 'name'), ...], преобразуем в [{0: 1, 1: 'name'}, ...]
             dicted = map(lambda x: {str(k): v for (k, v) in izip(xrange(len_), x)}, rows)
+
             cursor.executemany(insert_query, dicted)
         except Exception:
             # FIXME обработать еррор
@@ -164,7 +209,8 @@ def load_data_database(user_id, task_id, source, table_name, create_query,
             rows = rows_cursor.fetchall()
 
     # работа с datasource_meta
-    DataSourceService.update_datasource_meta(table_name, source, cols, last_row)
+    DataSourceService.update_datasource_meta(
+        table_key, source, cols, tables_info_for_meta, last_row)
 
 
 # write in console: python manage.py celery -A etl.tasks worker
