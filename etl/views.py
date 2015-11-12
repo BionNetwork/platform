@@ -334,7 +334,6 @@ class LoadDataView(BaseEtlView):
         data = request.POST.copy()
 
         tables = json.loads(data.get('tables'))
-        # cols = json.loads(data.get('cols'))
 
         # достаем типы колонок
         col_types = helpers.DataSourceService.get_columns_types(source, tables)
@@ -357,8 +356,6 @@ class LoadDataView(BaseEtlView):
         task = helpers.TaskService('etl:load_data:database')
         task_id2 = task.add_task(request.user.id, data, structure, conn_dict)
         tasks.load_data.apply_async((request.user.id, task_id2),)
-
-        # FIXME double task_id, need task_ids
 
         return {'task_id': task_id2, }
 
