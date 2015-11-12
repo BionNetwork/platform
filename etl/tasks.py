@@ -183,7 +183,8 @@ def load_data_database(user_id, task_id, data, source_dict):
 
     rows_cursor.execute(rows_query.format(limit, offset))
     rows = rows_cursor.fetchall()
-    len_ = len(rows[0])
+
+    len_ = len(rows[0]) if rows else 0
 
     # преобразуем строку инсерта в зависимости длины вставляемой строки
     insert_query = insert_table_query.format(

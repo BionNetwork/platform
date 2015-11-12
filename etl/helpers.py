@@ -2135,19 +2135,16 @@ class DataSourceService(object):
                 collection_name=table_name,
             )
 
-        stats = {}
-        fields = {
-            'columns': defaultdict(list),
-            'row_key': {},
-            'row_key_value': defaultdict(list)
-        }
+        stats = {'tables_stat': {}, 'row_key': {}, 'row_key_value': defaultdict(list), }
+        fields = {'columns': defaultdict(list), }
+
         # избавляет от дублей
         row_keys = defaultdict(set)
 
         for table, col_group in groupby(cols, lambda x: x['table']):
             table_info = tables_info_for_meta[table]
 
-            stats[table] = table_info['stats']
+            stats['tables_stat'][table] = table_info['stats']
             t_cols = table_info['columns']
 
             for sel_col in col_group:
@@ -2161,20 +2158,22 @@ class DataSourceService(object):
                         row_keys[table].add(col['name'])
 
         for k, v in row_keys.iteritems():
-            fields['row_key'][k] = list(v)
+            stats['row_key'][k] = list(v)
 
         if last_row:
             # корневая таблица
             root_table = cols[0]['table']
             mapped = filter(
                 lambda x: x[0]['table'] == root_table, zip(cols, last_row))
-            primaries = fields['row_key'][root_table]
 
-            for pri in primaries:
-                for (k, v) in mapped:
-                    if pri == k['col']:
-                        fields['row_key_value'][root_table].append(
-                            {pri: v})
+            if stats['row_key']:
+                primaries = stats['row_key'][root_table]
+
+                for pri in primaries:
+                    for (k, v) in mapped:
+                        if pri == k['col']:
+                            stats['row_key_value'][root_table].append(
+                                {pri: v})
 
         source_meta.update_date = datetime.datetime.now()
         source_meta.fields = json.dumps(fields)
