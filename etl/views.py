@@ -10,6 +10,7 @@ from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
 from django.conf import settings
 
+from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
 from core.models import Datasource
 from . import forms as etl_forms
@@ -20,6 +21,10 @@ from . import tasks
 
 
 logger = logging.getLogger(__name__)
+
+
+SUCCESS = 'success'
+ERROR = 'error'
 
 
 class SourcesListView(BaseTemplateView):
@@ -132,15 +137,17 @@ class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
         try:
-            result = helpers.DataSourceService.check_connection(request.POST)
+            helpers.DataSourceService.check_connection(request.POST)
             return self.json_response(
-                {'status': 'error' if not result else 'success',
-                 'message': ('Проверка соединения прошла успешно'
-                             if result else 'Проверка подключения не удалась')})
+                {'status': SUCCESS,
+                 'message': 'Проверка соединения прошла успешно'})
+        except ValueError as e:
+            return self.json_response({'status': ERROR, 'message': e.message})
         except Exception as e:
             logger.exception(e.message)
             return self.json_response(
-                {'status': 'error', 'message': 'Ошибка во время проверки соединения'}
+                {'status': ERROR,
+                 'message': 'Ошибка во время проверки соединения'}
             )
 
 
@@ -155,17 +162,9 @@ class GetConnectionDataView(BaseView):
         try:
             db = helpers.DataSourceService.get_database_info(source)
         except ValueError as err:
-            return self.json_response({'status': 'error', 'message': err.message})
+            return self.json_response({'status': ERROR, 'message': err.message})
 
-        return self.json_response({'data': db, 'status': 'success'})
-
-
-class ErrorResponse(object):
-    """
-        Класс ответа с ошибкой
-    """
-    def __init__(self, msg):
-        self.message = msg
+        return self.json_response({'data': db, 'status': SUCCESS})
 
 
 class BaseEtlView(BaseView):
@@ -202,26 +201,20 @@ class BaseEtlView(BaseView):
         """
         try:
             source = self.try_to_get_source(request)
-        except Datasource.DoesNotExist:
-            err_mess = 'Такого источника не найдено!'
-        else:
-            try:
-                if request.method == 'GET':
-                    data = self.start_get_action(request, source)
-                else:
-                    data = self.start_post_action(request, source)
-
-                # возвращаем свое сообщение
-                if isinstance(data, ErrorResponse):
-                    return self.json_response({'status': 'error', 'message': data.message})
-
-                return self.json_response({'status': 'ok', 'data': data, 'message': ''})
-            except Exception as e:
-                logger.exception(e.message)
-                err_mess = "Произошла непредвиденная ошибка"
-
-        if err_mess:
-            return self.json_response({'status': 'error', 'message': err_mess})
+            if request.method == 'GET':
+                data = self.start_get_action(request, source)
+            else:
+                data = self.start_post_action(request, source)
+            return self.json_response(
+                    {'status': SUCCESS, 'data': data, 'message': ''})
+        except (Datasource.DoesNotExist, ResponseError) as err:
+            return self.json_response(
+                {'status': err.code, 'message': err.message})
+        except Exception as e:
+            logger.exception(e.message)
+            return self.json_response({
+                'status': ERROR,
+                'message': 'Произошла непредвиденная ошибка'})
 
     def start_get_action(self, request, source):
         """
@@ -328,7 +321,7 @@ class LoadDataView(BaseEtlView):
         # подключение к источнику данных
         source_conn = helpers.DataSourceService.get_source_connection(source)
         if not source_conn:
-            return ErrorResponse('Не удалось подключиться к источнику данных!')
+            raise ResponseError(u'Не удалось подключиться к источнику данных!')
 
         # копия, чтобы могли добавлять
         data = request.POST.copy()

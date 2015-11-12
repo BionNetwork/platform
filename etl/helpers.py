@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import binascii
 import psycopg2
 import MySQLdb
 import json
@@ -2068,21 +2069,23 @@ class DataSourceService(object):
                                tables_info_for_meta, last_row):
         """
         Создание DatasourceMeta для Datasource
-        :param table_name: str
-        :param source: Datasource
-        :param cols: lsit
-        :param last_row: str or None
+
+        Args:
+            table_name(str): Название страницы
+            source(Datasource): Источник данных
+            cols(list): Список колонок
+            last_row(str or None): Последняя запись
+            tables_info_for_meta: Данные о таблицах
+
+        Returns:
+            DatasourceMeta: Объект мета-данных
+
         """
-        try:
-            source_meta = DatasourceMeta.objects.get(
-                datasource_id=source.id,
-                collection_name=table_name,
-            )
-        except DatasourceMeta.DoesNotExist:
-            source_meta = DatasourceMeta(
-                datasource_id=source.id,
-                collection_name=table_name,
-            )
+
+        source_meta, create = DatasourceMeta.objects.get_or_create(
+            datasource_id=source.id,
+            collection_name=table_name,
+        )
 
         stats = {}
         fields = {
@@ -2125,10 +2128,11 @@ class DataSourceService(object):
                         fields['row_key_value'][root_table].append(
                             {pri: v})
 
-        source_meta.update_date = datetime.datetime.now()
+        # source_meta.update_date = datetime.datetime.now()
         source_meta.fields = json.dumps(fields)
         source_meta.stats = json.dumps(stats)
         source_meta.save()
+        return source_meta
 
 
 class TaskService:
@@ -2211,3 +2215,20 @@ class EtlEncoder:
         elif isinstance(obj, decimal.Decimal):
             return float(obj)
         return obj
+
+
+def generate_table_name_key(source, cols_str):
+    """Генерация ключа для названия промежуточной таблицы
+
+    Args:
+        source(Datasource): источник
+        cols_str(str): Строка с названием столбцов
+
+    Returns:
+        str: Ключ для названия промежуточной таблицы
+
+    """
+    return binascii.crc32(
+        reduce(operator.add,
+               [source.host, str(source.port),
+                str(source.user_id), cols_str], ''))

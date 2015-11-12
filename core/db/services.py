@@ -58,7 +58,7 @@ def retry_query(using):
             try:
                 return func(*args, **kwargs)
             except OperationalError, e:
-                print 'try'
+
                 lock_error_check, timeout = get_error(using, str(e.args[0]))
                 if lock_error_check:
                     for i in range(0, settings.RETRY_COUNT):
@@ -66,7 +66,6 @@ def retry_query(using):
                         try:
                             return func(*args, **kwargs)
                         except OperationalError, e:
-                            print 'unsuccess'
                             if i == settings.RETRY_COUNT-1:
                                 logger.exception(e.message)
                                 raise
