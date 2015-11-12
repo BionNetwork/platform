@@ -216,13 +216,13 @@ def load_data_database(data, source_dict):
 
     # работа с datasource_meta
 
-        datasource_meta = DataSourceService.update_datasource_meta(
-            table_key, source, cols, tables_info_for_meta, last_row)
+    datasource_meta = DataSourceService.update_datasource_meta(
+        table_key, source, cols, tables_info_for_meta, last_row)
 
-        DatasourceMetaKeys.objects.get_or_create(
-            meta=datasource_meta,
-            value=key,
-        )
+    DatasourceMetaKeys.objects.get_or_create(
+        meta=datasource_meta,
+        value=key,
+    )
 
 
 # write in console: python manage.py celery -A etl.tasks worker
