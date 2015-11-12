@@ -81,7 +81,7 @@ class Database(object):
         :param conn_info: dict
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
     def lose_brackets(str_):
@@ -146,7 +146,7 @@ class Database(object):
         возвращает селект запрос
         :raise: NotImplementedError
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     def get_rows(self, cols, structure):
         """
@@ -172,7 +172,7 @@ class Database(object):
         :param tables: list
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     def get_statistic(self, source, tables):
         """
@@ -204,7 +204,7 @@ class Database(object):
         :param cols_str:
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
     def local_table_insert_query(key_str):
@@ -213,7 +213,7 @@ class Database(object):
         :param key_str: str
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
 
 class Postgresql(Database):
