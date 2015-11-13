@@ -35,7 +35,7 @@ def get_table_key(key):
     :param key: str
     :return:
     """
-    return '{0}{1}{2}'.format('sttm_datasoruce_', '_' if key < 0 else '', abs(key))
+    return '{0}{1}{2}'.format('sttm_datasource_', '_' if key < 0 else '', abs(key))
 
 
 def load_data_mongo(user_id, task_id, data, source):
@@ -130,7 +130,6 @@ def load_data_database(user_id, task_id, data, source_dict):
     source = Datasource()
     source.set_from_dict(**source_dict)
 
-    col_names_select = []
     col_names_create = []
 
     cols_str = ''
@@ -143,8 +142,7 @@ def load_data_database(user_id, task_id, data, source_dict):
 
         dotted = '{0}.{1}'.format(t, c)
 
-        col_names_create.append('{0}__{1} {2}'.format(t, c, col_types[dotted]))
-        col_names_select.append(dotted)
+        col_names_create.append('"{0}__{1}" {2}'.format(t, c, col_types[dotted]))
 
     # название новой таблицы
     key = binascii.crc32(
@@ -155,7 +153,7 @@ def load_data_database(user_id, task_id, data, source_dict):
     table_key = get_table_key(key)
 
     rows_query = DataSourceService.get_rows_query_for_loading_task(
-            source, structure,  col_names_select)
+            source, structure,  cols)
 
     # инстанс подключения к локальному хранилищу данных
     local_instance = DataSourceService.get_local_instance()

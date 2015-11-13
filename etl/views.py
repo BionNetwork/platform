@@ -265,7 +265,7 @@ class GetDataRowsView(BaseEtlView):
 
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             table_names.append(t_name)
-            col_names += [x["table"] + "." + x["col"] for x in col_group]
+            col_names += col_group
 
         data = helpers.DataSourceService.get_rows_info(
             source, col_names)

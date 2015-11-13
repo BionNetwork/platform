@@ -106,7 +106,7 @@ class Database(object):
     def _get_columns_query(source, tables):
         raise ValueError("Columns query is not realized")
 
-    def generate_join(self, structure, main_table=None):
+    def generate_join(self, structure, separator, main_table=None):
         """
         Генерация соединения таблиц для реляционных источников
         :type structure: dict
@@ -114,7 +114,8 @@ class Database(object):
         # определяем начальную таблицу
         if main_table is None:
             main_table = structure['val']
-            query_join = main_table
+            query_join = '{sep}{table}{sep}'.format(
+                    table=main_table, sep=separator)
         else:
             query_join = ''
         for child in structure['childs']:
@@ -129,14 +130,17 @@ class Database(object):
                 # определяем тип соединения
                 query_join += " " + JoinTypes.get_value(joinElement['join']['type'])
                 # присоединяем таблицу
-                query_join += " " + join_table
+                query_join += " " + '{sep}{table}{sep}'.format(
+                    table=join_table, sep=separator)
 
-                query_join += " ON %s.%s %s %s.%s" % (
+                query_join += (" ON {sep}%s{sep}.{sep}%s{sep} %s {sep}%s{sep}.{sep}%s{sep}" % (
                     joinElement['left']['table'], joinElement['left']['column'],
                     Operations.get_value(joinElement['join']['value']),
-                    joinElement['right']['table'], joinElement['right']['column'])
+                    joinElement['right']['table'], joinElement['right']['column']
+                )).format(sep=separator)
+
             # рекурсивно обходим остальные элементы
-            query_join += self.generate_join(child, child['val'])
+            query_join += self.generate_join(child, separator, child['val'])
 
         return query_join
 
@@ -146,7 +150,7 @@ class Database(object):
         возвращает селект запрос
         :raise: NotImplementedError
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method get_rows_query is not implemented")
 
     def get_rows(self, cols, structure):
         """
@@ -155,14 +159,28 @@ class Database(object):
         :param structure: dict
         :return: list
         """
-        query_join = self.generate_join(structure)
+        separator = self.get_separator()
+        query_join = self.generate_join(structure, separator)
+
+        pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
+            '{table}', '{col}', sep=separator)
+
+        cols_str = ', '.join(
+            [pre_cols_str.format(**x) for x in cols])
 
         query = self.get_rows_query().format(
-            ', '.join(cols), query_join,
+            cols_str, query_join,
             settings.ETL_COLLECTION_PREVIEW_LIMIT, 0)
 
         records = self.get_query_result(query)
         return records
+
+    @staticmethod
+    def get_separator():
+        """
+            Возвращает ковычки( ' or " ) для запроса
+        """
+        raise NotImplementedError("Method get_statistic_query is not implemented")
 
     @staticmethod
     def get_statistic_query(source, tables):
@@ -172,7 +190,7 @@ class Database(object):
         :param tables: list
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method get_statistic_query is not implemented")
 
     def get_statistic(self, source, tables):
         """
@@ -204,7 +222,7 @@ class Database(object):
         :param cols_str:
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method local_table_create_query is not implemented")
 
     @staticmethod
     def local_table_insert_query(key_str):
@@ -213,7 +231,7 @@ class Database(object):
         :param key_str: str
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method local_table_insert_query is not implemented")
 
 
 class Postgresql(Database):
@@ -233,6 +251,13 @@ class Postgresql(Database):
         except psycopg2.OperationalError:
             return None
         return conn
+
+    @staticmethod
+    def get_separator():
+        """
+            Возвращает ковычки(") для запроса
+        """
+        return '\"'
 
     def get_tables(self, source):
         """
@@ -431,6 +456,13 @@ class Mysql(Database):
         except MySQLdb.OperationalError:
             return None
         return conn
+
+    @staticmethod
+    def get_separator():
+        """
+            Возвращает ковычки(') для запроса
+        """
+        return '\''
 
     def get_tables(self, source):
         """
@@ -714,7 +746,7 @@ class DatabaseService(object):
         :return: str
         """
         instance = cls.get_source_instance(source)
-        return instance.generate_join(structure)
+        return instance.generate_join(structure, instance.get_separator())
 
     @classmethod
     def get_connection(cls, source):
@@ -780,6 +812,11 @@ class DatabaseService(object):
         local_data = cls.get_local_connection_dict()
         instance = cls.factory(**local_data)
         return instance
+
+    @classmethod
+    def get_separator(cls, source):
+        instance = cls.get_source_instance(source)
+        return instance.get_separator()
 
 
 class Node(object):
@@ -2060,6 +2097,10 @@ class DataSourceService(object):
         return types_dict
 
     @classmethod
+    def get_separator(cls, source):
+        return DatabaseService.get_separator(source)
+
+    @classmethod
     def get_rows_query_for_loading_task(cls, source, structure, cols):
         """
         Получение предзапроса данных указанных
@@ -2069,10 +2110,17 @@ class DataSourceService(object):
         :param cols:
         :return:
         """
+
+        separator = cls.get_separator(source)
         query_join = DatabaseService.get_generated_joins(source, structure)
 
+        pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
+            '{table}', '{col}', sep=separator)
+        cols_str = ', '.join(
+            [pre_cols_str.format(**x) for x in cols])
+
         rows_query = DatabaseService.get_rows_query(source).format(
-            ', '.join(cols), query_join, '{0}', '{1}')
+            cols_str, query_join, '{0}', '{1}')
         return rows_query
 
     @classmethod
