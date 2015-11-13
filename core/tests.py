@@ -5,13 +5,14 @@ from threading import Thread
 import time
 
 from django.contrib.sessions.models import Session
-from django.test import TestCase, Client
+from django.test import TestCase, Client, TransactionTestCase
 from django.core.urlresolvers import reverse
 from django.db import connection
 from django.conf import settings
 
 from core.db.services import retry_query
 from core.models import User
+from core.helpers import convert_milliseconds_to_seconds
 
 
 class AuthenticationTest(TestCase):
@@ -44,7 +45,7 @@ class AuthenticationTest(TestCase):
         self.assertEqual(users.count(), 2, 'Количество пользователей не 2!')
 
 
-class DatabaseErrorsCheckTestCase(TestCase):
+class DatabaseErrorsCheckTestCase(TransactionTestCase):
 
     # def setUp(self):
     #     User.objects.create(username='test', password='test')
@@ -130,7 +131,8 @@ class DatabaseErrorsCheckTestCase(TestCase):
                     cursor.execute('COMMIT WORK;')
                 # print 'lock table finish'
 
-        timeout = settings.DATABASE_WAIT_TIMEOUT * (
+        timeout = convert_milliseconds_to_seconds(
+            settings.DATABASE_WAIT_TIMEOUT) * (
             settings.RETRY_COUNT - 0.5) - THREADS_INTERVAL
         t = LockThread(timeout=timeout)
         t.start()
@@ -139,4 +141,3 @@ class DatabaseErrorsCheckTestCase(TestCase):
         t2.start()
         t.join()
         t2.join()
-

@@ -18,6 +18,18 @@ logger = logging.getLogger(__name__)
 """
 
 
+def convert_milliseconds_to_seconds(value):
+    """миллисекунды -> секунды
+
+    Args:
+        value(int): миллисекундах
+
+    Returns:
+        float: секунды
+    """
+    return float(value)/1000
+
+
 class Settings:
     @classmethod
     def get_host(cls, request):
@@ -60,7 +72,8 @@ def check_redis_lock(func):
             return func(*args, **kwargs)
         except LockError:
             for i in range(0, settings.RETRY_COUNT):
-                time.sleep(settings.REDIS_LOCK_TIMEOUT)
+                time.sleep(convert_milliseconds_to_seconds(
+                    settings.REDIS_LOCK_TIMEOUT))
                 try:
                     return func(*args, **kwargs)
                 except LockError, e:
