@@ -5,12 +5,14 @@ from threading import Thread
 import time
 
 from django.contrib.sessions.models import Session
-from django.test import TestCase, Client
+from django.test import TestCase, Client, TransactionTestCase
 from django.core.urlresolvers import reverse
 from django.db import connection
+from django.conf import settings
 
 from core.db.services import retry_query
 from core.models import User
+from core.helpers import convert_milliseconds_to_seconds
 
 
 class AuthenticationTest(TestCase):
@@ -43,7 +45,7 @@ class AuthenticationTest(TestCase):
         self.assertEqual(users.count(), 2, 'Количество пользователей не 2!')
 
 
-class DatabaseErrorsCheckTestCase(TestCase):
+class DatabaseErrorsCheckTestCase(TransactionTestCase):
 
     # def setUp(self):
     #     User.objects.create(username='test', password='test')
@@ -94,13 +96,13 @@ class DatabaseErrorsCheckTestCase(TestCase):
         Время ожидания(DATABASE_WAIT_TIMEOUT) 10 сек
         Количество попыток(RETRY_COUNT) 3
         """
+        THREADS_INTERVAL = 2  # сек
+
         class DataQuery(Thread):
 
             @retry_query('default')
             def run(self):
                 """Запрос к залоченной таблице"""
-
-                print 'select start'
                 cursor = connection.cursor()
                 try:
                     cursor.execute(
@@ -108,18 +110,17 @@ class DatabaseErrorsCheckTestCase(TestCase):
                     cursor.execute('COMMIT WORK;')
                 finally:
                     cursor.execute('COMMIT WORK;')
-                print 'select finish'
 
-        class DatasourceLock(Thread):
+        class LockThread(Thread):
 
-            def __init__(self, timeout):
+            def __init__(self, timeout=0):
                 self.timeout = timeout
-                super(DatasourceLock, self).__init__()
+                super(LockThread, self).__init__()
 
             def run(self):
                 """Блокировка таблицы"""
                 cursor = connection.cursor()
-                print 'lock table start'
+                # print 'lock table start'
                 try:
                     cursor.execute(
                           'BEGIN WORK; SELECT * FROM users FOR UPDATE NOWAIT;')
@@ -128,12 +129,15 @@ class DatabaseErrorsCheckTestCase(TestCase):
                     cursor.execute('COMMIT WORK;')
                 finally:
                     cursor.execute('COMMIT WORK;')
-                print 'lock table finish'
+                # print 'lock table finish'
 
-        t = DatasourceLock(timeout=25)
+        timeout = convert_milliseconds_to_seconds(
+            settings.DATABASE_WAIT_TIMEOUT) * (
+            settings.RETRY_COUNT - 0.5) - THREADS_INTERVAL
+        t = LockThread(timeout=timeout)
         t.start()
+        time.sleep(THREADS_INTERVAL)
         t2 = DataQuery()
         t2.start()
         t.join()
         t2.join()
-
