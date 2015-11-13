@@ -82,7 +82,7 @@ class Database(object):
         :param conn_info: dict
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get connection is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
     def lose_brackets(str_):
@@ -107,11 +107,14 @@ class Database(object):
     def _get_columns_query(source, tables):
         raise ValueError("Columns query is not realized")
 
-    def generate_join(self, structure, separator, main_table=None):
+    def generate_join(self, structure, main_table=None):
         """
         Генерация соединения таблиц для реляционных источников
         :type structure: dict
         """
+
+        separator = self.get_separator()
+
         # определяем начальную таблицу
         if main_table is None:
             main_table = structure['val']
@@ -141,7 +144,7 @@ class Database(object):
                 )).format(sep=separator)
 
             # рекурсивно обходим остальные элементы
-            query_join += self.generate_join(child, separator, child['val'])
+            query_join += self.generate_join(child, child['val'])
 
         return query_join
 
@@ -151,7 +154,7 @@ class Database(object):
         возвращает селект запрос
         :raise: NotImplementedError
         """
-        raise NotImplementedError("Method get_rows_query is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     def get_rows(self, cols, structure):
         """
@@ -160,8 +163,9 @@ class Database(object):
         :param structure: dict
         :return: list
         """
+        query_join = self.generate_join(structure,)
+
         separator = self.get_separator()
-        query_join = self.generate_join(structure, separator)
 
         pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
             '{table}', '{col}', sep=separator)
@@ -181,7 +185,7 @@ class Database(object):
         """
             Возвращает ковычки( ' or " ) для запроса
         """
-        raise NotImplementedError("Method get_statistic_query is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
     def get_statistic_query(source, tables):
@@ -191,7 +195,7 @@ class Database(object):
         :param tables: list
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method get_statistic_query is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     def get_statistic(self, source, tables):
         """
@@ -223,7 +227,7 @@ class Database(object):
         :param cols_str:
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method local_table_create_query is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
     def local_table_insert_query(key_str):
@@ -232,7 +236,7 @@ class Database(object):
         :param key_str: str
         :raise NotImplementedError:
         """
-        raise NotImplementedError("Method local_table_insert_query is not implemented")
+        raise NotImplementedError("Method %s is not implemented" % __name__)
 
 
 class Postgresql(Database):
@@ -463,7 +467,7 @@ class Mysql(Database):
         """
             Возвращает ковычки(') для запроса
         """
-        return '\''
+        return '\`'
 
     def get_tables(self, source):
         """
@@ -747,7 +751,7 @@ class DatabaseService(object):
         :return: str
         """
         instance = cls.get_source_instance(source)
-        return instance.generate_join(structure, instance.get_separator())
+        return instance.generate_join(structure)
 
     @classmethod
     def get_connection(cls, source):
