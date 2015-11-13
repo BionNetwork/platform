@@ -59,7 +59,7 @@ def load_data_mongo(user_id, task_id, data, source):
 
     for t_name, col_group in groupby(cols, lambda x: x["table"]):
         for x in col_group:
-            columns.append(x["table"] + "." + x["col"])
+            columns += col_group
             col_names.append(x["table"] + "__" + x["col"])
 
     # название новой таблицы

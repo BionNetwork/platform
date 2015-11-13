@@ -11,6 +11,7 @@ from itertools import groupby
 from collections import defaultdict
 
 from django.conf import settings
+from django.utils import timezone
 
 from core.models import ConnectionChoices
 from . import r_server
@@ -2223,7 +2224,7 @@ class DataSourceService(object):
                             stats['row_key_value'][root_table].append(
                                 {pri: v})
 
-        source_meta.update_date = datetime.datetime.now()
+        source_meta.update_date = timezone.now()
         source_meta.fields = json.dumps(fields)
         source_meta.stats = json.dumps(stats)
         source_meta.save()
