@@ -126,7 +126,7 @@ def load_data_database(user_id, task_id, data, source_dict):
     cols = json.loads(data['cols'])
     col_types = json.loads(data['col_types'])
     structure = data['tree']
-    tables_info_for_meta = json.loads(data['tables_info_for_meta'])
+    tables_info_for_meta = json.loads(data['meta_info'])
     source = Datasource()
     source.set_from_dict(**source_dict)
 

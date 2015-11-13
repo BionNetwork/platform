@@ -342,7 +342,7 @@ class LoadDataView(BaseEtlView):
         # достаем инфу колонок (статистика, типы, )
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
-        data.appendlist('tables_info_for_meta', json.dumps(tables_info_for_meta))
+        data.appendlist('meta_info', json.dumps(tables_info_for_meta))
 
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
