@@ -916,8 +916,11 @@ class TablesTree(object):
         :param root: Node
         :return: dict
         """
-        root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
-                     'join_type': root.join_type}
+        root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins), }
+
+        root_info['join_type'] = (
+            None if not root_info['joins'] else root.join_type)
+
         for ch in root.childs:
             root_info['childs'].append(cls.get_tree_structure(ch))
         return root_info
@@ -2256,7 +2259,7 @@ class TaskService:
                 'data': {
                     'cols': data['cols'], 'tables': data['tables'],
                     'tree': tree, 'col_types': data['col_types'],
-                    'tables_info_for_meta': data['tables_info_for_meta'],
+                    'meta_info': data['meta_info'],
                 },
                 'source': source_dict,
                 }
