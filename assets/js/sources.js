@@ -206,16 +206,25 @@ function getColumns(url, dict) {
     );
 }
 
+
+function hasWithoutBinds(){
+    // если есть талица без связи, то внимание
+    if($('.without_bind').length){
+        confirmAlert('Имеется таблица без связи! '+
+        'Выберите связь у таблицы, либо удалите ее!');
+        return true;
+    }
+    return false;
+}
+
+
 function tableToRight(url){
 
     if($('#button-toRight').hasClass('disabled')){
         return;
     }
 
-    // если есть талица без связи, то внимание
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 
@@ -241,10 +250,7 @@ function tablesToRight(url){
         return;
     }
 
-    // если есть талица без связи, то внимание
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 
@@ -413,9 +419,7 @@ function tablesToLeft(url){
 
 function refreshData(url){
 
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 
@@ -455,13 +459,30 @@ function refreshData(url){
     }
 }
 
+function insertJoinRows(data, parent, child, joinRows){
+    $.each(data.joins, function(i, join){
+        var newRow = joinWinRow({
+            parentCols: data[parent],
+            childCols: data[child],
+            i: i
+        });
+        joinRows.append($(newRow));
+        $('[name="joinradio"][value='+join['join']['type']+']').prop('checked', true);
+
+        $('.with-select-'+i).find('select[name="parent"]').val(join['left']['column']);
+        $('.with-select-'+i).find('select[name="child"]').val(join['right']['column']);
+        $('.with-select-'+i).find('select[name="joinType"]').val(join['join']['value']);
+    });
+}
 
 function showJoinWindow(url, parent, child, isWithoutBind){
 
     var info = getSourceInfo();
     info['parent'] = parent;
     info['child_bind'] = child;
-    info['is_without_bind'] = isWithoutBind;
+
+    var warn = $('#table-part-'+child+'>div:first').find('.without_bind');
+    info['is_without_bind'] = warn.length ? true : false;
 
     $.get(url, info, function(res){
         if (res.status == 'error') {
@@ -474,26 +495,18 @@ function showJoinWindow(url, parent, child, isWithoutBind){
             joinRows.data('table-left', parent);
             joinRows.data('table-right', child);
 
-            if(data['without_bind']){
+            if(data['has_error_joins']){
+                // правильные + неправильные джойны
+                insertJoinRows(data, parent, child, joinRows)
+            }
+            else if(data['without_bind']){
                 joinRows.append(joinWinRow({
                     parentCols: data[parent],
                     childCols: data[child],
                     i: 0
                 }));
             } else {
-                $.each(data.joins, function(i, join){
-                    var newRow = joinWinRow({
-                        parentCols: data[parent],
-                        childCols: data[child],
-                        i: i
-                    });
-                    joinRows.append($(newRow));
-                    $('[name="joinradio"][value='+join['join']['type']+']').prop('checked');
-
-                    $('.with-select-'+i).find('select[name="parent"]').val(join['left']['column']);
-                    $('.with-select-'+i).find('select[name="child"]').val(join['right']['column']);
-                    $('.with-select-'+i).find('select[name="joinType"]').val(join['join']['value']);
-                });
+                insertJoinRows(data, parent, child, joinRows)
             }
 
             $('#parentLabel').text(parent);
@@ -564,7 +577,20 @@ function saveJoins(url){
                 confirmAlert(res.message)
         } else {
             joinWin.modal('hide');
-            drawTables(res.data);
+            // имеются неправильные джоины
+
+            var rightTableArea = $('#table-part-'+joinRows.data('table-right')+'>div:first'),
+                   rel = rightTableArea.find('.relation'),
+                   warn = $('<span class="without_bind" style="color:red;">!!!</span>');
+
+            if(res.data.has_error_join == true){
+                if(!rel.find('.without_bind').length){
+                    rel.append(warn);
+                }
+            }
+            else if(res.data.has_error_join == false){
+                rightTableArea.find('.without_bind').remove();
+            }
         }
     });
 }
@@ -588,9 +614,7 @@ function startLoading(userId, loadUrl){
             }
         }).get();
 
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 
