@@ -10,17 +10,23 @@ from django.db.models.sql import (
     Query, UpdateQuery, DeleteQuery, InsertQuery, AggregateQuery)
 from django.db.models.sql.compiler import MULTI
 
+from core.helpers import convert_milliseconds_to_seconds
+
 logger = logging.getLogger(__name__)
 
 
 RETRY_ERRORS = {
     'mysql': {
-        'deadlock': (['1213'], settings.DEADLOCK_WAIT_TIMEOUT),
-        'db_lock': (['1205'], settings.DATABASE_WAIT_TIMEOUT)
+        'deadlock': (['1213'], convert_milliseconds_to_seconds(
+            settings.DEADLOCK_WAIT_TIMEOUT)),
+        'db_lock': (['1205'], convert_milliseconds_to_seconds(
+            settings.DATABASE_WAIT_TIMEOUT))
     },
     'postgresql_psycopg2': {
-        'deadlock': (['40P01'], settings.DEADLOCK_WAIT_TIMEOUT),
-        'db_lock': (['55P03'], settings.DATABASE_WAIT_TIMEOUT)
+        'deadlock': (['40P01'], convert_milliseconds_to_seconds(
+            settings.DEADLOCK_WAIT_TIMEOUT)),
+        'db_lock': (['55P03'], convert_milliseconds_to_seconds(
+            settings.DATABASE_WAIT_TIMEOUT))
     }
 }
 

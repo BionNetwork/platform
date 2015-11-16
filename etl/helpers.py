@@ -467,7 +467,7 @@ class Mysql(Database):
         """
             Возвращает ковычки(') для запроса
         """
-        return '\`'
+        return '`'
 
     def get_tables(self, source):
         """
