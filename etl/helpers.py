@@ -12,7 +12,6 @@ from itertools import groupby
 from collections import defaultdict
 
 from django.conf import settings
-from django.utils import timezone
 
 from core.models import ConnectionChoices
 from . import r_server
@@ -2273,6 +2272,22 @@ class TaskService:
                 'source': source_dict,
                 }
 
+        RedisSourceService.add_user_task(user_id, task_id, task)
+        return task_id
+
+    def add_dim_task(self, user_id, key):
+        """
+        Добавление задачи на создание таблиц размерностей
+        Args:
+            user_id(int): id пользователя
+            key(str): ключ к метаданным обрабатываемой таблицы
+
+        Returns:
+            int: id задачи
+        """
+        task_id = RedisSourceService.get_next_task_counter()
+        task = {'name': self.name,
+                'meta_db_key': key}
         RedisSourceService.add_user_task(user_id, task_id, task)
         return task_id
 
