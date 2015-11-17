@@ -201,7 +201,7 @@ def load_data_database(user_id, task_id, data, source_dict):
     else:
         float_max = float(max_rows_count)
         part = max_rows_count / l + 1 if float_max % l else max_rows_count / l
-        range_ = 100 / part
+        range_ = int(round(100.0 / part))
 
     percent_count = 0
     was_error = False
