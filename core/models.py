@@ -72,14 +72,20 @@ class Datasource(models.Model):
 
 
 class DatasourceMeta(models.Model):
-    """Мета информация для источников данных
+    """
+    Мета информация для источников данных
     """
 
-    collection_name = models.CharField(max_length=255, help_text="название коллекции")
+    collection_name = models.CharField(
+        max_length=255, help_text="название коллекции")
     fields = models.TextField(help_text="мета-информация полей")
     stats = models.TextField(help_text="статистика", null=True)
-    create_date = models.DateTimeField('create_date', help_text="дата создания", auto_now_add=True, db_index=True)
-    update_date = models.DateTimeField('update_date', help_text="дата обновления", db_index=True)
+    create_date = models.DateTimeField(
+        'create_date', help_text="дата создания",
+        auto_now_add=True, db_index=True)
+    update_date = models.DateTimeField(
+        'update_date', help_text="дата обновления",
+        auto_now=True, db_index=True)
     datasource = models.ForeignKey(Datasource, on_delete=models.CASCADE)
 
     objects = models.Manager.from_queryset(RetryQueryset)()
@@ -88,8 +94,22 @@ class DatasourceMeta(models.Model):
         db_table = "datasources_meta"
 
 
+class DatasourceMetaKeys(models.Model):
+    """
+    Ключ к динамически создаваемым таблицам
+    """
+    meta = models.ForeignKey(
+        DatasourceMeta, verbose_name=u'Метаданные', related_name=u'meta_keys')
+    value = models.CharField(verbose_name=u'Ключ', max_length=255)
+
+    class Meta:
+        db_table = 'datasources_meta_keys'
+        unique_together = ('meta', 'value')
+
+
 class User(AbstractUser):
-    """Модель пользователей, унаследованная от Django User
+    """
+    Модель пользователей, унаследованная от Django User
     """
 
     phone = models.CharField(verbose_name='Телефон', max_length=32, null=True, blank=True)
@@ -100,7 +120,7 @@ class User(AbstractUser):
     birth_date = models.DateField(verbose_name='Дата рождения', null=True, blank=True)
     verify_email_uuid = models.CharField(max_length=50, null=True, blank=True)
 
-    objects = models.Manager.from_queryset(RetryQueryset)()
+    # objects = models.Manager.from_queryset(RetryQueryset)()
 
     class Meta:
         db_table = "users"

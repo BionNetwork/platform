@@ -3,8 +3,6 @@
 import os
 import sys
 import brukva
-import psycopg2
-import psycopg2.extensions
 import pymongo
 import json
 
@@ -12,8 +10,8 @@ import operator
 import binascii
 
 from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
-                      TaskService)
-from core.models import Datasource
+                      TaskService, generate_table_name_key)
+from core.models import Datasource, DatasourceMetaKeys
 from django.conf import settings
 
 from djcelery import celery
@@ -110,10 +108,16 @@ def load_data(user_id, task_id):
     if task['name'] == 'etl:load_data:mongo':
         load_data_mongo(user_id, task_id, task['data'], task['source'])
     elif task['name'] == 'etl:load_data:database':
-        load_data_database(user_id, task_id, task['data'], task['source'])
+        load_data_database(task['data'], task['source'])
 
 
-def load_data_database(user_id, task_id, data, source_dict):
+def load_data_database(data, source_dict):
+    """Загрузка данных во временное хранилище
+
+    Args:
+        data(dict): Данные
+        source_dict(dict): Словарь с параметрами источника
+    """
 
     print 'load_data_database'
 
@@ -145,10 +149,7 @@ def load_data_database(user_id, task_id, data, source_dict):
         col_names_create.append('"{0}__{1}" {2}'.format(t, c, col_types[dotted]))
 
     # название новой таблицы
-    key = binascii.crc32(
-        reduce(operator.add,
-               [source.host, str(source.port),
-                str(source.user_id), cols_str], ''))
+    key = generate_table_name_key(source, cols_str)
 
     table_key = get_table_key(key)
 
@@ -192,8 +193,10 @@ def load_data_database(user_id, task_id, data, source_dict):
 
     while rows:
         try:
-            # приходит [(1, 'name'), ...], преобразуем в [{0: 1, 1: 'name'}, ...]
-            dicted = map(lambda x: {str(k): v for (k, v) in izip(xrange(len_), x)}, rows)
+            # приходит [(1, 'name'), ...],
+            # преобразуем в [{0: 1, 1: 'name'}, ...]
+            dicted = map(
+                lambda x: {str(k): v for (k, v) in izip(xrange(len_), x)}, rows)
 
             cursor.executemany(insert_query, dicted)
         except Exception:
@@ -211,8 +214,14 @@ def load_data_database(user_id, task_id, data, source_dict):
             rows = rows_cursor.fetchall()
 
     # работа с datasource_meta
-    DataSourceService.update_datasource_meta(
+
+    datasource_meta = DataSourceService.update_datasource_meta(
         table_key, source, cols, tables_info_for_meta, last_row)
+
+    DatasourceMetaKeys.objects.get_or_create(
+        meta=datasource_meta,
+        value=key,
+    )
 
 
 # write in console: python manage.py celery -A etl.tasks worker
