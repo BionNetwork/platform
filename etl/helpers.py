@@ -238,6 +238,22 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
+    def get_explain_result(self, explain_row):
+        """
+        запрос получения количества строк в селект запросе
+        :param explain_row: str (explain + запрос)
+        :raise NotImplementedError:
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def get_select_query():
+        """
+        возвращает селект запрос
+        :return: str
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
 
 class Postgresql(Database):
     """Управление источником данных Postgres"""
@@ -279,6 +295,34 @@ class Postgresql(Database):
                       sorted(records, key=lambda y: y[0]))
 
         return records
+
+    def get_structure_rows_number(self, structure, cols):
+
+        """
+        возвращает примерное кол-во строк в запросе для планирования
+        :param structure:
+        :param cols:
+        :return:
+        """
+        separator = self.get_separator()
+        query_join = self.generate_join(structure)
+
+        pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
+            '{table}', '{col}', sep=separator)
+        cols_str = ', '.join(
+            [pre_cols_str.format(**x) for x in cols])
+
+        select_query = self.get_select_query().format(
+            cols_str, query_join)
+
+        explain_query = 'explain analyze ' + select_query
+        records = self.get_query_result(explain_query)
+        data = records[0][0].split()
+        count = None
+        for d in data:
+            if d.startswith('rows='):
+                count = d
+        return int(count[5:])
 
     @staticmethod
     def _get_columns_query(source, tables):
@@ -401,10 +445,19 @@ class Postgresql(Database):
     @staticmethod
     def get_rows_query():
         """
-        возвращает селект запрос
+        возвращает селект запрос c лимитом, оффсетом
         :return: str
         """
         query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query
+
+    @staticmethod
+    def get_select_query():
+        """
+        возвращает селект запрос
+        :return: str
+        """
+        query = "SELECT {0} FROM {1};"
         return query
 
     @staticmethod
@@ -456,7 +509,9 @@ class Mysql(Database):
             connection = {'db': str(conn_info['db']), 'host': str(conn_info['host']),
                           'port': int(conn_info['port']),
                           'user': str(conn_info['login']),
-                          'passwd': str(conn_info['password'])}
+                          'passwd': str(conn_info['password']),
+                          'use_unicode': True,
+                          }
             conn = MySQLdb.connect(**connection)
         except MySQLdb.OperationalError:
             return None
@@ -484,6 +539,42 @@ class Mysql(Database):
         records = map(lambda x: {'name': x[0], }, records)
 
         return records
+
+    def get_structure_rows_number(self, structure, cols):
+
+        """
+        возвращает примерное кол-во строк в запросе для планирования
+        :param structure:
+        :param cols:
+        :return:
+        """
+        separator = self.get_separator()
+        query_join = self.generate_join(structure)
+
+        pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
+            '{table}', '{col}', sep=separator)
+        cols_str = ', '.join(
+            [pre_cols_str.format(**x) for x in cols])
+
+        select_query = self.get_select_query()
+
+        explain_query = 'explain ' + select_query.format(
+            cols_str, query_join)
+
+        records = self.get_query_result(explain_query)
+        total = 1
+        for rec in records:
+            total *= int(rec[8])
+        # если total меньше 100000, то делаем count запрос
+        # иначе возвращаем перемноженное кол-во в каждой строке,
+        # возвращенной EXPLAIN-ом
+        if total < 100000:
+            rows_count_query = select_query.format(
+                'count(1) ', query_join)
+            records = self.get_query_result(rows_count_query)
+            # records = ((100L,),)
+            return int(records[0][0])
+        return total
 
     @staticmethod
     def _get_columns_query(source, tables):
@@ -604,10 +695,19 @@ class Mysql(Database):
     @staticmethod
     def get_rows_query():
         """
-        возвращает селект запрос
+        возвращает селект запрос c лимитом, оффсетом
         :return: str
         """
         query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query
+
+    @staticmethod
+    def get_select_query():
+        """
+        возвращает селект запрос
+        :return: str
+        """
+        query = "SELECT {0} FROM {1};"
         return query
 
     @staticmethod
@@ -822,6 +922,18 @@ class DatabaseService(object):
     def get_separator(cls, source):
         instance = cls.get_source_instance(source)
         return instance.get_separator()
+
+    @classmethod
+    def get_structure_rows_number(cls, source, structure, cols):
+        """
+        возвращает примерное кол-во строк в запросе селекта для планирования
+        :param source:
+        :param structure:
+        :param cols:
+        :return:
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_structure_rows_number(structure, cols)
 
 
 class Node(object):
@@ -2235,6 +2347,18 @@ class DataSourceService(object):
         source_meta.fields = json.dumps(fields)
         source_meta.stats = json.dumps(stats)
         source_meta.save()
+
+    @classmethod
+    def get_structure_rows_number(cls, source, structure,  cols):
+        """
+        возвращает примерное кол-во строк в запросе селекта для планирования
+        :param source:
+        :param structure:
+        :param cols:
+        :return:
+        """
+        return DatabaseService.get_structure_rows_number(
+            source, structure,  cols)
 
 
 class TaskService:

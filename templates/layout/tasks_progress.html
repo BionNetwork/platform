@@ -1,5 +1,5 @@
 
-<h3 class="control-sidebar-heading">Tasks Progress</h3>
+<h3 class="control-sidebar-heading">Таблица Загрузок</h3>
 <ul class="control-sidebar-menu" id="user_tasks_bar"
     data-url="{% url "etl:datasources.user_tasks" %}" data-host="{{socket_url}}">
 </ul>
@@ -9,7 +9,7 @@
         <li>
             <a href="javascript::;">
                 <h4 class="control-sidebar-subheading">
-                    Task # <%= taskId %>
+                    Загрузка
                     <span class="label label-danger pull-right" id="task-text-<%= taskId %>">0%</span>
                 </h4>
 

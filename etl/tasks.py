@@ -5,6 +5,7 @@ import sys
 import brukva
 import psycopg2
 import psycopg2.extensions
+import time
 import pymongo
 import json
 
@@ -118,10 +119,7 @@ def load_data_database(user_id, task_id, data, source_dict):
     print 'load_data_database'
 
     # сокет канал
-    # chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
-    # for i in range(1, 11):
-    # client.publish(chanel, 10*10)
-    # time.sleep(2)
+    chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
 
     cols = json.loads(data['cols'])
     col_types = json.loads(data['col_types'])
@@ -154,6 +152,10 @@ def load_data_database(user_id, task_id, data, source_dict):
 
     rows_query = DataSourceService.get_rows_query_for_loading_task(
             source, structure,  cols)
+
+    # общее количество строк в запросе
+    max_rows_count = DataSourceService.get_structure_rows_number(
+        source, structure,  cols)
 
     # инстанс подключения к локальному хранилищу данных
     local_instance = DataSourceService.get_local_instance()
@@ -190,6 +192,19 @@ def load_data_database(user_id, task_id, data, source_dict):
 
     last_row = None
 
+    l = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+
+    if max_rows_count <= l:
+        range_ = 100
+    else:
+        float_max = float(max_rows_count)
+        part = max_rows_count / l + 1 if float_max % l else max_rows_count / l
+        range_ = 100 / part
+
+    percent_count = 0
+    was_error = False
+    up_to_100 = False
+
     while rows:
         try:
             # приходит [(1, 'name'), ...], преобразуем в [{0: 1, 1: 'name'}, ...]
@@ -200,6 +215,7 @@ def load_data_database(user_id, task_id, data, source_dict):
             # FIXME обработать еррор
             print 'Exception'
             rows = []
+            was_error = True
         else:
             # коммитим пачку в бд
             connection.commit()
@@ -209,6 +225,19 @@ def load_data_database(user_id, task_id, data, source_dict):
             offset += limit
             rows_cursor.execute(rows_query.format(limit, offset))
             rows = rows_cursor.fetchall()
+
+            #fixme check more 100
+            percent_count += range_
+            time.sleep(1)
+
+            if percent_count >= 100:
+                up_to_100 = True
+                client.publish(chanel, 100)
+            else:
+                client.publish(chanel, percent_count)
+    time.sleep(1)
+    if not was_error and not up_to_100:
+        client.publish(chanel, 100)
 
     # работа с datasource_meta
     DataSourceService.update_datasource_meta(
