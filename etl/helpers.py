@@ -1455,7 +1455,7 @@ class RedisSourceService(object):
         return json.loads(r_server.get(str_active_tree))
 
     @classmethod
-    def insert_tree(cls, structure, ordered_nodes, source, n=True):
+    def insert_tree(cls, structure, ordered_nodes, source, update_joins=True):
         """
         сохраняем полную инфу о дереве
         :param structure:
@@ -1504,13 +1504,13 @@ class RedisSourceService(object):
                 new_actives.append({'name': n_val, 'order': order})
 
             # добавляем инфу новых джойнов
-            joins = node.get_node_joins_info()
-            if n:
+            if update_joins:
+                joins = node.get_node_joins_info()
                 for k, v in joins.iteritems():
                     joins_in_redis[k] += v
 
         pipe.set(str_active_tables, json.dumps(new_actives))
-        if n:
+        if update_joins:
             pipe.set(str_joins, json.dumps(joins_in_redis))
 
         pipe.execute()
@@ -1616,69 +1616,32 @@ class RedisSourceService(object):
         """
         str_active_tables = RedisCacheKeys.get_active_tables(
             source.user_id, source.id)
+        str_remain = RedisCacheKeys.get_source_remain(
+            source.user_id, source.id)
         str_table = RedisCacheKeys.get_active_table(
             source.user_id, source.id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
-        str_joins = RedisCacheKeys.get_source_joins(source.user_id, source.id)
 
         err_msg = 'Истекло время хранения ключей в редисе!'
 
         if (not r_server.exists(str_active_tables) or
-                not r_server.exists(str_joins)):
+                not r_server.exists(str_remain)):
             raise Exception(err_msg)
+
+        wo_bind_columns = json.loads(r_server.get(str_table_by_name.format(
+            without_bind_table)))['columns']
 
         actives = json.loads(r_server.get(str_active_tables))
 
-        # колонки таблицы папы
         parent_columns = json.loads(r_server.get(str_table.format(
-                cls.get_order_from_actives(parent_table, actives)
-            )))['columns']
+            cls.get_order_from_actives(parent_table, actives)
+        )))['columns']
 
-        # достаем для случая, когда есть неправильные ждойны
-        r_joins = json.loads(r_server.get(str_joins))
-
-        err_joins = []
-        # если 2 таблицы выбраны без связей, то r_joins пустой,
-        # если биндим последнюю таблицу без связи,то parent_table not in r_joins
-        if r_joins and parent_table in r_joins:
-            parent_joins = r_joins[parent_table]
-            err_joins = [x for x in parent_joins if (
-                x['right']['table'] == without_bind_table and 'error_join' in x)]
-
-        if err_joins:
-            good_joins = [x for x in parent_joins if (
-                x['right']['table'] == without_bind_table and 'join' in x)]
-
-            if r_server.exists(str_table_by_name.format(without_bind_table)):
-                wo_bind_columns = json.loads(r_server.get(str_table_by_name.format(
-                    without_bind_table)))['columns']
-            else:
-                wo_bind_columns = json.loads(r_server.get(str_table.format(
-                    cls.get_order_from_actives(without_bind_table, actives)
-                )))['columns']
-
-            for j in err_joins:
-                j['join'] = j['error_join']
-                del j['error_join']
-
-            return {
-                without_bind_table: [x['name'] for x in wo_bind_columns],
-                parent_table: [x['name'] for x in parent_columns],
-                'has_error_joins': True,
-                'joins': good_joins + err_joins,
-            }
-
-        # случай когда биндим таблицы без каких-либо связей
-        else:
-            wo_bind_columns = json.loads(r_server.get(str_table_by_name.format(
-                without_bind_table)))['columns']
-
-            return {
-                without_bind_table: [x['name'] for x in wo_bind_columns],
-                parent_table: [x['name'] for x in parent_columns],
-                'without_bind': True,
-            }
+        return {
+            without_bind_table: [x['name'] for x in wo_bind_columns],
+            parent_table: [x['name'] for x in parent_columns],
+        }
 
     @classmethod
     def get_columns_for_tables_with_bind(
@@ -1696,8 +1659,6 @@ class RedisSourceService(object):
             source.user_id, source.id, '{0}')
         str_joins = RedisCacheKeys.get_source_joins(
             source.user_id, source.id)
-        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
-            source.user_id, source.id, '{0}')
 
         err_msg = 'Истекло время хранения ключей!'
 
@@ -1711,23 +1672,19 @@ class RedisSourceService(object):
             cls.get_order_from_actives(parent_table, actives)
         )))['columns']
 
-        if r_server.exists(str_table_by_name.format(child_table)):
-            child_columns = json.loads(r_server.get(str_table_by_name.format(
-                child_table)))['columns']
-        else:
-            child_columns = json.loads(r_server.get(str_table.format(
-                cls.get_order_from_actives(child_table, actives)
-            )))['columns']
+        child_columns = json.loads(r_server.get(str_table.format(
+            cls.get_order_from_actives(child_table, actives)
+        )))['columns']
 
-        exist_joins = json.loads(r_server.get(str_joins))
-        parent_joins = exist_joins[parent_table]
-        child_joins = [x for x in parent_joins if x['right']['table'] == child_table]
+        # exist_joins = json.loads(r_server.get(str_joins))
+        # parent_joins = exist_joins[parent_table]
+        # child_joins = [x for x in parent_joins if x['right']['table'] == child_table]
 
         return {
             child_table: [x['name'] for x in child_columns],
             parent_table: [x['name'] for x in parent_columns],
-            'without_bind': False,
-            'joins': child_joins,
+            # 'without_bind': False,
+            # 'joins': child_joins,
         }
 
     @classmethod
@@ -1944,26 +1901,26 @@ class RedisSourceService(object):
 
     @classmethod
     def save_good_error_joins(cls, source, left_table, right_table,
-                         joins, error_joins, join_type):
+                              good_joins, error_joins, join_type):
         """
-        Сохраняет временные ошибочные джойны таблиц
+        Сохраняет временные ошибочные и нормальные джойны таблиц
         :param source: Datasource
         :param joins: list
         :param error_joins: list
         """
-
-
         str_joins = RedisCacheKeys.get_source_joins(source.user_id, source.id)
         r_joins = json.loads(r_server.get(str_joins))
 
         if left_table in r_joins:
             # старые связи таблицы папы
             old_left_joins = r_joins[left_table]
-            r_joins[left_table] = [j for j in old_left_joins if j['right']['table'] != right_table]
+            # меняем связи с right_table, а остальное оставляем
+            r_joins[left_table] = [j for j in old_left_joins
+                                   if j['right']['table'] != right_table]
         else:
             r_joins[left_table] = []
 
-        for j in joins:
+        for j in good_joins:
             l_c, j_val, r_c = j
             r_joins[left_table].append(
                 {
@@ -1973,23 +1930,46 @@ class RedisSourceService(object):
                 }
             )
 
-        for j in error_joins:
-            l_c, j_val, r_c = j
-            r_joins[left_table].append(
-                {
-                    'left': {'table': left_table, 'column': l_c},
-                    'right': {'table': right_table, 'column': r_c},
-                    'error_join': {'type': join_type, 'value': j_val},
-                }
-            )
+        if error_joins:
+            for j in error_joins:
+                l_c, j_val, r_c = j
+                r_joins[left_table].append(
+                    {
+                        'left': {'table': left_table, 'column': l_c},
+                        'right': {'table': right_table, 'column': r_c},
+                        'join': {'type': join_type, 'value': j_val},
+                        'error': 'types mismatch'
+                    }
+                )
         r_server.set(str_joins, json.dumps(r_joins))
 
-        return {'has_error_join': bool(error_joins), }
+        return {'has_error_joins': bool(error_joins), }
+
+    @classmethod
+    def get_good_error_joins(cls, source, parent_table, child_table):
+
+        r_joins = cls.get_source_joins(source.user_id, source.id)
+
+        good_joins = []
+        error_joins = []
+
+        # если 2 таблицы выбраны без связей, то r_joins пустой,
+        # если биндим последнюю таблицу без связи,то parent_table not in r_joins
+        if r_joins and parent_table in r_joins:
+            par_joins = r_joins[parent_table]
+            good_joins = [
+                j for j in par_joins if j['right']['table'] == child_table
+                and 'error' not in j]
+
+            error_joins = [
+                j for j in par_joins if j['right']['table'] == child_table
+                and 'error' in j and j['error'] == 'types mismatch']
+
+        return good_joins, error_joins
 
     @classmethod
     def get_source_joins(cls, user_id, source_id):
         str_joins = RedisCacheKeys.get_source_joins(user_id, source_id)
-
         return json.loads(r_server.get(str_joins))
 
     @classmethod
@@ -2136,40 +2116,61 @@ class DataSourceService(object):
 
             ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
             structure = TablesTree.get_tree_structure(sel_tree.root)
-            RedisSourceService.insert_tree(structure, ordered_nodes, source)
+            RedisSourceService.insert_tree(structure, ordered_nodes, source, update_joins=False)
 
     @classmethod
-    def get_columns_for_choices(cls, source, parent_table,
-                                child_table, is_without_bind):
+    def check_is_binding_remain(cls, source, child_table):
+        remain = RedisSourceService.get_last_remain(
+            source.user_id, source.id)
+        return remain == child_table
+
+    @classmethod
+    def get_columns_and_joins_for_join_window(
+            cls, source, parent_table, child_table, has_warning):
         """
-        список колонок таблиц для создания джойнов
+        список колонок и джойнов таблиц для окнв связей таблиц
         :param source:
         :param parent_table:
         :param child_table:
-        :param is_without_bind:
+        :param has_warning:
         :return:
         """
-        if is_without_bind:
-            data = RedisSourceService.get_columns_for_tables_without_bind(
-                source, parent_table, child_table)
-        else:
-            data = RedisSourceService.get_columns_for_tables_with_bind(
-                source, parent_table, child_table)
 
-        return data
+        is_binding_remain = cls.check_is_binding_remain(
+                source, child_table)
+
+        # если связываем проблемных и один из них последний(remain)
+        if has_warning and is_binding_remain:
+                columns = RedisSourceService.get_columns_for_tables_without_bind(
+                    source, parent_table, child_table)
+                good_joins, error_joins = RedisSourceService.get_good_error_joins(
+                    source, parent_table, child_table)
+
+        # если связываем непроблемных или таблицы в дереве,
+        # имеющие неправильные связи
+        else:
+            columns = RedisSourceService.get_columns_for_tables_with_bind(
+                source, parent_table, child_table)
+            good_joins, error_joins = RedisSourceService.get_good_error_joins(
+                    source, parent_table, child_table)
+
+        result = {'columns': columns,
+                  'good_joins': good_joins,
+                  'error_joins': error_joins,
+                  }
+        return result
 
     @classmethod
-    def save_new_joins(cls, source, left_table, right_table, join_type, joins):
+    def check_new_joins(cls, source, left_table, right_table, joins):
+        # избавление от дублей
         """
-        сохранение новых джойнов
+        проверяет пришедшие джойны на совпадение типов
         :param source:
         :param left_table:
         :param right_table:
-        :param join_type:
         :param joins:
         :return:
         """
-        # избавление от дублей
         joins_set = set()
         for j in joins:
             joins_set.add(tuple(j))
@@ -2188,28 +2189,52 @@ class DataSourceService(object):
             else:
                 good_joins.append(j)
 
-        # достаем структуру дерева из редиса
-        structure = RedisSourceService.get_active_tree_structure(source)
-        # строим дерево
-        sel_tree = TablesTree.build_tree_by_structure(structure)
-        TablesTree.update_node_joins(
-            sel_tree, left_table, right_table, join_type, joins)
+        return good_joins, error_joins, joins_set
 
-        # сохраняем дерево
-        ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
-        structure = TablesTree.get_tree_structure(sel_tree.root)
-        RedisSourceService.insert_tree(structure, ordered_nodes, source, n=False)
+    @classmethod
+    def save_new_joins(cls, source, left_table, right_table, join_type, joins):
+        """
+        сохранение новых джойнов
+        :param source:
+        :param left_table:
+        :param right_table:
+        :param join_type:
+        :param joins:
+        :return:
+        """
+        # joins_set избавляет от дублей
+        good_joins, error_joins, joins_set = cls.check_new_joins(
+            source, left_table, right_table, joins)
 
         data = RedisSourceService.save_good_error_joins(
-            source, left_table, right_table, good_joins, error_joins, join_type)
+            source, left_table, right_table,
+            good_joins, error_joins, join_type)
 
-        remain = RedisSourceService.get_last_remain(
-            source.user_id, source.id)
+        if not error_joins:
+            # достаем структуру дерева из редиса
+            structure = RedisSourceService.get_active_tree_structure(source)
+            # строим дерево
+            sel_tree = TablesTree.build_tree_by_structure(structure)
+            TablesTree.update_node_joins(
+                sel_tree, left_table, right_table, join_type, joins_set)
 
-        if remain and remain == right_table:
-            # удаляем инфу о таблице без связи, если она есть
-            RedisSourceService.delete_last_remain(source)
+            # сохраняем дерево
+            ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
+            structure = TablesTree.get_tree_structure(sel_tree.root)
+            RedisSourceService.insert_tree(
+                structure, ordered_nodes, source, update_joins=False)
 
+            # если совсем нет ошибок ни у кого, то на клиенте перерисуем дерево,
+            # на всякий пожарный
+            data['draw_table'] = RedisSourceService.get_final_info(
+                ordered_nodes, source)
+
+            # работа с последней таблицей
+            remain = RedisSourceService.get_last_remain(
+                source.user_id, source.id)
+            if remain == right_table:
+                # удаляем инфу о таблице без связи, если она есть
+                RedisSourceService.delete_last_remain(source)
 
         return data
 

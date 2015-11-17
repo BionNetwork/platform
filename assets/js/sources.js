@@ -460,10 +460,14 @@ function refreshData(url){
 }
 
 function insertJoinRows(data, parent, child, joinRows){
-    $.each(data.joins, function(i, join){
+
+    // правильные и неправильные джойны
+    var concatJoins = data.good_joins.concat(data.error_joins);
+
+    $.each(concatJoins, function(i, join){
         var newRow = joinWinRow({
-            parentCols: data[parent],
-            childCols: data[child],
+            parentCols: data.columns[parent],
+            childCols: data.columns[child],
             i: i
         });
         joinRows.append($(newRow));
@@ -482,7 +486,7 @@ function showJoinWindow(url, parent, child, isWithoutBind){
     info['child_bind'] = child;
 
     var warn = $('#table-part-'+child+'>div:first').find('.without_bind');
-    info['is_without_bind'] = warn.length ? true : false;
+    info['has_warning'] = warn.length ? true : false;
 
     $.get(url, info, function(res){
         if (res.status == 'error') {
@@ -495,17 +499,15 @@ function showJoinWindow(url, parent, child, isWithoutBind){
             joinRows.data('table-left', parent);
             joinRows.data('table-right', child);
 
-            if(data['has_error_joins']){
-                // правильные + неправильные джойны
-                insertJoinRows(data, parent, child, joinRows)
-            }
-            else if(data['without_bind']){
+            // последняя таблица без связей
+            if(!data.good_joins.length && !data.error_joins.length){
                 joinRows.append(joinWinRow({
-                    parentCols: data[parent],
-                    childCols: data[child],
+                    parentCols: data.columns[parent],
+                    childCols: data.columns[child],
                     i: 0
                 }));
-            } else {
+            }
+            else {
                 insertJoinRows(data, parent, child, joinRows)
             }
 
@@ -577,19 +579,26 @@ function saveJoins(url){
                 confirmAlert(res.message)
         } else {
             joinWin.modal('hide');
-            // имеются неправильные джоины
 
             var rightTableArea = $('#table-part-'+joinRows.data('table-right')+'>div:first'),
                    rel = rightTableArea.find('.relation'),
                    warn = $('<span class="without_bind" style="color:red;">!!!</span>');
 
-            if(res.data.has_error_join == true){
+            // если новые джойны неверны, добавляем красное, если еще не было
+            if(res.data.has_error_joins == true){
                 if(!rel.find('.without_bind').length){
                     rel.append(warn);
                 }
             }
-            else if(res.data.has_error_join == false){
+            // если новые джойны верны, удаляем красное
+            else { // res.data.has_error_joins == false
                 rightTableArea.find('.without_bind').remove();
+            }
+
+            // если совсем нет ошибок ни у кого, то перерисуем дерево,
+            // на всякий пожарный
+            if(!$('.without_bind').length){
+                drawTables(res.data.draw_table);
             }
         }
     });
