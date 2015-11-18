@@ -3,9 +3,6 @@
 import os
 import sys
 import brukva
-import psycopg2
-import psycopg2.extensions
-import time
 import pymongo
 import json
 
@@ -194,16 +191,8 @@ def load_data_database(user_id, task_id, data, source_dict):
 
     last_row = None
 
-    l = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-
-    if max_rows_count <= l:
-        range_ = 100
-    else:
-        float_max = float(max_rows_count)
-        part = max_rows_count / l + 1 if float_max % l else max_rows_count / l
-        range_ = int(round(100.0 / part))
-
-    percent_count = 0
+    settings_limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+    loaded_count = 0.0
     was_error = False
     up_to_100 = False
 
@@ -230,16 +219,16 @@ def load_data_database(user_id, task_id, data, source_dict):
             rows_cursor.execute(rows_query.format(limit, offset))
             rows = rows_cursor.fetchall()
 
-            #fixme check more 100
-            percent_count += range_
-            time.sleep(1)
+            loaded_count += settings_limit
 
-            if percent_count >= 100:
+            percent = int(round(loaded_count/max_rows_count*100))
+
+            if percent >= 100:
                 up_to_100 = True
                 client.publish(chanel, 100)
             else:
-                client.publish(chanel, percent_count)
-    time.sleep(1)
+                client.publish(chanel, percent)
+
     if not was_error and not up_to_100:
         client.publish(chanel, 100)
 
