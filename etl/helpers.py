@@ -111,7 +111,10 @@ class Database(object):
     def generate_join(self, structure, main_table=None):
         """
         Генерация соединения таблиц для реляционных источников
-        :type structure: dict
+
+        Args:
+            structure: dict структура для генерации
+            main_table: string основная таблица, участвующая в связях
         """
 
         separator = self.get_separator()
@@ -129,7 +132,7 @@ class Database(object):
 
             # присоединяем таблицу + ' ON '
             query_join += " " + '{sep}{table}{sep}'.format(
-                table=child['val'], sep=separator) + " ON "
+                table=child['val'], sep=separator) + " ON ("
 
             # список джойнов, чтобы перечислить через 'AND'
             joins_info = []
@@ -143,7 +146,7 @@ class Database(object):
                     joinElement['right']['table'], joinElement['right']['column']
                 )).format(sep=separator))
 
-            query_join += " AND ".join(joins_info)
+            query_join += " AND ".join(joins_info) + ")"
 
             # рекурсивно обходим остальные элементы
             query_join += self.generate_join(child, child['val'])
@@ -2217,7 +2220,7 @@ class DataSourceService(object):
             structure = RedisSourceService.get_active_tree_structure(source)
             # строим дерево
             sel_tree = TablesTree.build_tree_by_structure(structure)
-            print 'join_type1', join_type
+
             TablesTree.update_node_joins(
                 sel_tree, left_table, right_table, join_type, joins_set)
 
