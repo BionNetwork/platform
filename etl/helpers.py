@@ -124,25 +124,26 @@ class Database(object):
         else:
             query_join = ''
         for child in structure['childs']:
-            for joinElement in child['joins']:
-                left_table = joinElement['left']['table']
-                right_table = joinElement['right']['table']
-                # определяем таблицу для связи
-                if left_table == main_table:
-                    join_table = right_table
-                else:
-                    join_table = left_table
-                # определяем тип соединения
-                query_join += " " + JoinTypes.get_value(joinElement['join']['type'])
-                # присоединяем таблицу
-                query_join += " " + '{sep}{table}{sep}'.format(
-                    table=join_table, sep=separator)
+            # определяем тип соединения
+            query_join += " " + JoinTypes.get_value(child['join_type'])
 
-                query_join += (" ON {sep}%s{sep}.{sep}%s{sep} %s {sep}%s{sep}.{sep}%s{sep}" % (
+            # присоединяем таблицу + ' ON '
+            query_join += " " + '{sep}{table}{sep}'.format(
+                table=child['val'], sep=separator) + " ON "
+
+            # список джойнов, чтобы перечислить через 'AND'
+            joins_info = []
+
+            # определяем джойны
+            for joinElement in child['joins']:
+
+                joins_info.append(("{sep}%s{sep}.{sep}%s{sep} %s {sep}%s{sep}.{sep}%s{sep}" % (
                     joinElement['left']['table'], joinElement['left']['column'],
                     Operations.get_value(joinElement['join']['value']),
                     joinElement['right']['table'], joinElement['right']['column']
-                )).format(sep=separator)
+                )).format(sep=separator))
+
+            query_join += " AND ".join(joins_info)
 
             # рекурсивно обходим остальные элементы
             query_join += self.generate_join(child, child['val'])
@@ -1024,6 +1025,7 @@ class TablesTree(object):
             # меняем существующие связи
             node = childs[0]
             node.joins = []
+            node.join_type = join_type
 
         for came_join in joins:
             parent_col, oper, child_col = came_join
@@ -2215,6 +2217,7 @@ class DataSourceService(object):
             structure = RedisSourceService.get_active_tree_structure(source)
             # строим дерево
             sel_tree = TablesTree.build_tree_by_structure(structure)
+            print 'join_type1', join_type
             TablesTree.update_node_joins(
                 sel_tree, left_table, right_table, join_type, joins_set)
 
