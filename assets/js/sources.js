@@ -210,8 +210,8 @@ function getColumns(url, dict) {
 function hasWithoutBinds(){
     // если есть талица без связи, то внимание
     if($('.without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+        confirmAlert('Обнаружены ошибки в связях! '+
+        'Выберите правильную связь у таблицы, либо удалите ее!');
         return true;
     }
     return false;
