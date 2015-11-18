@@ -461,14 +461,12 @@ function refreshData(url){
 
 function insertJoinRows(data, parent, child, joinRows){
 
-    // правильные и неправильные джойны
-    var concatJoins = data.good_joins.concat(data.error_joins);
-
-    $.each(concatJoins, function(i, join){
+    $.each(data.good_joins, function(i, join){
         var newRow = joinWinRow({
             parentCols: data.columns[parent],
             childCols: data.columns[child],
-            i: i
+            i: i,
+            error: false
         });
         joinRows.append($(newRow));
         $('[name="joinradio"][value='+join['join']['type']+']').prop('checked', true);
@@ -476,6 +474,26 @@ function insertJoinRows(data, parent, child, joinRows){
         $('.with-select-'+i).find('select[name="parent"]').val(join['left']['column']);
         $('.with-select-'+i).find('select[name="child"]').val(join['right']['column']);
         $('.with-select-'+i).find('select[name="joinType"]').val(join['join']['value']);
+    });
+
+    var goodLen = data.good_joins.length;
+
+    $.each(data.error_joins, function(i, join){
+
+        var j = i + goodLen;
+
+        var newRow = joinWinRow({
+            parentCols: data.columns[parent],
+            childCols: data.columns[child],
+            i: j,
+            error: true
+        });
+        joinRows.append($(newRow));
+        $('[name="joinradio"][value='+join['join']['type']+']').prop('checked', true);
+
+        $('.with-select-'+j).find('select[name="parent"]').val(join['left']['column']);
+        $('.with-select-'+j).find('select[name="child"]').val(join['right']['column']);
+        $('.with-select-'+j).find('select[name="joinType"]').val(join['join']['value']);
     });
 }
 
@@ -537,7 +555,8 @@ function addNewJoin(){
     joinRows.append(joinWinRow({
         parentCols: parentCols,
         childCols: childCols,
-        i: 0
+        i: 0,
+        error: false
     }));
 }
 
@@ -565,6 +584,17 @@ function saveJoins(url){
         });
         joinsArray.push(vals);
     });
+
+    var joinsSet = new Set();
+    // избавляемся от дублей джойнов
+    $.each(joinsArray, function(i, row){
+        joinsSet.add(row[0]+row[2]);
+    });
+
+    if(joinsArray.length != joinsSet.size){
+        confirmAlert('Имеются дубли среди связей, пожалуйста удалите лишнее!');
+        return;
+    }
 
     var joinRows = $('#joinRows'),
         info = getSourceInfo();
