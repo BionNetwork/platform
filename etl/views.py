@@ -286,10 +286,10 @@ class GetColumnsForChoicesView(BaseEtlView):
     def start_get_action(self, request, source):
         parent_table = request.GET.get('parent')
         child_table = request.GET.get('child_bind')
-        is_without_bind = json.loads(request.GET.get('is_without_bind'))
+        has_warning = json.loads(request.GET.get('has_warning'))
 
-        data = helpers.DataSourceService.get_columns_for_choices(
-            source, parent_table, child_table, is_without_bind)
+        data = helpers.DataSourceService.get_columns_and_joins_for_join_window(
+            source, parent_table, child_table, has_warning)
 
         return data
 

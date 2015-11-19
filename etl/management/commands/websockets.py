@@ -10,6 +10,7 @@ from tornado import ioloop
 from tornado.web import Application
 from tornado.websocket import WebSocketHandler
 
+
 class Command(BaseCommand):
 
     def handle(self, *args, **options):
@@ -39,7 +40,6 @@ class Command(BaseCommand):
                 self.client.listen(self.on_messages_published)
 
             def on_messages_published(self, message):
-                print message.body
                 self.write_message(message.body)
 
             def on_close(self):
