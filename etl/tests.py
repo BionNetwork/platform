@@ -29,7 +29,7 @@ class DatabaseTest(TestCase):
                      'val': 'billing_bank_packet_status'}
         join_query = self.database.generate_join(structure)
         expected_join_query = ('"billing_bank_packet_status" INNER JOIN "billing_bank_packet" ON '
-                               '"billing_bank_packet_status"."id" = "billing_bank_packet"."billing_bank_packet_status_id"')
+                               '("billing_bank_packet_status"."id" = "billing_bank_packet"."billing_bank_packet_status_id")')
         self.assertEqual(expected_join_query, join_query)
 
     def test_generate_join_multiple_tables(self):
@@ -87,9 +87,9 @@ class DatabaseTest(TestCase):
         }
         join_query = self.database.generate_join(structure)
         expected_join_query = ('"billing_bank_packet_status" INNER JOIN "billing_bank_packet" ON '
-                               '"billing_bank_packet_status"."id" = "billing_bank_packet"."billing_bank_packet_status_id" '
+                               '("billing_bank_packet_status"."id" = "billing_bank_packet"."billing_bank_packet_status_id") '
                                'INNER JOIN "billing_bank_packet_operation" ON '
-                               '"billing_bank_packet_operation"."billing_bank_packet_id" = "billing_bank_packet"."id"')
+                               '("billing_bank_packet_operation"."billing_bank_packet_id" = "billing_bank_packet"."id")')
         self.assertEqual(expected_join_query, join_query)
 
     def test_statistic(self):
