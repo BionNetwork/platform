@@ -112,7 +112,7 @@
                         <div class="col-md-3" style="height:550px; overflow-y: auto;">
                             <h3>База данных</h3>
                             <div class="row">
-                                <div class="col-md-12">
+                                <div class="">
                                     <div class="panel-group" id="databases" role="tablist">
                                     </div>
                                 </div>
@@ -277,7 +277,7 @@
                                    onclick="checkTable('<%= table.name %>')">&nbsp;&nbsp;
                                 <a class="collapsed fa fa-table" data-toggle="collapse"
                                     onclick="setActive('<%= table.name %>')">
-                                    <%= table.display %>
+                                    <%= table.name %>
                                 </a>
                         </div>
                     <% }); %>

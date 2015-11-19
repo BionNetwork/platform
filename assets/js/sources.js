@@ -102,8 +102,6 @@ function getConnectionData(dataUrl, closingUrl){
     $.get(dataUrl,
         {csrfmiddlewaretoken: csrftoken},
         function(res){
-            _.each(res.data.tables,
-                function(el){el['display'] = el['name'].substr(0, 21);});
 
             var rowsTemplate = _.template($('#database-rows').html());
 
