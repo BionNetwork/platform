@@ -358,5 +358,7 @@ class GetUserTasksView(BaseView):
         Cписок юзеровских тасков
     """
     def get(self, request, *args, **kwargs):
-        user_tasks = helpers.RedisSourceService.get_user_tasks(request.user.id)
-        return self.json_response({'userId': request.user.id, 'tasks': user_tasks})
+        user_task_ids = helpers.RedisSourceService.get_user_postgres_processing_task_ids(
+            request.user.id)
+        return self.json_response(
+            {'userId': request.user.id, 'tasks': user_task_ids})

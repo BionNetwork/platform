@@ -22,7 +22,20 @@ from .maps import mysql as mysql_map
 from core.models import Datasource, DatasourceMeta
 
 
-class JoinTypes(object):
+class BaseEnum(object):
+    """
+        Базовый класс для перечислений
+    """
+    values = {}
+
+    @classmethod
+    def get_value(cls, key):
+        if key not in cls.values:
+            raise ValueError("Unknown key provided " + key)
+        return cls.values[key]
+
+
+class JoinTypes(BaseEnum):
 
     INNER, LEFT, RIGHT = ('inner', 'left', 'right')
 
@@ -31,12 +44,6 @@ class JoinTypes(object):
         LEFT: "LEFT JOIN",
         RIGHT: "RIGHT JOIN",
     }
-
-    @staticmethod
-    def get_value(join_type):
-        if join_type not in JoinTypes.values:
-            raise ValueError("Unknown join type provided " + join_type)
-        return JoinTypes.values[join_type]
 
 
 class Operations(object):
@@ -507,7 +514,8 @@ class Mysql(Database):
         :return: connection
         """
         try:
-            connection = {'db': str(conn_info['db']), 'host': str(conn_info['host']),
+            connection = {'db': str(conn_info['db']),
+                          'host': str(conn_info['host']),
                           'port': int(conn_info['port']),
                           'user': str(conn_info['login']),
                           'passwd': str(conn_info['password']),
@@ -1967,7 +1975,34 @@ class RedisSourceService(object):
         key = RedisCacheKeys.get_user_task_list(user_id)
         storage = RedisStorage(r_server)
         tasks = storage.get_dict(key)
+        return tasks
+
+    @classmethod
+    def get_user_task_ids(cls, user_id):
+        """
+        список id задач юзера
+        :param user_id:
+        :return:
+        """
+        tasks = cls.get_user_tasks(user_id)
         return list(tasks)
+
+    @classmethod
+    def get_user_postgres_processing_task_ids(cls, user_id):
+        """
+        список id тасков для постгреса, которые в данный момент в обработке
+        :param user_id:
+        :return:
+        """
+        tasks_ids = []
+        tasks = cls.get_user_tasks(user_id)
+
+        for (task_id, task_info) in tasks.iteritems():
+            if (task_info['name'] == 'etl:load_data:database' and
+                        task_info['status_id'] == TaskStatusEnum.PROCESSING):
+                tasks_ids.append(task_id)
+
+        return tasks_ids
 
     @staticmethod
     def get_user_task_by_id(user_id, task_id):
@@ -1978,6 +2013,24 @@ class RedisSourceService(object):
         if task_id not in tasks:
             return None
         return tasks[task_id]
+
+    @classmethod
+    def update_task_status(cls, user_id, task_id, status_id,
+                           error_code=None, error_msg=None):
+        """
+            Меняем статусы тасков
+        """
+        tasks = cls.get_user_tasks(user_id)
+        task_dict = tasks[task_id]
+        task_dict['status_id'] = status_id
+
+        if status_id == TaskStatusEnum.ERROR:
+            task_dict['error'] = {
+                'code': error_code,
+                'message': error_msg,
+            }
+
+        tasks[task_id] = task_dict
 
     @classmethod
     def get_next_user_collection_counter(cls, user_id, source_id):
@@ -2370,6 +2423,21 @@ class DataSourceService(object):
             source, structure,  cols)
 
 
+class TaskStatusEnum(BaseEnum):
+    """
+        Статусы тасков пользователя
+    """
+    IDLE, PROCESSING, ERROR, DONE, DELETED = range(1, 6)
+
+    values = {
+        IDLE: " В ожидании",
+        PROCESSING: "В обработке",
+        ERROR: "Ошибка",
+        DONE: "Выполнено",
+        DELETED: "Удалено",
+    }
+
+
 class TaskService:
     """
     Добавление новых задач в очередь
@@ -2395,6 +2463,7 @@ class TaskService:
                     'meta_info': data['meta_info'],
                 },
                 'source': source_dict,
+                'status_id': TaskStatusEnum.IDLE,
                 }
 
         RedisSourceService.add_user_task(user_id, task_id, task)

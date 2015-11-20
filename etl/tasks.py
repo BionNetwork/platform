@@ -8,9 +8,10 @@ import json
 
 import operator
 import binascii
+from psycopg2 import errorcodes
 
 from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
-                      TaskService, generate_table_name_key)
+                      TaskService, generate_table_name_key, TaskStatusEnum)
 from core.models import Datasource, DatasourceMetaKeys
 from django.conf import settings
 
@@ -78,6 +79,14 @@ def load_data_mongo(user_id, task_id, data, source):
     instance = DataSourceService.get_source_connection(source_model)
     page = 1
     limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+
+    # меняем статус задачи на 'В обработке'
+    RedisSourceService.update_task_status(
+        user_id, task_id, TaskStatusEnum.PROCESSING)
+
+    was_error = False
+    err_msg = ''
+
     while True:
         query_load = query.format(limit, (page-1)*limit)
         cursor = instance.cursor()
@@ -96,8 +105,21 @@ def load_data_mongo(user_id, task_id, data, source):
             collection.insert_many(data_to_insert, ordered=False)
             print 'inserted %d rows to mongo' % len(data_to_insert)
         except Exception as e:
+            was_error = True
+            # fixme перезаписывается при каждой ошибке
+            err_msg = e.message
             print "Unexpected error:", type(e), e
         page += 1
+
+    if was_error:
+        # меняем статус задачи на 'Ошибка'
+        RedisSourceService.update_task_status(
+            user_id, task_id, TaskStatusEnum.ERROR,
+            error_code='1050', error_msg=err_msg)
+    else:
+        # меняем статус задачи на 'Выполнено'
+        RedisSourceService.update_task_status(
+            user_id, task_id, TaskStatusEnum.DONE, )
 
 
 @celery.task(name='etl.tasks.load_data')
@@ -105,10 +127,12 @@ def load_data(user_id, task_id):
 
     task = RedisSourceService.get_user_task_by_id(user_id, task_id)
 
-    if task['name'] == 'etl:load_data:mongo':
-        load_data_mongo(user_id, task_id, task['data'], task['source'])
-    elif task['name'] == 'etl:load_data:database':
-        load_data_database(user_id, task_id, task['data'], task['source'])
+    # обрабатываем таски со статусом 'В ожидании'
+    if task['status_id'] == TaskStatusEnum.IDLE:
+        if task['name'] == 'etl:load_data:mongo':
+            load_data_mongo(user_id, task_id, task['data'], task['source'])
+        elif task['name'] == 'etl:load_data:database':
+            load_data_database(user_id, task_id, task['data'], task['source'])
 
 
 def load_data_database(user_id, task_id, data, source_dict):
@@ -196,6 +220,10 @@ def load_data_database(user_id, task_id, data, source_dict):
     was_error = False
     up_to_100 = False
 
+    # меняем статус задачи на 'В обработке'
+    RedisSourceService.update_task_status(
+        user_id, task_id, TaskStatusEnum.PROCESSING)
+
     while rows:
         try:
             # приходит [(1, 'name'), ...],
@@ -204,11 +232,26 @@ def load_data_database(user_id, task_id, data, source_dict):
                 lambda x: {str(k): v for (k, v) in izip(xrange(len_), x)}, rows)
 
             cursor.executemany(insert_query, dicted)
-        except Exception:
-            # FIXME обработать еррор
+        except Exception as e:
+            err_msg = ''
+            err_code = '1050'
+
+            # код и сообщение ошибки
+            pg_code = getattr(e, 'pgcode', None)
+            if pg_code is not None:
+                err_code = pg_code
+                err_msg = errorcodes.lookup(pg_code) + ': '
+
+            err_msg += e.message
+
             print 'Exception'
             rows = []
             was_error = True
+
+            # меняем статус задачи на 'Ошибка'
+            RedisSourceService.update_task_status(
+                user_id, task_id, TaskStatusEnum.ERROR,
+                error_code=err_code, error_msg=err_msg)
         else:
             # коммитим пачку в бд
             connection.commit()
@@ -228,6 +271,11 @@ def load_data_database(user_id, task_id, data, source_dict):
                 client.publish(chanel, 100)
             else:
                 client.publish(chanel, percent)
+
+    if not was_error:
+        # меняем статус задачи на 'Выполнено'
+        RedisSourceService.update_task_status(
+            user_id, task_id, TaskStatusEnum.DONE, )
 
     if not was_error and not up_to_100:
         client.publish(chanel, 100)
