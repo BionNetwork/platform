@@ -11,7 +11,8 @@ import binascii
 from psycopg2 import errorcodes
 
 from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
-                      TaskService, generate_table_name_key, TaskStatusEnum)
+                      TaskService, generate_table_name_key, TaskStatusEnum,
+                      TaskErrorCodeEnum)
 from core.models import Datasource, DatasourceMetaKeys
 from django.conf import settings
 
@@ -115,7 +116,7 @@ def load_data_mongo(user_id, task_id, data, source):
         # меняем статус задачи на 'Ошибка'
         RedisSourceService.update_task_status(
             user_id, task_id, TaskStatusEnum.ERROR,
-            error_code='1050', error_msg=err_msg)
+            error_code=TaskErrorCodeEnum.DEFAULT_CODE, error_msg=err_msg)
     else:
         # меняем статус задачи на 'Выполнено'
         RedisSourceService.update_task_status(
@@ -234,7 +235,7 @@ def load_data_database(user_id, task_id, data, source_dict):
             cursor.executemany(insert_query, dicted)
         except Exception as e:
             err_msg = ''
-            err_code = '1050'
+            err_code = TaskErrorCodeEnum.DEFAULT_CODE
 
             # код и сообщение ошибки
             pg_code = getattr(e, 'pgcode', None)
@@ -245,13 +246,14 @@ def load_data_database(user_id, task_id, data, source_dict):
             err_msg += e.message
 
             print 'Exception'
-            rows = []
             was_error = True
 
             # меняем статус задачи на 'Ошибка'
             RedisSourceService.update_task_status(
                 user_id, task_id, TaskStatusEnum.ERROR,
                 error_code=err_code, error_msg=err_msg)
+
+            break
         else:
             # коммитим пачку в бд
             connection.commit()

@@ -1994,7 +1994,7 @@ class RedisSourceService(object):
         return list(tasks)
 
     @classmethod
-    def get_user_postgres_processing_task_ids(cls, user_id):
+    def get_user_database_task_ids(cls, user_id, status_id):
         """
         список id тасков для постгреса, которые в данный момент в обработке
         :param user_id:
@@ -2005,7 +2005,7 @@ class RedisSourceService(object):
 
         for (task_id, task_info) in tasks.iteritems():
             if (task_info['name'] == 'etl:load_data:database' and
-                        task_info['status_id'] == TaskStatusEnum.PROCESSING):
+                    task_info['status_id'] == status_id):
                 tasks_ids.append(task_id)
 
         return tasks_ids
@@ -2580,12 +2580,23 @@ class DataSourceService(object):
             source, structure,  cols)
 
 
+class TaskErrorCodeEnum(BaseEnum):
+    """
+        Коды ошибок тасков пользователя
+    """
+    DEFAULT_CODE = '1050'
+
+    values = {
+        DEFAULT_CODE: '1050',
+    }
+
+
 class TaskStatusEnum(BaseEnum):
     """
         Статусы тасков пользователя
     """
-    IDLE, PROCESSING, ERROR, DONE, DELETED = range(1, 6)
-
+    IDLE, PROCESSING, ERROR, DONE, DELETED = ('idle', 'processing', 'error',
+                                              'done', 'deleted', )
     values = {
         IDLE: " В ожидании",
         PROCESSING: "В обработке",
