@@ -136,6 +136,10 @@ class RemoveSourceView(BaseView):
 class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
+
+        from etl.models_test import model_test, create_fact
+        # model_test()
+        create_fact()
         try:
             helpers.DataSourceService.check_connection(request.POST)
             return self.json_response(
