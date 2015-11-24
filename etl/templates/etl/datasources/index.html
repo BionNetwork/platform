@@ -245,6 +245,9 @@
                     <% }); %>
                 </select>
             </div>
+            <% if(error){ %>
+                <span style="color:red;">Ошибка</span>
+            <% } %>
         </div>
     </script>
 
@@ -296,7 +299,7 @@
                     <a class="fa fa-exchange relation"
                        onclick="showJoinWindow('{% url "etl:datasources.cols_for_choices"%}',
                                                '<%= row.dest %>', '<%= row.tname %>', <%= row.without_bind %>)">
-                        <% if (row.without_bind) { %><span id="without_bind" style="color:red;">!!!</span><% } %>
+                        <% if (row.without_bind) { %><span class="without_bind" style="color:red;">!!!</span><% } %>
                     </a>
                 <% } %>
                 <div class="panel panel-default"

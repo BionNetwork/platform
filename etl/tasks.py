@@ -110,12 +110,11 @@ def load_data(user_id, task_id):
     if task['name'] == 'etl:load_data:mongo':
         load_data_mongo(user_id, task_id, task['data'], task['source'])
     elif task['name'] == 'etl:load_data:database':
-        load_data_database(user_id, task['data'], task['source'])
+        load_data_database(user_id, task_id, task['data'], task['source'])
 
 
-def load_data_database(user_id, data, source_dict):
+def load_data_database(user_id, task_id, data, source_dict):
     """Загрузка данных во временное хранилище
-
     Args:
         data(dict): Данные
         source_dict(dict): Словарь с параметрами источника
@@ -127,10 +126,7 @@ def load_data_database(user_id, data, source_dict):
     print 'load_data_database'
 
     # сокет канал
-    # chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
-    # for i in range(1, 11):
-    # client.publish(chanel, 10*10)
-    # time.sleep(2)
+    chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
 
     cols = json.loads(data['cols'])
     col_types = json.loads(data['col_types'])
@@ -151,7 +147,7 @@ def load_data_database(user_id, data, source_dict):
 
         dotted = '{0}.{1}'.format(t, c)
 
-        col_names_create.append('"{0}--{1}" {2}'.format(t, c, col_types[dotted]))
+        col_names_create.append('"{0}__{1}" {2}'.format(t, c, col_types[dotted]))
 
     # название новой таблицы
     key = generate_table_name_key(source, cols_str)
@@ -160,6 +156,10 @@ def load_data_database(user_id, data, source_dict):
 
     rows_query = DataSourceService.get_rows_query_for_loading_task(
             source, structure,  cols)
+
+    # общее количество строк в запросе
+    max_rows_count = DataSourceService.get_structure_rows_number(
+        source, structure,  cols)
 
     # инстанс подключения к локальному хранилищу данных
     local_instance = DataSourceService.get_local_instance()
@@ -196,6 +196,11 @@ def load_data_database(user_id, data, source_dict):
 
     last_row = None
 
+    settings_limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+    loaded_count = 0.0
+    was_error = False
+    up_to_100 = False
+
     while rows:
         try:
             # приходит [(1, 'name'), ...],
@@ -208,6 +213,7 @@ def load_data_database(user_id, data, source_dict):
             # FIXME обработать еррор
             print e
             rows = []
+            was_error = True
         else:
             # коммитим пачку в бд
             connection.commit()
@@ -217,6 +223,19 @@ def load_data_database(user_id, data, source_dict):
             offset += limit
             rows_cursor.execute(rows_query.format(limit, offset))
             rows = rows_cursor.fetchall()
+
+            loaded_count += settings_limit
+
+            percent = int(round(loaded_count/max_rows_count*100))
+
+            if percent >= 100:
+                up_to_100 = True
+                client.publish(chanel, 100)
+            else:
+                client.publish(chanel, percent)
+
+    if not was_error and not up_to_100:
+        client.publish(chanel, 100)
 
     # работа с datasource_meta
 
