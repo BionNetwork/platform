@@ -253,6 +253,7 @@ def create_dimensions(user_id, key):
     """Создание таблиц размерностей
 
     Args:
+        user_id(int): идентификатор пользователя
         key(str): ключ к метаданным обрабатываемой таблицы
     Returns:
 
