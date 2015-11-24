@@ -26,3 +26,7 @@
 a {
     cursor: pointer;
 }
+
+.width150 {
+    width: 150%;
+}
