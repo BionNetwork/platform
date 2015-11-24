@@ -204,16 +204,25 @@ function getColumns(url, dict) {
     );
 }
 
+
+function hasWithoutBinds(){
+    // если есть талица без связи, то внимание
+    if($('.without_bind').length){
+        confirmAlert('Обнаружены ошибки в связях! '+
+        'Выберите правильную связь у таблицы, либо удалите ее!');
+        return true;
+    }
+    return false;
+}
+
+
 function tableToRight(url){
 
     if($('#button-toRight').hasClass('disabled')){
         return;
     }
 
-    // если есть талица без связи, то внимание
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 
@@ -239,10 +248,7 @@ function tablesToRight(url){
         return;
     }
 
-    // если есть талица без связи, то внимание
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 
@@ -411,9 +417,7 @@ function tablesToLeft(url){
 
 function refreshData(url){
 
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 
@@ -453,13 +457,52 @@ function refreshData(url){
     }
 }
 
+function insertJoinRows(data, parent, child, joinRows){
+
+    $.each(data.good_joins, function(i, join){
+        var newRow = joinWinRow({
+            parentCols: data.columns[parent],
+            childCols: data.columns[child],
+            i: i,
+            error: false
+        });
+        joinRows.append($(newRow));
+        $('[name="joinradio"][value='+join['join']['type']+']').prop('checked', true);
+
+        $('.with-select-'+i).find('select[name="parent"]').val(join['left']['column']);
+        $('.with-select-'+i).find('select[name="child"]').val(join['right']['column']);
+        $('.with-select-'+i).find('select[name="joinType"]').val(join['join']['value']);
+    });
+
+    var goodLen = data.good_joins.length;
+
+    $.each(data.error_joins, function(i, join){
+
+        var j = i + goodLen;
+
+        var newRow = joinWinRow({
+            parentCols: data.columns[parent],
+            childCols: data.columns[child],
+            i: j,
+            error: true
+        });
+        joinRows.append($(newRow));
+        $('[name="joinradio"][value='+join['join']['type']+']').prop('checked', true);
+
+        $('.with-select-'+j).find('select[name="parent"]').val(join['left']['column']);
+        $('.with-select-'+j).find('select[name="child"]').val(join['right']['column']);
+        $('.with-select-'+j).find('select[name="joinType"]').val(join['join']['value']);
+    });
+}
 
 function showJoinWindow(url, parent, child, isWithoutBind){
 
     var info = getSourceInfo();
     info['parent'] = parent;
     info['child_bind'] = child;
-    info['is_without_bind'] = isWithoutBind;
+
+    var warn = $('#table-part-'+child+'>div:first').find('.without_bind');
+    info['has_warning'] = warn.length ? true : false;
 
     $.get(url, info, function(res){
         if (res.status == 'error') {
@@ -472,26 +515,16 @@ function showJoinWindow(url, parent, child, isWithoutBind){
             joinRows.data('table-left', parent);
             joinRows.data('table-right', child);
 
-            if(data['without_bind']){
+            // последняя таблица без связей
+            if(!data.good_joins.length && !data.error_joins.length){
                 joinRows.append(joinWinRow({
-                    parentCols: data[parent],
-                    childCols: data[child],
+                    parentCols: data.columns[parent],
+                    childCols: data.columns[child],
                     i: 0
                 }));
-            } else {
-                $.each(data.joins, function(i, join){
-                    var newRow = joinWinRow({
-                        parentCols: data[parent],
-                        childCols: data[child],
-                        i: i
-                    });
-                    joinRows.append($(newRow));
-                    $('[name="joinradio"][value='+join['join']['type']+']').prop('checked');
-
-                    $('.with-select-'+i).find('select[name="parent"]').val(join['left']['column']);
-                    $('.with-select-'+i).find('select[name="child"]').val(join['right']['column']);
-                    $('.with-select-'+i).find('select[name="joinType"]').val(join['join']['value']);
-                });
+            }
+            else {
+                insertJoinRows(data, parent, child, joinRows)
             }
 
             $('#parentLabel').text(parent);
@@ -520,7 +553,8 @@ function addNewJoin(){
     joinRows.append(joinWinRow({
         parentCols: parentCols,
         childCols: childCols,
-        i: 0
+        i: 0,
+        error: false
     }));
 }
 
@@ -549,6 +583,17 @@ function saveJoins(url){
         joinsArray.push(vals);
     });
 
+    var joinsSet = new Set();
+    // избавляемся от дублей джойнов
+    $.each(joinsArray, function(i, row){
+        joinsSet.add(row[0]+row[2]);
+    });
+
+    if(joinsArray.length != joinsSet.size){
+        confirmAlert('Имеются дубли среди связей, пожалуйста удалите лишнее!');
+        return;
+    }
+
     var joinRows = $('#joinRows'),
         info = getSourceInfo();
 
@@ -562,7 +607,27 @@ function saveJoins(url){
                 confirmAlert(res.message)
         } else {
             joinWin.modal('hide');
-            drawTables(res.data);
+
+            var rightTableArea = $('#table-part-'+joinRows.data('table-right')+'>div:first'),
+                   rel = rightTableArea.find('.relation'),
+                   warn = $('<span class="without_bind" style="color:red;">!!!</span>');
+
+            // если новые джойны неверны, добавляем красное, если еще не было
+            if(res.data.has_error_joins == true){
+                if(!rel.find('.without_bind').length){
+                    rel.append(warn);
+                }
+            }
+            // если новые джойны верны, удаляем красное
+            else { // res.data.has_error_joins == false
+                rightTableArea.find('.without_bind').remove();
+            }
+
+            // если совсем нет ошибок ни у кого, то перерисуем дерево,
+            // на всякий пожарный
+            if(!$('.without_bind').length){
+                drawTables(res.data.draw_table);
+            }
         }
     });
 }
@@ -586,9 +651,7 @@ function startLoading(userId, loadUrl){
             }
         }).get();
 
-    if($('#without_bind').length){
-        confirmAlert('Имеется таблица без связи! '+
-        'Выберите связь у таблицы, либо удалите ее!');
+    if(hasWithoutBinds()){
         return;
     }
 

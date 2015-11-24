@@ -28,9 +28,9 @@ class DatabaseTest(TestCase):
                                  'val': 'billing_bank_packet'}], 'joins': [], 'join_type': 'inner',
                      'val': 'billing_bank_packet_status'}
         join_query = self.database.generate_join(structure)
-        expected_join_query = ("billing_bank_packet_status INNER JOIN billing_bank_packet",
-                               "ON billing_bank_packet_status.id = billing_bank_packet.billing_bank_packet_status_id")
-        self.assertEqual(' '.join(expected_join_query), join_query)
+        expected_join_query = ('"billing_bank_packet_status" INNER JOIN "billing_bank_packet" ON '
+                               '("billing_bank_packet_status"."id" = "billing_bank_packet"."billing_bank_packet_status_id")')
+        self.assertEqual(expected_join_query, join_query)
 
     def test_generate_join_multiple_tables(self):
         structure = {
@@ -86,11 +86,11 @@ class DatabaseTest(TestCase):
             "val": "billing_bank_packet_status"
         }
         join_query = self.database.generate_join(structure)
-        expected_join_query = ("billing_bank_packet_status INNER JOIN billing_bank_packet",
-                               "ON billing_bank_packet_status.id = billing_bank_packet.billing_bank_packet_status_id",
-                               "INNER JOIN billing_bank_packet_operation ON",
-                               "billing_bank_packet_operation.billing_bank_packet_id = billing_bank_packet.id")
-        self.assertEqual(' '.join(expected_join_query), join_query)
+        expected_join_query = ('"billing_bank_packet_status" INNER JOIN "billing_bank_packet" ON '
+                               '("billing_bank_packet_status"."id" = "billing_bank_packet"."billing_bank_packet_status_id") '
+                               'INNER JOIN "billing_bank_packet_operation" ON '
+                               '("billing_bank_packet_operation"."billing_bank_packet_id" = "billing_bank_packet"."id")')
+        self.assertEqual(expected_join_query, join_query)
 
     def test_statistic(self):
         data = [('first', 5, 5), ('second', 0, 0), ]
@@ -248,7 +248,7 @@ class TablesTreeTest(TestCase):
                       'left': {'column': 'permission_id', 'table': 'auth_group_permissions'}}],
                  'val': 'auth_permission'}
             ],
-            'join_type': 'inner',
+            'join_type': None,
             'joins': [],
             'val': 'auth_group_permissions'
         }
@@ -307,7 +307,7 @@ class TablesTreeTest(TestCase):
         expected_structure = {
             'childs': [
                 {'childs': [],
-                 'join_type': 'inner',
+                 'join_type': 'right',
                  'joins': [
                      {'right': {'column': 'id', 'table': 'auth_group'},
                       'join': {'type': 'right', 'value': 'eq'},
@@ -325,7 +325,7 @@ class TablesTreeTest(TestCase):
                          'left': {'column': 'permission_id', 'table': 'auth_group_permissions'}}
                     ], 'val': 'auth_permission'}
             ],
-            'join_type': 'inner',
+            'join_type': None,
             'joins': [],
             'val': 'auth_group_permissions'
         }

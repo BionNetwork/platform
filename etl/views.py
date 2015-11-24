@@ -136,6 +136,7 @@ class RemoveSourceView(BaseView):
 class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
+
         try:
             helpers.DataSourceService.check_connection(request.POST)
             return self.json_response(
@@ -286,10 +287,10 @@ class GetColumnsForChoicesView(BaseEtlView):
     def start_get_action(self, request, source):
         parent_table = request.GET.get('parent')
         child_table = request.GET.get('child_bind')
-        is_without_bind = json.loads(request.GET.get('is_without_bind'))
+        has_warning = json.loads(request.GET.get('has_warning'))
 
-        data = helpers.DataSourceService.get_columns_for_choices(
-            source, parent_table, child_table, is_without_bind)
+        data = helpers.DataSourceService.get_columns_and_joins_for_join_window(
+            source, parent_table, child_table, has_warning)
 
         return data
 
@@ -358,5 +359,7 @@ class GetUserTasksView(BaseView):
         Cписок юзеровских тасков
     """
     def get(self, request, *args, **kwargs):
-        user_tasks = helpers.RedisSourceService.get_user_tasks(request.user.id)
-        return self.json_response({'userId': request.user.id, 'tasks': user_tasks})
+        user_task_ids = helpers.RedisSourceService.get_user_database_task_ids(
+            request.user.id, helpers.TaskStatusEnum.PROCESSING)
+        return self.json_response(
+            {'userId': request.user.id, 'tasks': user_task_ids})
