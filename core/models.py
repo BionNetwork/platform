@@ -132,18 +132,31 @@ class Dimension(models.Model):
     """
     Размерности для кубов
     """
-    name = models.CharField(verbose_name="название измерения", max_length=255, null=False, blank=False, db_index=True)
-    title = models.CharField(verbose_name="название", max_length=255, null=False, blank=False)
-    type = models.CharField(verbose_name="тип измерения", max_length=255, null=False, blank=False)
-    visible = models.BooleanField(verbose_name="виден", null=False, default=True)
-    high_cardinality = models.BooleanField(verbose_name="cardinality", null=False, default=False)
+    STANDART_DIMENSION = 'SD'
+    TIME_DIMENSION = 'TD'
+    DIMENSION_TYPE = (
+        (STANDART_DIMENSION, 'StandardDimension'),
+        (STANDART_DIMENSION, 'TimeDimension'),
+    )
+    name = models.CharField(
+        verbose_name="название измерения", max_length=255, db_index=True)
+    title = models.CharField(verbose_name="название", max_length=255)
+    type = models.CharField(
+        verbose_name="тип измерения", max_length=255,
+        choices=DIMENSION_TYPE, default=STANDART_DIMENSION)
+    visible = models.BooleanField(verbose_name="виден", default=True)
+    high_cardinality = models.BooleanField(
+        verbose_name="cardinality", default=False)
     data = models.TextField(verbose_name="иерархии", null=True, blank=True)
-    create_date = models.DateTimeField(verbose_name="дата создания", db_index=True)
-    update_date = models.DateTimeField(verbose_name="дата обновления", db_index=True)
-    user = models.ForeignKey(User)
-    datasources_meta = models.ForeignKey(DatasourceMeta)
+    create_date = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True, db_index=True)
+    update_date = models.DateTimeField(
+        verbose_name="дата обновления", auto_now=True, db_index=True)
+    user = models.ForeignKey(User, verbose_name=u'Пользователь')
+    datasources_meta = models.ForeignKey(
+        DatasourceMeta, related_name='dimension')
 
     class Meta:
         db_table = "dimensions"
-        verbose_name = 'Размерности'
+        verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'

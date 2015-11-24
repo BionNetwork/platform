@@ -136,6 +136,7 @@ class RemoveSourceView(BaseView):
 class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
+
         try:
             helpers.DataSourceService.check_connection(request.POST)
             return self.json_response(

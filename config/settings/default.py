@@ -57,7 +57,8 @@ MIDDLEWARE_CLASSES = (
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'core.middleware.http.HttpResponseNotAllowedMiddleware'
+    'core.middleware.http.HttpResponseNotAllowedMiddleware',
+    'core.middleware.thread_local.ThreadLocalMiddleware'
 )
 
 ROOT_URLCONF = 'config.urls'
