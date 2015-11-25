@@ -18,7 +18,8 @@ from . import r_server
 from redis_collections import Dict as RedisDict
 from .maps import postgresql as psql_map
 from .maps import mysql as mysql_map
-from core.models import Datasource, DatasourceMeta
+from core.models import (Datasource, DatasourceMeta, QueueList, Queue,
+                         QueueStatus)
 
 
 class BaseEnum(object):
@@ -2592,7 +2593,7 @@ class TaskErrorCodeEnum(BaseEnum):
 
 class TaskStatusEnum(BaseEnum):
     """
-        Статусы тасков пользователя
+        Статусы тасков
     """
     IDLE, PROCESSING, ERROR, DONE, DELETED = ('idle', 'processing', 'error',
                                               'done', 'deleted', )
@@ -2622,19 +2623,25 @@ class TaskService:
         :param source_dict: dict
         :return: integer
         """
-        task_id = RedisSourceService.get_next_task_counter()
-        task = {'name': self.name,
-                'data': {
-                    'cols': data['cols'], 'tables': data['tables'],
-                    'tree': tree, 'col_types': data['col_types'],
-                    'meta_info': data['meta_info'],
-                },
-                'source': source_dict,
-                'status_id': TaskStatusEnum.IDLE,
-                }
+        arguments = {
+            'cols': data['cols'],
+            'tables': data['tables'],
+            'col_types': data['col_types'],
+            'meta_info': data['meta_info'],
+            'tree': tree,
+            'source': source_dict,
+            'user_id': user_id,
+        }
 
-        RedisSourceService.add_user_task(user_id, task_id, task)
-        return task_id
+        task = QueueList.objects.create(
+            queue=Queue.objects.get(name=self.name),
+            queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
+            arguments=json.dumps(arguments),
+            app='etl',
+            checksum='',
+        )
+
+        return task.id
 
     def add_dim_task(self, user_id, key):
         """
@@ -2646,11 +2653,34 @@ class TaskService:
         Returns:
             int: id задачи
         """
-        task_id = RedisSourceService.get_next_task_counter()
-        task = {'name': self.name,
-                'meta_db_key': key}
-        RedisSourceService.add_user_task(user_id, task_id, task)
-        return task_id
+        arguments = {
+            'meta_db_key': key,
+            'user_id': user_id,
+        }
+
+        task = QueueList.objects.create(
+            queue=Queue.objects.get(name=self.name),
+            queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
+            arguments=json.dumps(arguments),
+            app='etl',
+            checksum='',
+        )
+
+        return task.id
+
+    @staticmethod
+    def update_task_status(task_id, status_id, error_code=None, error_msg=None):
+        """
+            Меняем статусы тасков
+        """
+        task = QueueList.objects.get(id=task_id)
+        task.queue_status = QueueStatus.objects.get(title=status_id)
+
+        if status_id == TaskStatusEnum.ERROR:
+            task.comment = 'code: {0}, message: {1}'.format(
+                error_code, error_msg)
+
+        task.save()
 
     @classmethod
     def table_create_query_for_loading_task(

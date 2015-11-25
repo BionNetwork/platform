@@ -12,9 +12,10 @@ from psycopg2 import errorcodes
 
 from etl.models import App, Model, Field, Setting
 from etl.services.model_creation import type_match, create_model, install
-from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
-                      TaskService, generate_table_name_key, TaskStatusEnum, TaskErrorCodeEnum)
-from core.models import Datasource, DatasourceMetaKeys, Dimension, User, Measure
+from .helpers import (DataSourceService, EtlEncoder,
+                      TaskService, generate_table_name_key, TaskStatusEnum,
+                      TaskErrorCodeEnum)
+from core.models import (Datasource, DatasourceMetaKeys, Dimension, User, Measure, QueueList)
 from django.conf import settings
 
 from djcelery import celery
@@ -41,7 +42,7 @@ def get_table_key(key):
     return '{0}{1}{2}'.format('sttm_datasource_', '_' if key < 0 else '', abs(key))
 
 
-def load_data_mongo(user_id, task_id, data, source):
+def load_data_mongo(user_id, task_id, data):
     """
     Загрузка данных в mongo
     :param user_id: integer
@@ -54,8 +55,10 @@ def load_data_mongo(user_id, task_id, data, source):
     cols = json.loads(data['cols'])
     tables = json.loads(data['tables'])
     structure = data['tree']
+
+    source_dict = data['source']
     source_model = Datasource()
-    source_model.set_from_dict(**source)
+    source_model.set_from_dict(**source_dict)
 
     columns = []
     col_names = []
@@ -85,8 +88,7 @@ def load_data_mongo(user_id, task_id, data, source):
     limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
     # меняем статус задачи на 'В обработке'
-    RedisSourceService.update_task_status(
-        user_id, task_id, TaskStatusEnum.PROCESSING)
+    TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
 
     was_error = False
     err_msg = ''
@@ -117,29 +119,32 @@ def load_data_mongo(user_id, task_id, data, source):
 
     if was_error:
         # меняем статус задачи на 'Ошибка'
-        RedisSourceService.update_task_status(
-            user_id, task_id, TaskStatusEnum.ERROR,
+        TaskService.update_task_status(
+            task_id, TaskStatusEnum.ERROR,
             error_code=TaskErrorCodeEnum.DEFAULT_CODE, error_msg=err_msg)
     else:
         # меняем статус задачи на 'Выполнено'
-        RedisSourceService.update_task_status(
-            user_id, task_id, TaskStatusEnum.DONE, )
+        TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
 
 
 @celery.task(name='etl.tasks.load_data')
 def load_data(user_id, task_id):
 
-    task = RedisSourceService.get_user_task_by_id(user_id, task_id)
+    task = QueueList.objects.get(id=task_id)
 
     # обрабатываем таски со статусом 'В ожидании'
-    if task['status_id'] == TaskStatusEnum.IDLE:
-        if task['name'] == 'etl:load_data:mongo':
-            load_data_mongo(user_id, task_id, task['data'], task['source'])
-        elif task['name'] == 'etl:load_data:database':
-            load_data_database(user_id, task_id, task['data'], task['source'])
+    if task.queue_status.title == TaskStatusEnum.IDLE:
+
+        data = json.loads(task.arguments)
+        name = task.queue.name
+
+        if name == 'etl:load_data:mongo':
+            load_data_mongo(user_id, task_id, data)
+        elif name == 'etl:load_data:database':
+            load_data_database(user_id, task_id, data)
 
 
-def load_data_database(user_id, task_id, data, source_dict):
+def load_data_database(user_id, task_id, data):
     """Загрузка данных во временное хранилище
     Args:
         data(dict): Данные
@@ -158,6 +163,8 @@ def load_data_database(user_id, task_id, data, source_dict):
     col_types = json.loads(data['col_types'])
     structure = data['tree']
     tables_info_for_meta = json.loads(data['meta_info'])
+
+    source_dict = data['source']
     source = Datasource()
     source.set_from_dict(**source_dict)
 
@@ -228,8 +235,7 @@ def load_data_database(user_id, task_id, data, source_dict):
     up_to_100 = False
 
     # меняем статус задачи на 'В обработке'
-    RedisSourceService.update_task_status(
-        user_id, task_id, TaskStatusEnum.PROCESSING)
+    TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
 
     while rows:
         try:
@@ -255,8 +261,8 @@ def load_data_database(user_id, task_id, data, source_dict):
             was_error = True
 
             # меняем статус задачи на 'Ошибка'
-            RedisSourceService.update_task_status(
-                user_id, task_id, TaskStatusEnum.ERROR,
+            TaskService.update_task_status(
+                task_id, TaskStatusEnum.ERROR,
                 error_code=err_code, error_msg=err_msg)
 
             break
@@ -282,8 +288,7 @@ def load_data_database(user_id, task_id, data, source_dict):
 
     if not was_error:
         # меняем статус задачи на 'Выполнено'
-        RedisSourceService.update_task_status(
-            user_id, task_id, TaskStatusEnum.DONE, )
+        TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
 
     if not was_error and not up_to_100:
         client.publish(chanel, 100)

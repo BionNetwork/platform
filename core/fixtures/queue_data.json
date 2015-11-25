@@ -1,0 +1,63 @@
+[
+  {
+    "model": "core.queuestatus",
+    "pk": 1,
+    "fields": {
+      "title": "idle",
+      "description": "В ожидании"
+    }
+  },
+  {
+    "model": "core.queuestatus",
+    "pk": 2,
+    "fields": {
+      "title": "processing",
+      "description": "В обработке"
+    }
+  },
+  {
+    "model": "core.queuestatus",
+    "pk": 3,
+    "fields": {
+      "title": "error",
+      "description": "Ошибка"
+    }
+  },
+  {
+    "model": "core.queuestatus",
+    "pk": 4,
+    "fields": {
+      "title": "done",
+      "description": "Выполнено"
+    }
+  },
+  {
+    "model": "core.queuestatus",
+    "pk": 5,
+    "fields": {
+      "title": "deleted",
+      "description": "Удалено"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 1,
+    "fields": {
+      "name": "etl:load_data:mongo"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 2,
+    "fields": {
+      "name": "etl:load_data:database"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 3,
+    "fields": {
+      "name": "etl:database:generate_dimensions"
+    }
+  }
+]
