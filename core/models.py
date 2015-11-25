@@ -160,3 +160,60 @@ class Dimension(models.Model):
         db_table = "dimensions"
         verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'
+
+
+class QueueStatus(models.Model):
+    """
+    Статусы очередей
+    """
+    title = models.CharField(verbose_name='Название', max_length=50,
+                             null=False, blank=False)
+    description = models.CharField(verbose_name='Определение', max_length=50,
+                                   null=True, blank=True)
+
+    class Meta:
+        db_table = "queue_status"
+
+
+class Queue(models.Model):
+    """
+    Модель очередей
+    """
+    name = models.CharField(verbose_name='Название', max_length=50,
+                            null=False, blank=False)
+    interval = models.IntegerField(
+        verbose_name='Интервал', null=True, blank=True)
+    is_active = models.BooleanField('Активен', null=False, blank=False,
+                                    default=True)
+
+    class Meta:
+        db_table = "queue"
+
+
+class QueueList(models.Model):
+    """
+    Модель списка очередей
+    """
+    queue = models.ForeignKey(Queue, verbose_name='ид очереди',
+                              null=False, blank=False)
+    queue_status = models.ForeignKey(
+        QueueStatus, verbose_name='статус очереди', null=False, blank=False)
+    arguments = models.TextField(verbose_name='параметры запуска задачи',
+                                 null=False, blank=False)
+    app = models.CharField(verbose_name='модуль/приложение', max_length=50,
+                           null=False, blank=False)
+    date_created = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True,
+        null=False, blank=False, db_index=True)
+    update_date = models.DateTimeField(
+        verbose_name="дата обновления", null=True, blank=True)
+    comment = models.CharField(verbose_name='коментарий', max_length=1024,
+                               null=True, blank=True)
+    checksum = models.CharField(verbose_name='контрольная сумма', db_index=True,
+                                max_length=255, null=False, blank=False)
+    percent = models.FloatField(verbose_name='процент выполнения задачи',
+                                null=True, blank=True)
+
+    class Meta:
+        db_table = "queue_list"
+        index_together = ["queue", "date_created", "queue_status"]
