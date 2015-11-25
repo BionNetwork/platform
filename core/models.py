@@ -6,10 +6,9 @@ import datetime
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
-from .db.services import RetryQueryset
-
 from djchoices import ChoiceItem, DjangoChoices
 
+from .db.services import RetryQueryset
 from .helpers import get_utf8_string
 
 """
@@ -160,3 +159,54 @@ class Dimension(models.Model):
         db_table = "dimensions"
         verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'
+
+
+class Measure(models.Model):
+    """Меры для кубов"""
+    STRING = 1
+    INTEGER = 2
+    NUMERIC = 3
+    BOOLEAN = 4
+    DATE = 5
+    TIME = 6
+    TIMESTAMP = 7
+    MEASURE_TYPE = (
+        (STRING, 'String'),
+        (INTEGER, 'Integer'),
+        (NUMERIC, 'Numeric'),
+        (BOOLEAN, 'Boolean'),
+        (DATE, 'Date'),
+        (TIME, 'Time'),
+        (TIMESTAMP, 'Timestamp')
+    )
+
+    SUM = 1
+    AGR_FUNCTIONS = (
+        (SUM, 'sum'),
+    )
+
+    name = models.CharField(
+        verbose_name="Название меры", max_length=255, db_index=True)
+    title = models.CharField(verbose_name="Название", max_length=255)
+    type = models.SmallIntegerField(
+        verbose_name="Тип измерения",
+        choices=MEASURE_TYPE, default=STRING)
+    aggregator = models.SmallIntegerField(
+        verbose_name="Функция агрегирования",
+        choices=AGR_FUNCTIONS, default=SUM)
+    format_string = models.CharField(
+        verbose_name="Строка форматирования", max_length=255,
+        null=True, blank=True)
+    visible = models.BooleanField(verbose_name="Виден", default=True)
+    create_date = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True, db_index=True)
+    update_date = models.DateTimeField(
+        verbose_name="дата обновления", auto_now=True, db_index=True)
+    user = models.ForeignKey(User, verbose_name=u'Пользователь')
+    datasources_meta = models.ForeignKey(
+        DatasourceMeta, related_name='measure')
+
+    class META:
+        db_table = 'measures'
+        verbose_name = 'Мера'
+        verbose_name_plural = 'Меры'

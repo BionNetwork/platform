@@ -13,12 +13,13 @@ from psycopg2 import errorcodes
 from etl.models import App, Model, Field, Setting
 from etl.services.model_creation import type_match, create_model, install
 from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
-                      TaskService, generate_table_name_key, TaskStatusEnum,
-                      TaskErrorCodeEnum)
-from core.models import Datasource, DatasourceMetaKeys, Dimension, User
+                      TaskService, generate_table_name_key, TaskStatusEnum, TaskErrorCodeEnum)
+from core.models import Datasource, DatasourceMetaKeys, Dimension, User, Measure
 from django.conf import settings
 
 from djcelery import celery
+from celery import group
+from celery.contrib.methods import task_method
 from itertools import groupby, izip
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -172,7 +173,7 @@ def load_data_database(user_id, task_id, data, source_dict):
 
         dotted = '{0}.{1}'.format(t, c)
 
-        col_names_create.append('"{0}__{1}" {2}'.format(t, c, col_types[dotted]))
+        col_names_create.append('"{0}--{1}" {2}'.format(t, c, col_types[dotted]))
 
     # название новой таблицы
     key = generate_table_name_key(source, cols_str)
@@ -299,7 +300,7 @@ def load_data_database(user_id, task_id, data, source_dict):
     return create_dimensions(user_id, key)
 
 
-def create_dimensions(user_id, key):
+def create_dimensions(user_id=11, key='-767084929'):
     """Создание таблиц размерностей
 
     Args:
@@ -308,137 +309,269 @@ def create_dimensions(user_id, key):
     Returns:
 
     """
-    task = TaskService('etl:database:generate_dimensions')
-    task_id = task.add_dim_task(user_id, key)
-    load_dim_data.apply_async((user_id, task_id),)
+    store = DataStore(key)
+    store.create_store_model()
+    dimension_task = TaskService('etl:database:generate_dimensions')
+    measure_task = TaskService('etl:database:generate_measures')
+    dimension_task_id = dimension_task.add_dim_task(user_id, key)
+    measure_task_id = measure_task.add_dim_task(user_id, key)
+    dimension, measure = DimensionCreation(store), MeasureCreation(store)
+
+    # dimension.load_data(user_id, dimension_task_id)
+    # measure.load_data(user_id, measure_task_id)
+
+    res = group([
+        dimension.load_data.s(user_id, dimension_task_id),
+        measure.load_data.s(user_id, measure_task_id)
+    ])()
 
 
 REGULAR = 'regular'
 
 
-def save_dim_info(user_id, field, meta):
+class DataStore(object):
+
+    def __init__(self, key, module='biplatform.etl.models', app_name='sttm',
+                 table_prefix='datasource'):
+        self.module = module
+        self.app_name = app_name
+
+        self.key = key if not key.startswith('-') else '_%s' % key[1:]
+        self.meta = DatasourceMetaKeys.objects.get(value=key).meta
+        self.meta_data = json.loads(self.meta.fields)
+
+        self.model = None
+        self.table_name = '{prefix}_{key}'.format(
+            prefix=table_prefix, key=self.key)
+
+    @property
+    def fields_list(self):
+        """
+        Получение списка полей таблицы
+        """
+        all_fields = []
+        for table, fields in self.meta_data['columns'].iteritems():
+            all_fields.extend([field for field in fields])
+        return all_fields
+
+    def create_store_model(self):
+        # Создаем мнимое приложение
+        app, app_create = App.objects.get_or_create(
+            name=self.app_name, module=self.module)
+
+        # Получаем доступ к обрабатываемой таблице как к django-модели
+        self.model, model_create = Model.objects.get_or_create(
+            app=app, name=self.table_name)
+
+        # django_fields_dict = {}
+        all_fields = []
+        for table, fields in self.meta_data['columns'].iteritems():
+
+            for field in fields:
+                field['name'] = '%s--%s' % (table, field['name'])
+                all_fields.append(field)
+                f, field_create = Field.objects.get_or_create(
+                    model=self.model, name=field['name'],
+                    type=type_match[field['type']])
+                if field['type'] in ['text']:
+                    Setting.objects.get_or_create(
+                        field=f, name='max_length', value=255)
+
+
+class OlapEntityCreation(object):
     """
-    Сохраняем информацию о размерности
-
-    Args:
-        user_id(int): id пользователя
-        field(dict): данные о поле
-        meta(DatasourceMeta): ссылка на метаданные хранилища
+    Создание сущностей(рамерности, измерения) олап куба
     """
-    dim = Dimension()
-    dim.name = field['name']
-    dim.title = field['name']
-    dim.user_id = user_id
-    dim.datasources_meta = meta
 
-    data = dict(
-        name=field['name'],
-        has_all=True,
-        table_name=field['name'],
-        level=dict(
-            type=field['type'],
-            level_type=REGULAR,
-            visible=True,
-            column=field['name'],
-            unique_members=field['is_unique'],
-            caption=field['name'],
-        ),
-        primary_key='id',
-        foreign_key=field['name']
-    )
+    actual_fields_type = []
 
-    dim.data = json.dumps(data)
-    dim.save()
+    def __init__(self, source):
+        self.source = source
+        # self.table_model = source.model.get_django_model()
+
+    @property
+    def actual_fields(self):
+        return [element for element in self.source.fields_list
+                if element['type'] in self.actual_fields_type]
+
+    def load_data(self, user_id, task_id):
+        raise NotImplementedError
+
+    def save_meta_data(self, user_id, field):
+        raise NotImplementedError
+
+    def save_fields(self, field_models, fields_info):
+        """Заполняем таблицу данными
+
+        Args:
+            table_model():
+        """
+        print field_models
+        dim_fields_name = [element['name'] for element in fields_info]
+        index = 0
+        while True:
+            index_to = index+settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+            data = self.source.model.get_django_model().objects.values(
+                *dim_fields_name)[index:index_to]
+            print data[:2]
+            if not data:
+                break
+            for field, dim in field_models.iteritems():
+                dim_data = [dim(**{k: v for (k, v) in x.iteritems() if k == field})
+                            for x in data]
+                print dim
+                dim.objects.bulk_create(dim_data)
+            index = index_to
+            print index
 
 
-@celery.task(name='etl:database:generate_dimensions')
-def load_dim_data(user_id, task_id):
+class DimensionCreation(OlapEntityCreation):
     """
     Создание размерностей
-
-    Args:
-        user_id(int): id Пользователя
-        task_id(int): id Задачи
     """
-    task = RedisSourceService.get_user_task_by_id(user_id, task_id)
 
-    # Получаем метаданные
-    key = str(task['meta_db_key'])
-    meta_key = DatasourceMetaKeys.objects.get(value=key)
-    key = key if not key.startswith('-') else '_%s' % key[1:]
-    meta = meta_key.meta
-    meta_data = json.loads(meta.fields)
+    actual_fields_type = ['text']
 
-    # Создаем мнимое приложение
-    app, app_create = App.objects.get_or_create(
-        name=u'dimensions', module=u'biplatform.dimensions.models')
+    def save_meta_data(self, user_id, field):
+        """
+        Сохраняем информацию о размерности
 
-    # Получаем доступ к обрабатываемой таблице как к django-модели
-    table_name = 'sttm_datasource_%s' % key
-    model, model_create = Model.objects.get_or_create(app=app, name=table_name)
+        Args:
+            user_id(int): id пользователя
+            field(dict): данные о поле
+            meta(DatasourceMeta): ссылка на метаданные хранилища
+        """
+        dim = Dimension()
+        dim.name = field['name']
+        dim.title = field['name']
+        dim.user_id = user_id
+        dim.datasources_meta = self.source.meta
 
-    django_fields_dict = {}
-    all_fields = []
-    for table, fields in meta_data['columns'].iteritems():
-
-        for field in fields:
-            print field
-            field['name'] = '%s_%s' % (table, field['name'])
-            all_fields.append(field)
-            f, field_create = Field.objects.get_or_create(
-                model=model, name=field['name'], type=type_match[field['type']])
-            if field['type'] in ['text']:
-                Setting.objects.get_or_create(
-                    field=f, name='max_length', value=255)
-            django_fields_dict.update({field['name']: f.get_django_field()})
-
-    table_model = create_model(
-        name=u'EtlTable', app_label=u'dimensions', fields=django_fields_dict,
-        options={'db_table': table_name})
-
-    # Отбираем текстовые поля
-    actual_fields = [
-        element for element in all_fields if element['type'] == 'text']
-
-    # Создаем размерности
-    dimensions = {}
-    for field in actual_fields:
-        field_name = field['name']
-        dim_table_name = '%s_%s' % (field_name, key)
-        dim_model, dim_model_create = Model.objects.get_or_create(
-            app=app, name=dim_table_name)
-        if not dim_model_create:
-            continue
-        dim_field, field_create = Field.objects.create(
-            model=dim_model, name=field_name, type='CharField')
-        Setting.objects.bulk_create([
-            Setting(field=dim_field, name='max_length', value=255),
-            Setting(field=dim_field, name='null', value=True),
-            Setting(field=dim_field, name='blank', value=True),
-            ]
+        data = dict(
+            name=field['name'],
+            has_all=True,
+            table_name=field['name'],
+            level=dict(
+                type=field['type'],
+                level_type=REGULAR,
+                visible=True,
+                column=field['name'],
+                unique_members=field['is_unique'],
+                caption=field['name'],
+            ),
+            primary_key='id',
+            foreign_key=field['name']
         )
-        dimension_table = dim_model.get_django_model()
-        install(dimension_table)
 
-        # Сохраняем метаданные об измерении
-        save_dim_info(user_id, field, meta)
+        dim.data = json.dumps(data)
+        dim.save()
 
-        dimensions.update({field_name: dimension_table})
+    @celery.task(name='etl:database:generate_dimensions', filter=task_method)
+    def load_data(self, user_id, task_id):
+        """
+        Создание размерностей
 
-    # Заполняем измерения данными
-    actual_fields_name = [
-        element['name'] for element in all_fields if element['type'] == 'text']
-    index = 0
-    while True:
-        index_to = index+settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-        data = table_model.objects.values(*actual_fields_name)[index:index_to]
-        if not data:
-            break
-        for field, dim in dimensions.iteritems():
-            dim_data = [dim(**{k: v for (k, v) in x.iteritems() if k == field})
-                        for x in data]
-            dim.objects.bulk_create(dim_data)
-        index = index_to
+        Args:
+            user_id(int): id Пользователя
+            task_id(int): id Задачи
+        """
+        task = RedisSourceService.get_user_task_by_id(user_id, task_id)
 
+        # Отбираем текстовые поля
+
+        # Создаем размерности
+        dimensions = {}
+        actual_fields = self.actual_fields
+        for field in actual_fields:
+            field_name = field['name']
+            dim_table_name = '%s_%s' % (field_name, self.source.key)
+            dim_model, dim_model_create = Model.objects.get_or_create(
+                app=App.objects.get(name=self.source.app_name), name=dim_table_name)
+            if not dim_model_create:
+                print 'continue'
+                continue
+            dim_field = Field.objects.create(
+                model=dim_model, name=field_name, type='CharField')
+            Setting.objects.bulk_create([
+                Setting(field=dim_field, name='max_length', value=255),
+                Setting(field=dim_field, name='null', value=True),
+                Setting(field=dim_field, name='blank', value=True),
+                ]
+            )
+            dimension_table = dim_model.get_django_model()
+            install(dimension_table)
+
+            # Сохраняем метаданные об измерении
+            self.save_meta_data(user_id, field)
+
+            dimensions.update({field_name: dimension_table})
+
+        self.save_fields(dimensions, actual_fields)
+
+
+class MeasureCreation(OlapEntityCreation):
+    """
+    Создание мер
+    """
+
+    actual_fields_type = ['integer', 'timestamp']
+
+    def save_meta_data(self, user_id, field):
+        """
+        Сохранение информации о мерах
+
+        Args:
+            user_id(int): id пользователя
+            field(dict): данные о поле
+            meta(DatasourceMeta): ссылка на метаданные хранилища
+        """
+        measure = Measure()
+        measure.name = field['name']
+        measure.title = field['name']
+        measure.user_id = user_id
+        measure.datasources_meta = self.source.meta
+        measure.save()
+
+    @celery.task(name='etl:database:generate_dimensions', filter=task_method)
+    def load_data(self, user_id, task_id):
+        """
+        Создание размерностей
+
+        Args:
+            user_id(int): id Пользователя
+            task_id(int): id Задачи
+        """
+        task = RedisSourceService.get_user_task_by_id(user_id, task_id)
+
+        # Отбираем текстовые поля
+        actual_fields = self.actual_fields
+
+        # Создаем размерности
+        measures = {}
+        for field in actual_fields:
+            field_name = field['name']
+            measure_table_name = '%s_%s' % (field_name, self.source.key)
+            measure_model, measure_model_create = Model.objects.get_or_create(
+                app=App.objects.get(name=self.source.app_name),
+                name=measure_table_name)
+            if not measure_model_create:
+                continue
+            measure_field, field_create = Field.objects.create(
+                model=measure_model, name=field_name,
+                type=type_match[field['type']])
+            Setting.objects.bulk_create([
+                Setting(field=measure_field, name='null', value=True),
+                Setting(field=measure_field, name='blank', value=True),
+                ]
+            )
+            measure_table = measure_model.get_django_model()
+            install(measure_table)
+
+            # Сохраняем метаданные о мере
+            self.save_meta_data(user_id, field)
+
+            measures.update({field_name: measure_table})
+
+        self.save_fields(measures, actual_fields)
 
 # write in console: python manage.py celery -A etl.tasks worker
