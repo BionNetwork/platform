@@ -377,17 +377,18 @@ class MeasureCreation(OlapEntityCreation):
     Создание мер
     """
 
-    actual_fields_type = ['integer', 'timestamp']
+    actual_fields_type = [
+        'integer', 'time', 'date', 'timestamp']
 
     def save_meta_data(self, user_id, field):
         """
         Сохранение информации о мерах
         """
         f_name = field['name']
-        # TODO: Разобраться с соотв. типов
         Measure.objects.create(
             name=f_name,
             title=f_name,
+            type=field['type'],
             user_id=user_id,
             datasources_meta=self.source.meta
         )

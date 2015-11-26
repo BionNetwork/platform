@@ -171,17 +171,19 @@ class Measure(models.Model):
     TIME = 6
     TIMESTAMP = 7
     MEASURE_TYPE = (
-        (STRING, 'String'),
-        (INTEGER, 'Integer'),
-        (NUMERIC, 'Numeric'),
-        (BOOLEAN, 'Boolean'),
-        (DATE, 'Date'),
-        (TIME, 'Time'),
-        (TIMESTAMP, 'Timestamp')
+        (STRING, 'string'),
+        (INTEGER, 'integer'),
+        (NUMERIC, 'numeric'),
+        (BOOLEAN, 'boolean'),
+        (DATE, 'date'),
+        (TIME, 'time'),
+        (TIMESTAMP, 'timestamp'),
     )
 
-    SUM = 1
+    NON_AGGREGATION = 1
+    SUM = 2
     AGR_FUNCTIONS = (
+        (NON_AGGREGATION, 'non_aggregation'),
         (SUM, 'sum'),
     )
 
@@ -193,7 +195,7 @@ class Measure(models.Model):
         choices=MEASURE_TYPE, default=STRING)
     aggregator = models.SmallIntegerField(
         verbose_name="Функция агрегирования",
-        choices=AGR_FUNCTIONS, default=SUM)
+        choices=AGR_FUNCTIONS, default=NON_AGGREGATION)
     format_string = models.CharField(
         verbose_name="Строка форматирования", max_length=255,
         null=True, blank=True)
@@ -206,8 +208,8 @@ class Measure(models.Model):
     datasources_meta = models.ForeignKey(
         DatasourceMeta, related_name='measure')
 
-    class META:
-        db_table = 'measures'
+    class Meta:
+        db_table = "measures"
         verbose_name = 'Мера'
         verbose_name_plural = 'Меры'
 
