@@ -4,7 +4,6 @@ $(document).ready(function(){
     var tasksUl = $('#user_tasks_bar');
 
     if(tasksUl.length){
-        var taskTmpl = _.template($('#tasks_progress').html());
 
         $.get(tasksUl.data('url'), {}, function(data){
 
