@@ -68,12 +68,10 @@ def load_data_mongo(user_id, task_id, data, channel):
     source_model = Datasource()
     source_model.set_from_dict(**source_dict)
 
-    columns = []
     col_names = []
 
     for t_name, col_group in groupby(cols, lambda x: x["table"]):
         for x in col_group:
-            columns += col_group
             col_names.append(x["table"] + "__" + x["col"])
 
     # название новой таблицы
@@ -90,7 +88,8 @@ def load_data_mongo(user_id, task_id, data, channel):
 
     collection = db[collection_name]
 
-    query = DataSourceService.get_rows_query_for_loading_task(source_model, structure, columns)
+    query = DataSourceService.get_rows_query_for_loading_task(source_model, structure, cols)
+
     instance = DataSourceService.get_source_connection(source_model)
     page = 1
     limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
