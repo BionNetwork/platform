@@ -27,14 +27,14 @@ class Command(BaseCommand):
 
                 return host == settings_host
 
-            def open(self, user_id, task_id):
+            def open(self, channel):
                 # создание канала
                 self.client = brukva.Client(host=settings.REDIS_HOST,
                                             port=int(settings.REDIS_PORT),
                                             selected_db=settings.REDIS_DB)
                 self.client.connect()
                 # подписка на канал
-                self.channel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
+                self.channel = channel
                 self.client.subscribe(self.channel)
                 # прослушка
                 self.client.listen(self.on_messages_published)
@@ -46,7 +46,7 @@ class Command(BaseCommand):
                 self.client.unsubscribe(self.channel)
 
         application = Application([
-            (r"/socket/user/(\d+)/task/(\d+)", SocketHandler),
+            (r"/socket/channel/(.*)", SocketHandler),
         ], {}, debug=settings.DEBUG)
 
         # if __name__ == "__main__":
