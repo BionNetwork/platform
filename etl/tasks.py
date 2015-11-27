@@ -293,7 +293,7 @@ def load_data_database(user_id, task_id, data):
         meta=datasource_meta,
         value=key,
     )
-    # return create_dimensions_and_measures(user_id, source, table_key, key)
+    return create_dimensions_and_measures(user_id, source, table_key, key)
 
 
 def create_dimensions_and_measures(user_id, source, table_key, key):
@@ -344,28 +344,28 @@ class DimensionCreation(OlapEntityCreation):
         level = dict()
         for field in fields:
             level.update(dict(
-                type=field['name'], level_type='regular', visible=True,
+                type=field['type'], level_type='regular', visible=True,
                 column=field['name'], unique_members=field['is_unique'],
-                caption=table_name,
+                caption=field['name'],
                 )
             )
 
-        data = dict(
-            name=table_name,
-            has_all=True,
-            table_name=table_name,
-            level=level,
-            primary_key='id',
-            foreign_key=table_name
-        )
+            data = dict(
+                name=field['name'],
+                has_all=True,
+                table_name=field['name'],
+                level=level,
+                primary_key='id',
+                foreign_key=field['name']
+            )
 
-        Dimension.objects.create(
-            name=table_name,
-            title=table_name,
-            user_id=user_id,
-            datasources_meta=self.meta,
-            data=json.dumps(data)
-        )
+            Dimension.objects.create(
+                name=field['name'],
+                title=field['name'],
+                user_id=user_id,
+                datasources_meta=self.meta,
+                data=json.dumps(data)
+            )
 
     @celery.task(name='etl:database:generate_dimensions', filter=task_method)
     def load_data(self, task_id):
@@ -379,29 +379,23 @@ class MeasureCreation(OlapEntityCreation):
     """
     Создание мер
     """
-    accord = {
-        'integer': Measure.INTEGER,
-        'time': Measure.TIME,
-        'date': Measure.DATE,
-        'timestamp': Measure.TIMESTAMP,
-    }
 
     actual_fields_type = [
-        'integer', 'time', 'date', 'timestamp']
+        Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
 
     def save_meta_data(self, user_id, table_name, fields):
         """
         Сохранение информации о мерах
         """
-        # f_name = field['name']
-        Measure.objects.create(
-            name=table_name,
-            title=table_name,
-            # type=self.accord[field['type']],
-            type=Measure.INTEGER,
-            user_id=user_id,
-            datasources_meta=self.meta
-        )
+        for field in fields:
+
+            Measure.objects.create(
+                name=field['name'],
+                title=field['name'],
+                type=field['type'],
+                user_id=user_id,
+                datasources_meta=self.meta
+            )
 
     @celery.task(name='etl:database:generate_measures', filter=task_method)
     def load_data(self, task_id):

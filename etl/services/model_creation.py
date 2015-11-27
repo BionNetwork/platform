@@ -142,7 +142,7 @@ class DataStore(object):
         all_fields = []
         for table, fields in meta_data['columns'].iteritems():
             for field in fields:
-                field['name'] = '{1}{2}{3}'.format(
+                field['name'] = '{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name'])
                 all_fields.append(field)
         return all_fields
@@ -212,7 +212,6 @@ class OlapEntityCreation(object):
             f_list.append(get_field_settings(field_name, field['type']))
 
         model = get_django_model(
-            self.table_name, f_list, self.source.app_name,
             self.source.module, self.table_name)
         install(model)
 
@@ -246,7 +245,6 @@ class OlapEntityCreation(object):
             data = self.source.get_table_model(
                 self.table_name, self.actual_fields, self.key).objects.values(
                 *actual_fields_name)[index:index_to]
-            print data[:2]
             if not data:
                 break
             column_data = [model(
@@ -254,4 +252,3 @@ class OlapEntityCreation(object):
                         for x in data]
             model.objects.bulk_create(column_data)
             index = index_to
-            print index

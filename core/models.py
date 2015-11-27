@@ -163,13 +163,13 @@ class Dimension(models.Model):
 
 class Measure(models.Model):
     """Меры для кубов"""
-    STRING = 1
-    INTEGER = 2
-    NUMERIC = 3
-    BOOLEAN = 4
-    DATE = 5
-    TIME = 6
-    TIMESTAMP = 7
+    STRING = 'string'
+    INTEGER = 'integer'
+    NUMERIC = 'numeric'
+    BOOLEAN = 'boolean'
+    DATE = 'date'
+    TIME = 'time'
+    TIMESTAMP = 'timestamp'
     MEASURE_TYPE = (
         (STRING, 'string'),
         (INTEGER, 'integer'),
@@ -190,9 +190,9 @@ class Measure(models.Model):
     name = models.CharField(
         verbose_name="Название меры", max_length=255, db_index=True)
     title = models.CharField(verbose_name="Название", max_length=255)
-    type = models.SmallIntegerField(
+    type = models.CharField(
         verbose_name="Тип измерения",
-        choices=MEASURE_TYPE, default=STRING)
+        choices=MEASURE_TYPE, default=STRING, max_length=50)
     aggregator = models.SmallIntegerField(
         verbose_name="Функция агрегирования",
         choices=AGR_FUNCTIONS, default=NON_AGGREGATION)

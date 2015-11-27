@@ -136,7 +136,10 @@ class RemoveSourceView(BaseView):
 class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
-
+        from tasks import create_dimensions_and_measures
+        # from models_test import model_test
+        # model_test()
+        create_dimensions_and_measures()
         try:
             helpers.DataSourceService.check_connection(request.POST)
             return self.json_response(
@@ -287,7 +290,7 @@ class GetColumnsForChoicesView(BaseEtlView):
     def start_get_action(self, request, source):
         parent_table = request.GET.get('parent')
         child_table = request.GET.get('child_bind')
-        has_warning = json.loads(request.GET.get('has_warning'))
+        has_warning = json.loads(request.GET.get('has_warning')) if request.GET.get('has_warning') else None
 
         data = helpers.DataSourceService.get_columns_and_joins_for_join_window(
             source, parent_table, child_table, has_warning)
