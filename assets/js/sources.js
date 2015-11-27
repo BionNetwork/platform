@@ -674,21 +674,30 @@ function startLoading(userId, loadUrl){
                 confirmAlert(response.message);
         } else {
             dataWindow.modal('hide');// clear data
-            var task_id = response.data['task_id'];
-            var tasksUl = $('#user_tasks_bar'),
-                ws = new WebSocket(
-                    "ws://"+tasksUl.data('host')+"user/"+userId+"/task/"+task_id);
 
-            ws.onopen = function(){
-                var taskTmpl = _.template($('#tasks_progress').html());
-                tasksUl.append(taskTmpl({data: [task_id ]}));
-            };
-            ws.onmessage = function (evt){
-                $('#task-text-'+task_id).text(evt.data+'%');
-                $('#task-measure-'+task_id).css('width', evt.data+'%')
-            };
-            ws.onclose = function(){
-            };
+            var channels = response.data['channels'],
+                tasksUl = $('#user_tasks_bar');
+
+            _.each(channels, function(channel){
+                var ws = new WebSocket(
+                    "ws://"+tasksUl.data('host')+"channel/"+channel);
+
+                ws.onopen = function(){
+                }
+                ws.onmessage = function (evt){
+                    var data = JSON.parse(evt.data),
+                        taskId = data.taskId;
+
+                    if(!$('#task-li-'+taskId).length){
+                        var taskTmpl = _.template($('#tasks_progress').html());
+                        tasksUl.append(taskTmpl({data: [taskId ]}));
+                    }
+                    $('#task-text-'+taskId).text(data.percent+'%');
+                    $('#task-measure-'+taskId).css('width', data.percent+'%');
+                };
+                ws.onclose = function(){
+                };
+            });
         }
     });
 }

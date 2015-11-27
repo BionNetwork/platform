@@ -4,18 +4,27 @@ $(document).ready(function(){
     var tasksUl = $('#user_tasks_bar');
 
     if(tasksUl.length){
-        var taskTmpl = _.template($('#tasks_progress').html());
 
         $.get(tasksUl.data('url'), {}, function(data){
-            tasksUl.append(taskTmpl({data: data.tasks}));
 
-            _.each(data.tasks, function(el){
+            _.each(data.channels, function(channel){
                 var ws = new WebSocket(
-                    "ws://"+tasksUl.data('host')+"user/"+
-                        data.userId+"/task/"+el);
+                    "ws://"+tasksUl.data('host')+"channel/"+channel);
+
+                ws.onopen = function(){
+                };
                 ws.onmessage = function (evt){
-                    $('#task-text-'+el).text(evt.data+'%')
-                    $('#task-measure-'+el).css('width', evt.data+'%')
+                    var data = JSON.parse(evt.data),
+                        taskId = data.taskId;
+
+                    if(!$('#task-li-'+taskId).length){
+                        var taskTmpl = _.template($('#tasks_progress').html());
+                        tasksUl.append(taskTmpl({data: [taskId ]}));
+                    }
+                    $('#task-text-'+taskId).text(data.percent+'%');
+                    $('#task-measure-'+taskId).css('width', data.percent+'%');
+                };
+                ws.onclose = function(){
                 };
             });
         });

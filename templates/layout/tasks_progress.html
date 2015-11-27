@@ -6,7 +6,7 @@
 
 <script type="text/html" id="tasks_progress">
     <% _.each(data, function(taskId) { %>
-        <li>
+        <li id="task-li-<%= taskId %>">
             <a href="javascript::;">
                 <h4 class="control-sidebar-subheading">
                     Загрузка

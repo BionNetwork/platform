@@ -136,10 +136,7 @@ class RemoveSourceView(BaseView):
 class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
-        from tasks import create_dimensions_and_measures
-        # from models_test import model_test
-        # model_test()
-        create_dimensions_and_measures()
+
         try:
             helpers.DataSourceService.check_connection(request.POST)
             return self.json_response(
@@ -290,7 +287,7 @@ class GetColumnsForChoicesView(BaseEtlView):
     def start_get_action(self, request, source):
         parent_table = request.GET.get('parent')
         child_table = request.GET.get('child_bind')
-        has_warning = json.loads(request.GET.get('has_warning')) if request.GET.get('has_warning') else None
+        has_warning = json.loads(request.GET.get('has_warning'))
 
         data = helpers.DataSourceService.get_columns_and_joins_for_join_window(
             source, parent_table, child_table, has_warning)
@@ -354,17 +351,19 @@ class LoadDataView(BaseEtlView):
             'user_id': request.user.id,
         }
 
+        user_id = request.user.id
+
         # добавляем задачу mongo в очередь
         task = helpers.TaskService('etl:load_data:mongo')
-        task_id1 = task.add_task(arguments)
-        tasks.load_data.apply_async((request.user.id, task_id1),)
+        task_id1, channel1 = task.add_task(arguments)
+        tasks.load_data.apply_async((user_id, task_id1, channel1),)
 
         # добавляем задачу database в очередь
         task = helpers.TaskService('etl:load_data:database')
-        task_id2 = task.add_task(arguments)
-        tasks.load_data.apply_async((request.user.id, task_id2),)
+        task_id2, channel2 = task.add_task(arguments)
+        tasks.load_data.apply_async((user_id, task_id2, channel2),)
 
-        return {'task_id': task_id2, }
+        return {'channels': [channel1, channel2], }
 
 
 class GetUserTasksView(BaseView):
@@ -372,7 +371,13 @@ class GetUserTasksView(BaseView):
         Cписок юзеровских тасков
     """
     def get(self, request, *args, **kwargs):
-        user_task_ids = helpers.RedisSourceService.get_user_database_task_ids(
-            request.user.id, helpers.TaskStatusEnum.PROCESSING)
-        return self.json_response(
-            {'userId': request.user.id, 'tasks': user_task_ids})
+        # берем 10 последних инфо каналов юзера
+        channels_info = helpers.RedisSourceService.get_user_subscribers(
+            request.user.id)[-10:]
+
+        # сами каналы
+        channels = []
+        for ch in channels_info:
+            channels.append(ch['channel'])
+
+        return self.json_response({'channels': channels})

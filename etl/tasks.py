@@ -5,6 +5,7 @@ import sys
 import brukva
 import pymongo
 import json
+import datetime
 
 import operator
 import binascii
@@ -12,11 +13,10 @@ from psycopg2 import errorcodes
 from etl.constants import FIELD_NAME_SEP
 
 from etl.services.model_creation import DataStore, OlapEntityCreation
-from .helpers import (DataSourceService, EtlEncoder,
+from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
                       TaskService, generate_table_name_key, TaskStatusEnum,
                       TaskErrorCodeEnum, get_table_key)
-from core.models import (
-    Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList)
+from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList
 from django.conf import settings
 
 from djcelery import celery
@@ -34,7 +34,14 @@ client = brukva.Client(host=settings.REDIS_HOST,
 client.connect()
 
 
-def load_data_mongo(user_id, task_id, data):
+def datetime_now_str():
+    """
+    Нынешнее время в строковой форме
+    """
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def load_data_mongo(user_id, task_id, data, channel):
     """
     Загрузка данных в mongo
     :param user_id: integer
@@ -42,7 +49,7 @@ def load_data_mongo(user_id, task_id, data):
     :param data: dict
     :param source: dict
     """
-    client.publish('jobs:etl:extract:{0}:{1}'.format(user_id, task_id), 'loading task enabled')
+
     print 'upload data to mongo'
     cols = json.loads(data['cols'])
     tables = json.loads(data['tables'])
@@ -52,12 +59,10 @@ def load_data_mongo(user_id, task_id, data):
     source_model = Datasource()
     source_model.set_from_dict(**source_dict)
 
-    columns = []
     col_names = []
 
     for t_name, col_group in groupby(cols, lambda x: x["table"]):
         for x in col_group:
-            columns += col_group
             col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
 
     # название новой таблицы
@@ -74,15 +79,33 @@ def load_data_mongo(user_id, task_id, data):
 
     collection = db[collection_name]
 
-    query = DataSourceService.get_rows_query_for_loading_task(source_model, structure, columns)
+    query = DataSourceService.get_rows_query_for_loading_task(
+        source_model, structure, cols)
+
+    # общее количество строк в запросе
+    max_rows_count = DataSourceService.get_structure_rows_number(
+        source_model, structure,  cols)
+
     instance = DataSourceService.get_source_connection(source_model)
-    page = 1
-    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+
+    # создаем информацию о работе таска
+    queue_storage = RedisSourceService.get_queue(task_id)
+
+    queue_storage['id'] = task_id
+    queue_storage['user_id'] = user_id
+    queue_storage['date_created'] = datetime_now_str()
+    queue_storage['date_updated'] = None
+    queue_storage['status'] = TaskStatusEnum.PROCESSING
+    queue_storage['percent'] = 0
 
     # меняем статус задачи на 'В обработке'
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
 
+    page = 1
+    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+    loaded_count = 0.0
     was_error = False
+    up_to_100 = False
     err_msg = ''
 
     while True:
@@ -107,6 +130,25 @@ def load_data_mongo(user_id, task_id, data):
             # fixme перезаписывается при каждой ошибке
             err_msg = e.message
             print "Unexpected error:", type(e), e
+            queue_storage['status'] = TaskStatusEnum.ERROR
+
+        # обновляем информацию о работе таска
+        queue_storage['date_updated'] = datetime_now_str()
+
+        loaded_count += limit
+        percent = int(round(loaded_count/max_rows_count*100))
+
+        if percent >= 100:
+            queue_storage['percent'] = 100
+            up_to_100 = True
+            client.publish(
+                channel, json.dumps({'percent': 100, 'taskId': task_id}))
+
+        else:
+            queue_storage['percent'] = percent
+            client.publish(
+                channel, json.dumps({'percent': percent, 'taskId': task_id}))
+
         page += 1
 
     if was_error:
@@ -118,9 +160,21 @@ def load_data_mongo(user_id, task_id, data):
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
 
+        queue_storage['date_updated'] = datetime_now_str()
+        queue_storage['status'] = TaskStatusEnum.DONE
+
+    if not was_error and not up_to_100:
+        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
+
+    # удаляем инфу о работе таска
+    RedisSourceService.delete_queue(task_id)
+
+    # удаляем канал из списка каналов юзера
+    RedisSourceService.delete_user_subscriber(user_id, task_id)
+
 
 @celery.task(name='etl.tasks.load_data')
-def load_data(user_id, task_id):
+def load_data(user_id, task_id, channel):
 
     task = QueueList.objects.get(id=task_id)
 
@@ -131,12 +185,12 @@ def load_data(user_id, task_id):
         name = task.queue.name
 
         if name == 'etl:load_data:mongo':
-            load_data_mongo(user_id, task_id, data)
+            load_data_mongo(user_id, task_id, data, channel)
         elif name == 'etl:load_data:database':
-            load_data_database(user_id, task_id, data)
+            load_data_database(user_id, task_id, data, channel)
 
 
-def load_data_database(user_id, task_id, data):
+def load_data_database(user_id, task_id, data, channel):
     """Загрузка данных во временное хранилище
     Args:
         data(dict): Данные
@@ -147,9 +201,6 @@ def load_data_database(user_id, task_id, data):
     """
 
     print 'load_data_database'
-
-    # сокет канал
-    chanel = 'jobs:etl:extract:{0}:{1}'.format(user_id, task_id)
 
     cols = json.loads(data['cols'])
     col_types = json.loads(data['col_types'])
@@ -177,7 +228,6 @@ def load_data_database(user_id, task_id, data):
 
     # название новой таблицы
     key = generate_table_name_key(source, cols_str)
-    print key, type(key)
 
     table_key = get_table_key('sttm_datasource', key)
 
@@ -228,6 +278,16 @@ def load_data_database(user_id, task_id, data):
     was_error = False
     up_to_100 = False
 
+    # создаем информацию о работе таска
+    queue_storage = RedisSourceService.get_queue(task_id)
+
+    queue_storage['id'] = task_id
+    queue_storage['user_id'] = user_id
+    queue_storage['date_created'] = datetime_now_str()
+    queue_storage['date_updated'] = None
+    queue_storage['status'] = TaskStatusEnum.PROCESSING
+    queue_storage['percent'] = 0
+
     # меняем статус задачи на 'В обработке'
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
 
@@ -259,6 +319,9 @@ def load_data_database(user_id, task_id, data):
                 task_id, TaskStatusEnum.ERROR,
                 error_code=err_code, error_msg=err_msg)
 
+            queue_storage['date_updated'] = datetime_now_str()
+            queue_storage['status'] = TaskStatusEnum.ERROR
+
             break
         else:
             # коммитим пачку в бд
@@ -272,21 +335,38 @@ def load_data_database(user_id, task_id, data):
 
             loaded_count += settings_limit
 
-            percent = int(round(loaded_count/max_rows_count*100))
+            # обновляем информацию о работе таска
+            queue_storage['date_updated'] = datetime_now_str()
 
+            percent = int(round(loaded_count/max_rows_count*100))
             if percent >= 100:
+                queue_storage['percent'] = 100
                 up_to_100 = True
-                client.publish(chanel, 100)
+                client.publish(
+                    channel, json.dumps({'percent': 100, 'taskId': task_id}))
+
             else:
-                client.publish(chanel, percent)
+                queue_storage['percent'] = percent
+                client.publish(
+                    channel, json.dumps({'percent': percent, 'taskId': task_id}))
 
     if not was_error:
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
 
-    if not was_error and not up_to_100:
-        client.publish(chanel, 100)
+        queue_storage['date_updated'] = datetime_now_str()
+        queue_storage['status'] = TaskStatusEnum.DONE
 
+    if not was_error and not up_to_100:
+        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
+
+    # удаляем инфу о работе таска
+    RedisSourceService.delete_queue(task_id)
+
+    # удаляем канал из списка каналов юзера
+    RedisSourceService.delete_user_subscriber(user_id, task_id)
+
+    # работа с datasource_meta
     datasource_meta = DataSourceService.update_datasource_meta(
         table_key, source, cols, tables_info_for_meta, last_row)
     DatasourceMetaKeys.objects.get_or_create(
@@ -316,12 +396,12 @@ def create_dimensions_and_measures(user_id, source, table_key, key):
     )
 
     dimension_task = TaskService('etl:database:generate_dimensions')
-    dimension_task_id = dimension_task.add_task(arguments)
+    dimension_task_id, channel = dimension_task.add_task(arguments)
     dimension = DimensionCreation(store)
     arguments.update({'target_table': get_table_key('measures', key)})
 
     measure_task = TaskService('etl:database:generate_measures')
-    measure_task_id = measure_task.add_task(arguments)
+    measure_task_id, channel = measure_task.add_task(arguments)
     measure = MeasureCreation(store)
 
     group([

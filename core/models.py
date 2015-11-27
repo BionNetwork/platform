@@ -6,6 +6,7 @@ import datetime
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+
 from djchoices import ChoiceItem, DjangoChoices
 
 from .db.services import RetryQueryset
@@ -159,7 +160,7 @@ class Dimension(models.Model):
         db_table = "dimensions"
         verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'
-
+        
 
 class Measure(models.Model):
     """Меры для кубов"""

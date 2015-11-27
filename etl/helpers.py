@@ -15,7 +15,7 @@ from django.conf import settings
 
 from core.models import ConnectionChoices
 from . import r_server
-from redis_collections import Dict as RedisDict
+from redis_collections import Dict as RedisDict, List as RedisList
 from .maps import postgresql as psql_map
 from .maps import mysql as mysql_map
 from core.models import (Datasource, DatasourceMeta, QueueList, Queue,
@@ -1393,21 +1393,18 @@ class RedisCacheKeys(object):
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
-    def get_task_counter():
+    def get_user_subscribers(user_id):
         """
-        счетчик задач
-        :return:
+        ключ каналов юзера для сокетов
         """
-        return 'tasks_counter'
+        return 'user_channels:{0}'.format(user_id)
 
     @staticmethod
-    def get_user_task_list(user_id):
+    def get_queue(task_id):
         """
-        список задач юзера
-        :param user_id:
-        :return:
+        ключ информации о ходе работы таска
         """
-        return 'user_tasks:{0}'.format(user_id)
+        return 'queue:{0}'.format(task_id)
 
 
 class RedisSourceService(object):
@@ -1953,90 +1950,47 @@ class RedisSourceService(object):
                 )))
         return tables_info_for_meta
 
-    @classmethod
-    def get_next_task_counter(cls):
-        """
-        порядковый номер задачи
-        :return:
-        """
-        counter = RedisCacheKeys.get_task_counter()
-        if not r_server.exists(counter):
-            r_server.set(counter, 1)
-            return 1
-        return r_server.incr(counter)
-
     @staticmethod
-    def add_user_task(user_id, task_id, data):
-        key = RedisCacheKeys.get_user_task_list(user_id)
-        storage = RedisStorage(r_server)
-        storage.set_dict(key, task_id, data)
-
-    @staticmethod
-    def get_user_tasks(user_id):
+    def get_user_subscribers(user_id):
         """
-        список задач юзера
+        каналы юзера для сокетов
         :param user_id:
         :return:
         """
-        key = RedisCacheKeys.get_user_task_list(user_id)
-        storage = RedisStorage(r_server)
-        tasks = storage.get_dict(key)
-        return tasks
+        subs_str = RedisCacheKeys.get_user_subscribers(user_id)
+        channels = RedisList(key=subs_str, redis=r_server, pickler=json)
+        return channels
 
     @classmethod
-    def get_user_task_ids(cls, user_id):
+    def delete_user_subscriber(cls, user_id, task_id):
         """
-        список id задач юзера
-        :param user_id:
-        :return:
+        удаляет канал из каналов для сокетов
         """
-        tasks = cls.get_user_tasks(user_id)
-        return list(tasks)
-
-    @classmethod
-    def get_user_database_task_ids(cls, user_id, status_id):
-        """
-        список id тасков для постгреса, которые в данный момент в обработке
-        :param user_id:
-        :return:
-        """
-        tasks_ids = []
-        tasks = cls.get_user_tasks(user_id)
-
-        for (task_id, task_info) in tasks.iteritems():
-            if (task_info['name'] == 'etl:load_data:database' and
-                    task_info['status_id'] == status_id):
-                tasks_ids.append(task_id)
-
-        return tasks_ids
+        subscribers = cls.get_user_subscribers(user_id)
+        for sub in subscribers:
+            if sub['queue_id'] == task_id:
+                subscribers.remove(sub)
+                break
 
     @staticmethod
-    def get_user_task_by_id(user_id, task_id):
-        """Получение пользовательской задачи"""
-        key = RedisCacheKeys.get_user_task_list(user_id)
-        storage = RedisStorage(r_server)
-        tasks = storage.get_dict(key)
-        if task_id not in tasks:
-            return None
-        return tasks[task_id]
-
-    @classmethod
-    def update_task_status(cls, user_id, task_id, status_id,
-                           error_code=None, error_msg=None):
+    def get_queue(task_id):
         """
-            Меняем статусы тасков
+        информация о ходе работы таска
+        :param task_id:
         """
-        tasks = cls.get_user_tasks(user_id)
-        task_dict = tasks[task_id]
-        task_dict['status_id'] = status_id
+        queue_str = RedisCacheKeys.get_queue(task_id)
+        queue_dict = RedisDict(key=queue_str, redis=r_server, pickler=json)
+        queue_storage = QueueStorage(queue_dict)
+        return queue_storage
 
-        if status_id == TaskStatusEnum.ERROR:
-            task_dict['error'] = {
-                'code': error_code,
-                'message': error_msg,
-            }
-
-        tasks[task_id] = task_dict
+    @staticmethod
+    def delete_queue(task_id):
+        """
+        информация о ходе работы таска
+        :param task_id:
+        """
+        queue_str = RedisCacheKeys.get_queue(task_id)
+        r_server.delete(queue_str)
 
     @classmethod
     def get_next_user_collection_counter(cls, user_id, source_id):
@@ -2632,21 +2586,20 @@ class TaskService:
             checksum='',
         )
 
-        return task.id
+        task_id = task.id
+        # канал для таска
+        new_channel = settings.SOCKET_CHANNEL.format(arguments['user_id'], task_id)
 
-    @staticmethod
-    def update_task_status(task_id, status_id, error_code=None, error_msg=None):
-        """
-            Меняем статусы тасков
-        """
-        task = QueueList.objects.get(id=task_id)
-        task.queue_status = QueueStatus.objects.get(title=status_id)
+        # добавляем канал подписки в редис
+        channels = RedisSourceService.get_user_subscribers(arguments['user_id'])
+        channels.append({
+            "channel": new_channel,
+            "queue_id": task_id,
+            "namespace": self.name,
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
 
-        if status_id == TaskStatusEnum.ERROR:
-            task.comment = 'code: {0}, message: {1}'.format(
-                error_code, error_msg)
-
-        task.save()
+        return task_id, new_channel
 
     @classmethod
     def table_create_query_for_loading_task(
@@ -2670,6 +2623,35 @@ class TaskService:
         return insert_query
 
 
+class QueueStorage(object):
+    """
+    Класс работает с информацией работающего таска пользователя,
+    обеспечивает контроль над входными данными,
+    имеется allowed_keys - список разрешенных ключей для редис словаря
+    """
+    allowed_keys = [
+        'id', 'user_id', 'date_created', 'date_updated', 'status', 'percent']
+
+    def __init__(self, queue_redis_dict):
+        """
+        :type queue_redis_dict: redis_collections.Dict
+        """
+        self.queue = queue_redis_dict
+
+    def __getitem__(self, key):
+        if key in self.allowed_keys:
+            return self.queue[key]
+        else:
+            raise KeyError('Неверный ключ для словаря информации задачи!')
+
+    def __setitem__(self, key, val):
+        if key in self.allowed_keys:
+            self.queue[key] = val
+        else:
+            raise KeyError('Неверный ключ для словаря информации задачи!')
+
+
+# FIXME не используется на данный момент
 class RedisStorage:
     """
     Обертка над методами сохранения информации в redis
