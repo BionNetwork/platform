@@ -520,7 +520,8 @@ function showJoinWindow(url, parent, child, isWithoutBind){
                 joinRows.append(joinWinRow({
                     parentCols: data.columns[parent],
                     childCols: data.columns[child],
-                    i: 0
+                    i: 0,
+                    error: false
                 }));
             }
             else {

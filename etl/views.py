@@ -341,14 +341,24 @@ class LoadDataView(BaseEtlView):
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
 
+        arguments = {
+            'cols': data['cols'],
+            'tables': data['tables'],
+            'col_types': data['col_types'],
+            'meta_info': data['meta_info'],
+            'tree': structure,
+            'source': conn_dict,
+            'user_id': request.user.id,
+        }
+
         # добавляем задачу mongo в очередь
         task = helpers.TaskService('etl:load_data:mongo')
-        task_id1 = task.add_task(request.user.id, data, structure, conn_dict)
+        task_id1 = task.add_task(arguments)
         tasks.load_data.apply_async((request.user.id, task_id1),)
 
         # добавляем задачу database в очередь
         task = helpers.TaskService('etl:load_data:database')
-        task_id2 = task.add_task(request.user.id, data, structure, conn_dict)
+        task_id2 = task.add_task(arguments)
         tasks.load_data.apply_async((request.user.id, task_id2),)
 
         return {'task_id': task_id2, }

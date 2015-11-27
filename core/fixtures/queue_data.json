@@ -59,5 +59,13 @@
     "fields": {
       "name": "etl:database:generate_dimensions"
     }
+  },
+  {
+    "model": "core.queue",
+    "pk": 3,
+    "fields": {
+      "name": "etl:database:generate_measures"
+    }
   }
+
 ]

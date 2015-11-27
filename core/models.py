@@ -99,7 +99,7 @@ class DatasourceMetaKeys(models.Model):
     """
     meta = models.ForeignKey(
         DatasourceMeta, verbose_name=u'Метаданные', related_name=u'meta_keys')
-    value = models.CharField(verbose_name=u'Ключ', max_length=255)
+    value = models.IntegerField(verbose_name=u'Ключ')
 
     class Meta:
         db_table = 'datasources_meta_keys'

@@ -2614,7 +2614,7 @@ class TaskService:
     def __init__(self, name):
         self.name = name
 
-    def add_task(self, user_id, data, tree, source_dict):
+    def add_task(self, arguments):
         """
         Добавляем задачу юзеру в список задач и возвращаем идентификатор заадчи
         :type tree: dict дерево источника
@@ -2623,40 +2623,6 @@ class TaskService:
         :param source_dict: dict
         :return: integer
         """
-        arguments = {
-            'cols': data['cols'],
-            'tables': data['tables'],
-            'col_types': data['col_types'],
-            'meta_info': data['meta_info'],
-            'tree': tree,
-            'source': source_dict,
-            'user_id': user_id,
-        }
-
-        task = QueueList.objects.create(
-            queue=Queue.objects.get(name=self.name),
-            queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
-            arguments=json.dumps(arguments),
-            app='etl',
-            checksum='',
-        )
-
-        return task.id
-
-    def add_dim_task(self, user_id, key):
-        """
-        Добавление задачи на создание таблиц размерностей
-        Args:
-            user_id(int): id пользователя
-            key(str): ключ к метаданным обрабатываемой таблицы
-
-        Returns:
-            int: id задачи
-        """
-        arguments = {
-            'meta_db_key': key,
-            'user_id': user_id,
-        }
 
         task = QueueList.objects.create(
             queue=Queue.objects.get(name=self.name),
@@ -2749,3 +2715,12 @@ def generate_table_name_key(source, cols_str):
         reduce(operator.add,
                [source.host, str(source.port),
                 str(source.user_id), cols_str], ''))
+
+
+def get_table_key(prefix, key):
+    """
+    название новой таблицы
+    :param key: str
+    :return:
+    """
+    return '{0}_{1}{2}'.format(prefix, '_' if key < 0 else '', abs(key))

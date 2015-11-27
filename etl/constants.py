@@ -1,0 +1,2 @@
+
+FIELD_NAME_SEP = '--'

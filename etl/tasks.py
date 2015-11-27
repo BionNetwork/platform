@@ -9,12 +9,12 @@ import json
 import operator
 import binascii
 from psycopg2 import errorcodes
+from etl.constants import FIELD_NAME_SEP
 
-from etl.services.model_creation import install, get_django_model, \
-    get_field_settings, DataStore, OlapEntityCreation
+from etl.services.model_creation import DataStore, OlapEntityCreation
 from .helpers import (DataSourceService, EtlEncoder,
                       TaskService, generate_table_name_key, TaskStatusEnum,
-                      TaskErrorCodeEnum)
+                      TaskErrorCodeEnum, get_table_key)
 from core.models import (
     Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList)
 from django.conf import settings
@@ -32,15 +32,6 @@ client = brukva.Client(host=settings.REDIS_HOST,
                        port=int(settings.REDIS_PORT),
                        selected_db=settings.REDIS_DB)
 client.connect()
-
-
-def get_table_key(key):
-    """
-    название новой таблицы
-    :param key: str
-    :return:
-    """
-    return '{0}{1}{2}'.format('sttm_datasource_', '_' if key < 0 else '', abs(key))
 
 
 def load_data_mongo(user_id, task_id, data):
@@ -67,7 +58,7 @@ def load_data_mongo(user_id, task_id, data):
     for t_name, col_group in groupby(cols, lambda x: x["table"]):
         for x in col_group:
             columns += col_group
-            col_names.append(x["table"] + "__" + x["col"])
+            col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
 
     # название новой таблицы
     key = binascii.crc32(
@@ -76,7 +67,7 @@ def load_data_mongo(user_id, task_id, data):
                 ','.join(sorted(tables))], ''))
 
     # collection
-    collection_name = get_table_key(key)
+    collection_name = get_table_key('sttm_datasource', key)
     connection = pymongo.MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
     # database name
     db = connection.etl
@@ -181,12 +172,14 @@ def load_data_database(user_id, task_id, data):
 
         dotted = '{0}.{1}'.format(t, c)
 
-        col_names_create.append('"{0}--{1}" {2}'.format(t, c, col_types[dotted]))
+        col_names_create.append('"{0}{1}{2}" {3}'.format(
+            t, FIELD_NAME_SEP, c, col_types[dotted]))
 
     # название новой таблицы
     key = generate_table_name_key(source, cols_str)
+    print key, type(key)
 
-    table_key = get_table_key(key)
+    table_key = get_table_key('sttm_datasource', key)
 
     rows_query = DataSourceService.get_rows_query_for_loading_task(
             source, structure,  cols)
@@ -294,40 +287,46 @@ def load_data_database(user_id, task_id, data):
     if not was_error and not up_to_100:
         client.publish(chanel, 100)
 
-    # работа с datasource_meta
-
     datasource_meta = DataSourceService.update_datasource_meta(
         table_key, source, cols, tables_info_for_meta, last_row)
-
     DatasourceMetaKeys.objects.get_or_create(
         meta=datasource_meta,
         value=key,
     )
-    return create_dimensions_and_measures(user_id, key)
+    # return create_dimensions_and_measures(user_id, source, table_key, key)
 
 
-def create_dimensions_and_measures(user_id, key):
+def create_dimensions_and_measures(user_id, source, table_key, key):
     """Создание таблиц размерностей
 
     Args:
         user_id(int): идентификатор пользователя
-        key(str): ключ к метаданным обрабатываемой таблицы
+        key(int): ключ к метаданным обрабатываемой таблицы
     Returns:
 
     """
-    store = DataStore(key)
+    store = DataStore()
+
+    arguments = dict(
+        user_id=user_id,
+        datasource_id=source.id,
+        source_table=table_key,
+        key=key,
+        target_table=get_table_key('dimensions', key)
+    )
 
     dimension_task = TaskService('etl:database:generate_dimensions')
-    dimension_task_id = dimension_task.add_dim_task(user_id, key)
+    dimension_task_id = dimension_task.add_task(arguments)
     dimension = DimensionCreation(store)
+    arguments.update({'target_table': get_table_key('measures', key)})
 
     measure_task = TaskService('etl:database:generate_measures')
-    measure_task_id = measure_task.add_dim_task(user_id, key)
+    measure_task_id = measure_task.add_task(arguments)
     measure = MeasureCreation(store)
 
     group([
-        dimension.load_data.s(user_id, dimension_task_id),
-        measure.load_data.s(user_id, measure_task_id)
+        dimension.load_data.s(dimension_task_id),
+        measure.load_data.s(measure_task_id)
     ])()
 
 
@@ -338,66 +337,77 @@ class DimensionCreation(OlapEntityCreation):
 
     actual_fields_type = ['text']
 
-    def save_meta_data(self, user_id, field):
+    def save_meta_data(self, user_id, table_name, fields):
         """
         Сохраняем информацию о размерности
         """
-        f_name = field['name']
+        level = dict()
+        for field in fields:
+            level.update(dict(
+                type=field['name'], level_type='regular', visible=True,
+                column=field['name'], unique_members=field['is_unique'],
+                caption=table_name,
+                )
+            )
+
         data = dict(
-            name=f_name,
+            name=table_name,
             has_all=True,
-            table_name=f_name,
-            level=dict(
-                type=f_name, level_type='regular', visible=True,
-                column=f_name, unique_members=field['is_unique'],
-                caption=f_name,
-            ),
+            table_name=table_name,
+            level=level,
             primary_key='id',
-            foreign_key=f_name
+            foreign_key=table_name
         )
 
         Dimension.objects.create(
-            name=f_name,
-            title=f_name,
+            name=table_name,
+            title=table_name,
             user_id=user_id,
-            datasources_meta=self.source.meta,
+            datasources_meta=self.meta,
             data=json.dumps(data)
         )
 
     @celery.task(name='etl:database:generate_dimensions', filter=task_method)
-    def load_data(self, user_id, task_id):
+    def load_data(self, task_id):
         """
         Создание размерностей
         """
-        super(DimensionCreation, self).load_data(user_id, task_id)
+        super(DimensionCreation, self).load_data(task_id)
 
 
 class MeasureCreation(OlapEntityCreation):
     """
     Создание мер
     """
+    accord = {
+        'integer': Measure.INTEGER,
+        'time': Measure.TIME,
+        'date': Measure.DATE,
+        'timestamp': Measure.TIMESTAMP,
+    }
 
     actual_fields_type = [
         'integer', 'time', 'date', 'timestamp']
 
-    def save_meta_data(self, user_id, field):
+    def save_meta_data(self, user_id, table_name, fields):
         """
         Сохранение информации о мерах
         """
-        f_name = field['name']
+        # f_name = field['name']
         Measure.objects.create(
-            name=f_name,
-            title=f_name,
-            type=field['type'],
+            name=table_name,
+            title=table_name,
+            # type=self.accord[field['type']],
+            type=Measure.INTEGER,
             user_id=user_id,
-            datasources_meta=self.source.meta
+            datasources_meta=self.meta
         )
 
     @celery.task(name='etl:database:generate_measures', filter=task_method)
-    def load_data(self, user_id, task_id):
+    def load_data(self, task_id):
         """
         Создание размерностей
         """
-        super(MeasureCreation, self).load_data(user_id, task_id)
+        super(MeasureCreation, self).load_data(task_id)
 
 # write in console: python manage.py celery -A etl.tasks worker
