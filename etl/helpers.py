@@ -2605,7 +2605,7 @@ class TaskService:
             "channel": new_channel,
             "queue_id": task_id,
             "namespace": self.name,
-            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         })
 
         return task_id, new_channel
@@ -2643,7 +2643,7 @@ class TaskService:
             "channel": new_channel,
             "queue_id": task_id,
             "namespace": self.name,
-            "date": datetime.date.today().strftime("%Y-%m-%d"),
+            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         })
 
         return task_id, new_channel
