@@ -57,8 +57,6 @@ def load_data_mongo(user_id, task_id, data, channel):
     :param source: dict
     """
 
-    client.publish(channel, json.dumps({'percent': 0, 'taskId': task_id}))
-
     print 'upload data to mongo'
     cols = json.loads(data['cols'])
     tables = json.loads(data['tables'])
@@ -88,16 +86,33 @@ def load_data_mongo(user_id, task_id, data, channel):
 
     collection = db[collection_name]
 
-    query = DataSourceService.get_rows_query_for_loading_task(source_model, structure, cols)
+    query = DataSourceService.get_rows_query_for_loading_task(
+        source_model, structure, cols)
+
+    # общее количество строк в запросе
+    max_rows_count = DataSourceService.get_structure_rows_number(
+        source_model, structure,  cols)
 
     instance = DataSourceService.get_source_connection(source_model)
-    page = 1
-    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+
+    # создаем информацию о работе таска
+    queue_storage = RedisSourceService.get_queue(task_id)
+
+    queue_storage['id'] = task_id
+    queue_storage['user_id'] = user_id
+    queue_storage['date_created'] = datetime_now_str()
+    queue_storage['date_updated'] = None
+    queue_storage['status'] = TaskStatusEnum.PROCESSING
+    queue_storage['percent'] = 0
 
     # меняем статус задачи на 'В обработке'
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
 
+    page = 1
+    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+    loaded_count = 0.0
     was_error = False
+    up_to_100 = False
     err_msg = ''
 
     while True:
@@ -122,7 +137,29 @@ def load_data_mongo(user_id, task_id, data, channel):
             # fixme перезаписывается при каждой ошибке
             err_msg = e.message
             print "Unexpected error:", type(e), e
+            queue_storage['status'] = TaskStatusEnum.ERROR
+
+        # обновляем информацию о работе таска
+        queue_storage['date_updated'] = datetime_now_str()
+
+        loaded_count += limit
+        percent = int(round(loaded_count/max_rows_count*100))
+
+        if percent >= 100:
+            queue_storage['percent'] = 100
+            up_to_100 = True
+            client.publish(
+                channel, json.dumps({'percent': 100, 'taskId': task_id}))
+
+        else:
+            queue_storage['percent'] = percent
+            client.publish(
+                channel, json.dumps({'percent': percent, 'taskId': task_id}))
+
         page += 1
+
+    if not was_error and not up_to_100:
+        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
 
     if was_error:
         # меняем статус задачи на 'Ошибка'
@@ -132,6 +169,15 @@ def load_data_mongo(user_id, task_id, data, channel):
     else:
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
+
+        queue_storage['date_updated'] = datetime_now_str()
+        queue_storage['status'] = TaskStatusEnum.DONE
+
+    # удаляем инфу о работе таска
+    RedisSourceService.delete_queue(task_id)
+
+    # удаляем канал из списка каналов юзера
+    RedisSourceService.delete_user_subscriber(user_id, task_id)
 
 
 @celery.task(name='etl.tasks.load_data')
@@ -239,13 +285,14 @@ def load_data_database(user_id, task_id, data, channel):
     up_to_100 = False
 
     # создаем информацию о работе таска
-    queue_info = RedisSourceService.get_queue(task_id)
-    queue_info['id'] = task_id
-    queue_info['user_id'] = user_id
-    queue_info['date_created'] = datetime_now_str()
-    queue_info['date_updated'] = None
-    queue_info['status'] = TaskStatusEnum.PROCESSING
-    queue_info['percent'] = 0
+    queue_storage = RedisSourceService.get_queue(task_id)
+
+    queue_storage['id'] = task_id
+    queue_storage['user_id'] = user_id
+    queue_storage['date_created'] = datetime_now_str()
+    queue_storage['date_updated'] = None
+    queue_storage['status'] = TaskStatusEnum.PROCESSING
+    queue_storage['percent'] = 0
 
     # меняем статус задачи на 'В обработке'
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
@@ -278,8 +325,8 @@ def load_data_database(user_id, task_id, data, channel):
                 task_id, TaskStatusEnum.ERROR,
                 error_code=err_code, error_msg=err_msg)
 
-            # удаляем инфу о работе таска
-            RedisSourceService.delete_queue(task_id)
+            queue_storage['date_updated'] = datetime_now_str()
+            queue_storage['status'] = TaskStatusEnum.ERROR
 
             break
         else:
@@ -295,33 +342,37 @@ def load_data_database(user_id, task_id, data, channel):
             loaded_count += settings_limit
 
             # обновляем информацию о работе таска
-            queue_info = RedisSourceService.get_queue(task_id)
-            queue_info['date_updated'] = datetime_now_str()
+            queue_storage['date_updated'] = datetime_now_str()
 
             percent = int(round(loaded_count/max_rows_count*100))
             if percent >= 100:
-                queue_info['percent'] = 100
+                queue_storage['percent'] = 100
                 up_to_100 = True
                 client.publish(
                     channel, json.dumps({'percent': 100, 'taskId': task_id}))
 
             else:
-                queue_info['percent'] = percent
+                queue_storage['percent'] = percent
                 client.publish(
                     channel, json.dumps({'percent': percent, 'taskId': task_id}))
+
+    if not was_error and not up_to_100:
+        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
 
     if not was_error:
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
 
-        # удаляем инфу о работе таска
-        RedisSourceService.delete_queue(task_id)
+        queue_storage['date_updated'] = datetime_now_str()
+        queue_storage['status'] = TaskStatusEnum.DONE
 
-    if not was_error and not up_to_100:
-        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
+    # удаляем инфу о работе таска
+    RedisSourceService.delete_queue(task_id)
+
+    # удаляем канал из списка каналов юзера
+    RedisSourceService.delete_user_subscriber(user_id, task_id)
 
     # работа с datasource_meta
-
     datasource_meta = DataSourceService.update_datasource_meta(
         table_key, source, cols, tables_info_for_meta, last_row)
 

@@ -1961,6 +1961,17 @@ class RedisSourceService(object):
         channels = RedisList(key=subs_str, redis=r_server, pickler=json)
         return channels
 
+    @classmethod
+    def delete_user_subscriber(cls, user_id, task_id):
+        """
+        удаляет канал из каналов для сокетов
+        """
+        subscribers = cls.get_user_subscribers(user_id)
+        for sub in subscribers:
+            if sub['queue_id'] == task_id:
+                subscribers.remove(sub)
+                break
+
     @staticmethod
     def get_queue(task_id):
         """
@@ -1968,8 +1979,9 @@ class RedisSourceService(object):
         :param task_id:
         """
         queue_str = RedisCacheKeys.get_queue(task_id)
-        queue_info = RedisDict(key=queue_str, redis=r_server, pickler=json)
-        return queue_info
+        queue_dict = RedisDict(key=queue_str, redis=r_server, pickler=json)
+        queue_storage = QueueStorage(queue_dict)
+        return queue_storage
 
     @staticmethod
     def delete_queue(task_id):
@@ -2593,6 +2605,7 @@ class TaskService:
             "channel": new_channel,
             "queue_id": task_id,
             "namespace": self.name,
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
         })
 
         return task_id, new_channel
@@ -2630,6 +2643,7 @@ class TaskService:
             "channel": new_channel,
             "queue_id": task_id,
             "namespace": self.name,
+            "date": datetime.date.today().strftime("%Y-%m-%d"),
         })
 
         return task_id, new_channel
@@ -2668,6 +2682,34 @@ class TaskService:
         insert_query = DatabaseService.get_table_insert_query(
             local_instance, table_key)
         return insert_query
+
+
+class QueueStorage(object):
+    """
+    Класс работает с информацией работающего таска пользователя,
+    обеспечивает контроль над входными данными,
+    имеется allowed_keys - список разрешенных ключей для редис словаря
+    """
+    allowed_keys = [
+        'id', 'user_id', 'date_created', 'date_updated', 'status', 'percent']
+
+    def __init__(self, queue_redis_dict):
+        """
+        :type queue_redis_dict: redis_collections.Dict
+        """
+        self.queue = queue_redis_dict
+
+    def __getitem__(self, key):
+        if key in self.allowed_keys:
+            return self.queue[key]
+        else:
+            raise KeyError('Неверный ключ для словаря информации задачи!')
+
+    def __setitem__(self, key, val):
+        if key in self.allowed_keys:
+            self.queue[key] = val
+        else:
+            raise KeyError('Неверный ключ для словаря информации задачи!')
 
 
 # FIXME не используется на данный момент
