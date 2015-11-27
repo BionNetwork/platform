@@ -158,9 +158,6 @@ def load_data_mongo(user_id, task_id, data, channel):
 
         page += 1
 
-    if not was_error and not up_to_100:
-        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
-
     if was_error:
         # меняем статус задачи на 'Ошибка'
         TaskService.update_task_status(
@@ -172,6 +169,9 @@ def load_data_mongo(user_id, task_id, data, channel):
 
         queue_storage['date_updated'] = datetime_now_str()
         queue_storage['status'] = TaskStatusEnum.DONE
+
+    if not was_error and not up_to_100:
+        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
 
     # удаляем инфу о работе таска
     RedisSourceService.delete_queue(task_id)
@@ -356,15 +356,15 @@ def load_data_database(user_id, task_id, data, channel):
                 client.publish(
                     channel, json.dumps({'percent': percent, 'taskId': task_id}))
 
-    if not was_error and not up_to_100:
-        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
-
     if not was_error:
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
 
         queue_storage['date_updated'] = datetime_now_str()
         queue_storage['status'] = TaskStatusEnum.DONE
+
+    if not was_error and not up_to_100:
+        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
 
     # удаляем инфу о работе таска
     RedisSourceService.delete_queue(task_id)
