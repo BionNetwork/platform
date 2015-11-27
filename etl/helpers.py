@@ -2601,6 +2601,20 @@ class TaskService:
 
         return task_id, new_channel
 
+    @staticmethod
+    def update_task_status(task_id, status_id, error_code=None, error_msg=None):
+        """
+            Меняем статусы тасков
+        """
+        task = QueueList.objects.get(id=task_id)
+        task.queue_status = QueueStatus.objects.get(title=status_id)
+
+        if status_id == TaskStatusEnum.ERROR:
+            task.comment = 'code: {0}, message: {1}'.format(
+                error_code, error_msg)
+
+        task.save()
+
     @classmethod
     def table_create_query_for_loading_task(
             cls, local_instance, table_key, cols_str):
@@ -2693,16 +2707,22 @@ def generate_table_name_key(source, cols_str):
         str: Ключ для названия промежуточной таблицы
 
     """
-    return binascii.crc32(
+    key = binascii.crc32(
         reduce(operator.add,
                [source.host, str(source.port),
                 str(source.user_id), cols_str], ''))
+    return str(key) if key > 0 else '_{0}'.format(abs(key))
 
 
-def get_table_key(prefix, key):
+def get_table_name(prefix, key):
     """
     название новой таблицы
-    :param key: str
-    :return:
+
+    Args:
+        prefix(str): префикс перед ключем
+        key(str): ключ
+    Returns:
+        str: Название новой наблицы
     """
-    return '{0}_{1}{2}'.format(prefix, '_' if key < 0 else '', abs(key))
+    return '{0}_{1}'.format(
+        prefix, key)

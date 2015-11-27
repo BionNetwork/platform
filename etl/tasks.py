@@ -15,7 +15,7 @@ from etl.constants import FIELD_NAME_SEP
 from etl.services.model_creation import DataStore, OlapEntityCreation
 from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
                       TaskService, generate_table_name_key, TaskStatusEnum,
-                      TaskErrorCodeEnum, get_table_key)
+                      TaskErrorCodeEnum, get_table_name)
 from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList
 from django.conf import settings
 
@@ -72,7 +72,7 @@ def load_data_mongo(user_id, task_id, data, channel):
                 ','.join(sorted(tables))], ''))
 
     # collection
-    collection_name = get_table_key('sttm_datasource', key)
+    collection_name = get_table_name('sttm_datasource', key)
     connection = pymongo.MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
     # database name
     db = connection.etl
@@ -229,7 +229,7 @@ def load_data_database(user_id, task_id, data, channel):
     # название новой таблицы
     key = generate_table_name_key(source, cols_str)
 
-    table_key = get_table_key('sttm_datasource', key)
+    table_key = get_table_name('sttm_datasource', key)
 
     rows_query = DataSourceService.get_rows_query_for_loading_task(
             source, structure,  cols)
@@ -392,13 +392,13 @@ def create_dimensions_and_measures(user_id, source, table_key, key):
         datasource_id=source.id,
         source_table=table_key,
         key=key,
-        target_table=get_table_key('dimensions', key)
+        target_table=get_table_name('dimensions', key)
     )
 
     dimension_task = TaskService('etl:database:generate_dimensions')
     dimension_task_id, channel = dimension_task.add_task(arguments)
     dimension = DimensionCreation(store)
-    arguments.update({'target_table': get_table_key('measures', key)})
+    arguments.update({'target_table': get_table_name('measures', key)})
 
     measure_task = TaskService('etl:database:generate_measures')
     measure_task_id, channel = measure_task.add_task(arguments)

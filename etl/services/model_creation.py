@@ -7,7 +7,7 @@ from django.db import models
 from django.conf import settings
 from core.models import DatasourceMetaKeys, QueueList
 from etl.constants import FIELD_NAME_SEP
-from etl.helpers import get_table_key, TaskStatusEnum
+from etl.helpers import get_table_name, TaskStatusEnum
 
 type_match = {
     'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),
@@ -153,7 +153,7 @@ class DataStore(object):
         for field in fields:
             f_list.append(get_field_settings(field['name'], field['type']))
         return get_django_model(
-            get_table_key('datasource', key), f_list, self.app_name, self.module)
+            get_table_name('datasource', key), f_list, self.app_name, self.module)
 
 
 class OlapEntityCreation(object):
@@ -212,6 +212,7 @@ class OlapEntityCreation(object):
             f_list.append(get_field_settings(field_name, field['type']))
 
         model = get_django_model(
+            self.table_name, f_list, self.source.app_name,
             self.source.module, self.table_name)
         install(model)
 
