@@ -5,9 +5,9 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
-from core.models import DatasourceMetaKeys, QueueList
+from core.models import DatasourceMetaKeys, QueueList, Datasource
 from etl.constants import FIELD_NAME_SEP
-from etl.helpers import get_table_name, TaskStatusEnum
+from etl.helpers import get_table_name, TaskStatusEnum, DataSourceService
 
 type_match = {
     'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),
@@ -23,14 +23,6 @@ def get_field_settings(f_name, f_type):
         type=type_match[f_type][0],
         settings=type_match[f_type][1]
     )
-
-
-def is_valid_field(self, field_data, all_data):
-    """Валидация типа поля"""
-    if hasattr(models, field_data) and issubclass(
-            getattr(models, field_data), models.Field):
-        return
-    raise ValidationError("This is not a valid field type.")
 
 
 def create_model(name, fields=None, app_label='',
@@ -128,16 +120,29 @@ def get_django_model(name, fields_list, app_name, module_name, table_name=None):
         name, dict(fields), app_name, module_name, options=options)
 
 
-class DataStore(object):
+class OlapEntityCreation(object):
+    """
+    Создание сущностей(рамерности, измерения) олап куба
+    """
+
+    actual_fields_type = []
 
     def __init__(self, module='biplatform.etl.models', app_name='sttm'):
         self.module = module
         self.app_name = app_name
+        self.source = None
+        self.source_table_name = None
+        self.meta = None
+        self.meta_data = None
+        self.actual_fields = None
 
     @staticmethod
     def get_fields_list(meta_data):
         """
         Получение списка полей таблицы
+
+        Args:
+            meta_data(dict): метаданные таблицы-источника
         """
         all_fields = []
         for table, fields in meta_data['columns'].iteritems():
@@ -147,30 +152,6 @@ class DataStore(object):
                 all_fields.append(field)
         return all_fields
 
-    def get_table_model(self, table_name, fields, key):
-        f_list = []
-
-        for field in fields:
-            f_list.append(get_field_settings(field['name'], field['type']))
-        return get_django_model(
-            get_table_name('datasource', key), f_list, self.app_name, self.module)
-
-
-class OlapEntityCreation(object):
-    """
-    Создание сущностей(рамерности, измерения) олап куба
-    """
-
-    actual_fields_type = []
-
-    def __init__(self, source):
-        self.source = source
-        self.table_name = None
-        self.key = None
-        self.meta = None
-        self.meta_data = None
-        self.actual_fields = None
-
     def get_actual_fields(self):
         """
         Фильтруем поля по необходимому нам типу
@@ -178,9 +159,24 @@ class OlapEntityCreation(object):
         Returns:
             list: Метаданные отфильтрованных полей
         """
-        all_fields = self.source.get_fields_list(self.meta_data)
+        all_fields = self.get_fields_list(self.meta_data)
         return [element for element in all_fields
                 if element['type'] in self.actual_fields_type]
+
+    def rows_query(self, fields):
+        """
+        Формируюм строку запроса
+
+        Args:
+            fields(list): Список именно необходимых имен
+
+        Returns:
+            str: Строка запроса
+        """
+        fields_str = '"'+'", "'.join(fields)+'"'
+        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query.format(
+            fields_str, self.source_table_name, '{0}', '{1}')
 
     def load_data(self, task_id):
         """
@@ -198,27 +194,27 @@ class OlapEntityCreation(object):
 
         data = json.loads(task.arguments)
 
-        self.key = data['key']
-
-        self.meta = DatasourceMetaKeys.objects.get(value=self.key).meta
+        self.source = Datasource.objects.get(id=data['datasource_id'])
+        self.source_table_name = data['source_table']
+        self.meta = DatasourceMetaKeys.objects.get(value=data['key']).meta
         self.meta_data = json.loads(self.meta.fields)
         self.actual_fields = self.get_actual_fields()
 
         f_list = []
-        self.table_name = data['target_table']
+        table_name = data['target_table']
         for field in self.actual_fields:
             field_name = field['name']
 
             f_list.append(get_field_settings(field_name, field['type']))
 
         model = get_django_model(
-            self.table_name, f_list, self.source.app_name,
-            self.source.module, self.table_name)
+            table_name, f_list, self.app_name,
+            self.module, table_name)
         install(model)
 
         # Сохраняем метаданные
         self.save_meta_data(
-            data['user_id'], self.table_name, self.actual_fields)
+            data['user_id'], table_name, self.actual_fields)
         self.save_fields(model)
 
     def save_meta_data(self, user_id, table_name, fields):
@@ -237,19 +233,24 @@ class OlapEntityCreation(object):
         """Заполняем таблицу данными
 
         Args:
-            model: Модель к целевой такблице
+            model: Модель к целевой таблице
         """
         actual_fields_name = [field['name'] for field in self.actual_fields]
-        index = 0
+        offset = 0
+        step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+        print 'load dim or measure'
         while True:
-            index_to = index+settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-            data = self.source.get_table_model(
-                self.table_name, self.actual_fields, self.key).objects.values(
-                *actual_fields_name)[index:index_to]
-            if not data:
+            rows_query = self.rows_query(actual_fields_name)
+            index_to = offset+step
+            connection = DataSourceService.get_local_instance().connection
+            cursor = connection.cursor()
+
+            cursor.execute(rows_query.format(index_to, offset))
+            rows = cursor.fetchall()
+            if not rows:
                 break
             column_data = [model(
-                **{k: v for (k, v) in x.iteritems()})
-                        for x in data]
+                **{actual_fields_name[i]: v for (i, v) in enumerate(x)})
+                        for x in rows]
             model.objects.bulk_create(column_data)
-            index = index_to
+            offset = index_to

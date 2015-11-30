@@ -12,7 +12,7 @@ import binascii
 from psycopg2 import errorcodes
 from etl.constants import FIELD_NAME_SEP
 
-from etl.services.model_creation import DataStore, OlapEntityCreation
+from etl.services.model_creation import OlapEntityCreation
 from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
                       TaskService, generate_table_name_key, TaskStatusEnum,
                       TaskErrorCodeEnum, get_table_name)
@@ -385,7 +385,6 @@ def create_dimensions_and_measures(user_id, source, table_key, key):
     Returns:
 
     """
-    store = DataStore()
 
     arguments = dict(
         user_id=user_id,
@@ -397,12 +396,12 @@ def create_dimensions_and_measures(user_id, source, table_key, key):
 
     dimension_task = TaskService('etl:database:generate_dimensions')
     dimension_task_id, channel = dimension_task.add_task(arguments)
-    dimension = DimensionCreation(store)
+    dimension = DimensionCreation()
     arguments.update({'target_table': get_table_name('measures', key)})
 
     measure_task = TaskService('etl:database:generate_measures')
     measure_task_id, channel = measure_task.add_task(arguments)
-    measure = MeasureCreation(store)
+    measure = MeasureCreation()
 
     group([
         dimension.load_data.s(dimension_task_id),

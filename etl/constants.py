@@ -1,2 +1,2 @@
 
-FIELD_NAME_SEP = '--'
+FIELD_NAME_SEP = '__'
