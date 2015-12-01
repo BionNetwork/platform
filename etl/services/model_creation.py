@@ -2,12 +2,14 @@
 import json
 
 from django.contrib import admin
-from django.core.exceptions import ValidationError
+from psycopg2 import errorcodes
 from django.db import models
 from django.conf import settings
 from core.models import DatasourceMetaKeys, QueueList, Datasource
 from etl.constants import FIELD_NAME_SEP
-from etl.helpers import get_table_name, TaskStatusEnum, DataSourceService
+from etl.helpers import TaskStatusEnum, DataSourceService, \
+    RedisSourceService, TaskService, TaskErrorCodeEnum
+from etl.helpers import datetime_now_str
 
 type_match = {
     'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),
@@ -135,22 +137,7 @@ class OlapEntityCreation(object):
         self.meta = None
         self.meta_data = None
         self.actual_fields = None
-
-    @staticmethod
-    def get_fields_list(meta_data):
-        """
-        Получение списка полей таблицы
-
-        Args:
-            meta_data(dict): метаданные таблицы-источника
-        """
-        all_fields = []
-        for table, fields in meta_data['columns'].iteritems():
-            for field in fields:
-                field['name'] = '{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name'])
-                all_fields.append(field)
-        return all_fields
+        self.queue_storage = None
 
     def get_actual_fields(self):
         """
@@ -159,9 +146,26 @@ class OlapEntityCreation(object):
         Returns:
             list: Метаданные отфильтрованных полей
         """
-        all_fields = self.get_fields_list(self.meta_data)
+        all_fields = []
+        for table, fields in self.meta_data['columns'].iteritems():
+            for field in fields:
+                field['name'] = '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name'])
+                all_fields.append(field)
+
         return [element for element in all_fields
                 if element['type'] in self.actual_fields_type]
+
+    def set_queue_storage(self, task_id, user_id):
+        # создаем информацию о работе таска
+        queue_storage = RedisSourceService.get_queue(task_id)
+        queue_storage['id'] = task_id
+        queue_storage['user_id'] = user_id
+        queue_storage['date_created'] = datetime_now_str()
+        queue_storage['date_updated'] = None
+        queue_storage['status'] = TaskStatusEnum.PROCESSING
+        queue_storage['percent'] = 0
+        self.queue_storage = queue_storage
 
     def rows_query(self, fields):
         """
@@ -190,15 +194,17 @@ class OlapEntityCreation(object):
 
         # обрабатываем таски со статусом 'В ожидании'
         if task.queue_status.title != TaskStatusEnum.IDLE:
-            pass
+            return
 
         data = json.loads(task.arguments)
 
+        # Наполняем контекст
         self.source = Datasource.objects.get(id=data['datasource_id'])
         self.source_table_name = data['source_table']
         self.meta = DatasourceMetaKeys.objects.get(value=data['key']).meta
         self.meta_data = json.loads(self.meta.fields)
         self.actual_fields = self.get_actual_fields()
+        self.set_queue_storage(task_id, data['user_id'])
 
         f_list = []
         table_name = data['target_table']
@@ -211,11 +217,43 @@ class OlapEntityCreation(object):
             table_name, f_list, self.app_name,
             self.module, table_name)
         install(model)
+        try:
+            self.save_fields(model)
+        except Exception as e:
+            err_msg = ''
+            err_code = TaskErrorCodeEnum.DEFAULT_CODE
+
+            # код и сообщение ошибки
+            pg_code = getattr(e, 'pgcode', None)
+            if pg_code is not None:
+                err_code = pg_code
+                err_msg = errorcodes.lookup(pg_code) + ': '
+
+            err_msg += e.message
+
+            # меняем статус задачи на 'Ошибка'
+            TaskService.update_task_status(
+                task_id, TaskStatusEnum.ERROR,
+                error_code=err_code, error_msg=err_msg)
+
+            self.queue_storage['date_updated'] = datetime_now_str()
+            self.queue_storage['status'] = TaskStatusEnum.ERROR
 
         # Сохраняем метаданные
         self.save_meta_data(
             data['user_id'], table_name, self.actual_fields)
-        self.save_fields(model)
+
+        # меняем статус задачи на 'Выполнено'
+        TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
+
+        self.queue_storage['date_updated'] = datetime_now_str()
+        self.queue_storage['status'] = TaskStatusEnum.DONE
+
+        # удаляем инфу о работе таска
+        RedisSourceService.delete_queue(task_id)
+
+        # удаляем канал из списка каналов юзера
+        RedisSourceService.delete_user_subscriber(data['user_id'], task_id)
 
     def save_meta_data(self, user_id, table_name, fields):
         """
@@ -254,3 +292,7 @@ class OlapEntityCreation(object):
                         for x in rows]
             model.objects.bulk_create(column_data)
             offset = index_to
+
+            # обновляем информацию о работе таска
+            self.queue_storage['date_updated'] = datetime_now_str()
+

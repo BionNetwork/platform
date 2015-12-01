@@ -15,7 +15,7 @@ from etl.constants import FIELD_NAME_SEP
 from etl.services.model_creation import OlapEntityCreation
 from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
                       TaskService, generate_table_name_key, TaskStatusEnum,
-                      TaskErrorCodeEnum, get_table_name)
+                      TaskErrorCodeEnum, get_table_name, datetime_now_str)
 from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList
 from django.conf import settings
 
@@ -32,13 +32,6 @@ client = brukva.Client(host=settings.REDIS_HOST,
                        port=int(settings.REDIS_PORT),
                        selected_db=settings.REDIS_DB)
 client.connect()
-
-
-def datetime_now_str():
-    """
-    Нынешнее время в строковой форме
-    """
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_data_mongo(user_id, task_id, data, channel):
@@ -193,8 +186,9 @@ def load_data(user_id, task_id, channel):
 def load_data_database(user_id, task_id, data, channel):
     """Загрузка данных во временное хранилище
     Args:
+        user_id: id пользователя
+        task_id: id задачи
         data(dict): Данные
-        source_dict(dict): Словарь с параметрами источника
 
     Returns:
         func
@@ -435,7 +429,7 @@ class DimensionCreation(OlapEntityCreation):
                 table_name=field['name'],
                 level=level,
                 primary_key='id',
-                foreign_key=field['name']
+                foreign_key=None
             )
 
             Dimension.objects.create(

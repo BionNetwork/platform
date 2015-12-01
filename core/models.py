@@ -181,10 +181,8 @@ class Measure(models.Model):
         (TIMESTAMP, 'timestamp'),
     )
 
-    NON_AGGREGATION = 1
-    SUM = 2
+    SUM = 'sum'
     AGR_FUNCTIONS = (
-        (NON_AGGREGATION, 'non_aggregation'),
         (SUM, 'sum'),
     )
 
@@ -194,9 +192,9 @@ class Measure(models.Model):
     type = models.CharField(
         verbose_name="Тип измерения",
         choices=MEASURE_TYPE, default=STRING, max_length=50)
-    aggregator = models.SmallIntegerField(
+    aggregator = models.CharField(
         verbose_name="Функция агрегирования",
-        choices=AGR_FUNCTIONS, default=NON_AGGREGATION)
+        choices=AGR_FUNCTIONS, null=True, max_length=50)
     format_string = models.CharField(
         verbose_name="Строка форматирования", max_length=255,
         null=True, blank=True)
@@ -259,7 +257,7 @@ class QueueList(models.Model):
         verbose_name="дата создания", auto_now_add=True,
         null=False, blank=False, db_index=True)
     update_date = models.DateTimeField(
-        verbose_name="дата обновления", null=True, blank=True)
+        verbose_name="дата обновления", auto_now=True)
     comment = models.CharField(verbose_name='коментарий', max_length=1024,
                                null=True, blank=True)
     checksum = models.CharField(verbose_name='контрольная сумма', db_index=True,

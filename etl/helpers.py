@@ -2726,3 +2726,10 @@ def get_table_name(prefix, key):
     """
     return '{0}_{1}'.format(
         prefix, key)
+
+
+def datetime_now_str():
+    """
+    Нынешнее время в строковой форме
+    """
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
