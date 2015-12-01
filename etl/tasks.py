@@ -5,7 +5,6 @@ import sys
 import brukva
 import pymongo
 import json
-import datetime
 
 import operator
 import binascii
