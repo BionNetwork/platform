@@ -9,7 +9,7 @@ from core.models import DatasourceMetaKeys, QueueList, Datasource
 from etl.constants import FIELD_NAME_SEP
 from etl.helpers import TaskStatusEnum, DataSourceService, \
     RedisSourceService, TaskService, TaskErrorCodeEnum
-from etl.helpers import datetime_now_str
+from etl.services.middleware.base import datetime_now_str
 
 type_match = {
     'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),

@@ -2,7 +2,8 @@
 from __future__ import unicode_literals
 
 from django.test import TestCase
-from etl.helpers import Postgresql, TablesTree
+from etl.services.db.postgresql import Postgresql
+from etl.services.datasource.base import TablesTree
 from core.models import Datasource
 
 """

@@ -1,14 +1,11 @@
 from __future__ import absolute_import, unicode_literals
+from django.conf.urls import url
+from . import views
 
 __author__ = 'miholeus'
 
 """Core URL Configuration.
 """
-
-from django.conf.urls import url
-
-from . import views
-
 
 urlpatterns = [
     url(r'^$', views.HomeView.as_view(), name='home'),

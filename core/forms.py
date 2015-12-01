@@ -1,12 +1,11 @@
 # coding: utf-8
 from __future__ import unicode_literals
-
-__author__ = 'damir'
-
 from django import forms
 from django.core.exceptions import ValidationError
 
 from .models import User
+
+__author__ = 'damir'
 
 
 class UserForm(forms.ModelForm):

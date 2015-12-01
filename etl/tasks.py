@@ -12,9 +12,10 @@ from psycopg2 import errorcodes
 from etl.constants import FIELD_NAME_SEP
 
 from etl.services.model_creation import OlapEntityCreation
-from .helpers import (RedisSourceService, DataSourceService, EtlEncoder,
-                      TaskService, generate_table_name_key, TaskStatusEnum,
-                      TaskErrorCodeEnum, get_table_name, datetime_now_str)
+from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, get_table_name, datetime_now_str)
+from .helpers import (RedisSourceService, DataSourceService,
+                      TaskService, TaskStatusEnum,
+                      TaskErrorCodeEnum)
 from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList
 from django.conf import settings
 

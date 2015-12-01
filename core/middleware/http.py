@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-
-__author__ = 'miholeus'
-
 from django.http import HttpResponseNotAllowed
 from django.template import RequestContext
 from django.template import loader
+
+__author__ = 'miholeus'
 
 
 class HttpResponseNotAllowedMiddleware(object):
