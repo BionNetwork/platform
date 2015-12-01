@@ -4,7 +4,6 @@ import json
 from django.conf import settings
 from collections import defaultdict
 from redis_collections import Dict as RedisDict, List as RedisList
-from etl.services.queue.base import QueueStorage
 
 
 class RedisCacheKeys(object):
@@ -690,15 +689,13 @@ class RedisSourceService(object):
                 break
 
     @staticmethod
-    def get_queue(task_id):
+    def get_queue_dict(task_id):
         """
         информация о ходе работы таска
         :param task_id:
         """
         queue_str = RedisCacheKeys.get_queue(task_id)
-        queue_dict = RedisDict(key=queue_str, redis=r_server, pickler=json)
-        queue_storage = QueueStorage(queue_dict)
-        return queue_storage
+        return RedisDict(key=queue_str, redis=r_server, pickler=json)
 
     @staticmethod
     def delete_queue(task_id):

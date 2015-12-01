@@ -77,6 +77,16 @@ class TaskService:
 
         return task_id, new_channel
 
+
+    @staticmethod
+    def get_queue(task_id):
+        """
+        информация о ходе работы таска
+        :param task_id:
+        """
+        queue_dict = RedisSourceService.get_queue_dict(task_id)
+        return QueueStorage(queue_dict)
+
     @staticmethod
     def update_task_status(task_id, status_id, error_code=None, error_msg=None):
         """
