@@ -82,7 +82,7 @@ def load_data_mongo(user_id, task_id, data, channel):
     instance = DataSourceService.get_source_connection(source_model)
 
     # создаем информацию о работе таска
-    queue_storage = RedisSourceService.get_queue(task_id)
+    queue_storage = TaskService.get_queue(task_id)
 
     queue_storage['id'] = task_id
     queue_storage['user_id'] = user_id
@@ -273,7 +273,7 @@ def load_data_database(user_id, task_id, data, channel):
     up_to_100 = False
 
     # создаем информацию о работе таска
-    queue_storage = RedisSourceService.get_queue(task_id)
+    queue_storage = TaskService.get_queue(task_id)
 
     queue_storage['id'] = task_id
     queue_storage['user_id'] = user_id

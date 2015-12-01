@@ -1,6 +1,9 @@
 # coding: utf-8
+from django.conf import settings
+
 from core.models import ConnectionChoices
 from etl.services.db import mysql, postgresql
+
 
 
 class DatabaseService(object):

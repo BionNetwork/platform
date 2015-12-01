@@ -158,7 +158,7 @@ class OlapEntityCreation(object):
 
     def set_queue_storage(self, task_id, user_id):
         # создаем информацию о работе таска
-        queue_storage = RedisSourceService.get_queue(task_id)
+        queue_storage = TaskService.get_queue(task_id)
         queue_storage['id'] = task_id
         queue_storage['user_id'] = user_id
         queue_storage['date_created'] = datetime_now_str()
