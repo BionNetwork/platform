@@ -9,6 +9,7 @@ import json
 import operator
 import binascii
 from psycopg2 import errorcodes
+import re
 from etl.constants import FIELD_NAME_SEP
 from etl.services.db.factory import DatabaseService
 from etl.services.model_creation import OlapEntityCreation
@@ -16,7 +17,8 @@ from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, g
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
-from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList
+from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList, \
+    DatasourceMeta
 from django.conf import settings
 
 from djcelery import celery
@@ -361,16 +363,13 @@ def load_data_database(user_id, task_id, data, channel):
     RedisSourceService.delete_user_subscriber(user_id, task_id)
 
     # работа с datasource_meta
-    datasource_meta = DataSourceService.update_datasource_meta(
-        table_key, source, cols, tables_info_for_meta, last_row)
-    DatasourceMetaKeys.objects.get_or_create(
-        meta=datasource_meta,
-        value=key,
-    )
+    DataSourceService.update_datasource_meta(key,
+        source, cols, tables_info_for_meta, last_row)
+
     return create_dimensions_and_measures(user_id, source, table_key, key)
 
 
-def create_dimensions_and_measures(user_id, source, table_key, key):
+def create_dimensions_and_measures(user_id=11, source=None, table_key=None, key=None):
     """Создание таблиц размерностей
 
     Args:
@@ -379,7 +378,13 @@ def create_dimensions_and_measures(user_id, source, table_key, key):
     Returns:
 
     """
-
+    # arguments = dict(
+    #     user_id=11,
+    #     datasource_id=3,
+    #     source_table='sttm_datasource_948655626',
+    #     key=948655626,
+    #     target_table='dimensions_948655626'
+    # )
     arguments = dict(
         user_id=user_id,
         datasource_id=source.id,
@@ -410,12 +415,16 @@ class DimensionCreation(OlapEntityCreation):
 
     actual_fields_type = ['text']
 
-    def save_meta_data(self, user_id, table_name, fields):
+    def save_meta_data(self, user_id, key, fields):
         """
         Сохраняем информацию о размерности
         """
         level = dict()
         for field in fields:
+            m = re.match(
+                r"(?P<table_name>\w+)%s(?P<column_name>\w+)" % FIELD_NAME_SEP,
+                field['name'])
+            table_name = get_table_name(m.group('table_name'), key)
             level.update(dict(
                 type=field['type'], level_type='regular', visible=True,
                 column=field['name'], unique_members=field['is_unique'],
@@ -432,11 +441,12 @@ class DimensionCreation(OlapEntityCreation):
                 foreign_key=None
             )
 
-            Dimension.objects.create(
+            Dimension.objects.get_or_create(
                 name=field['name'],
                 title=field['name'],
                 user_id=user_id,
-                datasources_meta=self.meta,
+                datasources_meta=DatasourceMeta.objects.get(
+                    collection_name=table_name),
                 data=json.dumps(data)
             )
 
@@ -456,18 +466,22 @@ class MeasureCreation(OlapEntityCreation):
     actual_fields_type = [
         Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
 
-    def save_meta_data(self, user_id, table_name, fields):
+    def save_meta_data(self, user_id, key, fields):
         """
         Сохранение информации о мерах
         """
         for field in fields:
-
-            Measure.objects.create(
+            m = re.match(
+                r"(?P<table_name>\w+)%s(?P<column_name>\w+)" % FIELD_NAME_SEP,
+                field['name'])
+            table_name = get_table_name(m.group('table_name'), key)
+            Measure.objects.get_or_create(
                 name=field['name'],
                 title=field['name'],
                 type=field['type'],
                 user_id=user_id,
-                datasources_meta=self.meta
+                datasources_meta=DatasourceMeta.objects.get(
+                    collection_name=table_name)
             )
 
     @celery.task(name='etl:database:generate_measures', filter=task_method)

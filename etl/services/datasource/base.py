@@ -1,5 +1,5 @@
 # coding: utf-8
-from core.models import DatasourceMeta
+from core.models import DatasourceMeta, DatasourceMetaKeys
 from etl.services.db.factory import DatabaseService
 from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
@@ -9,6 +9,7 @@ from collections import defaultdict
 from itertools import groupby
 
 import json
+from etl.services.middleware.base import get_table_name
 
 
 class DataSourceService(object):
@@ -355,7 +356,7 @@ class DataSourceService(object):
         return tables_info_for_meta
 
     @staticmethod
-    def update_datasource_meta(table_name, source, cols,
+    def update_datasource_meta(key, source, cols,
                                tables_info_for_meta, last_row):
         """
         Создание DatasourceMeta для Datasource
@@ -371,62 +372,64 @@ class DataSourceService(object):
             DatasourceMeta: Объект мета-данных
 
         """
-        try:
-            source_meta = DatasourceMeta.objects.get(
-                datasource_id=source.id,
-                collection_name=table_name,
-            )
-        except DatasourceMeta.DoesNotExist:
-            source_meta = DatasourceMeta(
-                datasource_id=source.id,
-                collection_name=table_name,
-            )
-
-        stats = {'tables_stat': {}, 'row_key': {}, 'row_key_value': defaultdict(list), }
-        fields = {'columns': defaultdict(list), }
-
-        # избавляет от дублей
-        row_keys = defaultdict(set)
+        # for table in tables_info_for_meta:
+        #     try:
+        #         source_meta = DatasourceMeta.objects.get(
+        #             datasource_id=source.id,
+        #             collection_name=table_name,
+        #         )
+        #     except DatasourceMeta.DoesNotExist:
+        #         source_meta = DatasourceMeta(
+        #             datasource_id=source.id,
+        #             collection_name=table_name,
+        #         )
 
         for table, col_group in groupby(cols, lambda x: x['table']):
+            stats = {
+                'tables_stat': {},
+                'row_key': {},
+                'row_key_value': {}
+            }
+            fields = {'columns': [], }
+            table_name = get_table_name(table, key)
+
             table_info = tables_info_for_meta[table]
 
-            stats['tables_stat'][table] = table_info['stats']
+            stats['tables_stat'] = table_info['stats']
             t_cols = table_info['columns']
 
             for sel_col in col_group:
                 for col in t_cols:
                     # cols info
                     if sel_col['col'] == col['name']:
-                        fields['columns'][table].append(col)
+                        fields['columns'].append(col)
 
                     # primary keys
                     if col['is_primary']:
-                        row_keys[table].add(col['name'])
+                        stats['row_key'] = col['name']
 
-        for k, v in row_keys.iteritems():
-            stats['row_key'][k] = list(v)
+            if last_row and stats['row_key']:
+                # корневая таблица
+                mapped = filter(
+                    lambda x: x[0]['table'] == table, zip(cols, last_row))
+                primary_key = stats['row_key']
 
-        if last_row:
-            # корневая таблица
-            root_table = cols[0]['table']
-            mapped = filter(
-                lambda x: x[0]['table'] == root_table, zip(cols, last_row))
+                for (k, v) in mapped:
+                    if primary_key == k['col']:
+                        stats['row_key_value'] = {primary_key: v}
 
-            if stats['row_key']:
-                primaries = stats['row_key'][root_table]
-
-                for pri in primaries:
-                    for (k, v) in mapped:
-                        if pri == k['col']:
-                            stats['row_key_value'][root_table].append(
-                                {pri: v})
-
-        # source_meta.update_date = datetime.datetime.now()
-        source_meta.fields = json.dumps(fields)
-        source_meta.stats = json.dumps(stats)
-        source_meta.save()
-        return source_meta
+            source_meta, created = DatasourceMeta.objects.update_or_create(
+                datasource_id=source.id,
+                collection_name=table_name,
+                defaults=dict(
+                    fields=json.dumps(fields),
+                    stats=json.dumps(stats),
+                )
+            )
+            DatasourceMetaKeys.objects.get_or_create(
+                meta=source_meta,
+                value=key,
+            )
 
     @classmethod
     def get_structure_rows_number(cls, source, structure,  cols):

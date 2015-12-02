@@ -5,11 +5,12 @@ from django.contrib import admin
 from psycopg2 import errorcodes
 from django.db import models
 from django.conf import settings
+import re
 from core.models import DatasourceMetaKeys, QueueList, Datasource
 from etl.constants import FIELD_NAME_SEP
 from etl.helpers import TaskStatusEnum, DataSourceService, \
     RedisSourceService, TaskService, TaskErrorCodeEnum
-from etl.services.middleware.base import datetime_now_str
+from etl.services.middleware.base import datetime_now_str, get_table_name
 
 type_match = {
     'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),
@@ -139,7 +140,7 @@ class OlapEntityCreation(object):
         self.actual_fields = None
         self.queue_storage = None
 
-    def get_actual_fields(self):
+    def get_actual_fields(self, key):
         """
         Фильтруем поля по необходимому нам типу
 
@@ -147,10 +148,13 @@ class OlapEntityCreation(object):
             list: Метаданные отфильтрованных полей
         """
         all_fields = []
-        for table, fields in self.meta_data['columns'].iteritems():
-            for field in fields:
+        for record in self.meta_data:
+
+            for field in json.loads(record['meta__fields'])['columns']:
+                m = re.match(r"(\w+)_(\d+)", record['meta__collection_name'])
+                table_name = m.group(1)
                 field['name'] = '{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name'])
+                    table_name, FIELD_NAME_SEP, field['name'])
                 all_fields.append(field)
 
         return [element for element in all_fields
@@ -201,9 +205,9 @@ class OlapEntityCreation(object):
         # Наполняем контекст
         self.source = Datasource.objects.get(id=data['datasource_id'])
         self.source_table_name = data['source_table']
-        self.meta = DatasourceMetaKeys.objects.get(value=data['key']).meta
-        self.meta_data = json.loads(self.meta.fields)
-        self.actual_fields = self.get_actual_fields()
+        self.meta_data = DatasourceMetaKeys.objects.filter(
+            value=data['key']).values('meta__collection_name', 'meta__fields')
+        self.actual_fields = self.get_actual_fields(data['key'])
         self.set_queue_storage(task_id, data['user_id'])
 
         f_list = []
@@ -241,7 +245,7 @@ class OlapEntityCreation(object):
 
         # Сохраняем метаданные
         self.save_meta_data(
-            data['user_id'], table_name, self.actual_fields)
+            data['user_id'], data['key'], self.actual_fields)
 
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
@@ -255,7 +259,7 @@ class OlapEntityCreation(object):
         # удаляем канал из списка каналов юзера
         RedisSourceService.delete_user_subscriber(data['user_id'], task_id)
 
-    def save_meta_data(self, user_id, table_name, fields):
+    def save_meta_data(self, user_id, key, fields):
         """
         Сохранение метаинформации
 
