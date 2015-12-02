@@ -369,7 +369,7 @@ def load_data_database(user_id, task_id, data, channel):
     return create_dimensions_and_measures(user_id, source, table_key, key)
 
 
-def create_dimensions_and_measures(user_id=11, source=None, table_key=None, key=None):
+def create_dimensions_and_measures(user_id, source, table_key, key):
     """Создание таблиц размерностей
 
     Args:
@@ -378,13 +378,6 @@ def create_dimensions_and_measures(user_id=11, source=None, table_key=None, key=
     Returns:
 
     """
-    # arguments = dict(
-    #     user_id=11,
-    #     datasource_id=3,
-    #     source_table='sttm_datasource_948655626',
-    #     key=948655626,
-    #     target_table='dimensions_948655626'
-    # )
     arguments = dict(
         user_id=user_id,
         datasource_id=source.id,
@@ -401,6 +394,8 @@ def create_dimensions_and_measures(user_id=11, source=None, table_key=None, key=
     measure_task = TaskService('etl:database:generate_measures')
     measure_task_id, channel = measure_task.add_task(arguments)
     measure = MeasureCreation()
+    # dimension.load_data(dimension_task_id)
+    # measure.load_data(measure_task_id)
 
     group([
         dimension.load_data.s(dimension_task_id),
@@ -420,11 +415,7 @@ class DimensionCreation(OlapEntityCreation):
         Сохраняем информацию о размерности
         """
         level = dict()
-        for field in fields:
-            m = re.match(
-                r"(?P<table_name>\w+)%s(?P<column_name>\w+)" % FIELD_NAME_SEP,
-                field['name'])
-            table_name = get_table_name(m.group('table_name'), key)
+        for table, field in fields:
             level.update(dict(
                 type=field['type'], level_type='regular', visible=True,
                 column=field['name'], unique_members=field['is_unique'],
@@ -446,7 +437,7 @@ class DimensionCreation(OlapEntityCreation):
                 title=field['name'],
                 user_id=user_id,
                 datasources_meta=DatasourceMeta.objects.get(
-                    collection_name=table_name),
+                    collection_name=table, datasource=self.source),
                 data=json.dumps(data)
             )
 
@@ -470,18 +461,15 @@ class MeasureCreation(OlapEntityCreation):
         """
         Сохранение информации о мерах
         """
-        for field in fields:
-            m = re.match(
-                r"(?P<table_name>\w+)%s(?P<column_name>\w+)" % FIELD_NAME_SEP,
-                field['name'])
-            table_name = get_table_name(m.group('table_name'), key)
+        for table, field in fields:
+
             Measure.objects.get_or_create(
                 name=field['name'],
                 title=field['name'],
                 type=field['type'],
                 user_id=user_id,
                 datasources_meta=DatasourceMeta.objects.get(
-                    collection_name=table_name)
+                    collection_name=table, datasource=self.source)
             )
 
     @celery.task(name='etl:database:generate_measures', filter=task_method)

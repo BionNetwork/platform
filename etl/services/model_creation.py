@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from copy import copy, deepcopy
 import json
 
 from django.contrib import admin
@@ -147,18 +148,15 @@ class OlapEntityCreation(object):
         Returns:
             list: Метаданные отфильтрованных полей
         """
-        all_fields = []
+        actual_fields = []
         for record in self.meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                m = re.match(r"(\w+)_(\d+)", record['meta__collection_name'])
-                table_name = m.group(1)
-                field['name'] = '{0}{1}{2}'.format(
-                    table_name, FIELD_NAME_SEP, field['name'])
-                all_fields.append(field)
+                if field['type'] in self.actual_fields_type:
+                    actual_fields.append((
+                        record['meta__collection_name'], field))
 
-        return [element for element in all_fields
-                if element['type'] in self.actual_fields_type]
+        return actual_fields
 
     def set_queue_storage(self, task_id, user_id):
         # создаем информацию о работе таска
@@ -212,8 +210,9 @@ class OlapEntityCreation(object):
 
         f_list = []
         table_name = data['target_table']
-        for field in self.actual_fields:
-            field_name = field['name']
+        for table, field in self.actual_fields:
+            field_name = '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name'])
 
             f_list.append(get_field_settings(field_name, field['type']))
 
@@ -277,7 +276,17 @@ class OlapEntityCreation(object):
         Args:
             model: Модель к целевой таблице
         """
-        actual_fields_name = [field['name'] for field in self.actual_fields]
+        actual_fields = []
+        for record in self.meta_data:
+            for field in json.loads(record['meta__fields'])['columns']:
+                table_name = record['meta__collection_name']
+                new_field = deepcopy(field)
+                new_field['name'] = '{0}{1}{2}'.format(
+                    table_name, FIELD_NAME_SEP, field['name'])
+                if new_field['type'] in self.actual_fields_type:
+                    actual_fields.append(new_field)
+
+        actual_fields_name = [field['name'] for field in actual_fields]
         offset = 0
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
