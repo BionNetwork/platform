@@ -10,7 +10,7 @@ import operator
 import binascii
 from psycopg2 import errorcodes
 from etl.constants import FIELD_NAME_SEP
-
+from etl.services.db.factory import DatabaseService
 from etl.services.model_creation import OlapEntityCreation
 from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, get_table_name, datetime_now_str)
 from .helpers import (RedisSourceService, DataSourceService,
@@ -235,10 +235,10 @@ def load_data_database(user_id, task_id, data, channel):
     # инстанс подключения к локальному хранилищу данных
     local_instance = DataSourceService.get_local_instance()
 
-    create_table_query = TaskService.table_create_query_for_loading_task(
+    create_table_query = DatabaseService.get_table_create_query(
         local_instance, table_key, ', '.join(col_names_create))
 
-    insert_table_query = TaskService.table_insert_query_for_loading_task(
+    insert_table_query = DatabaseService.get_table_insert_query(
         local_instance, table_key)
 
     connection = local_instance.connection

@@ -101,27 +101,6 @@ class TaskService:
 
         task.save()
 
-    @classmethod
-    def table_create_query_for_loading_task(
-        cls, local_instance, table_key, cols_str):
-        """
-            Получение запроса на создание новой таблицы
-            для локального хранилища данных
-        """
-        create_query = DatabaseService.get_table_create_query(
-            local_instance, table_key, cols_str)
-        return create_query
-
-    @classmethod
-    def table_insert_query_for_loading_task(cls, local_instance, table_key):
-        """
-            Получение запроса на заполнение таблицы
-            для локального хранилища данных
-        """
-        insert_query = DatabaseService.get_table_insert_query(
-            local_instance, table_key)
-        return insert_query
-
 
 class TaskErrorCodeEnum(BaseEnum):
     """
