@@ -369,7 +369,7 @@ def load_data_database(user_id, task_id, data, channel):
     return create_dimensions_and_measures(user_id, source, table_key, key)
 
 
-def create_dimensions_and_measures(user_id=11, source=None, table_key=None, key=None):
+def create_dimensions_and_measures(user_id, source, table_key, key):
     """Создание таблиц размерностей
 
     Args:
