@@ -244,7 +244,7 @@ class OlapEntityCreation(object):
 
         # Сохраняем метаданные
         self.save_meta_data(
-            data['user_id'], data['key'], self.actual_fields)
+            data['user_id'], data['key'], self.actual_fields, data['meta_tables'])
 
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
@@ -258,7 +258,7 @@ class OlapEntityCreation(object):
         # удаляем канал из списка каналов юзера
         RedisSourceService.delete_user_subscriber(data['user_id'], task_id)
 
-    def save_meta_data(self, user_id, key, fields):
+    def save_meta_data(self, user_id, key, fields, meta_tables):
         """
         Сохранение метаинформации
 

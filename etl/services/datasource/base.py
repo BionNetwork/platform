@@ -5,11 +5,9 @@ from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
 from django.conf import settings
-from collections import defaultdict
 from itertools import groupby
 
 import json
-from etl.services.middleware.base import get_table_name
 
 
 class DataSourceService(object):
@@ -372,7 +370,7 @@ class DataSourceService(object):
             DatasourceMeta: Объект мета-данных
 
         """
-
+        res = dict()
         for table, col_group in groupby(cols, lambda x: x['table']):
             try:
                 source_meta = DatasourceMeta.objects.get(
@@ -422,6 +420,10 @@ class DataSourceService(object):
                 meta=source_meta,
                 value=key,
             )
+            res.update({
+                table: source_meta.id
+            })
+        return res
 
     @classmethod
     def get_structure_rows_number(cls, source, structure,  cols):
