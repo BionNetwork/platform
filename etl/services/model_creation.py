@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from copy import copy, deepcopy
 import json
 
 from django.contrib import admin
@@ -140,25 +141,22 @@ class OlapEntityCreation(object):
         self.actual_fields = None
         self.queue_storage = None
 
-    def get_actual_fields(self, key):
+    def get_actual_fields(self):
         """
         Фильтруем поля по необходимому нам типу
 
         Returns:
-            list: Метаданные отфильтрованных полей
+            list of tuple: Метаданные отфильтрованных полей
         """
-        all_fields = []
+        actual_fields = []
         for record in self.meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                m = re.match(r"(\w+)_(\d+)", record['meta__collection_name'])
-                table_name = m.group(1)
-                field['name'] = '{0}{1}{2}'.format(
-                    table_name, FIELD_NAME_SEP, field['name'])
-                all_fields.append(field)
+                if field['type'] in self.actual_fields_type:
+                    actual_fields.append((
+                        record['meta__collection_name'], field))
 
-        return [element for element in all_fields
-                if element['type'] in self.actual_fields_type]
+        return actual_fields
 
     def set_queue_storage(self, task_id, user_id):
         # создаем информацию о работе таска
@@ -207,13 +205,14 @@ class OlapEntityCreation(object):
         self.source_table_name = data['source_table']
         self.meta_data = DatasourceMetaKeys.objects.filter(
             value=data['key']).values('meta__collection_name', 'meta__fields')
-        self.actual_fields = self.get_actual_fields(data['key'])
+        self.actual_fields = self.get_actual_fields()
         self.set_queue_storage(task_id, data['user_id'])
 
         f_list = []
         table_name = data['target_table']
-        for field in self.actual_fields:
-            field_name = field['name']
+        for table, field in self.actual_fields:
+            field_name = '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name'])
 
             f_list.append(get_field_settings(field_name, field['type']))
 
@@ -245,7 +244,7 @@ class OlapEntityCreation(object):
 
         # Сохраняем метаданные
         self.save_meta_data(
-            data['user_id'], data['key'], self.actual_fields)
+            data['user_id'], data['key'], self.actual_fields, data['meta_tables'])
 
         # меняем статус задачи на 'Выполнено'
         TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
@@ -259,7 +258,7 @@ class OlapEntityCreation(object):
         # удаляем канал из списка каналов юзера
         RedisSourceService.delete_user_subscriber(data['user_id'], task_id)
 
-    def save_meta_data(self, user_id, key, fields):
+    def save_meta_data(self, user_id, key, fields, meta_tables):
         """
         Сохранение метаинформации
 
@@ -277,12 +276,15 @@ class OlapEntityCreation(object):
         Args:
             model: Модель к целевой таблице
         """
-        actual_fields_name = [field['name'] for field in self.actual_fields]
+        column_names = []
+        for table, field in self.actual_fields:
+            column_names.append('{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name']))
         offset = 0
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
         while True:
-            rows_query = self.rows_query(actual_fields_name)
+            rows_query = self.rows_query(column_names)
             index_to = offset+step
             connection = DataSourceService.get_local_instance().connection
             cursor = connection.cursor()
@@ -292,7 +294,7 @@ class OlapEntityCreation(object):
             if not rows:
                 break
             column_data = [model(
-                **{actual_fields_name[i]: v for (i, v) in enumerate(x)})
+                **{column_names[i]: v for (i, v) in enumerate(x)})
                         for x in rows]
             model.objects.bulk_create(column_data)
             offset = index_to

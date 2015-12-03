@@ -5,11 +5,9 @@ from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
 from django.conf import settings
-from collections import defaultdict
 from itertools import groupby
 
 import json
-from etl.services.middleware.base import get_table_name
 
 
 class DataSourceService(object):
@@ -362,7 +360,7 @@ class DataSourceService(object):
         Создание DatasourceMeta для Datasource
 
         Args:
-            table_name(str): Название страницы
+            key(str): Ключ
             source(Datasource): Источник данных
             cols(list): Список колонок
             last_row(str or None): Последняя запись
@@ -372,26 +370,24 @@ class DataSourceService(object):
             DatasourceMeta: Объект мета-данных
 
         """
-        # for table in tables_info_for_meta:
-        #     try:
-        #         source_meta = DatasourceMeta.objects.get(
-        #             datasource_id=source.id,
-        #             collection_name=table_name,
-        #         )
-        #     except DatasourceMeta.DoesNotExist:
-        #         source_meta = DatasourceMeta(
-        #             datasource_id=source.id,
-        #             collection_name=table_name,
-        #         )
-
+        res = dict()
         for table, col_group in groupby(cols, lambda x: x['table']):
+            try:
+                source_meta = DatasourceMeta.objects.get(
+                    datasource_id=source.id,
+                    collection_name=table,
+                )
+            except DatasourceMeta.DoesNotExist:
+                source_meta = DatasourceMeta(
+                    datasource_id=source.id,
+                    collection_name=table,
+                )
             stats = {
                 'tables_stat': {},
-                'row_key': {},
-                'row_key_value': {}
+                'row_key': [],
+                'row_key_value': []
             }
             fields = {'columns': [], }
-            table_name = get_table_name(table, key)
 
             table_info = tables_info_for_meta[table]
 
@@ -406,30 +402,28 @@ class DataSourceService(object):
 
                     # primary keys
                     if col['is_primary']:
-                        stats['row_key'] = col['name']
+                        stats['row_key'].append(col['name'])
 
             if last_row and stats['row_key']:
                 # корневая таблица
                 mapped = filter(
                     lambda x: x[0]['table'] == table, zip(cols, last_row))
-                primary_key = stats['row_key']
 
                 for (k, v) in mapped:
-                    if primary_key == k['col']:
-                        stats['row_key_value'] = {primary_key: v}
+                    if k['col'] in stats['row_key']:
+                        stats['row_key_value'].append({k['col']: v})
 
-            source_meta, created = DatasourceMeta.objects.update_or_create(
-                datasource_id=source.id,
-                collection_name=table_name,
-                defaults=dict(
-                    fields=json.dumps(fields),
-                    stats=json.dumps(stats),
-                )
-            )
+            source_meta.fields = json.dumps(fields)
+            source_meta.stats = json.dumps(stats)
+            source_meta.save()
             DatasourceMetaKeys.objects.get_or_create(
                 meta=source_meta,
                 value=key,
             )
+            res.update({
+                table: source_meta.id
+            })
+        return res
 
     @classmethod
     def get_structure_rows_number(cls, source, structure,  cols):
