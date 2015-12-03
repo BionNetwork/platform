@@ -427,12 +427,12 @@ class DimensionCreation(OlapEntityCreation):
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
                 id=meta_tables[table])
-            # target_table_name = '{0}{1}{2}'.format(
-            #         table, FIELD_NAME_SEP, field['name'])
+            target_table_name = '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name'])
             level.update(dict(
                 type=field['type'], level_type='regular', visible=True,
-                column=field['name'], unique_members=field['is_unique'],
-                caption=field['name'],
+                column=target_table_name, unique_members=field['is_unique'],
+                caption=target_table_name,
                 )
             )
 
@@ -446,8 +446,8 @@ class DimensionCreation(OlapEntityCreation):
             # )
 
             Dimension.objects.get_or_create(
-                name=field['name'],
-                title=field['name'],
+                name=target_table_name,
+                title=target_table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
                 # data=json.dumps(data)
