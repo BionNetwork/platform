@@ -427,8 +427,8 @@ class DimensionCreation(OlapEntityCreation):
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
                 id=meta_tables[table])
-            target_table_name = '{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name'])
+            # target_table_name = '{0}{1}{2}'.format(
+            #         table, FIELD_NAME_SEP, field['name'])
             level.update(dict(
                 type=field['type'], level_type='regular', visible=True,
                 column=field['name'], unique_members=field['is_unique'],
@@ -436,21 +436,21 @@ class DimensionCreation(OlapEntityCreation):
                 )
             )
 
-            data = dict(
-                name=target_table_name,
-                has_all=True,
-                table_name=target_table_name,
-                level=level,
-                primary_key='id',
-                foreign_key=None
-            )
+            # data = dict(
+            #     name=target_table_name,
+            #     has_all=True,
+            #     table_name=target_table_name,
+            #     level=level,
+            #     primary_key='id',
+            #     foreign_key=None
+            # )
 
             Dimension.objects.get_or_create(
                 name=field['name'],
                 title=field['name'],
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
-                data=json.dumps(data)
+                # data=json.dumps(data)
             )
 
     @celery.task(name='etl:database:generate_dimensions', filter=task_method)
