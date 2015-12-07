@@ -184,6 +184,49 @@ def load_data(user_id, task_id, channel):
             load_data_database(user_id, task_id, data, channel)
 
 
+class RowKeysCreator(object):
+    """
+    Расчет ключа для таблицы
+    """
+
+    def __init__(self, table, cols, primary_key=None):
+        self.table = table
+        self.cols = cols
+        self.primary_key = primary_key
+
+    def calc_key(self, row, row_num):
+        """
+        Расчет ключа для строки таблицы либо по первичному ключу
+        либо по номеру и значениям этой строки
+
+        Args:
+            row(tuple): Строка данных
+            row_num(int): Номер строки
+
+        Returns:
+            int: Ключ строки для таблицы
+        """
+        if self.primary_key:
+            return binascii.crc32(str(self.primary_key))
+        l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
+        l.append(row_num)
+        return binascii.crc32(
+                reduce(lambda res, x: '%s%s' % (res, x), l))
+
+    def set_primary_key(self, data):
+        """
+        Установка первичного ключа, если есть
+
+        Args:
+            data(dict): метаданные по колонкам таблицы
+        """
+
+        for record in data['columns']:
+            if record['is_primary']:
+                self.primary_key = record['name']
+                break
+
+
 def load_data_database(user_id, task_id, data, channel):
     """Загрузка данных во временное хранилище
     Args:
@@ -194,6 +237,22 @@ def load_data_database(user_id, task_id, data, channel):
     Returns:
         func
     """
+
+    def calc_key_for_row(row, tables_key_creator, row_num):
+        """
+        Расчет ключа для отдельно взятой строки
+
+        Args:
+            row(tuple): строка данных
+            tables_key_creator(list of RowKeysCreator): список создателей ключей
+            row_num(int): Номер строки
+
+        Returns:
+            tuple: Модифицированная строка с ключом в первой позиции
+        """
+        row_values_for_calc = [
+            str(each.calc_key(row, row_num)) for each in tables_key_creator]
+        return (binascii.crc32(''.join(row_values_for_calc)),) + row
 
     print 'load_data_database'
 
@@ -206,7 +265,7 @@ def load_data_database(user_id, task_id, data, channel):
     source = Datasource()
     source.set_from_dict(**source_dict)
 
-    col_names_create = []
+    col_names = ['"cdc_key" text']
 
     cols_str = ''
 
@@ -218,7 +277,7 @@ def load_data_database(user_id, task_id, data, channel):
 
         dotted = '{0}.{1}'.format(t, c)
 
-        col_names_create.append('"{0}{1}{2}" {3}'.format(
+        col_names.append('"{0}{1}{2}" {3}'.format(
             t, FIELD_NAME_SEP, c, col_types[dotted]))
 
     # название новой таблицы
@@ -237,7 +296,7 @@ def load_data_database(user_id, task_id, data, channel):
     local_instance = DataSourceService.get_local_instance()
 
     create_table_query = DatabaseService.get_table_create_query(
-        local_instance, source_table_name, ', '.join(col_names_create))
+        local_instance, source_table_name, ', '.join(col_names))
 
     insert_table_query = DatabaseService.get_table_insert_query(
         local_instance, source_table_name)
@@ -260,11 +319,11 @@ def load_data_database(user_id, task_id, data, channel):
     rows_cursor.execute(rows_query.format(limit, offset))
     rows = rows_cursor.fetchall()
 
-    len_ = len(rows[0]) if rows else 0
+    len_ = len(rows[0])+1 if rows else 0
 
     # преобразуем строку инсерта в зависимости длины вставляемой строки
     insert_query = insert_table_query.format(
-        '(' + ','.join(['%({0})s'.format(i) for i in xrange(len_)]) + ')')
+        '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(len_)]))
 
     last_row = None
 
@@ -286,12 +345,21 @@ def load_data_database(user_id, task_id, data, channel):
     # меняем статус задачи на 'В обработке'
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
 
+    tables_key_creator = []
+    for key, value in tables_info_for_meta.iteritems():
+        rkc = RowKeysCreator(table=key, cols=cols)
+        rkc.set_primary_key(value)
+        tables_key_creator.append(rkc)
+
     while rows:
+
         try:
+            rows_with_keys = map(lambda (ind, row): calc_key_for_row(
+                row, tables_key_creator, offset + ind), enumerate(rows))
             # приходит [(1, 'name'), ...],
             # преобразуем в [{0: 1, 1: 'name'}, ...]
             dicted = map(
-                lambda x: {str(k): v for (k, v) in izip(xrange(len_), x)}, rows)
+                lambda x: {str(k): v for (k, v) in izip(xrange(len_), x)}, rows_with_keys)
 
             cursor.executemany(insert_query, dicted)
         except Exception as e:
