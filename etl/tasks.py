@@ -101,6 +101,11 @@ def load_data_mongo(user_id, task_id, data, channel):
     was_error = False
     up_to_100 = False
     err_msg = ''
+    percent = 0
+
+    # сообщаем о начале загрузке
+    client.publish(channel, json.dumps(
+        {'percent': 0, 'taskId': task_id, 'event': 'start'}))
 
     while True:
         query_load = query.format(limit, (page-1)*limit)
@@ -126,6 +131,11 @@ def load_data_mongo(user_id, task_id, data, channel):
             print "Unexpected error:", type(e), e
             queue_storage['status'] = TaskStatusEnum.ERROR
 
+            # сообщаем об ошибке
+            client.publish(channel, json.dumps(
+                {'percent': percent, 'taskId': task_id,
+                 'event': 'error', 'message': err_msg}))
+
         # обновляем информацию о работе таска
         queue_storage['date_updated'] = datetime_now_str()
 
@@ -136,12 +146,14 @@ def load_data_mongo(user_id, task_id, data, channel):
             queue_storage['percent'] = 100
             up_to_100 = True
             client.publish(
-                channel, json.dumps({'percent': 100, 'taskId': task_id}))
+                channel, json.dumps(
+                    {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
 
         else:
             queue_storage['percent'] = percent
             client.publish(
-                channel, json.dumps({'percent': percent, 'taskId': task_id}))
+                channel, json.dumps(
+                    {'percent': percent, 'taskId': task_id, 'event': 'process'}))
 
         page += 1
 
@@ -158,7 +170,8 @@ def load_data_mongo(user_id, task_id, data, channel):
         queue_storage['status'] = TaskStatusEnum.DONE
 
     if not was_error and not up_to_100:
-        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
+        client.publish(channel, json.dumps(
+            {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
 
     # удаляем инфу о работе таска
     RedisSourceService.delete_queue(task_id)
@@ -272,6 +285,7 @@ def load_data_database(user_id, task_id, data, channel):
     loaded_count = 0.0
     was_error = False
     up_to_100 = False
+    percent = 0
 
     # создаем информацию о работе таска
     queue_storage = TaskService.get_queue(task_id)
@@ -285,6 +299,10 @@ def load_data_database(user_id, task_id, data, channel):
 
     # меняем статус задачи на 'В обработке'
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
+
+    # сообщаем о начале загрузке
+    client.publish(channel, json.dumps(
+        {'percent': 0, 'taskId': task_id, 'event': 'start'}))
 
     while rows:
         try:
@@ -317,6 +335,11 @@ def load_data_database(user_id, task_id, data, channel):
             queue_storage['date_updated'] = datetime_now_str()
             queue_storage['status'] = TaskStatusEnum.ERROR
 
+            # сообщаем об ошибке
+            client.publish(channel, json.dumps(
+                {'percent': percent, 'taskId': task_id,
+                 'event': 'error', 'message': err_msg}))
+
             break
         else:
             # коммитим пачку в бд
@@ -338,12 +361,14 @@ def load_data_database(user_id, task_id, data, channel):
                 queue_storage['percent'] = 100
                 up_to_100 = True
                 client.publish(
-                    channel, json.dumps({'percent': 100, 'taskId': task_id}))
+                    channel, json.dumps(
+                        {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
 
             else:
                 queue_storage['percent'] = percent
                 client.publish(
-                    channel, json.dumps({'percent': percent, 'taskId': task_id}))
+                    channel, json.dumps(
+                        {'percent': percent, 'taskId': task_id, 'event': 'process'}))
 
     if not was_error:
         # меняем статус задачи на 'Выполнено'
@@ -353,7 +378,8 @@ def load_data_database(user_id, task_id, data, channel):
         queue_storage['status'] = TaskStatusEnum.DONE
 
     if not was_error and not up_to_100:
-        client.publish(channel, json.dumps({'percent': 100, 'taskId': task_id}))
+        client.publish(channel, json.dumps(
+            {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
 
     # удаляем инфу о работе таска
     RedisSourceService.delete_queue(task_id)
