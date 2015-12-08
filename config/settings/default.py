@@ -169,6 +169,16 @@ LOGGING = {
             'handlers': ['core'],
             'level': 'ERROR',
             'propagate': True
+        },
+        'etl.tasks': {
+            'handlers': ['etl'],
+            'level': 'ERROR',
+            'propagate': True
+        },
+        'etl.services.model_creation': {
+            'handlers': ['etl'],
+            'level': 'ERROR',
+            'propagate': True
         }
     }
 }
