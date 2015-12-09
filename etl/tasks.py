@@ -243,6 +243,9 @@ class RowKeysCreator(object):
 
 
 class Query(object):
+    """
+    Класс формирования и совершения запроса
+    """
 
     def __init__(self, source_service, cursor=None, query=None):
         self.source_service = source_service
@@ -425,18 +428,18 @@ def load_data_database(user_id, task_id, data, channel):
         try:
             rows = rows_query.execute(
                 source=source, limit=limit, offset=offset)
-            last_row = rows[-1]
             if not rows:
                 break
+            # добавляем ключ в каждую запись таблицы
             rows_with_keys = map(lambda (ind, row): calc_key_for_row(
                 row, tables_key_creator, offset + ind), enumerate(rows))
             # приходит [(1, 'name'), ...],
             # преобразуем в [{0: 1, 1: 'name'}, ...]
-            dicted = map(
+            rows_dict = map(
                 lambda x: {str(k): v for (k, v) in izip(xrange(cols_nums), x)},
                 rows_with_keys)
 
-            insert_query.execute(data=dicted)
+            insert_query.execute(data=rows_dict)
             offset += limit
         except Exception as e:
             print 'Exception'

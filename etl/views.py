@@ -136,6 +136,8 @@ class RemoveSourceView(BaseView):
 class CheckConnectionView(BaseView):
 
     def post(self, request, *args, **kwargs):
+        from etl.tasks import create_dimensions_and_measures
+        create_dimensions_and_measures()
 
         try:
             helpers.DataSourceService.check_connection(request.POST)
@@ -353,17 +355,19 @@ class LoadDataView(BaseEtlView):
 
         user_id = request.user.id
 
-        # добавляем задачу mongo в очередь
-        task = helpers.TaskService('etl:load_data:mongo')
-        task_id1, channel1 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id1, channel1),)
+        # # добавляем задачу mongo в очередь
+        # task = helpers.TaskService('etl:load_data:mongo')
+        # task_id1, channel1 = task.add_task(arguments)
+        # tasks.load_data.apply_async((user_id, task_id1, channel1),)
 
         # добавляем задачу database в очередь
         task = helpers.TaskService('etl:load_data:database')
         task_id2, channel2 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id2, channel2),)
+        # tasks.load_data.apply_async((user_id, task_id2, channel2),)
+        tasks.load_data(user_id, task_id2, channel2)
 
-        return {'channels': [channel1, channel2], }
+        # return {'channels': [channel1, channel2]}
+        return {'channels': [channel2]}
 
 
 class GetUserTasksView(BaseView):
