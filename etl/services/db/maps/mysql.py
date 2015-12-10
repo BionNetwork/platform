@@ -81,3 +81,40 @@ stat_query = """
     SELECT TABLE_NAME, TABLE_ROWS as count, DATA_LENGTH as size FROM INFORMATION_SCHEMA.TABLES
     where table_name in {0} and table_schema = '{1}' order by table_name;
 """
+
+remote_table_query = """
+    CREATE TABLE IF NOT EXISTS `{0}` (
+        {1}
+        `cdc_created_at` timestamp NOT NULL,
+        `cdc_updated_at` timestamp,
+        `cdc_delta_flag` smallint NOT NULL,
+        `cdc_synced` smallint NOT NULL,
+        PRIMARY KEY(`cdc_updated_at`, `cdc_synced`)
+    )
+"""
+
+remote_triggers_query = """
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_insert` $$
+    CREATE TRIGGER `cdc_{orig_table}_insert` AFTER INSERT ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({new} now(), now(), 1, 0);
+    END
+    $$
+
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_update` $$
+    CREATE  TRIGGER `cdc_{orig_table}_update` AFTER UPDATE ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({new} now(), now(), 2, 0);
+    END
+    $$
+
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_delete` $$
+    CREATE  TRIGGER `cdc_{orig_table}_delete` AFTER DELETE ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({old} now(), now(), 3, 0);
+    END
+
+"""

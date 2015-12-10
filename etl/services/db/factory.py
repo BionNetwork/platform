@@ -5,7 +5,6 @@ from core.models import ConnectionChoices
 from etl.services.db import mysql, postgresql
 
 
-
 class DatabaseService(object):
     """Сервис для источников данных"""
 
@@ -216,3 +215,19 @@ class DatabaseService(object):
         """
         instance = cls.get_source_instance(source)
         return instance.get_structure_rows_number(structure, cols)
+
+    @classmethod
+    def get_remote_table_create_query(cls, source):
+        """
+        возвращает запрос на создание таблицы в БД клиента
+        """
+        instance = cls.get_source_instance(source)
+        return instance.remote_table_create_query()
+
+    @classmethod
+    def get_remote_triggers_create_query(cls, source):
+        """
+        возвращает запрос на создание григгеров в БД клиента
+        """
+        instance = cls.get_source_instance(source)
+        return instance.remote_triggers_create_query()

@@ -244,3 +244,17 @@ class Postgresql(Database):
         """
         insert_query = "INSERT INTO {0} VALUES {1}".format(key_str, '{0}')
         return insert_query
+
+    @staticmethod
+    def remote_table_create_query():
+        """
+        запрос на создание новой таблицы в БД клиента
+        """
+        return pgsql_map.remote_table_query
+
+    @staticmethod
+    def remote_triggers_create_query():
+        """
+        запрос на создание триггеров в БД клиента
+        """
+        return pgsql_map.remote_triggers_query

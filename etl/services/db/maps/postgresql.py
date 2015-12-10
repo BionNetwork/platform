@@ -109,3 +109,40 @@ stat_query = """
     SELECT relname, reltuples as count, relpages*8192 as size FROM pg_class
     where oid in {0};
 """
+
+
+remote_table_query = """
+    CREATE TABLE IF NOT EXISTS "{0}" (
+        {1}
+        "cdc_created_at" timestamp NOT NULL,
+        "cdc_updated_at" timestamp,
+        "cdc_delta_flag" smallint NOT NULL,
+        "cdc_synced" smallint NOT NULL,
+        PRIMARY KEY ("cdc_updated_at", "cdc_synced")
+    )
+"""
+
+
+remote_triggers_query = """
+    CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
+    BEGIN
+        IF (TG_OP = 'DELETE') THEN
+            INSERT INTO "{new_table}" SELECT {old} now(), now(), 3, 0;
+            RETURN OLD;
+        ELSIF (TG_OP = 'UPDATE') THEN
+            INSERT INTO "{new_table}" SELECT {new} now(), now(), 2, 0;
+            RETURN NEW;
+        ELSIF (TG_OP = 'INSERT') THEN
+            INSERT INTO "{new_table}" SELECT {new} now(), now(), 1, 0;
+            RETURN NEW;
+        END IF;
+        RETURN NULL;
+    END;
+$cdc_audit$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "{new_table}_audit" on "{orig_table}";
+
+CREATE TRIGGER "{new_table}_audit"
+AFTER INSERT OR UPDATE OR DELETE ON "{orig_table}"
+    FOR EACH ROW EXECUTE PROCEDURE process_{new_table}_audit();
+"""

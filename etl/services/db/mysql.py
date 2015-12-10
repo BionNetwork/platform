@@ -234,3 +234,18 @@ class Mysql(Database):
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
         stats_query = mysql_map.stat_query.format(tables_str, source.db)
         return stats_query
+
+    @staticmethod
+    def remote_table_create_query():
+        """
+        запрос на создание новой таблицы в БД клиента
+        """
+        return mysql_map.remote_table_query
+
+    @staticmethod
+    def remote_triggers_create_query():
+        """
+        запрос на создание триггеров в БД клиента
+        """
+        return mysql_map.remote_triggers_query
+
