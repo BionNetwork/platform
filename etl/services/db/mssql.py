@@ -78,8 +78,8 @@ class MsSql(Database):
             source, tables)
 
         col_records = self.get_query_result(columns_query)
-        index_records = self.get_query_result(indexes_query)
-        const_records = self.get_query_result(consts_query)
+        index_records = []  # self.get_query_result(indexes_query)
+        const_records = []  # self.get_query_result(consts_query)
 
         return col_records, index_records, const_records
 

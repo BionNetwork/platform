@@ -91,6 +91,6 @@ constraints_query = """
 """
 
 stat_query = """
-    1, 1, 1 FROM INFORMATION_SCHEMA.TABLES
+    SELECT TABLE_NAME, 1, 1 FROM INFORMATION_SCHEMA.TABLES
     where table_name in {0} and table_schema = '{1}' order by table_name;
 """
