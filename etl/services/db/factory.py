@@ -2,8 +2,7 @@
 from django.conf import settings
 
 from core.models import ConnectionChoices
-from etl.services.db import mysql, postgresql
-
+from etl.services.db import mysql, postgresql, mssql
 
 
 class DatabaseService(object):
@@ -23,6 +22,10 @@ class DatabaseService(object):
             return postgresql.Postgresql(connection)
         elif conn_type == ConnectionChoices.MYSQL:
             return mysql.Mysql(connection)
+        elif conn_type == ConnectionChoices.MS_SQL:
+            return mssql.MsSql(connection)
+        elif conn_type == ConnectionChoices.ORACLE:
+            raise ValueError("Write Here!")
         else:
             raise ValueError("Неизвестный тип подключения!")
 
