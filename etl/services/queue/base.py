@@ -44,7 +44,7 @@ class TaskService:
     def __init__(self, name):
         self.name = name
 
-    def add_task(self, arguments):
+    def add_task(self, arguments, table_key):
         """
         Добавляем задачу юзеру в список задач и возвращаем идентификатор заадчи
         :type tree: dict дерево источника
@@ -59,7 +59,7 @@ class TaskService:
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
             app='etl',
-            checksum='',
+            checksum=table_key,
         )
 
         task_id = task.id

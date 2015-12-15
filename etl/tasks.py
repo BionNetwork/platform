@@ -37,7 +37,7 @@ client.connect()
 logger = logging.getLogger(__name__)
 
 
-def load_data_mongo(user_id, task_id, data, channel):
+def load_data_mongo(user_id, task_id, data, channel, key):
     """
     Загрузка данных в mongo
     :param user_id: integer
@@ -48,7 +48,6 @@ def load_data_mongo(user_id, task_id, data, channel):
 
     print 'upload data to mongo'
     cols = json.loads(data['cols'])
-    tables = json.loads(data['tables'])
     structure = data['tree']
 
     source_dict = data['source']
@@ -60,12 +59,6 @@ def load_data_mongo(user_id, task_id, data, channel):
     for t_name, col_group in groupby(cols, lambda x: x["table"]):
         for x in col_group:
             col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
-
-    # название новой таблицы
-    key = binascii.crc32(
-        reduce(operator.add,
-               [source_model.host, str(source_model.port), str(source_model.user_id),
-                ','.join(sorted(tables))], ''))
 
     # collection
     collection_name = get_table_name('sttm_datasource', key)
@@ -192,11 +185,12 @@ def load_data(user_id, task_id, channel):
 
         data = json.loads(task.arguments)
         name = task.queue.name
+        table_key = task.checksum
 
         if name == 'etl:load_data:mongo':
-            load_data_mongo(user_id, task_id, data, channel)
+            load_data_mongo(user_id, task_id, data, channel, table_key)
         elif name == 'etl:load_data:database':
-            load_data_database(user_id, task_id, data, channel)
+            load_data_database(user_id, task_id, data, channel, table_key)
 
 
 class RowKeysCreator(object):
@@ -318,7 +312,7 @@ class RowsQuery(Query):
         return self.cursor.fetchall()
 
 
-def load_data_database(user_id, task_id, data, channel):
+def load_data_database(user_id, task_id, data, channel, key):
     """Загрузка данных во временное хранилище
     Args:
         user_id: id пользователя
@@ -358,21 +352,14 @@ def load_data_database(user_id, task_id, data, channel):
 
     col_names = ['"cdc_key" text']
 
-    cols_str = ''
-
     for obj in cols:
         t = obj['table']
         c = obj['col']
-
-        cols_str += '{0}-{1};'.format(t, c)
 
         dotted = '{0}.{1}'.format(t, c)
 
         col_names.append('"{0}{1}{2}" {3}'.format(
             t, FIELD_NAME_SEP, c, col_types[dotted]))
-
-    # название новой таблицы
-    key = generate_table_name_key(source, cols_str)
 
     source_table_name = get_table_name('sttm_datasource', key)
 
@@ -414,8 +401,8 @@ def load_data_database(user_id, task_id, data, channel):
     percent = 0
 
     tables_key_creator = []
-    for key, value in tables_info_for_meta.iteritems():
-        rkc = RowKeysCreator(table=key, cols=cols)
+    for key_, value in tables_info_for_meta.iteritems():
+        rkc = RowKeysCreator(table=key_, cols=cols)
         rkc.set_primary_key(value)
         tables_key_creator.append(rkc)
 
@@ -538,12 +525,12 @@ def create_dimensions_and_measures(
     )
 
     dimension_task = TaskService('etl:database:generate_dimensions')
-    dimension_task_id, channel = dimension_task.add_task(arguments)
+    dimension_task_id, channel = dimension_task.add_task(arguments, key)
     dimension = DimensionCreation()
     arguments.update({'target_table': get_table_name('measures', key)})
 
     measure_task = TaskService('etl:database:generate_measures')
-    measure_task_id, channel = measure_task.add_task(arguments)
+    measure_task_id, channel = measure_task.add_task(arguments, key)
     measure = MeasureCreation()
     # dimension.load_data(dimension_task_id)
     # measure.load_data(measure_task_id)

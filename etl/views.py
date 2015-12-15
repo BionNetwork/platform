@@ -12,12 +12,15 @@ from django.conf import settings
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource
+from core.models import Datasource, Queue, QueueList, QueueStatus
 from . import forms as etl_forms
 import logging
 
 from . import helpers
 from . import tasks
+from .services.queue.base import TaskStatusEnum
+from .services.middleware.base import (generate_columns_string,
+                                       generate_table_name_key)
 
 
 logger = logging.getLogger(__name__)
@@ -327,6 +330,28 @@ class LoadDataView(BaseEtlView):
         # копия, чтобы могли добавлять
         data = request.POST.copy()
 
+        # генерируем название новой таблицы и
+        # проверяем на существование дубликатов
+        cols = json.loads(data['cols'])
+        cols_str = generate_columns_string(cols)
+        table_key = generate_table_name_key(source, cols_str)
+
+        # берем все типы очередей
+        queue_ids = Queue.objects.values_list('id', flat=True)
+        # берем статусы (В ожидании, В обработке)
+        queue_status_ids = QueueStatus.objects.filter(
+            title__in=(TaskStatusEnum.IDLE, TaskStatusEnum.PROCESSING)
+        ).values_list('id', flat=True)
+
+        queues_list = QueueList.objects.filter(
+            checksum=table_key,
+            queue_id__in=queue_ids,
+            queue_status_id__in=queue_status_ids,
+        )
+
+        if queues_list.exists():
+            raise ResponseError(u'Данная задача уже находится в обработке!')
+
         tables = json.loads(data.get('tables'))
 
         # достаем типы колонок
@@ -355,12 +380,12 @@ class LoadDataView(BaseEtlView):
 
         # добавляем задачу mongo в очередь
         task = helpers.TaskService('etl:load_data:mongo')
-        task_id1, channel1 = task.add_task(arguments)
+        task_id1, channel1 = task.add_task(arguments, table_key)
         tasks.load_data.apply_async((user_id, task_id1, channel1),)
 
         # добавляем задачу database в очередь
         task = helpers.TaskService('etl:load_data:database')
-        task_id2, channel2 = task.add_task(arguments)
+        task_id2, channel2 = task.add_task(arguments, table_key)
         tasks.load_data.apply_async((user_id, task_id2, channel2),)
 
         return {'channels': [channel1, channel2]}
