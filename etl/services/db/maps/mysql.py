@@ -23,13 +23,9 @@ texts = [
     'char',
     'varchar',
     'text',
-    'blob',
     'tinytext',
-    'tinyblob',
     'mediumtext',
-    'mediumblob',
     'longtext',
-    'longblob',
     'enum',
 ]
 dates = [
@@ -38,6 +34,13 @@ dates = [
     'timestamp',
     'time',
     'year',
+]
+
+blobs = [
+    'blob',
+    'tinyblob',
+    'mediumblob',
+    'longblob',
 ]
 
 for i in ints:

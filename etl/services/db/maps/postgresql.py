@@ -38,6 +38,9 @@ dates = [
     'time with time zone',
     'interval',
 ]
+blobs = [
+    'bytea',
+]
 
 for i in ints:
     PSQL_TYPES[i] = 'integer'
