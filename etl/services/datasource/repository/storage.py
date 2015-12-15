@@ -48,7 +48,7 @@ class RedisCacheKeys(object):
         :param number:
         :return:
         """
-        return '{0}:collection:{1}'.format(
+        return '{0}:ddl:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
 
     @staticmethod
@@ -71,7 +71,7 @@ class RedisCacheKeys(object):
         :param table:
         :return:
         """
-        return '{0}:collection:{1}'.format(
+        return '{0}:ddl:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), table)
 
     @staticmethod
