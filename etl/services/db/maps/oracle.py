@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-ORACLE_TYPES = defaultdict(lambda: 0)
+DB_TYPES = defaultdict(lambda: 0)
 
 ints = [
     'int',
@@ -36,16 +36,21 @@ dates = [
 ]
 
 for i in ints:
-    ORACLE_TYPES[i] = 'integer'
+    DB_TYPES[i] = 'integer'
 
 for i in floats:
-    ORACLE_TYPES[i] = 'double precision'
+    DB_TYPES[i] = 'double precision'
 
 for i in texts:
-    ORACLE_TYPES[i] = 'text'
+    DB_TYPES[i] = 'text'
 
 for i in dates:
-    ORACLE_TYPES[i] = 'timestamp'
+    DB_TYPES[i] = 'timestamp'
+
+table_query = """SELECT table_name FROM user_tables"""
+
+columns_query = """SELECT table_name, column_name, data_type FROM user_tab_columns
+          WHERE table_name IN {0}"""
 
 
 constraints_query = """
@@ -64,4 +69,21 @@ indexes_query = """
     SELECT i.table_name, c.column_name, i.index_name, i.uniqueness
     FROM all_ind_columns c, all_indexes i
     WHERE i.table_name IN {0} and i.index_name = c.index_name
+"""
+
+row_query = """
+    SELECT {0} FROM (
+    SELECT {1}, ROW_NUMBER() OVER (ORDER BY ROWNUM) AS rn FROM {2})
+    WHERE rn BETWEEN {3} AND {4}
+"""
+
+stat_query = """
+    SELECT ut.table_name, ut.num_rows, s.t_size
+      FROM user_tables ut
+    JOIN (
+    SELECT segment_name, segment_type, bytes t_size
+      FROM dba_segments
+        WHERE segment_type='TABLE' AND segment_name in {0}
+    ) s
+    ON ut.table_name = s.segment_name
 """
