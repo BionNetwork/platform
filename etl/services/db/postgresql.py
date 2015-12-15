@@ -150,7 +150,7 @@ class Postgresql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type = xrange(3)
+        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -160,6 +160,7 @@ class Postgresql(Database):
             for x in group:
                 is_index = is_unique = is_primary = False
                 col = x[col_name]
+                extra = x[extra_]
 
                 for i in t_indexes:
                     if col in i['columns']:
@@ -175,10 +176,16 @@ class Postgresql(Database):
                                     is_primary = True
 
                 columns[key].append({"name": col,
-                                     "type": (pgsql_map.PSQL_TYPES[cls.lose_brackets(x[col_type])]
-                                              or x[col_type]),
+                                     "type": x[col_type],
                                      "is_index": is_index,
-                                     "is_unique": is_unique, "is_primary": is_primary})
+                                     "is_unique": is_unique,
+                                     "is_primary": is_primary,
+                                     "is_nullable": x[is_nullable].lower(),
+                                     "extra": (
+                                         'serial' if extra is not None and
+                                         extra.startswith('nextval')
+                                         else extra),
+                                     })
 
             # находим внешние ключи
             for c in t_consts:
