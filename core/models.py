@@ -21,7 +21,8 @@ class ConnectionChoices(DjangoChoices):
     """Типы подключения"""
     POSTGRESQL = ChoiceItem(1, 'Postgresql')
     MYSQL = ChoiceItem(2, 'Mysql')
-    ORACLE = ChoiceItem(3, 'Oracle')
+    MS_SQL = ChoiceItem(3, 'MsSql')
+    ORACLE = ChoiceItem(4, 'Oracle')
 
 
 class Datasource(models.Model):
