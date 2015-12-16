@@ -2,8 +2,7 @@
 from django.conf import settings
 
 from core.models import ConnectionChoices
-from etl.services.db import mysql, postgresql
-
+from etl.services.db import mysql, postgresql, mssql, oracle
 
 
 class DatabaseService(object):
@@ -23,6 +22,10 @@ class DatabaseService(object):
             return postgresql.Postgresql(connection)
         elif conn_type == ConnectionChoices.MYSQL:
             return mysql.Mysql(connection)
+        elif conn_type == ConnectionChoices.MS_SQL:
+            return mssql.MsSql(connection)
+        elif conn_type == ConnectionChoices.ORACLE:
+            return oracle.Oracle(connection)
         else:
             raise ValueError("Неизвестный тип подключения!")
 
@@ -79,14 +82,14 @@ class DatabaseService(object):
         return instance.get_statistic(source, tables)
 
     @classmethod
-    def get_rows_query(cls, source):
+    def get_rows_query(cls, source, cols, structure):
         """
         Получение запроса выбранных колонок из указанных таблиц выбранного источника
         :param source: Datasource
         :return:
         """
         instance = cls.get_source_instance(source)
-        return instance.get_rows_query()
+        return instance.get_rows_query(cols, structure)
 
     @classmethod
     def get_rows(cls, source, cols, structure):
@@ -200,6 +203,7 @@ class DatabaseService(object):
         instance = cls.factory(**local_data)
         return instance
 
+    # fixme: не использутеся
     @classmethod
     def get_separator(cls, source):
         instance = cls.get_source_instance(source)

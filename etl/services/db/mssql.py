@@ -1,77 +1,87 @@
 # coding: utf-8
+
+__author__ = 'damir(GDR)'
+
 from .interfaces import Database
-from etl.services.db.maps import postgresql as pgsql_map
+import pymssql
+
 from collections import defaultdict
 from itertools import groupby
-import psycopg2
+from etl.services.db.maps import mysql as mssql_map
 
 
-class Postgresql(Database):
-    """Управление источником данных Postgres"""
-
-    db_map = pgsql_map
+class MsSql(Database):
+    """Управление источником данных MSSQL"""
 
     @staticmethod
     def get_connection(conn_info):
         """
-        Получение соединения к базе данных
+        connection бд соурса
+        :param conn_info:
+        :return: connection
         """
         try:
-            conn_str = (u"host='{host}' dbname='{db}' user='{login}' "
-                        u"password='{password}' port={port}").format(**conn_info)
-            conn = psycopg2.connect(conn_str)
-        except psycopg2.OperationalError:
+            connection = {'database': str(conn_info['db']),
+                          'host': str(conn_info['host']),
+                          # 'port': int(conn_info['port']),
+                          'user': str(conn_info['login']),
+                          'password': str(conn_info['password']),
+                          }
+            conn = pymssql.connect(**connection)
+        except pymssql.Error:
             return None
         return conn
 
     @staticmethod
     def get_separator():
         """
-            Возвращает кавычки(") для запроса
+            Возвращает ковычки(") для запроса
         """
-        return '\"'
+        return '`'
 
-    def get_structure_rows_number(self, structure, cols):
+    def get_tables(self, source):
         """
-        возвращает примерное кол-во строк в запросе для планирования
-        :param structure:
-        :param cols:
+        Получение списка таблиц
+        :param source:
         :return:
         """
-        separator = self.get_separator()
-        query_join = self.generate_join(structure)
+        query = """
+            SELECT table_name FROM information_schema.tables
+            where table_schema='{0}' order by table_name;
+        """.format(source.db)
 
-        pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
-            '{table}', '{col}', sep=separator)
-        cols_str = ', '.join(
-            [pre_cols_str.format(**x) for x in cols])
+        records = self.get_query_result(query)
+        records = map(lambda x: {'name': x[0], }, records)
 
-        select_query = self.get_select_query().format(
-            cols_str, query_join)
-
-        explain_query = 'explain analyze ' + select_query
-        records = self.get_query_result(explain_query)
-        data = records[0][0].split()
-        count = None
-        for d in data:
-            if d.startswith('rows='):
-                count = d
-        return int(count[5:])
+        return records
 
     @staticmethod
     def _get_columns_query(source, tables):
         """
-        Получение запросов на получение данных о колонках, индексах и
-        ограничениях
+            запросы для колонок, констраинтов, индексов соурса
         """
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
-        # public - default scheme for postgres
-        cols_query = pgsql_map.cols_query.format(tables_str, source.db, 'public')
-        constraints_query = pgsql_map.constraints_query.format(tables_str)
-        indexes_query = pgsql_map.indexes_query.format(tables_str)
+        cols_query = mssql_map.cols_query.format(tables_str, source.db)
+
+        constraints_query = mssql_map.constraints_query.format(tables_str, source.db)
+
+        indexes_query = mssql_map.indexes_query.format(tables_str, source.db)
+
         return cols_query, constraints_query, indexes_query
 
+    def get_columns(self, source, tables):
+        """
+        Получение списка колонок в таблицах
+        """
+        columns_query, consts_query, indexes_query = self._get_columns_query(
+            source, tables)
+
+        col_records = self.get_query_result(columns_query)
+        index_records = []  # self.get_query_result(indexes_query)
+        const_records = []  # self.get_query_result(consts_query)
+
+        return col_records, index_records, const_records
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -127,22 +137,20 @@ class Postgresql(Database):
                 for i in t_indexes:
                     if col in i['columns']:
                         is_index = True
-                        index_name = i['name']
                         for c in t_consts:
                             const_type = c['c_type']
-                            if index_name == c['c_name']:
+                            if col == c['c_col_name']:
                                 if const_type == 'UNIQUE':
                                     is_unique = True
                                 elif const_type == 'PRIMARY KEY':
                                     is_unique = True
                                     is_primary = True
 
-                columns[key].append({
-                    "name": col,
-                    "type": (cls.db_map.DB_TYPES[cls.lose_brackets(x[col_type])]
+                columns[key].append({"name": col,
+                                     "type": (mssql_map.MYSQL_TYPES[cls.lose_brackets(x[col_type])]
                                               or x[col_type]),
-                    "is_index": is_index,
-                    "is_unique": is_unique, "is_primary": is_primary})
+                                     "is_index": is_index,
+                                     "is_unique": is_unique, "is_primary": is_primary})
 
             # находим внешние ключи
             for c in t_consts:
@@ -158,42 +166,28 @@ class Postgresql(Database):
         return columns, indexes, foreigns
 
     @staticmethod
+    def get_rows_query():
+        """
+        возвращает селект запрос c лимитом, оффсетом
+        :return: str
+        """
+        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query
+
+    @staticmethod
     def get_select_query():
         """
         возвращает селект запрос
         :return: str
         """
-        return "SELECT {0} FROM {1};"
+        query = "SELECT {0} FROM {1};"
+        return query
 
-    @classmethod
-    def get_statistic_query(cls, source, tables):
+    @staticmethod
+    def get_statistic_query(source, tables):
         """
         запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
         """
-        tables_str = '(' + ', '.join(["'{0}'::regclass::oid".format(y) for y in tables]) + ')'
-        return cls.db_map.stat_query.format(tables_str)
-
-    @staticmethod
-    def local_table_create_query(key_str, cols_str):
-        """
-        запрос на создание новой таблицы в локал хранилище
-        :param key_str:
-        :param cols_str:
-        :return:
-        """
-        create_query = "CREATE TABLE {0} ({1})".format(key_str, cols_str)
-
-        return create_query
-
-    @staticmethod
-    def local_table_insert_query(key_str):
-        """
-        запрос на инсерт в новую таблицу локал хранилища
-        :param key_str:
-        :return:
-        """
-        insert_query = "INSERT INTO {0} VALUES {1}".format(key_str, '{0}')
-        return insert_query
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+        stats_query = mssql_map.stat_query.format(tables_str, source.db)
+        return stats_query
