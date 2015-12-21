@@ -17,6 +17,7 @@ from . import forms as etl_forms
 import logging
 
 from . import helpers
+from . import services
 from . import tasks
 
 
@@ -352,18 +353,37 @@ class LoadDataView(BaseEtlView):
         }
 
         user_id = request.user.id
+        to_update = False
+
+        #
+        if not to_update:
+            # reduce(services.run_task, services.init_load_series, (tasks.load_data_mongodb, arguments))
+            init_func = tasks.load_data_mongodb
+
+            next_func, args_for_load_db = helpers.run_task(
+                helpers.MONGODB_DATA_LOAD, init_func, arguments)
+            helpers.run_task(helpers.DB_DATA_LOAD, next_func, args_for_load_db)
+        else:
+            reduce(
+                helpers.run_task, helpers.additional_load_series, arguments)
+
+            args_for_load_db = helpers.run_task('etl:cdc:load_delta', arguments)
+            args_for_detect_redundant = helpers.run_task('etl:cdc:load_data', args_for_load_db)
+            args_for_delete_redundant = helpers.run_task('etl:cdc:detect_redundant', args_for_detect_redundant)
+            helpers.run_task('etl:cdc:delete_redundant', args_for_delete_redundant)
 
         # добавляем задачу mongo в очередь
         task = helpers.TaskService('etl:load_data:mongo')
         task_id1, channel1 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id1, channel1),)
+        # tasks.load_data.apply_async((user_id, task_id1, channel1),)
+        tasks.load_data(user_id, task_id1, channel1)
 
         # добавляем задачу database в очередь
-        task = helpers.TaskService('etl:load_data:database')
-        task_id2, channel2 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id2, channel2),)
+        # task = helpers.TaskService('etl:load_data:database')
+        # task_id2, channel2 = task.add_task(arguments)
+        # tasks.load_data.apply_async((user_id, task_id2, channel2),)
 
-        return {'channels': [channel1, channel2]}
+        return {'channels': [channel1]}
 
 
 class GetUserTasksView(BaseView):

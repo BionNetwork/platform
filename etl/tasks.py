@@ -4,20 +4,25 @@ import logging
 import os
 import sys
 import brukva
+from datetime import datetime
+from django.utils.datastructures import SortedDict
 import pymongo
 import json
-
+from collections import OrderedDict
+from pymongo import IndexModel, ASCENDING, DESCENDING
 import operator
 import binascii
 from psycopg2 import errorcodes
 from etl.constants import FIELD_NAME_SEP
 from etl.services.model_creation import OlapEntityCreation
-from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, get_table_name, datetime_now_str)
+from etl.services.middleware.base import (
+    EtlEncoder, generate_table_name_key, get_table_name, datetime_now_str)
+from etl.services.queue.base import TaskLoadingStatusEnum, TLSE
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
-from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList, \
-    DatasourceMeta
+from core.models import (
+    Datasource, Dimension, Measure, QueueList, DatasourceMeta)
 from django.conf import settings
 
 from djcelery import celery
@@ -35,168 +40,6 @@ client = brukva.Client(host=settings.REDIS_HOST,
 client.connect()
 
 logger = logging.getLogger(__name__)
-
-
-def load_data_mongo(user_id, task_id, data, channel):
-    """
-    Загрузка данных в mongo
-    :param user_id: integer
-    :param task_id: integer
-    :param data: dict
-    :param source: dict
-    """
-
-    print 'upload data to mongo'
-    cols = json.loads(data['cols'])
-    tables = json.loads(data['tables'])
-    structure = data['tree']
-
-    source_dict = data['source']
-    source_model = Datasource()
-    source_model.set_from_dict(**source_dict)
-
-    col_names = []
-
-    for t_name, col_group in groupby(cols, lambda x: x["table"]):
-        for x in col_group:
-            col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
-
-    # название новой таблицы
-    key = binascii.crc32(
-        reduce(operator.add,
-               [source_model.host, str(source_model.port), str(source_model.user_id),
-                ','.join(sorted(tables))], ''))
-
-    # collection
-    collection_name = get_table_name('sttm_datasource', key)
-    connection = pymongo.MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
-    # database name
-    db = connection.etl
-
-    collection = db[collection_name]
-
-    query = DataSourceService.get_rows_query_for_loading_task(
-        source_model, structure, cols)
-
-    # общее количество строк в запросе
-    max_rows_count = DataSourceService.get_structure_rows_number(
-        source_model, structure,  cols)
-
-    instance = DataSourceService.get_source_connection(source_model)
-
-    # создаем информацию о работе таска
-    queue_storage = TaskService.get_queue(task_id)
-
-    queue_storage['id'] = task_id
-    queue_storage['user_id'] = user_id
-    queue_storage['date_created'] = datetime_now_str()
-    queue_storage['date_updated'] = None
-    queue_storage['status'] = TaskStatusEnum.PROCESSING
-    queue_storage['percent'] = 0
-
-    # меняем статус задачи на 'В обработке'
-    TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
-
-    page = 1
-    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-    loaded_count = 0.0
-    was_error = False
-    up_to_100 = False
-    err_msg = ''
-    percent = 0
-
-    # сообщаем о начале загрузке
-    client.publish(channel, json.dumps(
-        {'percent': 0, 'taskId': task_id, 'event': 'start'}))
-
-    while True:
-        query_load = query.format(limit, (page-1)*limit)
-        cursor = instance.cursor()
-        cursor.execute(query_load)
-        result = cursor.fetchall()
-
-        data_to_insert = []
-        if not result:
-            break
-        # заполняем массив для вставки
-        for record in result:
-            record_normalized = [EtlEncoder.encode(rec_field) for rec_field in record]
-            record_row = dict(izip(col_names, record_normalized))
-            data_to_insert.append(record_row)
-        try:
-            collection.insert_many(data_to_insert, ordered=False)
-            print 'inserted %d rows to mongo' % len(data_to_insert)
-        except Exception as e:
-            was_error = True
-            # fixme перезаписывается при каждой ошибке
-            err_msg = e.message
-            print "Unexpected error:", type(e), e
-            queue_storage['status'] = TaskStatusEnum.ERROR
-
-            # сообщаем об ошибке
-            client.publish(channel, json.dumps(
-                {'percent': percent, 'taskId': task_id,
-                 'event': 'error', 'message': err_msg}))
-
-        # обновляем информацию о работе таска
-        queue_storage['date_updated'] = datetime_now_str()
-
-        loaded_count += limit
-        percent = int(round(loaded_count/max_rows_count*100))
-
-        if percent >= 100:
-            queue_storage['percent'] = 100
-            up_to_100 = True
-            client.publish(
-                channel, json.dumps(
-                    {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
-
-        else:
-            queue_storage['percent'] = percent
-            client.publish(
-                channel, json.dumps(
-                    {'percent': percent, 'taskId': task_id, 'event': 'process'}))
-
-        page += 1
-
-    if was_error:
-        # меняем статус задачи на 'Ошибка'
-        TaskService.update_task_status(
-            task_id, TaskStatusEnum.ERROR,
-            error_code=TaskErrorCodeEnum.DEFAULT_CODE, error_msg=err_msg)
-    else:
-        # меняем статус задачи на 'Выполнено'
-        TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
-
-        queue_storage['date_updated'] = datetime_now_str()
-        queue_storage['status'] = TaskStatusEnum.DONE
-
-    if not was_error and not up_to_100:
-        client.publish(channel, json.dumps(
-            {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
-
-    # удаляем инфу о работе таска
-    RedisSourceService.delete_queue(task_id)
-
-    # удаляем канал из списка каналов юзера
-    RedisSourceService.delete_user_subscriber(user_id, task_id)
-
-
-@celery.task(name='etl.tasks.load_data')
-def load_data(user_id, task_id, channel):
-
-    task = QueueList.objects.get(id=task_id)
-
-    # обрабатываем таски со статусом 'В ожидании'
-    if task.queue_status.title == TaskStatusEnum.IDLE:
-
-        data = json.loads(task.arguments)
-        name = task.queue.name
-
-        if name == 'etl:load_data:mongo':
-            load_data_mongo(user_id, task_id, data, channel)
-        elif name == 'etl:load_data:database':
-            load_data_database(user_id, task_id, data, channel)
 
 
 class RowKeysCreator(object):
@@ -242,6 +85,269 @@ class RowKeysCreator(object):
                 break
 
 
+class RPublish(object):
+    """
+    Запись в Редис состоянии загрузки
+    """
+
+    def __init__(self, channel, task_id):
+        self.channel = channel
+        self.task_id = task_id
+
+    def publish(self, status, percent=None, msg=None):
+        if status != TLSE.FINISH or percent > 100:
+            client.publish(self.channel, json.dumps(
+                {'percent': 100,
+                 'taskId': self.task_id,
+                 'event': TLSE.FINISH}
+            ))
+            return True
+        elif status == TLSE.START:
+            client.publish(self.channel, json.dumps(
+                {'percent': 0,
+                 'taskId': self.task_id,
+                 'event': TLSE.START}
+            ))
+        elif status == TLSE.PROCESSING:
+            client.publish(self.channel, json.dumps(
+                {'percent': percent,
+                 'taskId': self.task_id,
+                 'event': TLSE.PROCESSING}
+            ))
+        else:
+            client.publish(self.channel, json.dumps(
+                {'percent': percent,
+                 'taskId': self.task_id,
+                 'event': TLSE.ERROR,
+                 'msg': msg}
+            ))
+        return False
+
+
+def calc_key_for_row(row, tables_key_creators, row_num):
+    """
+    Расчет ключа для отдельно взятой строки
+
+    Args:
+        row(tuple): строка данных
+        tables_key_creators(list of RowKeysCreator()): список экземпляров
+        класса, создающие ключи для строки конкретной таблицы
+        row_num(int): Номер строки
+
+    Returns:
+        int: Ключ для строки
+    """
+    row_values_for_calc = [
+        str(each.calc_key(row, row_num)) for each in tables_key_creators]
+    return binascii.crc32(''.join(row_values_for_calc))
+
+
+@celery.task(name='etl:load_data:mongo')
+def load_data_mongodb(task_id, channel):
+    """
+    Загрузка данных в mongodb
+
+    Args:
+        user_id(int): Id позьзователя
+        task_id(int): id задачи
+        data(dict): метаданные
+        channel(): хз
+    """
+    task = QueueList.objects.get(id=task_id)
+
+    # обрабатываем таски со статусом 'В ожидании'
+    if task.queue_status.title == TaskStatusEnum.IDLE:
+
+        data = json.loads(task.arguments)
+        name = task.queue.name
+
+    mongodb_update = False
+    print 'upload data to mongodb'
+    cols = json.loads(data['cols'])
+    tables = json.loads(data['tables'])
+    structure = data['tree']
+    user_id = data['user_id']
+
+    source_model = Datasource()
+    source_model.set_from_dict(**data['source'])
+
+    col_names = ['_key', '_state', '_date']
+
+    for t_name, col_group in groupby(cols, lambda x: x["table"]):
+        for x in col_group:
+            col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+    key = generate_table_name_key(source_model, ','.join(sorted(col_names)))
+    # название новой таблицы
+    collection_name = get_table_name('sttm_datasource', key)
+
+    connection = pymongo.MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
+    # database name
+    db = connection.etl
+
+    collection = db[collection_name]
+    indexes = IndexModel([
+        ('_key', ASCENDING),
+        ('_state', ASCENDING),
+        ('_date', ASCENDING)], name='test')
+    collection.create_indexes([indexes])
+
+    query = DataSourceService.get_rows_query_for_loading_task(
+        source_model, structure, cols)
+
+    # общее количество строк в запросе
+    max_rows_count = DataSourceService.get_structure_rows_number(
+        source_model, structure,  cols)
+
+    instance = DataSourceService.get_source_connection(source_model)
+
+    # создаем информацию о работе таска
+    queue_storage = TaskService.get_queue(task_id, user_id)
+
+    # меняем статус задачи на 'В обработке'
+    TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
+
+    publisher = RPublish(channel, task_id)
+
+    page = 1
+    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+    loaded_count = 0.0
+    was_error = False
+    up_to_100 = False
+    err_msg = ''
+    percent = 0
+
+    # сообщаем о начале загрузке
+    publisher.publish(TLSE.START)
+
+    tables_key_creator = []
+    for key2, value in json.loads(data['meta_info']).iteritems():
+        rkc = RowKeysCreator(table=key2, cols=cols)
+        rkc.set_primary_key(value)
+        tables_key_creator.append(rkc)
+
+    if mongodb_update:
+        collection_name = get_table_name('sttm_datasource_delta', key)
+        delta_collection = db[collection_name]
+        indexes = IndexModel([
+            ('_key', ASCENDING),
+            ('_sync_state', ASCENDING),
+            ('_date', ASCENDING)], name='test')
+        delta_collection.create_indexes([indexes])
+
+        while True:
+            cursor = instance.cursor()
+            cursor.execute(query.format(limit, (page-1)*limit))
+            result = cursor.fetchall()
+            delta_rows = []
+            for ind, record in enumerate(result):
+                key = calc_key_for_row(
+                    record, tables_key_creator, (page-1)*limit + ind)
+                curs = collection.find({'_key': key})
+                if not curs.count():
+                    delta_rows.append({
+                        '_key': key, '_state': 'new',
+                        '_date': EtlEncoder.encode(datetime.now())
+                    })
+            if delta_rows:
+                delta_collection.insert_many(delta_rows, ordered=False)
+            page += 1
+    else:
+        while (page-1)*limit < 1500:
+            cursor = instance.cursor()
+            cursor.execute(query.format(limit, (page-1)*limit))
+            result = cursor.fetchall()
+
+            data_to_insert = []
+            if not result:
+                break
+
+            for ind, record in enumerate(result):
+                record_normalized = [
+                    calc_key_for_row(
+                        record, tables_key_creator, (page-1)*limit + ind),
+                    'idle',
+                    EtlEncoder.encode(datetime.now()),
+                ]
+                record_normalized.extend(
+                    [EtlEncoder.encode(rec_field) for rec_field in record])
+                record_row = dict(izip(col_names, record_normalized))
+                data_to_insert.append(record_row)
+            try:
+                collection.insert_many(data_to_insert, ordered=False)
+                print 'inserted %d rows to mongodb' % len(data_to_insert)
+            except Exception as e:
+                was_error = True
+                # fixme перезаписывается при каждой ошибке
+                err_msg = e.message
+                print "Unexpected error:", type(e), e
+                queue_storage['status'] = TaskStatusEnum.ERROR
+
+                # сообщаем об ошибке
+                publisher.publish(TLSE.ERROR, percent, err_msg)
+
+            # обновляем информацию о работе таска
+            queue_storage.update()
+
+            loaded_count += limit
+            percent = int(round(loaded_count/max_rows_count*100))
+            if publisher.publish(TLSE.PROCESSING, percent):
+                queue_storage['percent'] = 100
+                up_to_100 = True
+            else:
+                queue_storage['percent'] = percent
+
+            page += 1
+
+    if was_error:
+        # меняем статус задачи на 'Ошибка'
+        TaskService.update_task_status(
+            task_id, TaskStatusEnum.ERROR,
+            error_code=TaskErrorCodeEnum.DEFAULT_CODE, error_msg=err_msg)
+        if not up_to_100:
+            publisher.publish(TLSE.FINISH)
+
+    else:
+        # меняем статус задачи на 'Выполнено'
+        TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
+
+        queue_storage.update(TaskStatusEnum.DONE)
+
+    # удаляем инфу о работе таска
+    RedisSourceService.delete_queue(task_id)
+
+    # удаляем канал из списка каналов юзера
+    RedisSourceService.delete_user_subscriber(user_id, task_id)
+
+    return load_data_database, {
+        'key': key,
+        'user_id': user_id,
+        'cols': cols,
+        'tables': tables,
+        'col_types': data['col_types'],
+        'meta_info': data['meta_info'],
+        'tree': structure,
+        'source': data['source'],
+        'max_rows_count': max_rows_count,
+    }
+
+
+@celery.task(name='etl.tasks.load_data')
+def load_data(task_id, channel):
+
+    task = QueueList.objects.get(id=task_id)
+
+    # обрабатываем таски со статусом 'В ожидании'
+    if task.queue_status.title == TaskStatusEnum.IDLE:
+
+        data = json.loads(task.arguments)
+        name = task.queue.name
+
+        if name == 'etl:load_data:mongo':
+            load_data_mongodb(task_id, data, channel)
+        elif name == 'etl:load_data:database':
+            load_data_database(user_id, task_id, data, channel)
+
+
 class Query(object):
     """
     Класс формирования и совершения запроса
@@ -273,9 +379,9 @@ class TableCreateQuery(Query):
             kwargs['table_name'],
             ', '.join(kwargs['cols'])
         )
+        self.set_connection()
 
     def execute(self):
-        self.set_connection()
         self.cursor = self.connection.cursor()
 
         # create new table
@@ -293,9 +399,9 @@ class InsertQuery(TableCreateQuery):
         self.query = insert_table_query.format(
             '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(
                 kwargs['cols_nums'])]))
+        self.set_connection()
 
     def execute(self, **kwargs):
-        self.set_connection()
         self.cursor = self.connection.cursor()
 
         # create new table
@@ -304,21 +410,7 @@ class InsertQuery(TableCreateQuery):
         return
 
 
-class RowsQuery(Query):
-
-    def set_query(self, **kwargs):
-        self.query = self.source_service.get_rows_query_for_loading_task(
-            kwargs['source'], kwargs['structure'],  kwargs['cols'])
-
-    def execute(self, **kwargs):
-        connection = self.source_service.get_source_connection(kwargs['source'])
-        self.cursor = connection.cursor()
-
-        self.cursor.execute(self.query.format(kwargs['limit'], kwargs['offset']))
-        return self.cursor.fetchall()
-
-
-def load_data_database(user_id, task_id, data, channel):
+def load_data_database(task_id, channel):
     """Загрузка данных во временное хранилище
     Args:
         user_id: id пользователя
@@ -329,115 +421,81 @@ def load_data_database(user_id, task_id, data, channel):
         func
     """
 
-    def calc_key_for_row(row, tables_key_creator, row_num):
-        """
-        Расчет ключа для отдельно взятой строки
+    task = QueueList.objects.get(id=task_id)
 
-        Args:
-            row(tuple): строка данных
-            tables_key_creator(list of RowKeysCreator): список создателей ключей
-            row_num(int): Номер строки
+    # обрабатываем таски со статусом 'В ожидании'
+    if task.queue_status.title == TaskStatusEnum.IDLE:
+        data = json.loads(task.arguments)
+        name = task.queue.name
 
-        Returns:
-            tuple: Модифицированная строка с ключом в первой позиции
-        """
-        row_values_for_calc = [
-            str(each.calc_key(row, row_num)) for each in tables_key_creator]
-        return (binascii.crc32(''.join(row_values_for_calc)),) + row
-
-    print 'load_data_database'
-
-    cols = json.loads(data['cols'])
+    user_id = data['user_id']
+    cols = data['cols']
     col_types = json.loads(data['col_types'])
     structure = data['tree']
-    tables_info_for_meta = json.loads(data['meta_info'])
 
-    source_dict = data['source']
     source = Datasource()
-    source.set_from_dict(**source_dict)
+    source.set_from_dict(**data['source'])
 
-    col_names = ['"cdc_key" text']
-
+    col_names = ['"_key" text', '"_state" text', '"_date" timestamp']
+    clear_col_names = ['_key', '_state', '_date']
     cols_str = ''
-
     for obj in cols:
         t = obj['table']
         c = obj['col']
-
         cols_str += '{0}-{1};'.format(t, c)
-
         dotted = '{0}.{1}'.format(t, c)
-
         col_names.append('"{0}{1}{2}" {3}'.format(
+            t, FIELD_NAME_SEP, c, col_types[dotted]))
+        clear_col_names.append('{0}{1}{2}'.format(
             t, FIELD_NAME_SEP, c, col_types[dotted]))
 
     # название новой таблицы
-    key = generate_table_name_key(source, cols_str)
-
+    key = data['key']
     source_table_name = get_table_name('sttm_datasource', key)
+    collection_name = get_table_name('sttm_datasource', key)
 
+    connection = pymongo.MongoClient(settings.MONGO_HOST, settings.MONGO_PORT)
+    collection = connection.etl[collection_name]
     # общее количество строк в запросе
     max_rows_count = DataSourceService.get_structure_rows_number(
         source, structure,  cols)
 
-    # меняем статус задачи на 'В обработке'
+    # меняем статус задачи на 'В обработке'; информируем клиент редис о начале
+    # загрузки
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
-
-    # создаем информацию о работе таска
-    queue_storage = TaskService.get_queue(task_id)
-    queue_storage['id'] = task_id
-    queue_storage['user_id'] = user_id
-    queue_storage['date_created'] = datetime_now_str()
-    queue_storage['date_updated'] = None
-    queue_storage['status'] = TaskStatusEnum.PROCESSING
-    queue_storage['percent'] = 0
+    queue_storage = TaskService.get_queue(task_id, user_id)
+    publisher = RPublish(channel=channel, task_id=task_id)
+    publisher.publish(TLSE.START)
 
     table_create_query = TableCreateQuery(DataSourceService())
     table_create_query.set_query(table_name=source_table_name, cols=col_names)
     table_create_query.execute()
 
-    cols_nums = len(cols)+1
+    insert_query = InsertQuery(DataSourceService())
+    insert_query.set_query(
+        table_name=source_table_name, cols_nums=len(clear_col_names))
+
     limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
     offset = 0
-
-    rows_query = RowsQuery(DataSourceService())
-    rows_query.set_query(source=source, structure=structure,  cols=cols)
-
-    insert_query = InsertQuery(DataSourceService())
-    insert_query.set_query(table_name=source_table_name, cols_nums=cols_nums)
-
-    last_row = None
-    settings_limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-    loaded_count = 0.0
     was_error = False
     up_to_100 = False
+    loaded_count = 0.0
     percent = 0
-
-    tables_key_creator = []
-    for key, value in tables_info_for_meta.iteritems():
-        rkc = RowKeysCreator(table=key, cols=cols)
-        rkc.set_primary_key(value)
-        tables_key_creator.append(rkc)
-
-    # сообщаем о начале загрузке
-    client.publish(channel, json.dumps(
-        {'percent': 0, 'taskId': task_id, 'event': 'start'}))
+    last_row = None
 
     while True:
 
         try:
-            rows = rows_query.execute(
-                source=source, limit=limit, offset=offset)
-            if not rows:
+            collection_cursor =collection.find(
+                {'_state': 'idle'},  {'_id': False}, limit=limit, skip=offset)
+            if not collection_cursor:
                 break
-            # добавляем ключ в каждую запись таблицы
-            rows_with_keys = map(lambda (ind, row): calc_key_for_row(
-                row, tables_key_creator, offset + ind), enumerate(rows))
-            # приходит [(1, 'name'), ...],
-            # преобразуем в [{0: 1, 1: 'name'}, ...]
-            rows_dict = map(
-                lambda x: {str(k): v for (k, v) in izip(xrange(cols_nums), x)},
-                rows_with_keys)
+            rows_dict = []
+            for record in collection_cursor:
+                temp_dict = {}
+                for ind, col_name in enumerate(clear_col_names):
+                    temp_dict.update({str(ind): record[col_name]})
+                rows_dict.append(temp_dict)
 
             insert_query.execute(data=rows_dict)
             offset += limit
@@ -452,50 +510,36 @@ def load_data_database(user_id, task_id, data, channel):
 
             # меняем статус задачи на 'Ошибка'
             TaskService.update_task_status(
-                task_id,
-                TaskStatusEnum.ERROR,
+                task_id, TaskStatusEnum.ERROR,
                 error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,
                 error_msg=err_msg)
             logger.exception(err_msg)
-            queue_storage['date_updated'] = datetime_now_str()
-            queue_storage['status'] = TaskStatusEnum.ERROR
+            queue_storage.update(TaskStatusEnum.ERROR)
 
             # сообщаем об ошибке
-            client.publish(channel, json.dumps(
-                {'percent': percent, 'taskId': task_id,
-                 'event': 'error', 'message': err_msg}))
+            publisher.publish(TLSE.ERROR, percent, err_msg)
 
             break
         else:
-            last_row = rows[-1]  # получаем последнюю запись
+            last_row = record  # получаем последнюю запись
             # обновляем информацию о работе таска
-            loaded_count += settings_limit
-            queue_storage['date_updated'] = datetime_now_str()
+            loaded_count += limit
+            queue_storage.update()
 
             percent = int(round(loaded_count/max_rows_count*100))
-            if percent >= 100:
+            if publisher.publish(TLSE.PROCESSING, percent):
                 queue_storage['percent'] = 100
                 up_to_100 = True
-                client.publish(
-                    channel, json.dumps(
-                        {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
-
             else:
                 queue_storage['percent'] = percent
-                client.publish(
-                    channel, json.dumps(
-                        {'percent': percent, 'taskId': task_id, 'event': 'process'}))
 
     if not was_error:
         # меняем статус задачи на 'Выполнено'
-        TaskService.update_task_status(task_id, TaskStatusEnum.DONE, )
-
-        queue_storage['date_updated'] = datetime_now_str()
-        queue_storage['status'] = TaskStatusEnum.DONE
+        TaskService.update_task_status(task_id, TaskStatusEnum.DONE)
+        queue_storage.update(TaskStatusEnum.DONE)
 
         if not up_to_100:
-            client.publish(channel, json.dumps(
-                {'percent': 100, 'taskId': task_id, 'event': 'finish'}))
+            publisher.publish(TLSE.FINISH)
 
     # удаляем инфу о работе таска
     RedisSourceService.delete_queue(task_id)
@@ -505,7 +549,7 @@ def load_data_database(user_id, task_id, data, channel):
 
     # работа с datasource_meta
     meta_tables = DataSourceService.update_datasource_meta(
-        key, source, cols, tables_info_for_meta, last_row)
+        key, source, cols, json.loads(data['meta_info']), last_row)
 
     return create_dimensions_and_measures(
         user_id, source, source_table_name, meta_tables, key)

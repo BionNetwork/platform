@@ -6,6 +6,7 @@ from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
 import json
 import datetime
+from etl.services.middleware.base import datetime_now_str
 
 
 class QueueStorage(object):
@@ -17,41 +18,80 @@ class QueueStorage(object):
     allowed_keys = [
         'id', 'user_id', 'date_created', 'date_updated', 'status', 'percent']
 
-    def __init__(self, queue_redis_dict):
+    def __init__(self, queue_redis_dict, task_id, user_id):
         """
         :type queue_redis_dict: redis_collections.Dict
         """
         self.queue = queue_redis_dict
+        self.task_id = task_id
+        self.user_id = user_id
+        self.set_init_params()
 
     def __getitem__(self, key):
-        if key in self.allowed_keys:
-            return self.queue[key]
-        else:
+        if key not in self.allowed_keys:
             raise KeyError('Неверный ключ для словаря информации задачи!')
+        return self.queue[key]
 
     def __setitem__(self, key, val):
-        if key in self.allowed_keys:
-            self.queue[key] = val
-        else:
+        if key not in self.allowed_keys:
             raise KeyError('Неверный ключ для словаря информации задачи!')
 
+    def set_init_params(self):
+        self.queue['task_id'] = self.task_id
+        self.queue['user_id'] = self.user_id
+        self.queue['date_created'] = datetime_now_str()
+        self.queue['date_updated'] = None
+        self.queue['status'] = TaskStatusEnum.PROCESSING
+        self.queue['percent'] = 0
 
-class TaskService:
+    def update(self, status=None):
+        self.queue['date_created'] = datetime_now_str()
+        if status:
+            self.queue['status'] = status
+
+MONGODB_DATA_LOAD = 'etl:load_data:mongo'
+DB_DATA_LOAD = 'etl:cdc:load_data'
+MONGODB_DELTA_LOAD = 'etl:cdc:load_delta'
+DB_DETECT_REDUNDANT = 'etl:cdc:detect_redundant'
+DB_DELETE_REDUNDANT = 'etl:cdc:delete_redundant'
+
+init_load_series = (MONGODB_DATA_LOAD, DB_DATA_LOAD)
+additional_load_series = (
+    MONGODB_DELTA_LOAD, DB_DATA_LOAD, DB_DETECT_REDUNDANT, DB_DELETE_REDUNDANT)
+
+
+def run_task(task_name, task_func, params):
+    """
+    Args:
+        task_name(str): Название
+    """
+    task = TaskService(task_name)
+    next_task, next_arguments = task_func(*task.add_task(arguments=params))
+    return next_task, next_arguments
+
+
+class TaskService(object):
     """
     Добавление новых задач в очередь
     Управление пользовательскими задачами
     """
     def __init__(self, name):
+        """
+        Args:
+            name(str): Имя задачи
+        """
         self.name = name
 
     def add_task(self, arguments):
         """
         Добавляем задачу юзеру в список задач и возвращаем идентификатор заадчи
-        :type tree: dict дерево источника
-        :param user_id: integer
-        :param data: dict
-        :param source_dict: dict
-        :return: integer
+
+        Args:
+            arguments(dict): Необходимые для выполнения задачи данные
+
+        Returns:
+            task_id(int): id задачи
+            new_channel(str): Название канала для сокетов
         """
 
         task = QueueList.objects.create(
@@ -63,8 +103,9 @@ class TaskService:
         )
 
         task_id = task.id
-        # канал для таска
-        new_channel = settings.SOCKET_CHANNEL.format(arguments['user_id'], task_id)
+        # канал для задач
+        new_channel = settings.SOCKET_CHANNEL.format(
+            arguments['user_id'], task_id)
 
         # добавляем канал подписки в редис
         channels = RedisSourceService.get_user_subscribers(arguments['user_id'])
@@ -79,18 +120,18 @@ class TaskService:
 
 
     @staticmethod
-    def get_queue(task_id):
+    def get_queue(task_id, user_id):
         """
-        информация о ходе работы таска
+        Информация о ходе работы задач
         :param task_id:
         """
         queue_dict = RedisSourceService.get_queue_dict(task_id)
-        return QueueStorage(queue_dict)
+        return QueueStorage(queue_dict, task_id, user_id)
 
     @staticmethod
     def update_task_status(task_id, status_id, error_code=None, error_msg=None):
         """
-            Меняем статусы тасков
+        Меняем статусы задач
         """
         task = QueueList.objects.get(id=task_id)
         task.queue_status = QueueStatus.objects.get(title=status_id)
@@ -126,3 +167,19 @@ class TaskStatusEnum(BaseEnum):
         DONE: "Выполнено",
         DELETED: "Удалено",
     }
+
+
+class TaskLoadingStatusEnum(BaseEnum):
+    """
+    Состояние загрузки задачи
+    """
+    START, PROCESSING, FINISH, ERROR = ('start', 'processing', 'finish', 'error')
+    values = {
+        START: "Старт",
+        PROCESSING: "В обработке",
+        FINISH: "Выполнено",
+        ERROR: "Ошибка",
+    }
+
+TLSE = TaskLoadingStatusEnum
+
