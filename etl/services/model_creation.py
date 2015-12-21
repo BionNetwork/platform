@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
-from copy import copy, deepcopy
 import json
 
 from django.contrib import admin
 from psycopg2 import errorcodes
 from django.db import models
 from django.conf import settings
-import re
 from core.models import DatasourceMetaKeys, QueueList, Datasource
 from etl.constants import FIELD_NAME_SEP
 from etl.helpers import TaskStatusEnum, DataSourceService, \
     RedisSourceService, TaskService, TaskErrorCodeEnum
-from etl.services.middleware.base import datetime_now_str, get_table_name
+from etl.services.middleware.base import datetime_now_str
 
 type_match = {
     'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),
