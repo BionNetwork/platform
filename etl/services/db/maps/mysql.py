@@ -4,7 +4,7 @@
 from collections import defaultdict
 
 
-MYSQL_TYPES = defaultdict(lambda: 0)
+DB_TYPES = defaultdict(lambda: 0)
 
 
 ints = [
@@ -41,16 +41,21 @@ dates = [
 ]
 
 for i in ints:
-    MYSQL_TYPES[i] = 'integer'
+    DB_TYPES[i] = 'integer'
 
 for i in floats:
-    MYSQL_TYPES[i] = 'double precision'
+    DB_TYPES[i] = 'double precision'
 
 for i in texts:
-    MYSQL_TYPES[i] = 'text'
+    DB_TYPES[i] = 'text'
 
 for i in dates:
-    MYSQL_TYPES[i] = 'timestamp'
+    DB_TYPES[i] = 'timestamp'
+
+table_query = """
+    SELECT table_name FROM information_schema.tables
+            where table_schema='{0}' order by table_name;
+        """
 
 cols_query = """
     SELECT table_name, column_name, column_type FROM information_schema.columns
@@ -81,3 +86,7 @@ stat_query = """
     SELECT TABLE_NAME, TABLE_ROWS as count, DATA_LENGTH as size FROM INFORMATION_SCHEMA.TABLES
     where table_name in {0} and table_schema = '{1}' order by table_name;
 """
+
+row_query = """
+    SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
+    """

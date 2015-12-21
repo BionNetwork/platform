@@ -7,5 +7,6 @@ def settings_processor(request):
     """ передача в темплэйты данных из settings.py
     """
     return {
-        'socket_url': settings.SOCKET_URL,
+        'socket_host': settings.SOCKET_HOST,
+        'socket_port': settings.SOCKET_PORT,
     }

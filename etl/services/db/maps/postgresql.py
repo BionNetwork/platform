@@ -4,7 +4,7 @@
 from collections import defaultdict
 
 
-PSQL_TYPES = defaultdict(lambda: 0)
+DB_TYPES = defaultdict(lambda: 0)
 
 
 ints = [
@@ -40,16 +40,21 @@ dates = [
 ]
 
 for i in ints:
-    PSQL_TYPES[i] = 'integer'
+    DB_TYPES[i] = 'integer'
 
 for i in floats:
-    PSQL_TYPES[i] = 'double precision'
+    DB_TYPES[i] = 'double precision'
 
 for i in texts:
-    PSQL_TYPES[i] = 'text'
+    DB_TYPES[i] = 'text'
 
 for i in dates:
-    PSQL_TYPES[i] = 'timestamp'
+    DB_TYPES[i] = 'timestamp'
+
+table_query = """
+            SELECT table_name FROM information_schema.tables
+            where table_schema='public' order by table_name;
+        """
 
 cols_query = """
     SELECT table_name, column_name, data_type FROM information_schema.columns
@@ -108,4 +113,8 @@ indexes_query = """
 stat_query = """
     SELECT relname, reltuples as count, relpages*8192 as size FROM pg_class
     where oid in {0};
+"""
+
+row_query = """
+        SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """

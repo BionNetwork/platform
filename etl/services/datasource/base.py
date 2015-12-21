@@ -62,9 +62,14 @@ class DataSourceService(object):
 
         """
         Получение информации по колонкам
-        :param source: Datasource
-        :param tables:
-        :return:
+
+        Args:
+            source(`Datasource`): источник
+            tables(list): Список имен таблиц
+
+        Returns:
+            list: Список словарей с информацией о дереве. Подробрый формат
+            ответа см. `RedisSourceService.get_final_info`
         """
         col_records, index_records, const_records = (
             DatabaseService.get_columns_info(source, tables))
@@ -74,47 +79,46 @@ class DataSourceService(object):
         cols, indexes, foreigns = DatabaseService.processing_records(
             source, col_records, index_records, const_records)
 
-        if settings.USE_REDIS_CACHE:
-            RedisSourceService.insert_columns_info(
-                source, tables, cols, indexes, foreigns, stat_records)
+        if not settings.USE_REDIS_CACHE:
+            return []
 
-            # выбранные ранее таблицы в редисе
-            active_tables = RedisSourceService.get_active_list(
-                source.user_id, source.id)
+        RedisSourceService.insert_columns_info(
+            source, tables, cols, indexes, foreigns, stat_records)
 
-            # работа с деревьями
-            if not active_tables:
-                trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
-                sel_tree = TablesTree.select_tree(trees)
+        # выбранные ранее таблицы в редисе
+        active_tables = RedisSourceService.get_active_list(
+            source.user_id, source.id)
 
-                remains = without_bind[sel_tree.root.val]
-            else:
-                # достаем структуру дерева из редиса
-                structure = RedisSourceService.get_active_tree_structure(source)
-                # строим дерево
-                sel_tree = TablesTree.build_tree_by_structure(structure)
+        # работа с деревьями
+        if not active_tables:
+            trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
+            sel_tree = TablesTree.select_tree(trees)
 
-                ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
+            remains = without_bind[sel_tree.root.val]
+        else:
+            # достаем структуру дерева из редиса
+            structure = RedisSourceService.get_active_tree_structure(source)
+            # строим дерево
+            sel_tree = TablesTree.build_tree_by_structure(structure)
 
-                tables_info = RedisSourceService.info_for_tree_building(
-                    ordered_nodes, tables, source)
-
-                # перестраиваем дерево
-                remains = TablesTree.build_tree(
-                    [sel_tree.root, ], tuple(tables), tables_info)
-
-            # таблица без связи
-            last = RedisSourceService.insert_remains(source, remains)
-
-            # сохраняем дерево
-            structure = TablesTree.get_tree_structure(sel_tree.root)
             ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
-            RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
-            # возвращаем результат
-            return RedisSourceService.get_final_info(ordered_nodes, source, last)
+            tables_info = RedisSourceService.info_for_tree_building(
+                ordered_nodes, tables, source)
 
-        return []
+            # перестраиваем дерево
+            remains = TablesTree.build_tree(
+                [sel_tree.root, ], tuple(tables), tables_info)
+
+        # таблица без связи
+        last = RedisSourceService.insert_remains(source, remains)
+
+        # сохраняем дерево
+        structure = TablesTree.get_tree_structure(sel_tree.root)
+        ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
+        RedisSourceService.insert_tree(structure, ordered_nodes, source)
+
+        return RedisSourceService.get_final_info(ordered_nodes, source, last)
 
     @classmethod
     def get_rows_info(cls, source, cols):
@@ -287,9 +291,20 @@ class DataSourceService(object):
 
         return types_dict
 
+    # fixme: не используется
     @classmethod
     def get_separator(cls, source):
         return DatabaseService.get_separator(source)
+
+    @classmethod
+    def get_table_create_query(cls, local_instance, key_str, cols_str):
+        return DatabaseService.get_table_create_query(
+            local_instance, key_str, cols_str)
+
+    @classmethod
+    def get_table_insert_query(cls, local_instance, source_table_name):
+        return DatabaseService.get_table_insert_query(
+            local_instance, source_table_name)
 
     @classmethod
     def get_rows_query_for_loading_task(cls, source, structure, cols):
@@ -302,16 +317,7 @@ class DataSourceService(object):
         :return:
         """
 
-        separator = cls.get_separator(source)
-        query_join = DatabaseService.get_generated_joins(source, structure)
-
-        pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
-            '{table}', '{col}', sep=separator)
-        cols_str = ', '.join(
-            [pre_cols_str.format(**x) for x in cols])
-
-        rows_query = DatabaseService.get_rows_query(source).format(
-            cols_str, query_join, '{0}', '{1}')
+        rows_query = DatabaseService.get_rows_query(source, cols, structure)
         return rows_query
 
     @classmethod
