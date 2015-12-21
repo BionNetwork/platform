@@ -356,7 +356,7 @@ def load_data_database(user_id, task_id, data, channel):
     source = Datasource()
     source.set_from_dict(**source_dict)
 
-    col_names = ['"cdc_key" text']
+    col_names = ['"cdc_key" text UNIQUE']
 
     cols_str = ''
 
@@ -379,19 +379,6 @@ def load_data_database(user_id, task_id, data, channel):
     # общее количество строк в запросе
     max_rows_count = DataSourceService.get_structure_rows_number(
         source, structure,  cols)
-
-    # инстанс подключения к локальному хранилищу данных
-    local_instance = DataSourceService.get_local_instance()
-
-    create_table_query = DataSourceService.get_table_create_query(
-        local_instance, source_table_name, ', '.join(col_names))
-
-    connection = local_instance.connection
-    cursor = connection.cursor()
-
-    # create new table
-    cursor.execute(create_table_query)
-    connection.commit()
 
     # меняем статус задачи на 'В обработке'
     TaskService.update_task_status(task_id, TaskStatusEnum.PROCESSING)
@@ -426,20 +413,14 @@ def load_data_database(user_id, task_id, data, channel):
     up_to_100 = False
     percent = 0
 
-    tables_key_creator = []
-    for key, value in tables_info_for_meta.iteritems():
-        rkc = RowKeysCreator(table=key, cols=cols)
-        rkc.set_primary_key(value)
-        tables_key_creator.append(rkc)
-
     # сообщаем о начале загрузке
     client.publish(channel, json.dumps(
         {'percent': 0, 'taskId': task_id, 'event': 'start'}))
 
     tables_key_creator = []
 
-    for key, value in tables_info_for_meta.iteritems():
-        rkc = RowKeysCreator(table=key, cols=cols)
+    for table, value in tables_info_for_meta.iteritems():
+        rkc = RowKeysCreator(table=table, cols=cols)
         rkc.set_primary_key(value)
         tables_key_creator.append(rkc)
 
