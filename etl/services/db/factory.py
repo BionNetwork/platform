@@ -115,8 +115,7 @@ class DatabaseService(object):
         :param cols_str: str
         :return: str
         """
-        create_query = local_instance.local_table_create_query(key_str, cols_str)
-        return create_query
+        return local_instance.local_table_create_query(key_str, cols_str)
 
     @classmethod
     def get_table_insert_query(cls, local_instance, key_str):

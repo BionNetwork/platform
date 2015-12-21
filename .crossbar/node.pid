@@ -1,0 +1,17 @@
+{
+   "pid": 21352, 
+   "options": {
+      "reactor": null, 
+      "loglevel": "info", 
+      "logtofile": false, 
+      "logformat": "colour", 
+      "command": "start", 
+      "logdir": null, 
+      "config": "/home/damir/platform/.crossbar/config.json", 
+      "cbdir": "/home/damir/platform/.crossbar"
+   }, 
+   "argv": [
+      "/home/damir/.virtualenvs/2venv-autobahn/bin/crossbar", 
+      "start"
+   ]
+}

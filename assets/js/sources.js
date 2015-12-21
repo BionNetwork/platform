@@ -679,24 +679,11 @@ function startLoading(userId, loadUrl){
                 tasksUl = $('#user_tasks_bar');
 
             _.each(channels, function(channel){
-                var ws = new WebSocket(
-                    "ws://"+tasksUl.data('host')+"channel/"+channel);
+                var q = new Queue2(
+                            tasksUl.data('host'), tasksUl.data('port'), '/ws');
 
-                ws.onopen = function(){
-                }
-                ws.onmessage = function (evt){
-                    var data = JSON.parse(evt.data),
-                        taskId = data.taskId;
-
-                    if(!$('#task-li-'+taskId).length){
-                        var taskTmpl = _.template($('#tasks_progress').html());
-                        tasksUl.append(taskTmpl({data: [taskId ]}));
-                    }
-                    $('#task-text-'+taskId).text(data.percent+'%');
-                    $('#task-measure-'+taskId).css('width', data.percent+'%');
-                };
-                ws.onclose = function(){
-                };
+                // подписка на канал
+                q.subscribe(channel);
             });
         }
     });

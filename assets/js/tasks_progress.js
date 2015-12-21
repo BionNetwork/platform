@@ -6,26 +6,13 @@ $(document).ready(function(){
     if(tasksUl.length){
 
         $.get(tasksUl.data('url'), {}, function(data){
+            console.log('Channels: ', data.channels);
 
             _.each(data.channels, function(channel){
-                var ws = new WebSocket(
-                    "ws://"+tasksUl.data('host')+"channel/"+channel);
-
-                ws.onopen = function(){
-                };
-                ws.onmessage = function (evt){
-                    var data = JSON.parse(evt.data),
-                        taskId = data.taskId;
-
-                    if(!$('#task-li-'+taskId).length){
-                        var taskTmpl = _.template($('#tasks_progress').html());
-                        tasksUl.append(taskTmpl({data: [taskId ]}));
-                    }
-                    $('#task-text-'+taskId).text(data.percent+'%');
-                    $('#task-measure-'+taskId).css('width', data.percent+'%');
-                };
-                ws.onclose = function(){
-                };
+                var q = new Queue2(
+                            tasksUl.data('host'), tasksUl.data('port'), '/ws');
+                    // подписка на канал
+                    q.subscribe(channel)
             });
         });
     }

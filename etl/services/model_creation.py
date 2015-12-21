@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import logging
 
 from django.contrib import admin
 from psycopg2 import errorcodes
@@ -10,6 +11,8 @@ from etl.constants import FIELD_NAME_SEP
 from etl.helpers import TaskStatusEnum, DataSourceService, \
     RedisSourceService, TaskService, TaskErrorCodeEnum
 from etl.services.middleware.base import datetime_now_str
+
+logger = logging.getLogger(__name__)
 
 type_match = {
     'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),
@@ -221,22 +224,19 @@ class OlapEntityCreation(object):
         try:
             self.save_fields(model)
         except Exception as e:
-            err_msg = ''
-            err_code = TaskErrorCodeEnum.DEFAULT_CODE
-
             # код и сообщение ошибки
             pg_code = getattr(e, 'pgcode', None)
-            if pg_code is not None:
-                err_code = pg_code
-                err_msg = errorcodes.lookup(pg_code) + ': '
 
+            err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
             err_msg += e.message
 
             # меняем статус задачи на 'Ошибка'
             TaskService.update_task_status(
-                task_id, TaskStatusEnum.ERROR,
-                error_code=err_code, error_msg=err_msg)
-
+                task_id,
+                TaskStatusEnum.ERROR,
+                error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,
+                error_msg=err_msg)
+            logger.exception(err_msg)
             self.queue_storage['date_updated'] = datetime_now_str()
             self.queue_storage['status'] = TaskStatusEnum.ERROR
 

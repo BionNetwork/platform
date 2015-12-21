@@ -297,6 +297,16 @@ class DataSourceService(object):
         return DatabaseService.get_separator(source)
 
     @classmethod
+    def get_table_create_query(cls, local_instance, key_str, cols_str):
+        return DatabaseService.get_table_create_query(
+            local_instance, key_str, cols_str)
+
+    @classmethod
+    def get_table_insert_query(cls, local_instance, source_table_name):
+        return DatabaseService.get_table_insert_query(
+            local_instance, source_table_name)
+
+    @classmethod
     def get_rows_query_for_loading_task(cls, source, structure, cols):
         """
         Получение предзапроса данных указанных

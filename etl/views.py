@@ -363,7 +363,7 @@ class LoadDataView(BaseEtlView):
         task_id2, channel2 = task.add_task(arguments)
         tasks.load_data.apply_async((user_id, task_id2, channel2),)
 
-        return {'channels': [channel1, channel2], }
+        return {'channels': [channel1, channel2]}
 
 
 class GetUserTasksView(BaseView):
