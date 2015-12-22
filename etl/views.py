@@ -339,6 +339,10 @@ class LoadDataView(BaseEtlView):
             source, tables)
         data.appendlist('meta_info', json.dumps(tables_info_for_meta))
 
+        # достаем инфу колонок (статистика, типы, )
+        for_triggers = helpers.RedisSourceService.tables_info_for_triggers(
+            source, tables)
+
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
 
@@ -347,6 +351,7 @@ class LoadDataView(BaseEtlView):
             'tables': data['tables'],
             'col_types': data['col_types'],
             'meta_info': data['meta_info'],
+            'for_triggers': for_triggers,
             'tree': structure,
             'source': conn_dict,
             'user_id': request.user.id,
