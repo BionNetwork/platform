@@ -57,8 +57,12 @@ table_query = """
         """
 
 cols_query = """
-    SELECT table_name, column_name, data_type, is_nullable, column_default FROM information_schema.columns
-            where table_name in {0} and table_catalog = '{1}' and table_schema = '{2}' order by table_name;
+    SELECT table_name, column_name, data_type, is_nullable,
+    case when substring(column_default, 0, 8) = 'nextval'
+         then 'serial' else null end as extra
+    FROM information_schema.columns
+    where table_name in {0} and table_catalog = '{1}' and
+          table_schema = '{2}' order by table_name;
 """
 
 constraints_query = """

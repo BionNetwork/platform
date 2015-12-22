@@ -78,6 +78,8 @@ var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
 // событие на закрытие модального окна
 $('#modal-data').on('hidden.bs.modal', function(e){
     var info = getSourceInfo();
+    // если окно закрылось при нажатии кнопки, то удалять ddl не надо
+    info['delete_ddl'] = !dataWindow.data('load');
     $.get(closeUrl, info, function(res){
         if (res.status == 'error'){
             confirmAlert(res.message);
@@ -401,6 +403,8 @@ function tablesToLeft(url){
     }
 
     var info = getSourceInfo();
+    // удалять ddl надо
+    info['delete_ddl'] = true;
 
     $.get(url, info, function(res){
         if (res.status == 'error') {
@@ -673,18 +677,21 @@ function startLoading(userId, loadUrl){
         if(response.status == 'error') {
                 confirmAlert(response.message);
         } else {
+            // признак того, что окно закрылось при нажатии кнопки
+            dataWindow.data('load', true);
             dataWindow.modal('hide');// clear data
+            dataWindow.data('load', false);
 
             var channels = response.data['channels'],
                 tasksUl = $('#user_tasks_bar');
 
-            _.each(channels, function(channel){
-                var q = new Queue2(
-                            tasksUl.data('host'), tasksUl.data('port'), '/ws');
-
-                // подписка на канал
-                q.subscribe(channel);
-            });
+//            _.each(channels, function(channel){
+//                var q = new Queue2(
+//                            tasksUl.data('host'), tasksUl.data('port'), '/ws');
+//
+//                // подписка на канал
+//                q.subscribe(channel);
+//            });
         }
     });
 }

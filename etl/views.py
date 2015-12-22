@@ -278,7 +278,8 @@ class RemoveTablesView(BaseEtlView):
 class RemoveAllTablesView(BaseEtlView):
 
     def start_get_action(self, request, source):
-        helpers.RedisSourceService.tree_full_clean(source)
+        delete_ddl = request.GET.get('delete_ddl') == 'true'
+        helpers.RedisSourceService.tree_full_clean(source, delete_ddl)
         return []
 
 

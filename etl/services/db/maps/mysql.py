@@ -58,7 +58,9 @@ table_query = """
         """
 
 cols_query = """
-    SELECT table_name, column_name, column_type, is_nullable, extra FROM information_schema.columns
+    SELECT table_name, column_name, column_type, is_nullable,
+    case extra when 'auto_increment' then extra else null end
+    FROM information_schema.columns
             where table_name in {0} and table_schema = '{1}' order by table_name;
 """
 

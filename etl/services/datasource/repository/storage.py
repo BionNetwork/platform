@@ -48,6 +48,18 @@ class RedisCacheKeys(object):
         :param number:
         :return:
         """
+        return '{0}:collection:{1}'.format(
+            RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
+
+    @staticmethod
+    def get_active_table_ddl(user_id, datasource_id, number):
+        """
+        фулл инфа таблицы, которая в дереве для ddl
+        :param user_id:
+        :param datasource_id:
+        :param number:
+        :return:
+        """
         return '{0}:ddl:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
 
@@ -71,7 +83,7 @@ class RedisCacheKeys(object):
         :param table:
         :return:
         """
-        return '{0}:ddl:{1}'.format(
+        return '{0}:collection:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), table)
 
     @staticmethod
@@ -179,6 +191,7 @@ class RedisSourceService(object):
         rck = RedisCacheKeys
 
         str_table = rck.get_active_table(source.user_id, source.id, '{0}')
+        str_table_ddl = rck.get_active_table_ddl(source.user_id, source.id, '{0}')
         str_table_by_name = rck.get_active_table(source.user_id, source.id, '{0}')
         str_active_tables = rck.get_active_tables(source.user_id, source.id)
         str_joins = rck.get_source_joins(source.user_id, source.id)
@@ -200,7 +213,7 @@ class RedisSourceService(object):
         r_server.set(str_joins, json.dumps(joins))
 
         # удаляем полную инфу пришедших таблиц
-        cls.delete_tables_info(tables, actives, str_table)
+        cls.delete_tables_info(tables, actives, str_table, str_table_ddl)
         r_server.set(str_active_tables, json.dumps(actives))
 
     @classmethod
@@ -229,7 +242,7 @@ class RedisSourceService(object):
         return destinations
 
     @classmethod
-    def delete_tables_info(cls, tables, actives, str_table):
+    def delete_tables_info(cls, tables, actives, str_table, str_table_ddl):
         """
         удаляет инфу о таблицах
         :param tables: list
@@ -241,6 +254,7 @@ class RedisSourceService(object):
             if table in names:
                 found = [x for x in actives if x['name'] == table][0]
                 r_server.delete(str_table.format(found['order']))
+                r_server.delete(str_table_ddl.format(found['order']))
                 actives.remove(found)
 
     @classmethod
@@ -304,6 +318,8 @@ class RedisSourceService(object):
 
         str_table = RedisCacheKeys.get_active_table(
             user_id, source.id, '{0}')
+        str_table_ddl = RedisCacheKeys.get_active_table_ddl(
+            user_id, source.id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             user_id, source_id, '{0}')
         str_active_tables = RedisCacheKeys.get_active_tables(
@@ -329,9 +345,13 @@ class RedisSourceService(object):
                 # cчетчик коллекций пользователя
                 coll_counter = cls.get_next_user_collection_counter(
                     user_id, source_id)
+
                 # достаем инфу либо по имени, либо по порядковому номеру
-                pipe.set(str_table.format(coll_counter),
-                         RedisSourceService.get_table_full_info(source, n_val))
+                table_info = RedisSourceService.get_table_full_info(source, n_val)
+
+                pipe.set(str_table.format(coll_counter), table_info)
+                pipe.set(str_table_ddl.format(coll_counter), table_info)
+
                 # удаляем таблицы с именованными ключами
                 pipe.delete(str_table_by_name.format(n_val))
                 # добавляем новую таблциу в карту активных таблиц
@@ -356,7 +376,7 @@ class RedisSourceService(object):
         RedisSourceService.save_active_tree(structure, source)
 
     @classmethod
-    def tree_full_clean(cls, source):
+    def tree_full_clean(cls, source, delete_ddl=True):
         """ удаляет информацию о таблицах, джоинах, дереве
             из редиса
         """
@@ -373,6 +393,10 @@ class RedisSourceService(object):
             user_id, source_id)
         table_by_name_key = RedisCacheKeys.get_active_table_by_name(
             user_id, source_id, '{0}')
+        table_str = RedisCacheKeys.get_active_table(
+                user_id, source_id, '{0}')
+        table_str_ddl = RedisCacheKeys.get_active_table_ddl(
+                user_id, source_id, '{0}')
 
         # delete keys in redis
         pipe = r_server.pipeline()
@@ -381,9 +405,9 @@ class RedisSourceService(object):
 
         actives = cls.get_active_list(source.user_id, source.id)
         for t in actives:
-            table_str = RedisCacheKeys.get_active_table(
-                user_id, source_id, t['order'])
-            pipe.delete(table_str)
+            pipe.delete(table_str.format(t['order']))
+            if delete_ddl:
+                pipe.delete(table_str_ddl.format(t['order']))
 
         pipe.delete(active_tables_key)
         pipe.delete(tables_joins_key)
