@@ -4,7 +4,7 @@
 from collections import defaultdict
 
 
-MYSQL_TYPES = defaultdict(lambda: 0)
+DB_TYPES = defaultdict(lambda: 0)
 
 
 ints = [
@@ -23,9 +23,13 @@ texts = [
     'char',
     'varchar',
     'text',
+    'blob',
     'tinytext',
+    'tinyblob',
     'mediumtext',
+    'mediumblob',
     'longtext',
+    'longblob',
     'enum',
 ]
 dates = [
@@ -36,24 +40,22 @@ dates = [
     'year',
 ]
 
-blobs = [
-    'blob',
-    'tinyblob',
-    'mediumblob',
-    'longblob',
-]
-
 for i in ints:
-    MYSQL_TYPES[i] = 'integer'
+    DB_TYPES[i] = 'integer'
 
 for i in floats:
-    MYSQL_TYPES[i] = 'double precision'
+    DB_TYPES[i] = 'double precision'
 
 for i in texts:
-    MYSQL_TYPES[i] = 'text'
+    DB_TYPES[i] = 'text'
 
 for i in dates:
-    MYSQL_TYPES[i] = 'timestamp'
+    DB_TYPES[i] = 'timestamp'
+
+table_query = """
+    SELECT table_name FROM information_schema.tables
+            where table_schema='{0}' order by table_name;
+        """
 
 cols_query = """
     SELECT table_name, column_name, column_type, is_nullable, extra FROM information_schema.columns
@@ -120,4 +122,8 @@ remote_triggers_query = """
     VALUES ({old} now(), now(), 3, 0);
     END
 
+"""
+
+row_query = """
+    SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """

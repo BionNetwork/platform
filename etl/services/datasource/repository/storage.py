@@ -85,7 +85,6 @@ class RedisCacheKeys(object):
         return '{0}:joins'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
-
     @staticmethod
     def get_source_remain(user_id, datasource_id):
         """
@@ -528,11 +527,28 @@ class RedisSourceService(object):
     @classmethod
     def get_final_info(cls, ordered_nodes, source, last=None):
         """
-        инфа дерева для отрисовки на фронте
-        :param ordered_nodes:
-        :param source:
-        :param last:
-        :return:
+        Информация о дереве для передачи на клиент
+
+        Args:
+            ordered_nodes(list): Список узлов
+            source(`Datasource`): Источник
+            last():
+
+        Returns:
+            list: Список словарей с информацией о дереве
+            ::
+                [
+                    {
+                        'db': 'XE',
+                        'host': localhost,
+                        'tname': 'EMPLOYEES',
+                        'cols': [u'EMPLOYEE_ID', u'FIRST_NAME', ...],
+                        'is_root': True,
+                        'dest': None,
+                        'without_bind': False,
+                    }
+                    ...
+                ]
         """
         result = []
         str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')

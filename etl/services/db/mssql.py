@@ -1,16 +1,17 @@
 # coding: utf-8
 
+__author__ = 'damir(GDR)'
+
 from .interfaces import Database
-import MySQLdb
+import pymssql
+
 from collections import defaultdict
 from itertools import groupby
-from etl.services.db.maps import mysql as mysql_map
+from etl.services.db.maps import mysql as mssql_map
 
 
-class Mysql(Database):
-    """Управление источником данных MySQL"""
-
-    db_map = mysql_map
+class MsSql(Database):
+    """Управление источником данных MSSQL"""
 
     @staticmethod
     def get_connection(conn_info):
@@ -20,76 +21,67 @@ class Mysql(Database):
         :return: connection
         """
         try:
-            connection = {'db': str(conn_info['db']),
+            connection = {'database': str(conn_info['db']),
                           'host': str(conn_info['host']),
-                          'port': int(conn_info['port']),
+                          # 'port': int(conn_info['port']),
                           'user': str(conn_info['login']),
-                          'passwd': str(conn_info['password']),
-                          'use_unicode': True,
+                          'password': str(conn_info['password']),
                           }
-            conn = MySQLdb.connect(**connection)
-        except MySQLdb.OperationalError:
+            conn = pymssql.connect(**connection)
+        except pymssql.Error:
             return None
         return conn
 
     @staticmethod
     def get_separator():
         """
-        Возвращает кавычки(') для запроса
+            Возвращает ковычки(") для запроса
         """
         return '`'
 
-    def get_structure_rows_number(self, structure, cols):
-
+    def get_tables(self, source):
         """
-        возвращает примерное кол-во строк в запросе для планирования
-        :param structure:
-        :param cols:
+        Получение списка таблиц
+        :param source:
         :return:
         """
-        separator = self.get_separator()
-        query_join = self.generate_join(structure)
+        query = """
+            SELECT table_name FROM information_schema.tables
+            where table_schema='{0}' order by table_name;
+        """.format(source.db)
 
-        pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
-            '{table}', '{col}', sep=separator)
-        cols_str = ', '.join(
-            [pre_cols_str.format(**x) for x in cols])
+        records = self.get_query_result(query)
+        records = map(lambda x: {'name': x[0], }, records)
 
-        select_query = self.get_select_query()
-
-        explain_query = 'explain ' + select_query.format(
-            cols_str, query_join)
-
-        records = self.get_query_result(explain_query)
-        total = 1
-        for rec in records:
-            total *= int(rec[8])
-        # если total меньше 100000, то делаем count запрос
-        # иначе возвращаем перемноженное кол-во в каждой строке,
-        # возвращенной EXPLAIN-ом
-        if total < 100000:
-            rows_count_query = select_query.format(
-                'count(1) ', query_join)
-            records = self.get_query_result(rows_count_query)
-            # records = ((100L,),)
-            return int(records[0][0])
-        return total
+        return records
 
     @staticmethod
     def _get_columns_query(source, tables):
         """
-        запросы для колонок, констраинтов, индексов соурса
-        :param source: Datasource
-        :param tables:
-        :return: tuple
+            запросы для колонок, констраинтов, индексов соурса
         """
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
 
-        cols_query = mysql_map.cols_query.format(tables_str, source.db)
-        constraints_query = mysql_map.constraints_query.format(tables_str, source.db)
-        indexes_query = mysql_map.indexes_query.format(tables_str, source.db)
+        cols_query = mssql_map.cols_query.format(tables_str, source.db)
+
+        constraints_query = mssql_map.constraints_query.format(tables_str, source.db)
+
+        indexes_query = mssql_map.indexes_query.format(tables_str, source.db)
 
         return cols_query, constraints_query, indexes_query
+
+    def get_columns(self, source, tables):
+        """
+        Получение списка колонок в таблицах
+        """
+        columns_query, consts_query, indexes_query = self._get_columns_query(
+            source, tables)
+
+        col_records = self.get_query_result(columns_query)
+        index_records = []  # self.get_query_result(indexes_query)
+        const_records = []  # self.get_query_result(consts_query)
+
+        return col_records, index_records, const_records
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -131,7 +123,7 @@ class Mysql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
+        table_name, col_name, col_type = xrange(3)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -141,7 +133,6 @@ class Mysql(Database):
             for x in group:
                 is_index = is_unique = is_primary = False
                 col = x[col_name]
-                extra = x[extra_]
 
                 for i in t_indexes:
                     if col in i['columns']:
@@ -156,13 +147,10 @@ class Mysql(Database):
                                     is_primary = True
 
                 columns[key].append({"name": col,
-                                     "type": x[col_type],
+                                     "type": (mssql_map.MYSQL_TYPES[cls.lose_brackets(x[col_type])]
+                                              or x[col_type]),
                                      "is_index": is_index,
-                                     "is_unique": is_unique,
-                                     "is_primary": is_primary,
-                                     "is_nullable": x[is_nullable].lower(),
-                                     "extra": extra,
-                                     })
+                                     "is_unique": is_unique, "is_primary": is_primary})
 
             # находим внешние ключи
             for c in t_consts:
@@ -178,35 +166,28 @@ class Mysql(Database):
         return columns, indexes, foreigns
 
     @staticmethod
+    def get_rows_query():
+        """
+        возвращает селект запрос c лимитом, оффсетом
+        :return: str
+        """
+        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        return query
+
+    @staticmethod
     def get_select_query():
         """
         возвращает селект запрос
         :return: str
         """
-        return "SELECT {0} FROM {1};"
+        query = "SELECT {0} FROM {1};"
+        return query
 
-    @classmethod
-    def get_statistic_query(cls, source, tables):
+    @staticmethod
+    def get_statistic_query(source, tables):
         """
         запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
         """
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return mysql_map.stat_query.format(tables_str, source.db)
-
-    @staticmethod
-    def remote_table_create_query():
-        """
-        запрос на создание новой таблицы в БД клиента
-        """
-        return mysql_map.remote_table_query
-
-    @staticmethod
-    def remote_triggers_create_query():
-        """
-        запрос на создание триггеров в БД клиента
-        """
-        return mysql_map.remote_triggers_query
-
+        stats_query = mssql_map.stat_query.format(tables_str, source.db)
+        return stats_query

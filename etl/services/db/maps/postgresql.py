@@ -4,7 +4,7 @@
 from collections import defaultdict
 
 
-PSQL_TYPES = defaultdict(lambda: 0)
+DB_TYPES = defaultdict(lambda: 0)
 
 
 ints = [
@@ -38,21 +38,23 @@ dates = [
     'time with time zone',
     'interval',
 ]
-blobs = [
-    'bytea',
-]
 
 for i in ints:
-    PSQL_TYPES[i] = 'integer'
+    DB_TYPES[i] = 'integer'
 
 for i in floats:
-    PSQL_TYPES[i] = 'double precision'
+    DB_TYPES[i] = 'double precision'
 
 for i in texts:
-    PSQL_TYPES[i] = 'text'
+    DB_TYPES[i] = 'text'
 
 for i in dates:
-    PSQL_TYPES[i] = 'timestamp'
+    DB_TYPES[i] = 'timestamp'
+
+table_query = """
+            SELECT table_name FROM information_schema.tables
+            where table_schema='public' order by table_name;
+        """
 
 cols_query = """
     SELECT table_name, column_name, data_type, is_nullable, column_default FROM information_schema.columns
@@ -148,4 +150,8 @@ DROP TRIGGER IF EXISTS "{new_table}_audit" on "{orig_table}";
 CREATE TRIGGER "{new_table}_audit"
 AFTER INSERT OR UPDATE OR DELETE ON "{orig_table}"
     FOR EACH ROW EXECUTE PROCEDURE process_{new_table}_audit();
+"""
+
+row_query = """
+        SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """
