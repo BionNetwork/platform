@@ -105,8 +105,10 @@ constraints_query = """
     """
 
 indexes_query = """
-        SELECT t.relname, string_agg(a.attname, ','), i.relname, ix.indisprimary,
-        ix.indisunique FROM pg_class t
+        SELECT t.relname, string_agg(a.attname, ','), i.relname,
+        case ix.indisprimary when 't' then 't' else 'f' end as primary,
+        case ix.indisunique when 't' then 't' else 'f' end as unique
+        FROM pg_class t
         JOIN pg_index ix ON t.oid = ix.indrelid
         JOIN pg_class i ON i.oid = ix.indexrelid
         JOIN pg_attribute a ON a.attrelid = t.oid

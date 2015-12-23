@@ -685,13 +685,13 @@ function startLoading(userId, loadUrl){
             var channels = response.data['channels'],
                 tasksUl = $('#user_tasks_bar');
 
-//            _.each(channels, function(channel){
-//                var q = new Queue2(
-//                            tasksUl.data('host'), tasksUl.data('port'), '/ws');
-//
-//                // подписка на канал
-//                q.subscribe(channel);
-//            });
+            _.each(channels, function(channel){
+                var q = new Queue2(
+                            tasksUl.data('host'), tasksUl.data('port'), '/ws');
+
+                // подписка на канал
+                q.subscribe(channel);
+            });
         }
     });
 }

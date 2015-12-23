@@ -1,10 +1,13 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import json
+
 from django.test import TestCase
+from etl.services.datasource.repository import r_server
 from etl.services.db.postgresql import Postgresql
-from etl.services.datasource.base import TablesTree
-from core.models import Datasource
+from etl.services.datasource.base import TablesTree, DataSourceService
+from core.models import Datasource, ConnectionChoices
 
 """
 Тестирование etl методов
@@ -336,9 +339,123 @@ class TablesTreeTest(TestCase):
 
 
 class DatasourceTest(TestCase):
+
     def test_set_from_dict(self):
         source = Datasource()
         data = {"db": "test", "conn_type": 1, "host": "localhost", "login": "foo", "password": "bar", "port": 5432}
         source.set_from_dict(**data)
         for k, v in data.items():
             self.assertEquals(v, source.__dict__[k], "attribute %s does not valid" % k)
+
+
+class RedisKeysTest(TestCase):
+    def setUp(self):
+        connection = {'host': 'localhost', 'port': 5432, 'db': 'test_biplatform',
+                      'login': 'biplatform', 'password': 'biplatform'}
+
+        self.source = Datasource.objects.create(
+            db='test_biplatform',
+            host='localhost',
+            port=5432,
+            login='biplatform',
+            password='biplatform',
+            user_id=11,
+            conn_type=ConnectionChoices.POSTGRESQL,
+        )
+
+        self.database = Postgresql(connection)
+        self.cursor = self.database.connection.cursor()
+        self.cursor.execute("""
+            drop table if exists test_table;
+
+            create table test_table(
+              id serial NOT NULL,
+              arguments text NOT NULL,
+              date_created timestamp with time zone NOT NULL,
+              comment character varying(1024),
+              queue_id integer NOT NULL,
+              CONSTRAINT test_table_pkey PRIMARY KEY (id),
+              CONSTRAINT test_table_uniq UNIQUE (queue_id)
+            )
+            WITH (OIDS=FALSE);
+
+            ALTER TABLE test_table
+              OWNER TO biplatform;
+
+            CREATE INDEX test_queue_id_index
+              ON test_table
+              USING btree
+              (queue_id);
+
+            CREATE INDEX test_date_created_index
+              ON test_table
+              USING btree
+              (date_created);
+
+            CREATE UNIQUE INDEX test_uniq_together_index
+              ON test_table
+              USING btree
+              (date_created, queue_id);
+        """)
+        self.database.connection.commit()
+
+    def test_redis_keys(self):
+        tables = ['test_table', ]
+        DataSourceService.get_columns_info(self.source, tables)
+
+        keys = ['user_datasources:11:1:active_collections',
+                'user_datasources:11:1:counter',
+                'user_datasources:11:1:ddl:1',
+                'user_datasources:11:1:collection:1',
+                ]
+
+        for k in keys:
+            self.assertTrue(r_server.exists(k), 'Ключ {0} не создался!'.format(k))
+
+        collections = json.loads(r_server.get('user_datasources:11:1:active_collections'))
+        self.assertEqual(collections, [{"name": "test_table", "order": 1}, ],
+                         'Активные коллекции сохранены неправильно!')
+
+        self.assertEqual(r_server.get('user_datasources:11:1:counter'), '1',
+                         'Счетчик коллекций сохранен неправильно!')
+
+        expected_col1 = {"foreigns": [], "stats": None,
+                         "columns": [
+                             {"is_index": True, "name": "id", "is_primary": True, "is_unique": True, "type": "integer"},
+                             {"is_index": False, "name": "arguments", "is_primary": False, "is_unique": False, "type": "text"},
+                             {"is_index": True, "name": "date_created", "is_primary": False, "is_unique": False, "type": "timestamp"},
+                             {"is_index": False, "name": "comment", "is_primary": False, "is_unique": False, "type": "text"},
+                             {"is_index": True, "name": "queue_id", "is_primary": False, "is_unique": True, "type": "integer"}
+                         ],
+                         "indexes": [
+                             {u'is_primary': False, u'is_unique': False, u'name': u'test_date_created_index', u'columns': [u'date_created']},
+                             {u'is_primary': False, u'is_unique': True, u'name': u'test_uniq_together_index', u'columns': [u'date_created', u'queue_id']},
+                             {u'is_primary': False, u'is_unique': False, u'name': u'test_queue_id_index', u'columns': [u'queue_id']},
+                             {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
+                             {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]}
+
+        collection1 = json.loads(r_server.get('user_datasources:11:1:collection:1'))
+        self.assertEqual(collection1, expected_col1,
+                         'Collection сохранен неправильно!')
+        expected_ddl1 = {u'foreigns': [], u'stats': None,
+                         u'columns': [{u'is_index': True, u'name': u'id', u'extra': u'serial',
+                                       u'is_primary': True, u'is_nullable': u'NO', u'is_unique': True, u'type': u'integer'},
+                                      {u'is_index': False, u'name': u'arguments', u'extra': None, u'is_primary': False,
+                                       u'is_nullable': u'NO', u'is_unique': False, u'type': u'text'},
+                                      {u'is_index': True, u'name': u'date_created', u'extra': None, u'is_primary': False,
+                                       u'is_nullable': u'NO', u'is_unique': False, u'type': u'timestamp with time zone'},
+                                      {u'is_index': False, u'name': u'comment', u'extra': None, u'is_primary': False,
+                                       u'is_nullable': u'YES', u'is_unique': False, u'type': u'character varying'},
+                                      {u'is_index': True, u'name': u'queue_id', u'extra': None, u'is_primary': False,
+                                       u'is_nullable': u'NO', u'is_unique': True, u'type': u'integer'}],
+                         u'indexes': [{u'is_primary': False, u'is_unique': False, u'name': u'test_date_created_index', u'columns': [u'date_created']},
+                                      {u'is_primary': False, u'is_unique': True, u'name': u'test_uniq_together_index', u'columns': [u'date_created', u'queue_id']},
+                                      {u'is_primary': False, u'is_unique': False, u'name': u'test_queue_id_index', u'columns': [u'queue_id']},
+                                      {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
+                                      {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]
+                         }
+        ddl1 = json.loads(r_server.get('user_datasources:11:1:ddl:1'))
+        self.assertEqual(ddl1, expected_ddl1, 'DDL сохранен неправильно!')
+
+        self.database.connection.close()
+
