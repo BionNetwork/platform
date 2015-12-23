@@ -19,7 +19,9 @@ import logging
 from . import helpers
 from . import services
 from . import tasks
-
+from etl.constants import FIELD_NAME_SEP
+from etl.services.middleware.base import generate_table_name_key
+from etl.tasks import UpdateMongodb, LoadDb, DetectRedundant, DeleteRedundant
 
 logger = logging.getLogger(__name__)
 
@@ -342,7 +344,14 @@ class LoadDataView(BaseEtlView):
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
 
+        col_names = []
+        for t_name, col_group in groupby(json.loads(data['cols']), lambda x: x["table"]):
+            for x in col_group:
+                col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+        key = generate_table_name_key(source, ','.join(sorted(col_names)))
+
         arguments = {
+            'key': key,
             'cols': data['cols'],
             'tables': data['tables'],
             'col_types': data['col_types'],
@@ -353,9 +362,8 @@ class LoadDataView(BaseEtlView):
         }
 
         user_id = request.user.id
-        to_update = False
+        to_update = True
 
-        #
         if not to_update:
             # reduce(services.run_task, services.init_load_series, (tasks.load_data_mongodb, arguments))
             init_func = tasks.load_data_mongodb
@@ -364,13 +372,34 @@ class LoadDataView(BaseEtlView):
                 helpers.MONGODB_DATA_LOAD, init_func, arguments)
             helpers.run_task(helpers.DB_DATA_LOAD, next_func, args_for_load_db)
         else:
-            reduce(
-                helpers.run_task, helpers.additional_load_series, arguments)
+            try:
+                task = helpers.TaskService(helpers.MONGODB_DELTA_LOAD)
+                update_mongo = UpdateMongodb(*task.add_task(arguments))
 
-            args_for_load_db = helpers.run_task('etl:cdc:load_delta', arguments)
-            args_for_detect_redundant = helpers.run_task('etl:cdc:load_data', args_for_load_db)
-            args_for_delete_redundant = helpers.run_task('etl:cdc:detect_redundant', args_for_detect_redundant)
-            helpers.run_task('etl:cdc:delete_redundant', args_for_delete_redundant)
+                context = update_mongo.load_data()
+
+                task2 = helpers.TaskService(helpers.DB_DATA_LOAD)
+                load_db = LoadDb(*task2.add_task(arguments))
+                c = load_db.load_data()
+                #
+                task3 = helpers.TaskService(helpers.DB_DETECT_REDUNDANT)
+                detect_redundant = DetectRedundant(*task3.add_task({
+                    'key': key,
+                    'user_id': request.user.id,
+                }))
+                detect_redundant.load_data()
+                           #
+                task4 = helpers.TaskService(helpers.DB_DELETE_REDUNDANT)
+                delete_redundant = DeleteRedundant(*task4.add_task({
+                    'key': key,
+                    'user_id': request.user.id,
+                }))
+                delete_redundant.load_data()
+            except Exception as e:
+                pass
+            # reduce(
+            #     helpers.run_task, helpers.additional_load_series, arguments)
+
 
         # добавляем задачу mongo в очередь
         task = helpers.TaskService('etl:load_data:mongo')

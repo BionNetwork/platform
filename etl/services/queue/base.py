@@ -81,6 +81,7 @@ class TaskService(object):
             name(str): Имя задачи
         """
         self.name = name
+        self.task_id = None
 
     def add_task(self, arguments):
         """
