@@ -543,7 +543,7 @@ def create_triggers(source_dict, tables_info):
             old += 'OLD.{0}, '.format(name)
             cols += ('{name}, '.format(name=name))
             cols_str += ' {sep}{name}{sep} {typ},'.format(
-                sep=sep, name=name, typ=col['origin_type']
+                sep=sep, name=name, typ=col['type']
             )
         source_cursor.execute(remote_table_create_query.format(
             table_name, cols_str))

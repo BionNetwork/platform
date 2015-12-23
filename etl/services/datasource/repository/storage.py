@@ -1,6 +1,7 @@
 # coding: utf-8
 from . import r_server
 import json
+from copy import deepcopy
 from django.conf import settings
 from collections import defaultdict
 from redis_collections import Dict as RedisDict, List as RedisList
@@ -348,9 +349,23 @@ class RedisSourceService(object):
 
                 # достаем инфу либо по имени, либо по порядковому номеру
                 table_info = RedisSourceService.get_table_full_info(source, n_val)
+                table_info = json.loads(table_info)
 
-                pipe.set(str_table.format(coll_counter), table_info)
-                pipe.set(str_table_ddl.format(coll_counter), table_info)
+                info_for_coll = deepcopy(table_info)
+                info_for_ddl = deepcopy(table_info)
+
+                for column in info_for_coll["columns"]:
+                    del column["origin_type"]
+                    del column["is_nullable"]
+                    del column["extra"]
+
+                pipe.set(str_table.format(coll_counter), json.dumps(info_for_coll))
+
+                for column in info_for_ddl["columns"]:
+                    column["type"] = column["origin_type"]
+                    del column["origin_type"]
+
+                pipe.set(str_table_ddl.format(coll_counter), json.dumps(info_for_ddl))
 
                 # удаляем таблицы с именованными ключами
                 pipe.delete(str_table_by_name.format(n_val))
