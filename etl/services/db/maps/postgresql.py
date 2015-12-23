@@ -57,7 +57,7 @@ table_query = """
         """
 
 cols_query = """
-    SELECT table_name, column_name, data_type, is_nullable,
+    SELECT table_name, column_name, data_type as column_type, is_nullable,
     case when substring(column_default, 0, 8) = 'nextval'
          then 'serial' else null end as extra
     FROM information_schema.columns
