@@ -222,7 +222,9 @@ class RowKeysCreator(object):
             int: Ключ строки для таблицы
         """
         if self.primary_key:
-            return binascii.crc32(str(self.primary_key))
+            for ind, value in enumerate(self.cols):
+                if value['col'] == self.primary_key:
+                    return binascii.crc32(str(row[ind]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         l.append(row_num)
         return binascii.crc32(
