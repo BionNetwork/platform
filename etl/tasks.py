@@ -16,7 +16,7 @@ from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, g
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
-from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList, \
+from core.models import Datasource, Dimension, Measure, QueueList, \
     DatasourceMeta
 from django.conf import settings
 
