@@ -204,10 +204,18 @@ class RowKeysCreator(object):
     Расчет ключа для таблицы
     """
 
-    def __init__(self, table, cols, primary_key=None):
+    def __init__(self, table, cols, primary_keys=None):
+        """
+        Args:
+            table(str): Название таблицы
+            cols(list): Список словарей с названиями колонок и соотв. таблиц
+            primary_keys(list): Список уникальных ключей
+            primary_keys_indexes(list): Порядковые номера первичных ключей
+        """
         self.table = table
         self.cols = cols
-        self.primary_key = primary_key
+        self.primary_keys = primary_keys
+        self.primary_keys_indexes = None
 
     def calc_key(self, row, row_num):
         """
@@ -221,10 +229,9 @@ class RowKeysCreator(object):
         Returns:
             int: Ключ строки для таблицы
         """
-        if self.primary_key:
-            for ind, value in enumerate(self.cols):
-                if value['col'] == self.primary_key:
-                    return binascii.crc32(str(row[ind]))
+        if self.primary_keys:
+            return binascii.crc32(','.join(
+                [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         l.append(row_num)
         return binascii.crc32(
@@ -238,9 +245,12 @@ class RowKeysCreator(object):
             data(dict): метаданные по колонкам таблицы
         """
 
-        for record in data['columns']:
+        for record in data['indexes']:
             if record['is_primary']:
-                self.primary_key = record['name']
+                self.primary_keys = record['columns']
+                for ind, value in enumerate(self.cols):
+                    if value['col'] in self.primary_keys:
+                        self.primary_keys_indexes.append(ind)
                 break
 
 
