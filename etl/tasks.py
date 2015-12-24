@@ -16,6 +16,8 @@ from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, g
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
+from etl.services.cdc.factory import CdcFactroy
+
 from core.models import Datasource, Dimension, Measure, QueueList, \
     DatasourceMeta
 from django.conf import settings
@@ -507,60 +509,20 @@ def load_data_database(user_id, task_id, data, channel):
     meta_tables = DataSourceService.update_datasource_meta(
         key, source, cols, tables_info_for_meta, last_row)
 
-    create_triggers.apply_async((source_dict, data['for_triggers'], ),)
+    create_load_mechanism.apply_async((source_dict, data['for_triggers'], ),)
 
     return create_dimensions_and_measures(
         user_id, source, source_table_name, meta_tables, key)
 
 
 @celery.task(name='etl.tasks.create_triggers')
-def create_triggers(source_dict, tables_info):
+def create_load_mechanism(source_dict, tables_info):
     print 'create_triggers is started'
 
     source = Datasource()
     source.set_from_dict(**source_dict)
 
-    sep = DataSourceService.get_separator(source)
-    remote_table_create_query = (
-        DataSourceService.get_remote_table_create_query(source))
-    remote_triggers_create_query = (
-        DataSourceService.get_remote_triggers_create_query(source))
-
-    source_conn = DataSourceService.get_source_connection(source)
-    source_cursor = source_conn.cursor()
-
-    for table, columns in tables_info.iteritems():
-
-        table_name = '_etl_datasource_cdc_{0}'.format(table)
-        cols_str = ''
-        new = ''
-        old = ''
-        cols = ''
-
-        for col in columns:
-            name = col['name']
-            new += 'NEW.{0}, '.format(name)
-            old += 'OLD.{0}, '.format(name)
-            cols += ('{name}, '.format(name=name))
-            cols_str += ' {sep}{name}{sep} {typ},'.format(
-                sep=sep, name=name, typ=col['type']
-            )
-
-        # multi queries of mysql, delimiter $$
-        for query in remote_table_create_query.format(table_name, cols_str).split('$$'):
-            source_cursor.execute(query)
-
-        source_conn.commit()
-
-        trigger_commands = remote_triggers_create_query.format(
-            orig_table=table, new_table=table_name, new=new, old=old,
-            cols=cols)
-
-        # multi queries of mysql, delimiter $$
-        for query in trigger_commands.split('$$'):
-            source_cursor.execute(query)
-
-        source_conn.commit()
+    CdcFactroy.create_load_mechanism(source, tables_info)
 
 
 def create_dimensions_and_measures(
