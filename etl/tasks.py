@@ -545,8 +545,10 @@ def create_triggers(source_dict, tables_info):
             cols_str += ' {sep}{name}{sep} {typ},'.format(
                 sep=sep, name=name, typ=col['type']
             )
-        source_cursor.execute(remote_table_create_query.format(
-            table_name, cols_str))
+
+        # multi queries of mysql, delimiter $$
+        for query in remote_table_create_query.format(table_name, cols_str).split('$$'):
+            source_cursor.execute(query)
 
         source_conn.commit()
 
