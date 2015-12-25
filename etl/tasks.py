@@ -361,7 +361,7 @@ def load_data_database(user_id, task_id, data, channel):
                 str(each.calc_key(row, row_num)) for each in tables_key_creator]
             return (binascii.crc32(''.join(row_values_for_calc)),) + row
         else:
-            (tables_key_creator[0].calc_key(row, row_num),) + row
+            return (tables_key_creator[0].calc_key(row, row_num),) + row
 
     print 'load_data_database'
 
@@ -485,7 +485,7 @@ def load_data_database(user_id, task_id, data, channel):
 
             break
         else:
-            last_row = rows[-1]  # получаем последнюю запись
+            last_row = rows_with_keys[-1]  # получаем последнюю запись
             # обновляем информацию о работе таска
             loaded_count += settings_limit
             queue_storage['date_updated'] = datetime_now_str()
@@ -524,6 +524,8 @@ def load_data_database(user_id, task_id, data, channel):
     # работа с datasource_meta
     meta_tables = DataSourceService.update_datasource_meta(
         key, source, cols, tables_info_for_meta, last_row)
+
+    DataSourceService.update_collections_stats(data['collections_names'], last_row[0])
 
     return create_dimensions_and_measures(
         user_id, source, source_table_name, meta_tables, key)

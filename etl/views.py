@@ -329,6 +329,8 @@ class LoadDataView(BaseEtlView):
 
         tables = json.loads(data.get('tables'))
 
+        collections_names = helpers.DataSourceService.get_collections_names(
+            source, tables)
         # достаем типы колонок
         col_types = helpers.DataSourceService.get_columns_types(source, tables)
         data.appendlist('col_types', json.dumps(col_types))
@@ -349,6 +351,7 @@ class LoadDataView(BaseEtlView):
             'tree': structure,
             'source': conn_dict,
             'user_id': request.user.id,
+            'collections_names': collections_names,
         }
 
         user_id = request.user.id
