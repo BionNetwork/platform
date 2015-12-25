@@ -1,4 +1,5 @@
 # coding: utf-8
+from celery import group
 from django.conf import settings
 from etl.services.db.factory import DatabaseService
 from etl.services.db.interfaces import BaseEnum
@@ -54,21 +55,33 @@ DB_DATA_LOAD = 'etl:cdc:load_data'
 MONGODB_DELTA_LOAD = 'etl:cdc:load_delta'
 DB_DETECT_REDUNDANT = 'etl:cdc:detect_redundant'
 DB_DELETE_REDUNDANT = 'etl:cdc:delete_redundant'
+GENERATE_DIMENSIONS = 'etl:database:generate_dimensions'
+GENERATE_MEASURES = 'etl:database:generate_measures'
 
 init_load_series = (MONGODB_DATA_LOAD, DB_DATA_LOAD)
 additional_load_series = (
     MONGODB_DELTA_LOAD, DB_DATA_LOAD, DB_DETECT_REDUNDANT, DB_DELETE_REDUNDANT)
 
 
-def run_task(task_name, task_func, params):
+def run_task(task_params):
     """
     Args:
-        task_name(str): Название
+        task_params(tuple or list):
     """
-    task = TaskService(task_name)
-    next_task, next_arguments = task_func(*task.add_task(arguments=params))
-    return next_task, next_arguments
-
+    if type(task_params) == tuple:
+        task_id, channel = TaskService(task_params[0]).add_task(
+            arguments=task_params[2])
+        task_params[1](task_id, channel).load_data()
+        return [channel]
+    else:
+        group_tasks = []
+        channels = []
+        for each in task_params:
+            task_id, channel = TaskService(each[0]).add_task(arguments=each[2])
+            group_tasks.append(each[1](task_id, channel).load_data.s())
+            channels.append(channel)
+        group(group_tasks)
+        return channels
 
 class TaskService(object):
     """

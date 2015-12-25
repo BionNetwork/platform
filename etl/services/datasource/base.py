@@ -429,7 +429,6 @@ class DataSourceService(object):
             res.update({
                 table: source_meta.id
             })
-        return res
 
     @classmethod
     def get_structure_rows_number(cls, source, structure,  cols):

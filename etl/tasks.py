@@ -5,28 +5,26 @@ import os
 import sys
 import brukva
 from datetime import datetime
-from django.utils.datastructures import SortedDict
 import pymongo
 import json
-from collections import OrderedDict
-from pymongo import IndexModel, ASCENDING, DESCENDING
-import operator
+from pymongo import IndexModel, ASCENDING
 import binascii
 from psycopg2 import errorcodes
 from etl.constants import FIELD_NAME_SEP
-from etl.services.model_creation import OlapEntityCreation
 from etl.services.middleware.base import (
-    EtlEncoder, generate_table_name_key, get_table_name, datetime_now_str)
-from etl.services.queue.base import TaskLoadingStatusEnum, TLSE
+    EtlEncoder, get_table_name)
+from etl.services.model_creation import (get_django_model, install,
+    get_field_settings)
+from etl.services.queue.base import TLSE
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
 from core.models import (
-    Datasource, Dimension, Measure, QueueList, DatasourceMeta)
+    Datasource, Dimension, Measure, QueueList, DatasourceMeta,
+    DatasourceMetaKeys)
 from django.conf import settings
 
 from djcelery import celery
-from celery import group
 from celery.contrib.methods import task_method
 from itertools import groupby, izip
 
@@ -108,7 +106,7 @@ class DeleteQuery(TableCreateQuery):
 
     def set_query(self, **kwargs):
         local_instance = self.source_service.get_local_instance()
-        delete_table_query = "DELETE from {0} where _key in ('{1}');"
+        delete_table_query = "DELETE from {0} where _id in ('{1}');"
         self.query = delete_table_query.format(
             kwargs['table_name'], '{0}')
         self.set_connection()
@@ -116,7 +114,8 @@ class DeleteQuery(TableCreateQuery):
     def execute(self, **kwargs):
         self.cursor = self.connection.cursor()
         [str(a) for a in kwargs['keys']]
-        self.query = self.query.format("','".join([str(a) for a in kwargs['keys']]))
+        self.query = self.query.format(
+            "','".join([str(a) for a in kwargs['keys']]))
         self.cursor.execute(self.query)
         self.connection.commit()
         return
@@ -316,7 +315,6 @@ class TaskProcessing(object):
         self.prepare()
         self.processing()
         self.exit()
-        return self.return_data()
 
     def processing(self):
         """
@@ -347,19 +345,13 @@ class TaskProcessing(object):
         # удаляем канал из списка каналов юзера
         RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
 
-    def return_data(self):
-        """
-        Параметры для след. задачи
-        """
-        return None
-
 
 class LoadMongodb(TaskProcessing):
     """
     Первичная загрузка данных в Mongodb
     """
 
-    @celery.task(name='etl:load_data:mongo')
+    @celery.task(name='etl:load_data:mongo', filter=task_method)
     def load_data(self):
         return super(LoadMongodb, self).load_data()
 
@@ -377,7 +369,7 @@ class LoadMongodb(TaskProcessing):
             source_model, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['_key', '_state', '_date']
+        col_names = ['_id', '_state', '_date']
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
@@ -387,7 +379,7 @@ class LoadMongodb(TaskProcessing):
         mc = MongodbConnection()
         collection = mc.get_collection(
             'etl', get_table_name('sttm_datasource', key))
-        mc.set_indexes([('_key', ASCENDING), ('_state', ASCENDING),
+        mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
                         ('_date', ASCENDING)], name='test')
 
         query = DataSourceService.get_rows_query_for_loading_task(
@@ -439,9 +431,6 @@ class LoadMongodb(TaskProcessing):
 
             page += 1
 
-    def return_data(self):
-        return self.context
-
 
 class UpdateMongodb(TaskProcessing):
 
@@ -466,7 +455,7 @@ class UpdateMongodb(TaskProcessing):
             source_model, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['_key', '_state', '_date']
+        col_names = ['_id', '_state', '_date']
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
@@ -479,7 +468,7 @@ class UpdateMongodb(TaskProcessing):
         delta_mc = MongodbConnection()
         delta_collection = delta_mc.get_collection(
             'etl', get_table_name('sttm_datasource_delta', key))
-        delta_mc.set_indexes([('_key', ASCENDING), ('_state', ASCENDING),
+        delta_mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
                          ('_date', ASCENDING)], name='delta')
 
         # Коллекция с текущими данными
@@ -513,7 +502,7 @@ class UpdateMongodb(TaskProcessing):
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
                     record, tables_key_creator, (page-1)*limit + ind)
-                if not collection.find({'_key': row_key}).count():
+                if not collection.find({'_id': row_key}).count():
                     delta_rows = (
                         [row_key, 'new', EtlEncoder.encode(datetime.now())] +
                         [EtlEncoder.encode(rec_field) for rec_field in record])
@@ -526,11 +515,11 @@ class UpdateMongodb(TaskProcessing):
             current_collection.insert_many(data_to_current_insert, ordered=False)
             page += 1
 
-        # Обновляем основную коллекцию новым данными
+        # Обновляем основную коллекцию новыми данными
         page = 1
         while True:
             delta_data = delta_collection.find(
-                {'_state': 'new'},  {'_id': False},
+                {'_state': 'new'},
                 limit=limit, skip=(page-1)*limit).sort('_date', ASCENDING)
             to_ins = []
             for record in delta_data:
@@ -544,10 +533,6 @@ class UpdateMongodb(TaskProcessing):
         # Обновляем статусы дельты-коллекции
         delta_collection.update_many(
             {'_state': 'new'}, {'$set': {'_state': 'synced'}})
-
-    def return_data(self):
-        return self.context
-
 
 class LoadDb(TaskProcessing):
 
@@ -563,6 +548,7 @@ class LoadDb(TaskProcessing):
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
+        db_update = self.context['db_update']
 
         source = Datasource()
         source.set_from_dict(**self.context['source'])
@@ -571,8 +557,8 @@ class LoadDb(TaskProcessing):
             source, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"_key" text', '"_state" text', '"_date" timestamp']
-        clear_col_names = ['_key', '_state', '_date']
+        col_names = ['"_id" text', '"_state" text', '"_date" timestamp']
+        clear_col_names = ['_id', '_state', '_date']
         for obj in cols:
             t = obj['table']
             c = obj['col']
@@ -588,10 +574,11 @@ class LoadDb(TaskProcessing):
             'etl', get_table_name('sttm_datasource', key))
 
         source_table_name = get_table_name('sttm_datasource', key)
-        table_create_query = TableCreateQuery(DataSourceService())
-        table_create_query.set_query(
-            table_name=source_table_name, cols=col_names)
-        table_create_query.execute()
+        if not db_update:
+            table_create_query = TableCreateQuery(DataSourceService())
+            table_create_query.set_query(
+                table_name=source_table_name, cols=col_names)
+            table_create_query.execute()
 
         insert_query = InsertQuery(DataSourceService())
         insert_query.set_query(
@@ -605,7 +592,7 @@ class LoadDb(TaskProcessing):
         while True:
             try:
                 collection_cursor = collection.find(
-                    {'_state': 'idle'},  {'_id': False},
+                    {'_state': 'idle'},
                     limit=limit, skip=offset)
                 # last_row = collection_cursor.limit(1).sort('$natural', -1)[0]
                 rows_dict = []
@@ -650,11 +637,8 @@ class LoadDb(TaskProcessing):
             {'_state': 'idle'}, {'$set': {'_state': 'loaded'}})
 
         # работа с datasource_meta
-        meta_tables = DataSourceService.update_datasource_meta(
+        DataSourceService.update_datasource_meta(
             key, source, cols, json.loads(self.context['meta_info']), last_row)
-
-        # create_dimensions_and_measures(
-        #     self.user_id, source, source_table_name, meta_tables, key)
 
 
 class DetectRedundant(TaskProcessing):
@@ -669,7 +653,7 @@ class DetectRedundant(TaskProcessing):
         """
         key = self.context['key']
 
-        collection = MongodbConnection().get_collection(
+        source_collection = MongodbConnection().get_collection(
                     'etl', get_table_name('sttm_datasource', key))
         current_collection = MongodbConnection().get_collection(
                     'etl', get_table_name('sttm_datasource_keys', key))
@@ -681,25 +665,28 @@ class DetectRedundant(TaskProcessing):
         delete_mc.set_indexes([('_state', ASCENDING),
                          ('_deleted', ASCENDING)], name='delete_delta')
 
-
-        collection.aggregate(
+        source_collection.aggregate(
             [{"$match": {"_state": "loaded"}},
-             {"$project": {"_id": "$_key", "_state": {"$literal": "new"}}},
+             {"$project": {"_id": "$_id", "_state": {"$literal": "new"}}},
              {"$out": "%s" % get_table_name('sttm_datasource_keysall', key)}])
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         page = 1
         while True:
-            delete_delta = delete_collection.find(
-                {'_state': 'new'},  {'_id': False},
-                limit=limit, skip=(page-1)*limit)
 
-            to_insert = []
-            for record in delete_delta:
-                key = record['_key']
+            to_delete = []
+            for record in delete_collection.find(
+                    {'_state': 'new'}, limit=limit, skip=(page-1)*limit):
+                key = record['_id']
                 if not current_collection.find({'_id': key}).count():
-                    to_insert.append({'_id': key, '_state': 'deleted'})
+                    to_delete.append(key)
 
-            delete_collection.insert_many(to_insert, ordered=False)
+            delete_collection.update_many(
+                {'_id': {'$in': to_delete}},
+                {'$set': {'_state': 'deleted'}})
+
+            source_collection.delete_many({'_id': {'$in': to_delete}})
+
+            page += 1
 
 
 class DeleteRedundant(TaskProcessing):
@@ -724,67 +711,115 @@ class DeleteRedundant(TaskProcessing):
         while True:
             delete_delta = del_collection.find(
                 {'_state': 'deleted'},
-                limit=limit, skip=(page-1)*limit).sort('_date', ASCENDING)
+                limit=limit, skip=(page-1)*limit)
             l = [record['_id'] for record in delete_delta]
+            if not l:
+                break
             delete_query.execute(keys=l)
-        a = 4
+            page += 1
 
 
-
-
-def create_dimensions_and_measures(
-        user_id=None, source=None, source_table_name=None, meta_tables=None, key=None):
-    """Создание таблиц размерностей
-
-    Args:
-        user_id(int): идентификатор пользователя
-        key(int): ключ к метаданным обрабатываемой таблицы
-    Returns:
-
+class LoadDimensions(TaskProcessing):
     """
-    # arguments = dict(
-    #     user_id=11,
-    #     datasource_id=3,
-    #     source_table='sttm_datasource_948655626',
-    #     key=948655626,
-    #     target_table='dimensions_948655626'
-    # )
-    arguments = dict(
-        user_id=user_id,
-        datasource_id=source.id,
-        source_table=source_table_name,
-        meta_tables=meta_tables,
-        key=key,
-        target_table=get_table_name('dimensions', key)
-    )
-
-    dimension_task = TaskService('etl:database:generate_dimensions')
-    dimension_task_id, channel = dimension_task.add_task(arguments)
-    dimension = DimensionCreation()
-    arguments.update({'target_table': get_table_name('measures', key)})
-
-    measure_task = TaskService('etl:database:generate_measures')
-    measure_task_id, channel = measure_task.add_task(arguments)
-    measure = MeasureCreation()
-    # dimension.load_data(dimension_task_id)
-    # measure.load_data(measure_task_id)
-
-    group([
-        dimension.load_data.s(dimension_task_id),
-        measure.load_data.s(measure_task_id)
-    ])()
-
-
-class DimensionCreation(OlapEntityCreation):
+    Создание сущностей(рамерности, измерения) олап куба
     """
-    Создание размерностей
-    """
-
+    app_name = 'sttm'
+    module = 'biplatform.etl.models'
+    table_prefix = 'dimension'
     actual_fields_type = ['text']
+
+    def get_actual_fields(self, meta_data):
+        """
+        Фильтруем поля по необходимому нам типу
+
+        Returns:
+            list of tuple: Метаданные отфильтрованных полей
+        """
+        actual_fields = []
+        for record in meta_data:
+
+            for field in json.loads(record['meta__fields'])['columns']:
+                if field['type'] in self.actual_fields_type:
+                    actual_fields.append((
+                        record['meta__collection_name'], field))
+
+        return actual_fields
+
+    def rows_query(self, fields):
+        """
+        Формируюм строку запроса
+
+        Args:
+            fields(list): Список именно необходимых имен
+
+        Returns:
+            str: Строка запроса
+        """
+        fields_str = '"'+'", "'.join(fields)+'"'
+        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
+        source_table_name = get_table_name(
+            'sttm_datasource', self.context['key'])
+        return query.format(
+            fields_str, source_table_name, '{0}', '{1}')
+
+    @celery.task(name='etl:database:generate_dimensions', filter=task_method)
+    def load_data(self):
+        return super(LoadDimensions, self).load_data()
+
+    def processing(self):
+
+        key = self.context['key']
+        # Наполняем контекст
+        source = Datasource.objects.get(id=self.context['datasource_id'])
+        meta_tables = {
+            k: v for (k, v) in
+            DatasourceMeta.objects.filter(
+                datasource=source).values_list('collection_name', 'id')}
+        meta_data = DatasourceMetaKeys.objects.filter(
+            value=key).values('meta__collection_name', 'meta__fields')
+        self.actual_fields = self.get_actual_fields(meta_data)
+
+        f_list = []
+        table_name = get_table_name(self.table_prefix, key)
+        for table, field in self.actual_fields:
+            field_name = '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name'])
+
+            f_list.append(get_field_settings(field_name, field['type']))
+
+        model = get_django_model(
+            table_name, f_list, self.app_name,
+            self.module, table_name)
+        install(model)
+        try:
+            self.save_fields(model)
+        except Exception as e:
+            # код и сообщение ошибки
+            pg_code = getattr(e, 'pgcode', None)
+
+            err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+            err_msg += e.message
+
+            # меняем статус задачи на 'Ошибка'
+            TaskService.update_task_status(
+                self.task_id, TaskStatusEnum.ERROR, error_msg=err_msg,
+                error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,)
+            logger.exception(err_msg)
+            self.queue_storage.update(TaskStatusEnum.ERROR)
+
+        # Сохраняем метаданные
+        self.save_meta_data(
+            self.user_id, key, self.actual_fields, meta_tables)
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
-        Сохраняем информацию о размерности
+        Сохранение метаинформации
+
+        Args:
+            user_id(int): id пользователя
+            table_name(str): Название создаваемой таблицы
+            fields(dict): данные о полях
+            meta(DatasourceMeta): ссылка на метаданные хранилища
         """
         level = dict()
         for table, field in fields:
@@ -816,19 +851,43 @@ class DimensionCreation(OlapEntityCreation):
                 # data=json.dumps(data)
             )
 
-    @celery.task(name='etl:database:generate_dimensions', filter=task_method)
-    def load_data(self, task_id):
+    def save_fields(self, model):
+        """Заполняем таблицу данными
+
+        Args:
+            model: Модель к целевой таблице
         """
-        Создание размерностей
-        """
-        super(DimensionCreation, self).load_data(task_id)
+        column_names = []
+        for table, field in self.actual_fields:
+            column_names.append('{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name']))
+        offset = 0
+        step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+        print 'load dim or measure'
+        while True:
+            rows_query = self.rows_query(column_names)
+            index_to = offset+step
+            connection = DataSourceService.get_local_instance().connection
+            cursor = connection.cursor()
+
+            cursor.execute(rows_query.format(index_to, offset))
+            rows = cursor.fetchall()
+            if not rows:
+                break
+            column_data = [model(
+                **{column_names[i]: v for (i, v) in enumerate(x)})
+                        for x in rows]
+            model.objects.bulk_create(column_data)
+            offset = index_to
+
+            self.queue_storage.update()
 
 
-class MeasureCreation(OlapEntityCreation):
+class LoadMeasures(LoadDimensions):
     """
     Создание мер
     """
-
+    table_prefix = 'measures'
     actual_fields_type = [
         Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
 
@@ -850,10 +909,13 @@ class MeasureCreation(OlapEntityCreation):
             )
 
     @celery.task(name='etl:database:generate_measures', filter=task_method)
-    def load_data(self, task_id):
+    def load_data(self):
         """
         Создание размерностей
         """
-        super(MeasureCreation, self).load_data(task_id)
+        super(LoadMeasures, self).load_data()
+
+    def processing(self):
+        super(LoadMeasures, self).processing()
 
 # write in console: python manage.py celery -A etl.tasks worker

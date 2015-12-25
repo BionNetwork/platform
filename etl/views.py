@@ -12,7 +12,7 @@ from django.conf import settings
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource
+from core.models import Datasource, DatasourceMetaKeys
 from . import forms as etl_forms
 import logging
 
@@ -21,7 +21,9 @@ from . import services
 from . import tasks
 from etl.constants import FIELD_NAME_SEP
 from etl.services.middleware.base import generate_table_name_key
-from etl.tasks import UpdateMongodb, LoadDb, DetectRedundant, DeleteRedundant
+from etl.services.queue.base import run_task
+from etl.tasks import UpdateMongodb, LoadDb, DetectRedundant, DeleteRedundant, \
+    LoadMongodb, LoadDimensions, LoadMeasures
 
 logger = logging.getLogger(__name__)
 
@@ -349,7 +351,7 @@ class LoadDataView(BaseEtlView):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
         key = generate_table_name_key(source, ','.join(sorted(col_names)))
-
+        user_id = request.user.id
         arguments = {
             'key': key,
             'cols': data['cols'],
@@ -358,61 +360,46 @@ class LoadDataView(BaseEtlView):
             'meta_info': data['meta_info'],
             'tree': structure,
             'source': conn_dict,
-            'user_id': request.user.id,
+            'user_id': user_id,
+            'db_update': False
+        }
+        dim_measure_args = {
+                'user_id': user_id,
+                'datasource_id': source.id,
+                'key': key,
         }
 
-        user_id = request.user.id
-        to_update = True
+        redundant_args = {
+                'key': key,
+                'user_id': request.user.id,
+            }
 
+        create_tasks = [
+            (helpers.MONGODB_DATA_LOAD, LoadMongodb, arguments),
+            (helpers.DB_DATA_LOAD, LoadDb, arguments),
+            [
+                (helpers.GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
+                (helpers.GENERATE_MEASURES, LoadMeasures, dim_measure_args),
+            ]
+        ]
+
+        update_tasks = [
+            (helpers.MONGODB_DELTA_LOAD, UpdateMongodb, arguments),
+            (helpers.DB_DATA_LOAD, LoadDb, arguments),
+            (helpers.DB_DETECT_REDUNDANT, DetectRedundant, redundant_args),
+            (helpers.DB_DELETE_REDUNDANT, DeleteRedundant, redundant_args),
+        ]
+
+        to_update = DatasourceMetaKeys.objects.filter(value=key)
+        channels = []
         if not to_update:
-            # reduce(services.run_task, services.init_load_series, (tasks.load_data_mongodb, arguments))
-            init_func = tasks.load_data_mongodb
-
-            next_func, args_for_load_db = helpers.run_task(
-                helpers.MONGODB_DATA_LOAD, init_func, arguments)
-            helpers.run_task(helpers.DB_DATA_LOAD, next_func, args_for_load_db)
+            for task_info in create_tasks:
+                channels.extend(run_task(task_info))
         else:
-            try:
-                task = helpers.TaskService(helpers.MONGODB_DELTA_LOAD)
-                update_mongo = UpdateMongodb(*task.add_task(arguments))
+            for task_info in update_tasks:
+                channels.extend(run_task(task_info))
 
-                context = update_mongo.load_data()
-
-                task2 = helpers.TaskService(helpers.DB_DATA_LOAD)
-                load_db = LoadDb(*task2.add_task(arguments))
-                c = load_db.load_data()
-                #
-                task3 = helpers.TaskService(helpers.DB_DETECT_REDUNDANT)
-                detect_redundant = DetectRedundant(*task3.add_task({
-                    'key': key,
-                    'user_id': request.user.id,
-                }))
-                detect_redundant.load_data()
-                           #
-                task4 = helpers.TaskService(helpers.DB_DELETE_REDUNDANT)
-                delete_redundant = DeleteRedundant(*task4.add_task({
-                    'key': key,
-                    'user_id': request.user.id,
-                }))
-                delete_redundant.load_data()
-            except Exception as e:
-                pass
-            # reduce(
-            #     helpers.run_task, helpers.additional_load_series, arguments)
-
-
-        # добавляем задачу mongo в очередь
-        task = helpers.TaskService('etl:load_data:mongo')
-        task_id1, channel1 = task.add_task(arguments)
-        # tasks.load_data.apply_async((user_id, task_id1, channel1),)
-        tasks.load_data(user_id, task_id1, channel1)
-
-        # добавляем задачу database в очередь
-        # task = helpers.TaskService('etl:load_data:database')
-        # task_id2, channel2 = task.add_task(arguments)
-        # tasks.load_data.apply_async((user_id, task_id2, channel2),)
-
-        return {'channels': [channel1]}
+        return {'channels': channels}
 
 
 class GetUserTasksView(BaseView):
