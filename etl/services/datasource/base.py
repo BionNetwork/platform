@@ -442,3 +442,17 @@ class DataSourceService(object):
         """
         return DatabaseService.get_structure_rows_number(
             source, structure,  cols)
+
+    @classmethod
+    def get_remote_table_create_query(cls, source):
+        """
+        возвращает запрос на создание таблицы в БД клиента
+        """
+        return DatabaseService.get_remote_table_create_query(source)
+
+    @classmethod
+    def get_remote_triggers_create_query(cls, source):
+        """
+        возвращает запрос на создание триггеров в БД клиента
+        """
+        return DatabaseService.get_remote_triggers_create_query(source)

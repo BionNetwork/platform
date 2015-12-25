@@ -73,6 +73,21 @@ class Datasource(models.Model):
         unique_together = ('host', 'db', 'user_id')
 
 
+class DatasourceSettings(models.Model):
+    """
+    Таблица настроек для источников
+    """
+    TRIGGERS = 'apply_triggers'
+    CHECKSUM = 'apply_checksum'
+
+    name = models.CharField(max_length=255, verbose_name=u'Название', db_index=True)
+    value = models.TextField(verbose_name=u'Значение')
+    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+
+    class Meta:
+        db_table = "datasources_settings"
+
+
 class DatasourceMeta(models.Model):
     """
     Мета информация для источников данных

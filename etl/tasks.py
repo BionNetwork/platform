@@ -16,7 +16,9 @@ from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, g
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
-from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList, \
+from etl.services.cdc.factory import CdcFactroy
+
+from core.models import Datasource, Dimension, Measure, QueueList, \
     DatasourceMeta
 from django.conf import settings
 
@@ -507,8 +509,20 @@ def load_data_database(user_id, task_id, data, channel):
     meta_tables = DataSourceService.update_datasource_meta(
         key, source, cols, tables_info_for_meta, last_row)
 
+    create_load_mechanism.apply_async((source_dict, data['for_triggers'], ),)
+
     return create_dimensions_and_measures(
         user_id, source, source_table_name, meta_tables, key)
+
+
+@celery.task(name='etl.tasks.create_triggers')
+def create_load_mechanism(source_dict, tables_info):
+    print 'create_triggers is started'
+
+    source = Datasource()
+    source.set_from_dict(**source_dict)
+
+    CdcFactroy.create_load_mechanism(source, tables_info)
 
 
 def create_dimensions_and_measures(
