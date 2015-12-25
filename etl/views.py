@@ -328,11 +328,12 @@ class LoadDataView(BaseEtlView):
             raise ResponseError(u'Не удалось подключиться к источнику данных!')
 
         # копия, чтобы могли добавлять
-        data = request.POST.copy()
+        # data = request.POST.copy()
+        post = request.POST
 
         # генерируем название новой таблицы и
         # проверяем на существование дубликатов
-        cols = json.loads(data['cols'])
+        cols = json.loads(post.get('cols'))
         cols_str = generate_columns_string(cols)
         table_key = generate_table_name_key(source, cols_str)
 
@@ -352,43 +353,42 @@ class LoadDataView(BaseEtlView):
         if queues_list.exists():
             raise ResponseError(u'Данная задача уже находится в обработке!')
 
-        tables = json.loads(data.get('tables'))
+        tables = json.loads(post.get('tables'))
 
         collections_names = helpers.DataSourceService.get_collections_names(
             source, tables)
         # достаем типы колонок
         col_types = helpers.DataSourceService.get_columns_types(source, tables)
-        data.appendlist('col_types', json.dumps(col_types))
 
         # достаем инфу колонок (статистика, типы, )
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
-        data.appendlist('meta_info', json.dumps(tables_info_for_meta))
 
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
 
         arguments = {
-            'cols': data['cols'],
-            'tables': data['tables'],
-            'col_types': data['col_types'],
-            'meta_info': data['meta_info'],
+            'cols': post.get('cols'),
+            'tables': post.get('tables'),
+            'col_types': json.dumps(col_types),
+            'meta_info': json.dumps(tables_info_for_meta),
             'tree': structure,
             'source': conn_dict,
             'user_id': request.user.id,
             'collections_names': collections_names,
+            'checksum': table_key,
         }
 
         user_id = request.user.id
 
         # добавляем задачу mongo в очередь
         task = helpers.TaskService('etl:load_data:mongo')
-        task_id1, channel1 = task.add_task(arguments, table_key)
+        task_id1, channel1 = task.add_task(arguments)
         tasks.load_data.apply_async((user_id, task_id1, channel1),)
 
         # добавляем задачу database в очередь
         task = helpers.TaskService('etl:load_data:database')
-        task_id2, channel2 = task.add_task(arguments, table_key)
+        task_id2, channel2 = task.add_task(arguments)
         tasks.load_data.apply_async((user_id, task_id2, channel2),)
 
         return {'channels': [channel1, channel2]}
