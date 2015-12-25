@@ -236,7 +236,7 @@ class RowKeysCreator(object):
             return binascii.crc32(''.join(
                 [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
-        l.append(row_num)small
+        l.append(row_num)
         return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
