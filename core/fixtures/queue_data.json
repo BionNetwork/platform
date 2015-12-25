@@ -62,7 +62,7 @@
   },
   {
     "model": "core.queue",
-    "pk": 3,
+    "pk": 4,
     "fields": {
       "name": "etl:database:generate_measures"
     }

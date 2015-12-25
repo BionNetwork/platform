@@ -195,6 +195,7 @@ def load_data(user_id, task_id, channel):
 
         data = json.loads(task.arguments)
         name = task.queue.name
+        table_key = task.checksum
 
         if name == 'etl:load_data:mongo':
             load_data_mongo(user_id, task_id, data, channel)

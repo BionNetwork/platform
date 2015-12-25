@@ -85,7 +85,6 @@ class RedisCacheKeys(object):
         return '{0}:joins'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
-
     @staticmethod
     def get_source_remain(user_id, datasource_id):
         """
