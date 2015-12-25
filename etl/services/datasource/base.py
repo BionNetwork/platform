@@ -388,7 +388,6 @@ class DataSourceService(object):
                 })
 
                 pipe.set(collection, json.dumps(table_info))
-                pipe.expire(collection, settings.REDIS_EXPIRE)
             pipe.execute()
 
     @staticmethod

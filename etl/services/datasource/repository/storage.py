@@ -615,7 +615,6 @@ class RedisSourceService(object):
         user_id = source.user_id
         source_id = source.id
 
-        str_table = RedisCacheKeys.get_active_table(user_id, source_id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table(
             user_id, source_id, '{0}')
 
@@ -630,7 +629,6 @@ class RedisSourceService(object):
                     "stats": stats[t_name],
                 }
             ))
-            pipe.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
         pipe.execute()
 
     @classmethod
