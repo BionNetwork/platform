@@ -61,11 +61,14 @@ def load_data_mongo(user_id, task_id, data, channel):
         for x in col_group:
             col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
 
+    cols_str = ''
+
+    for obj in cols:
+        cols_str += '{0}-{1};'.format(obj['table'], obj['col'])
+
+
     # название новой таблицы
-    key = binascii.crc32(
-        reduce(operator.add,
-               [source_model.host, str(source_model.port), str(source_model.user_id),
-                ','.join(sorted(tables))], ''))
+    key = generate_table_name_key(source_model, cols_str)
 
     # collection
     collection_name = get_table_name('sttm_datasource', key)
