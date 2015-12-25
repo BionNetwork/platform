@@ -238,7 +238,7 @@ class RowKeysCreator(object):
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         l.append(row_num)
         return binascii.crc32(
-                reduce(lambda res, x: '%s%s' % (res, x), l))
+                reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
     def set_primary_key(self, data):
         """
