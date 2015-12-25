@@ -213,12 +213,12 @@ class RowKeysCreator(object):
             table(str): Название таблицы
             cols(list): Список словарей с названиями колонок и соотв. таблиц
             primary_keys(list): Список уникальных ключей
-            primary_keys_indexes(list): Порядковые номера первичных ключей
         """
         self.table = table
         self.cols = cols
         self.primary_keys = primary_keys
-        self.primary_keys_indexes = None
+        # primary_keys_indexes(list): Порядковые номера первичных ключей
+        self.primary_keys_indexes = list()
 
     def calc_key(self, row, row_num):
         """
@@ -233,10 +233,10 @@ class RowKeysCreator(object):
             int: Ключ строки для таблицы
         """
         if self.primary_keys:
-            return binascii.crc32(','.join(
+            return binascii.crc32(''.join(
                 [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
-        l.append(row_num)
+        l.append(row_num)small
         return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
