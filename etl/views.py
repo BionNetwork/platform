@@ -328,12 +328,11 @@ class LoadDataView(BaseEtlView):
             raise ResponseError(u'Не удалось подключиться к источнику данных!')
 
         # копия, чтобы могли добавлять
-        # data = request.POST.copy()
-        post = request.POST
+        data = request.POST
 
         # генерируем название новой таблицы и
         # проверяем на существование дубликатов
-        cols = json.loads(post.get('cols'))
+        cols = json.loads(data.get('cols'))
         cols_str = generate_columns_string(cols)
         table_key = generate_table_name_key(source, cols_str)
 
@@ -353,7 +352,7 @@ class LoadDataView(BaseEtlView):
         if queues_list.exists():
             raise ResponseError(u'Данная задача уже находится в обработке!')
 
-        tables = json.loads(post.get('tables'))
+        tables = json.loads(data.get('tables'))
 
         collections_names = helpers.DataSourceService.get_collections_names(
             source, tables)
@@ -368,8 +367,8 @@ class LoadDataView(BaseEtlView):
         conn_dict = source.get_connection_dict()
 
         arguments = {
-            'cols': post.get('cols'),
-            'tables': post.get('tables'),
+            'cols': data.get('cols'),
+            'tables': data.get('tables'),
             'col_types': json.dumps(col_types),
             'meta_info': json.dumps(tables_info_for_meta),
             'tree': structure,
