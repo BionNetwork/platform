@@ -356,9 +356,12 @@ def load_data_database(user_id, task_id, data, channel):
         Returns:
             tuple: Модифицированная строка с ключом в первой позиции
         """
-        row_values_for_calc = [
-            str(each.calc_key(row, row_num)) for each in tables_key_creator]
-        return (binascii.crc32(''.join(row_values_for_calc)),) + row
+        if len(tables_key_creator) > 1:
+            row_values_for_calc = [
+                str(each.calc_key(row, row_num)) for each in tables_key_creator]
+            return (binascii.crc32(''.join(row_values_for_calc)),) + row
+        else:
+            (tables_key_creator[0].calc_key(row, row_num),) + row
 
     print 'load_data_database'
 
