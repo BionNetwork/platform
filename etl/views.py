@@ -9,10 +9,11 @@ from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
 from django.conf import settings
+from django.db import transaction
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource
+from core.models import Datasource, DatasourceSettings as source_setts
 from . import forms as etl_forms
 import logging
 
@@ -76,18 +77,41 @@ class NewSourceView(BaseTemplateView):
         form = etl_forms.SourceForm()
         return render(request, self.template_name, {'form': form, })
 
+    @transaction.atomic()
     def post(self, request, *args, **kwargs):
-        post = request.POST
-        form = etl_forms.SourceForm(post)
+        try:
+            post = request.POST
 
-        if not form.is_valid():
-            return self.render_to_response({'form': form, })
+            cdc_value = post.get('cdc_type')
 
-        source = form.save(commit=False)
-        source.user_id = request.user.id
-        source.save()
+            if cdc_value not in [source_setts.CHECKSUM, source_setts.TRIGGERS]:
+                return self.json_response(
+                    {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
 
-        return self.redirect('etl:datasources.index')
+            form = etl_forms.SourceForm(post)
+            if not form.is_valid():
+                return self.json_response(
+                    {'status': ERROR, 'message': 'Поля формы заполнены некорректно!'})
+
+            source = form.save(commit=False)
+            source.user_id = request.user.id
+            source.save()
+
+            # сохраняем настройки докачки
+            source_setts.objects.create(
+                name='cdc_type',
+                value=cdc_value,
+                datasource=source,
+            )
+
+            return self.json_response(
+                {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
+        except Exception as e:
+            logger.exception(e.message)
+            return self.json_response(
+                {'status': ERROR,
+                 'message': 'Произошла непредвиденная ошибка!'}
+            )
 
 
 class EditSourceView(BaseTemplateView):

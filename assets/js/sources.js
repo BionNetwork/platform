@@ -71,6 +71,44 @@ function removeSource(url){
     });
 }
 
+
+function createSettigns(){
+    $.validator.messages.required = 'Обязательное поле!';
+    if (!$('#conn_form').valid()) {
+      return;
+    }
+    $('#settings-window').modal('show');
+}
+
+function saveNewSource(){
+    var form = $('#conn_form'),
+        formData = new FormData(form[0]);
+        url = form.attr('data-save-url');
+        formData.append('cdc_type', $('#cdc_select').val());
+
+    $.ajax({
+        url: url,
+        data: formData,
+        processData: false,
+        contentType: false,
+        type: 'POST',
+        success: function(result){
+            $('#settings-window').modal('hide');
+
+            if (result.status=='error'){
+                confirmAlert(result.message);
+            } else {
+                window.location = result.redirect_url;
+            }
+        }
+    });
+}
+
+function closeSettings(){
+    $('#settings-window').modal('hide');
+}
+
+
 var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
     selectedRow, dataWorkspace, loader, initDataTable, closeUrl,
     dataWindow;
@@ -96,7 +134,7 @@ function getConnectionData(dataUrl, closingUrl){
     joinWinRow = _.template($("#join-win-row").html());
 
     dataWindow = $('#modal-data');
-    joinWin = $('#join-window')
+    joinWin = $('#join-window');
 
     loader = $('#loader');
     loader.hide();
