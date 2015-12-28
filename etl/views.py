@@ -88,7 +88,10 @@ class NewSourceView(BaseTemplateView):
 
         source = form.save(commit=False)
         source.user_id = request.user.id
-        source.save()
+        try:
+            source.save()
+        except Exception:
+            return
 
         return self.redirect('etl:datasources.index')
 
