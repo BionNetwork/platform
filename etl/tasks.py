@@ -7,7 +7,6 @@ import brukva
 import pymongo
 import json
 
-import operator
 import binascii
 from psycopg2 import errorcodes
 from etl.constants import FIELD_NAME_SEP
@@ -18,7 +17,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from etl.services.cdc.factory import CdcFactroy
 
-from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList, \
+from core.models import Datasource, Dimension, Measure, QueueList, \
     DatasourceMeta
 from django.conf import settings
 

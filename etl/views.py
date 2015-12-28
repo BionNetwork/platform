@@ -13,7 +13,7 @@ from django.db import transaction
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource, Queue, QueueList, QueueStatus, DatasourceSettings as source_setts
+from core.models import Datasource, Queue, QueueList, QueueStatus, DatasourceSettings as SourceSettings
 from . import forms as etl_forms
 import logging
 
@@ -87,7 +87,7 @@ class NewSourceView(BaseTemplateView):
 
             cdc_value = post.get('cdc_type')
 
-            if cdc_value not in [source_setts.CHECKSUM, source_setts.TRIGGERS]:
+            if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
                 return self.json_response(
                     {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
 
@@ -101,7 +101,7 @@ class NewSourceView(BaseTemplateView):
             source.save()
 
             # сохраняем настройки докачки
-            source_setts.objects.create(
+            SourceSettings.objects.create(
                 name='cdc_type',
                 value=cdc_value,
                 datasource=source,
