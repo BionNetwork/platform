@@ -13,6 +13,9 @@ class BaseCdc(object):
     def apply_triggers(self, tables_info):
         """
         Создание триггеров в БД пользователя
+
+        Args:
+            tables_info: tuple информация о колонках внутри таблиц. Приходит в виде кортежа (table, {name, type})
         """
         db_instance = self.get_db_instance()
         sep = db_instance.get_separator()
