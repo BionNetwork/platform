@@ -59,7 +59,7 @@ class TaskService:
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
             app='etl',
-            checksum='',
+            checksum=arguments.get('checksum', ''),
         )
 
         task_id = task.id

@@ -135,9 +135,13 @@ remote_table_query = """
         "cdc_created_at" timestamp NOT NULL,
         "cdc_updated_at" timestamp,
         "cdc_delta_flag" smallint NOT NULL,
-        "cdc_synced" smallint NOT NULL,
-        PRIMARY KEY ("cdc_updated_at", "cdc_synced")
-    )
+        "cdc_synced" smallint NOT NULL
+    );
+    CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
+
+    CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
+
+    CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
 """
 
 
@@ -145,13 +149,13 @@ remote_triggers_query = """
     CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
-            INSERT INTO "{new_table}" SELECT {old} now(), now(), 3, 0;
+            INSERT INTO "{new_table}" SELECT {old} now(), null, 3, 0;
             RETURN OLD;
         ELSIF (TG_OP = 'UPDATE') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), now(), 2, 0;
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 2, 0;
             RETURN NEW;
         ELSIF (TG_OP = 'INSERT') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), now(), 1, 0;
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 1, 0;
             RETURN NEW;
         END IF;
         RETURN NULL;
