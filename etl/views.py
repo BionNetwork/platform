@@ -13,12 +13,15 @@ from django.db import transaction
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource, DatasourceSettings as source_setts
+from core.models import Datasource, Queue, QueueList, QueueStatus, DatasourceSettings as source_setts
 from . import forms as etl_forms
 import logging
 
 from . import helpers
 from . import tasks
+from .services.queue.base import TaskStatusEnum
+from .services.middleware.base import (generate_columns_string,
+                                       generate_table_name_key)
 
 
 logger = logging.getLogger(__name__)
@@ -350,18 +353,40 @@ class LoadDataView(BaseEtlView):
             raise ResponseError(u'Не удалось подключиться к источнику данных!')
 
         # копия, чтобы могли добавлять
-        data = request.POST.copy()
+        data = request.POST
+
+        # генерируем название новой таблицы и
+        # проверяем на существование дубликатов
+        cols = json.loads(data.get('cols'))
+        cols_str = generate_columns_string(cols)
+        table_key = generate_table_name_key(source, cols_str)
+
+        # берем все типы очередей
+        queue_ids = Queue.objects.values_list('id', flat=True)
+        # берем статусы (В ожидании, В обработке)
+        queue_status_ids = QueueStatus.objects.filter(
+            title__in=(TaskStatusEnum.IDLE, TaskStatusEnum.PROCESSING)
+        ).values_list('id', flat=True)
+
+        queues_list = QueueList.objects.filter(
+            checksum=table_key,
+            queue_id__in=queue_ids,
+            queue_status_id__in=queue_status_ids,
+        )
+
+        if queues_list.exists():
+            raise ResponseError(u'Данная задача уже находится в обработке!')
 
         tables = json.loads(data.get('tables'))
 
+        collections_names = helpers.DataSourceService.get_collections_names(
+            source, tables)
         # достаем типы колонок
         col_types = helpers.DataSourceService.get_columns_types(source, tables)
-        data.appendlist('col_types', json.dumps(col_types))
 
         # достаем инфу колонок (статистика, типы, )
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
-        data.appendlist('meta_info', json.dumps(tables_info_for_meta))
 
         # достаем инфу колонок (статистика, типы, )
         for_triggers = helpers.RedisSourceService.tables_info_for_triggers(
@@ -371,14 +396,15 @@ class LoadDataView(BaseEtlView):
         conn_dict = source.get_connection_dict()
 
         arguments = {
-            'cols': data['cols'],
-            'tables': data['tables'],
-            'col_types': data['col_types'],
-            'meta_info': data['meta_info'],
-            'for_triggers': for_triggers,
+            'cols': data.get('cols'),
+            'tables': data.get('tables'),
+            'col_types': json.dumps(col_types),
+            'meta_info': json.dumps(tables_info_for_meta),
             'tree': structure,
             'source': conn_dict,
             'user_id': request.user.id,
+            'collections_names': collections_names,
+            'checksum': table_key,
         }
 
         user_id = request.user.id

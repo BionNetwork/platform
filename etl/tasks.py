@@ -18,7 +18,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from etl.services.cdc.factory import CdcFactroy
 
-from core.models import Datasource, Dimension, Measure, QueueList, \
+from core.models import Datasource, DatasourceMetaKeys, Dimension, Measure, QueueList, \
     DatasourceMeta
 from django.conf import settings
 
@@ -63,11 +63,14 @@ def load_data_mongo(user_id, task_id, data, channel):
         for x in col_group:
             col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
 
+    cols_str = ''
+
+    for obj in cols:
+        cols_str += '{0}-{1};'.format(obj['table'], obj['col'])
+
+
     # название новой таблицы
-    key = binascii.crc32(
-        reduce(operator.add,
-               [source_model.host, str(source_model.port), str(source_model.user_id),
-                ','.join(sorted(tables))], ''))
+    key = generate_table_name_key(source_model, cols_str)
 
     # collection
     collection_name = get_table_name('sttm_datasource', key)
@@ -206,10 +209,18 @@ class RowKeysCreator(object):
     Расчет ключа для таблицы
     """
 
-    def __init__(self, table, cols, primary_key=None):
+    def __init__(self, table, cols, primary_keys=None):
+        """
+        Args:
+            table(str): Название таблицы
+            cols(list): Список словарей с названиями колонок и соотв. таблиц
+            primary_keys(list): Список уникальных ключей
+        """
         self.table = table
         self.cols = cols
-        self.primary_key = primary_key
+        self.primary_keys = primary_keys
+        # primary_keys_indexes(list): Порядковые номера первичных ключей
+        self.primary_keys_indexes = list()
 
     def calc_key(self, row, row_num):
         """
@@ -223,12 +234,13 @@ class RowKeysCreator(object):
         Returns:
             int: Ключ строки для таблицы
         """
-        if self.primary_key:
-            return binascii.crc32(str(self.primary_key))
+        if self.primary_keys:
+            return binascii.crc32(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         l.append(row_num)
         return binascii.crc32(
-                reduce(lambda res, x: '%s%s' % (res, x), l))
+                reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
     def set_primary_key(self, data):
         """
@@ -238,9 +250,12 @@ class RowKeysCreator(object):
             data(dict): метаданные по колонкам таблицы
         """
 
-        for record in data['columns']:
+        for record in data['indexes']:
             if record['is_primary']:
-                self.primary_key = record['name']
+                self.primary_keys = record['columns']
+                for ind, value in enumerate(self.cols):
+                    if value['col'] in self.primary_keys:
+                        self.primary_keys_indexes.append(ind)
                 break
 
 
@@ -343,9 +358,12 @@ def load_data_database(user_id, task_id, data, channel):
         Returns:
             tuple: Модифицированная строка с ключом в первой позиции
         """
-        row_values_for_calc = [
-            str(each.calc_key(row, row_num)) for each in tables_key_creator]
-        return (binascii.crc32(''.join(row_values_for_calc)),) + row
+        if len(tables_key_creator) > 1:
+            row_values_for_calc = [
+                str(each.calc_key(row, row_num)) for each in tables_key_creator]
+            return (binascii.crc32(''.join(row_values_for_calc)),) + row
+        else:
+            return (tables_key_creator[0].calc_key(row, row_num),) + row
 
     print 'load_data_database'
 
@@ -358,7 +376,7 @@ def load_data_database(user_id, task_id, data, channel):
     source = Datasource()
     source.set_from_dict(**source_dict)
 
-    col_names = ['"cdc_key" text']
+    col_names = ['"cdc_key" text UNIQUE']
 
     cols_str = ''
 
@@ -415,18 +433,18 @@ def load_data_database(user_id, task_id, data, channel):
     up_to_100 = False
     percent = 0
 
-    tables_key_creator = []
-    for key, value in tables_info_for_meta.iteritems():
-        rkc = RowKeysCreator(table=key, cols=cols)
-        rkc.set_primary_key(value)
-        tables_key_creator.append(rkc)
-
     # сообщаем о начале загрузке
     client.publish(channel, json.dumps(
         {'percent': 0, 'taskId': task_id, 'event': 'start'}))
 
-    while True:
+    tables_key_creator = []
 
+    for table, value in tables_info_for_meta.iteritems():
+        rkc = RowKeysCreator(table=table, cols=cols)
+        rkc.set_primary_key(value)
+        tables_key_creator.append(rkc)
+
+    while True:
         try:
             rows = rows_query.execute(
                 source=source, limit=limit, offset=offset)
@@ -469,7 +487,7 @@ def load_data_database(user_id, task_id, data, channel):
 
             break
         else:
-            last_row = rows[-1]  # получаем последнюю запись
+            last_row = rows_with_keys[-1]  # получаем последнюю запись
             # обновляем информацию о работе таска
             loaded_count += settings_limit
             queue_storage['date_updated'] = datetime_now_str()
@@ -510,6 +528,8 @@ def load_data_database(user_id, task_id, data, channel):
         key, source, cols, tables_info_for_meta, last_row)
 
     create_load_mechanism.apply_async((source_dict, data['for_triggers'], ),)
+
+    DataSourceService.update_collections_stats(data['collections_names'], last_row[0])
 
     return create_dimensions_and_measures(
         user_id, source, source_table_name, meta_tables, key)
