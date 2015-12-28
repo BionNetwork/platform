@@ -740,11 +740,11 @@ class RedisSourceService(object):
         return tables_info_for_meta
 
     @classmethod
-    def tables_info_for_triggers(cls, source, tables):
+    def get_ddl_tables_info(cls, source, tables):
         """
-        Достает инфу о колонках, выбранных таблиц для триггеров
+        Достает инфу о колонках, выбранных таблиц для cdc стратегии
         """
-        for_triggers = {}
+        data = {}
 
         str_table = RedisCacheKeys.get_active_table_ddl(
             source.user_id, source.id, '{0}')
@@ -753,12 +753,12 @@ class RedisSourceService(object):
         actives_list = json.loads(r_server.get(str_active_tables))
 
         for table in tables:
-            for_triggers[table] = json.loads(
+            data[table] = json.loads(
                 r_server.get(str_table.format(
                     RedisSourceService.get_order_from_actives(
                         table, actives_list)
                 )))['columns']
-        return for_triggers
+        return data
 
     @staticmethod
     def get_user_subscribers(user_id):

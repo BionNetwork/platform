@@ -7,12 +7,12 @@ class BaseCdc(object):
         """
         Создание триггеров в БД пользователя
         """
-        bd_instance = self.bd_instance
-        sep = bd_instance.get_separator()
-        remote_table_create_query = bd_instance.remote_table_create_query()
-        remote_triggers_create_query = bd_instance.remote_triggers_create_query()
+        db_instance = self.db_instance
+        sep = db_instance.get_separator()
+        remote_table_create_query = db_instance.remote_table_create_query()
+        remote_triggers_create_query = db_instance.remote_triggers_create_query()
 
-        connection = bd_instance.connection
+        connection = db_instance.connection
         cursor = connection.cursor()
 
         for table, columns in tables_info.iteritems():

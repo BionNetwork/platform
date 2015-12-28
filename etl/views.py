@@ -388,8 +388,8 @@ class LoadDataView(BaseEtlView):
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
 
-        # достаем инфу колонок (статистика, типы, )
-        for_triggers = helpers.RedisSourceService.tables_info_for_triggers(
+        # достаем инфу для расчета контрольных сумм строк
+        ddl_data = helpers.RedisSourceService.get_ddl_tables_info(
             source, tables)
 
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
@@ -404,6 +404,7 @@ class LoadDataView(BaseEtlView):
             'source': conn_dict,
             'user_id': request.user.id,
             'collections_names': collections_names,
+            'ddl_data': ddl_data,
             'checksum': table_key,
         }
 

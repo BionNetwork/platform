@@ -526,7 +526,7 @@ def load_data_database(user_id, task_id, data, channel):
     meta_tables = DataSourceService.update_datasource_meta(
         key, source, cols, tables_info_for_meta, last_row)
 
-    create_load_mechanism.apply_async((source_dict, data['for_triggers'], ),)
+    create_load_mechanism.apply_async((source_dict, data['ddl_data'], ),)
 
     DataSourceService.update_collections_stats(data['collections_names'], last_row[0])
 
