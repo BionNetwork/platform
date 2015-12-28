@@ -1,13 +1,15 @@
 # coding: utf-8
+from etl.tasks import TaskProcessing
 
 
-class BaseCdc(object):
+class CreateTriggers(TaskProcessing):
 
-    def apply_triggers(self, tables_info):
+    def processing(self):
         """
         Создание триггеров в БД пользователя
         """
-        db_instance = self.db_instance
+        tables_info = self.context['tables_info']
+        db_instance = self.context['db_instance']
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
@@ -48,6 +50,3 @@ class BaseCdc(object):
                 cursor.execute(query)
 
             connection.commit()
-
-    def apply_checksum(self):
-        pass

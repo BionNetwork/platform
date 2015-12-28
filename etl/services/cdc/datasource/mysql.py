@@ -1,8 +1,7 @@
 # coding: utf-8
 
-from etl.services.cdc.data_capture import BaseCdc
+from etl.services.cdc.data_capture import CreateTriggers
 
 
-class MysqlCdc(BaseCdc):
-
+class MysqlCdc(CreateTriggers):
     pass

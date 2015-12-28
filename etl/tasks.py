@@ -569,7 +569,7 @@ class LoadDb(TaskProcessing):
         """
         self.user_id = self.context['user_id']
         cols = json.loads(self.context['cols'])
-        col_types = json.loads(self.context['col_types'])
+        col_types = self.context['col_types']
         structure = self.context['tree']
         db_update = self.context['db_update']
 
@@ -657,25 +657,14 @@ class LoadDb(TaskProcessing):
 
         collection.update_many(
             {'_state': STSE.IDLE}, {'$set': {'_state': STSE.LOADED}})
-        
-        create_load_mechanism.apply_async((self.context['source'], data['ddl_data'], ),)
 
         # DataSourceService.update_collections_stats(
         #     self.context['collections_names'], last_row[0])
 
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
-            self.key, source, cols, json.loads(self.context['meta_info']), last_row)
+            self.key, source, cols, self.context['meta_info'], last_row)
 
-
-@celery.task(name='etl.tasks.create_triggers')
-def create_load_mechanism(source_dict, tables_info):
-    print 'create_triggers is started'
-
-    source = Datasource()
-    source.set_from_dict(**source_dict)
-
-    CdcFactroy.create_load_mechanism(source, tables_info)
 
 class DetectRedundant(TaskProcessing):
 

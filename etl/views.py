@@ -15,7 +15,7 @@ from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus, 
-    DatasourceSettings as SourceSettings)
+    DatasourceSettings as SourceSettings, DatasourceSettings)
 from . import forms as etl_forms
 import logging
 
@@ -23,6 +23,9 @@ from . import helpers
 from . import services
 from . import tasks
 from etl.constants import *
+from etl.services.cdc.data_capture import CreateTriggers
+from etl.services.cdc.factory import CdcFactroy
+from etl.services.db.factory import DatabaseService
 from etl.services.queue.base import run_task
 from etl.tasks import UpdateMongodb, LoadDb, DetectRedundant, DeleteRedundant, \
     LoadMongodb, LoadDimensions, LoadMeasures
@@ -402,8 +405,14 @@ class LoadDataView(BaseEtlView):
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
 
+        cdc_class = CdcFactroy.factory(source)
+
+        # непонятно как это обрабатывать на ошибки
+        source_settings = DatasourceSettings.objects.get(
+                datasource_id=source.id).value
+
         user_id = request.user.id
-        arguments = {
+        load_args = {
             'cols': data.get('cols'),
             'tables': data.get('tables'),
             'col_types': json.dumps(col_types),
@@ -413,29 +422,49 @@ class LoadDataView(BaseEtlView):
             'user_id': user_id,
             'db_update': False,
             'collections_names': collections_names,
-            'ddl_data': ddl_data,
             'checksum': table_key,
         }
         dim_measure_args = {
-                'user_id': user_id,
-                'datasource_id': source.id,
+            'user_id': user_id,
+            'checksum': table_key,
+            'datasource_id': source.id,
         }
 
         redundant_args = {
-                'user_id': user_id,
+            'checksum': table_key,
+            'user_id': user_id,
             }
 
+        trigger_args = {
+            'checksum': table_key,
+            'user_id': user_id,
+            'tables_info': ddl_data,
+            # TODO: импорт DatabaseService
+            'db_instance': DatabaseService.get_source_instance(source)
+        }
+
+        trigger_tasks = [
+            (MONGODB_DATA_LOAD, LoadMongodb, load_args),
+            (DB_DATA_LOAD, LoadDb, load_args),
+            [
+                (GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
+                (GENERATE_MEASURES, LoadMeasures, dim_measure_args),
+                (CREATE_TRIGGERS, cdc_class, trigger_args)
+            ]
+        ]
+
         create_tasks = [
-            (MONGODB_DATA_LOAD, LoadMongodb, arguments),
-            (DB_DATA_LOAD, LoadDb, arguments),
+            (MONGODB_DATA_LOAD, LoadMongodb, load_args),
+            (DB_DATA_LOAD, LoadDb, load_args),
             [
                 (GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
                 (GENERATE_MEASURES, LoadMeasures, dim_measure_args),
             ]
         ]
+
         update_tasks = [
-            # (MONGODB_DELTA_LOAD, UpdateMongodb, arguments),
-            # (DB_DATA_LOAD, LoadDb, arguments),
+            (MONGODB_DELTA_LOAD, UpdateMongodb, load_args),
+            (DB_DATA_LOAD, LoadDb, load_args),
             (DB_DETECT_REDUNDANT, DetectRedundant, redundant_args),
             (DB_DELETE_REDUNDANT, DeleteRedundant, redundant_args),
         ]
@@ -444,13 +473,17 @@ class LoadDataView(BaseEtlView):
         to_update = True
         channels = []
         try:
-            if not to_update:
+            if source_settings == DatasourceSettings.TRIGGERS:
+                for task_info in trigger_tasks:
+                    channels.extend(run_task(task_info))
+
+            elif not to_update:
                 for task_info in create_tasks:
-                    channels.extend(run_task(task_info, table_key))
+                    channels.extend(run_task(task_info))
             else:
-                arguments.update(db_update=True)
+                load_args.update(db_update=True)
                 for task_info in update_tasks:
-                    channels.extend(run_task(task_info, table_key))
+                    channels.extend(run_task(task_info))
         except Exception as e:
             print e
 

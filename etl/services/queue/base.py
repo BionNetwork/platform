@@ -54,14 +54,14 @@ class QueueStorage(object):
             self.queue['status'] = status
 
 
-def run_task(task_params, table_key):
+def run_task(task_params):
     """
     Args:
         task_params(tuple or list):
     """
     if type(task_params) == tuple:
         task_id, channel = TaskService(task_params[0]).add_task(
-            arguments=task_params[2], table_key=table_key)
+            arguments=task_params[2])
         task_params[1](task_id, channel).load_data()
         return [channel]
     else:
@@ -69,7 +69,7 @@ def run_task(task_params, table_key):
         channels = []
         for each in task_params:
             task_id, channel = TaskService(each[0]).add_task(
-                arguments=each[2], table_key=table_key)
+                arguments=each[2])
             group_tasks.append(each[1](task_id, channel).load_data())
             channels.append(channel)
         # group(group_tasks)

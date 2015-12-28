@@ -11,6 +11,7 @@ DB_DETECT_REDUNDANT = 'etl:cdc:detect_redundant'
 DB_DELETE_REDUNDANT = 'etl:cdc:delete_redundant'
 GENERATE_DIMENSIONS = 'etl:database:generate_dimensions'
 GENERATE_MEASURES = 'etl:database:generate_measures'
+CREATE_TRIGGERS = 'etl.tasks.create_triggers'
 
 # Префиксы названий таблиц
 STTM_DATASOURCE = 'sttm_datasource'  # Временная загружаемая таблица
