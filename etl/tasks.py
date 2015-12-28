@@ -238,8 +238,13 @@ class RowKeysCreator(object):
                 [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         l.append(row_num)
-        return binascii.crc32(
+
+        try:
+            return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
+        except UnicodeDecodeError:
+            return binascii.crc32(
+                reduce(lambda res, x: '%s%s' % (res, x), l))
 
     def set_primary_key(self, data):
         """

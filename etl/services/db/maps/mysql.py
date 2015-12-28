@@ -23,13 +23,9 @@ texts = [
     'char',
     'varchar',
     'text',
-    'blob',
     'tinytext',
-    'tinyblob',
     'mediumtext',
-    'mediumblob',
     'longtext',
-    'longblob',
     'enum',
 ]
 dates = [
@@ -38,6 +34,13 @@ dates = [
     'timestamp',
     'time',
     'year',
+]
+
+blobs = [
+    'blob',
+    'tinyblob',
+    'mediumblob',
+    'longblob',
 ]
 
 for i in ints:
@@ -51,6 +54,10 @@ for i in texts:
 
 for i in dates:
     DB_TYPES[i] = 'timestamp'
+
+for i in blobs:
+    DB_TYPES[i] = 'bytea'
+
 
 table_query = """
     SELECT table_name FROM information_schema.tables

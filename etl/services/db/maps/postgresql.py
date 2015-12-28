@@ -29,6 +29,7 @@ texts = [
     'char',
     'text',
 ]
+
 dates = [
     'timestamp without time zone',
     'timestamp with time zone',
@@ -37,6 +38,10 @@ dates = [
     'time without time zone',
     'time with time zone',
     'interval',
+]
+
+blobs = [
+    'bytea',
 ]
 
 for i in ints:
@@ -50,6 +55,10 @@ for i in texts:
 
 for i in dates:
     DB_TYPES[i] = 'timestamp'
+
+for i in blobs:
+    DB_TYPES[i] = 'bytea'
+
 
 table_query = """
             SELECT table_name FROM information_schema.tables
