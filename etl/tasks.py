@@ -10,12 +10,12 @@ import json
 from pymongo import IndexModel, ASCENDING
 import binascii
 from psycopg2 import errorcodes
-from etl.constants import FIELD_NAME_SEP
+from etl.constants import *
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
-from etl.services.model_creation import (get_django_model, install,
-    get_field_settings)
-from etl.services.queue.base import TLSE
+from etl.services.model_creation import (
+    get_django_model, install, get_field_settings)
+from etl.services.queue.base import TLSE, DTSE, STSE, DelTSE
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
@@ -55,7 +55,6 @@ class Query(object):
 
     def execute(self, **kwargs):
         raise NotImplemented
-
 
 
 class TableCreateQuery(Query):
@@ -274,9 +273,16 @@ def calc_key_for_row(row, tables_key_creators, row_num):
     Returns:
         int: Ключ для строки
     """
-    row_values_for_calc = [
-        str(each.calc_key(row, row_num)) for each in tables_key_creators]
-    return binascii.crc32(''.join(row_values_for_calc))
+    if len(tables_key_creators) > 1:
+        row_values_for_calc = [
+            str(each.calc_key(row, row_num)) for each in tables_key_creators]
+        return binascii.crc32(''.join(row_values_for_calc))
+    else:
+        return tables_key_creators[0].calc_key(row, row_num)
+
+    # row_values_for_calc = [
+    #     str(each.calc_key(row, row_num)) for each in tables_key_creators]
+    # return binascii.crc32(''.join(row_values_for_calc))
 
 
 class TaskProcessing(object):
@@ -292,6 +298,7 @@ class TaskProcessing(object):
         err_msg(str): Текст ошибки, если случилась
         publisher(`RPublish`): Посыльный к клиенту о текущем статусе задачи
         queue_storage(`QueueStorage`): Посыльный к redis о текущем статусе задачи
+        key(str): Ключ
     """
 
     def __init__(self, task_id, channel):
@@ -308,6 +315,7 @@ class TaskProcessing(object):
         self.err_msg = ''
         self.publisher = RPublish(self.channel, self.task_id)
         self.queue_storage = None
+        self.key = None
 
     def prepare(self):
         """
@@ -317,6 +325,7 @@ class TaskProcessing(object):
         """
         task = QueueList.objects.get(id=self.task_id)
         self.context = json.loads(task.arguments)
+        self.key = task.checksum
         self.user_id = self.context['user_id']
         self.queue_storage = TaskService.get_queue(self.task_id, self.user_id)
         TaskService.update_task_status(self.task_id, TaskStatusEnum.PROCESSING)
@@ -364,7 +373,7 @@ class LoadMongodb(TaskProcessing):
     Первичная загрузка данных в Mongodb
     """
 
-    @celery.task(name='etl:load_data:mongo', filter=task_method)
+    @celery.task(name=MONGODB_DATA_LOAD, filter=task_method)
     def load_data(self):
         return super(LoadMongodb, self).load_data()
 
@@ -374,15 +383,6 @@ class LoadMongodb(TaskProcessing):
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
 
-        # Returns:
-        #     tuple: Модифицированная строка с ключом в первой позиции
-        # """
-        # if len(tables_key_creator) > 1:
-        #     row_values_for_calc = [
-        #         str(each.calc_key(row, row_num)) for each in tables_key_creator]
-        #     return (binascii.crc32(''.join(row_values_for_calc)),) + row
-        # else:
-        #     return (tables_key_creator[0].calc_key(row, row_num),) + row
         page = 1
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
@@ -395,16 +395,14 @@ class LoadMongodb(TaskProcessing):
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
-        key = self.context['key']
 
         # создаем коллекцию и индексы в Mongodb
         mc = MongodbConnection()
         collection = mc.get_collection(
-            'etl', get_table_name('sttm_datasource', key))
+            'etl', get_table_name(STTM_DATASOURCE, self.key))
         mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
                         ('_date', ASCENDING)], name='test')
 
-    # col_names = ['"cdc_key" text UNIQUE']
         query = DataSourceService.get_rows_query_for_loading_task(
             source_model, structure, cols)
 
@@ -429,7 +427,7 @@ class LoadMongodb(TaskProcessing):
                 row_key = calc_key_for_row(
                         record, tables_key_creator, (page-1)*limit + ind)
                 record_normalized = (
-                    [row_key, 'idle', EtlEncoder.encode(datetime.now())] +
+                    [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
                     [EtlEncoder.encode(rec_field) for rec_field in record])
                 data_to_insert.append(dict(izip(col_names, record_normalized)))
             try:
@@ -457,7 +455,7 @@ class LoadMongodb(TaskProcessing):
 
 class UpdateMongodb(TaskProcessing):
 
-    @celery.task(name='etl:cdc:load_delta', filter=task_method)
+    @celery.task(name=MONGODB_DELTA_LOAD, filter=task_method)
     def load_data(self):
         return super(UpdateMongodb, self).load_data()
 
@@ -483,21 +481,20 @@ class UpdateMongodb(TaskProcessing):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
 
-        key = self.context['key']
         collection = MongodbConnection().get_collection(
-            'etl', get_table_name('sttm_datasource', key))
+            'etl', get_table_name(STTM_DATASOURCE, self.key))
 
         # Дельта-коллекция
         delta_mc = MongodbConnection()
         delta_collection = delta_mc.get_collection(
-            'etl', get_table_name('sttm_datasource_delta', key))
+            'etl', get_table_name(STTM_DATASOURCE_DELTA, self.key))
         delta_mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
                          ('_date', ASCENDING)], name='delta')
 
         # Коллекция с текущими данными
         current_mc = MongodbConnection()
         current_collection = current_mc.get_collection(
-            'etl', get_table_name('sttm_datasource_keys', key))
+            'etl', get_table_name(STTM_DATASOURCE_KEYS, self.key))
         current_mc.set_indexes([('_id', ASCENDING)], name='current')
 
         query = DataSourceService.get_rows_query_for_loading_task(
@@ -527,7 +524,7 @@ class UpdateMongodb(TaskProcessing):
                     record, tables_key_creator, (page-1)*limit + ind)
                 if not collection.find({'_id': row_key}).count():
                     delta_rows = (
-                        [row_key, 'new', EtlEncoder.encode(datetime.now())] +
+                        [row_key, DTSE.NEW, EtlEncoder.encode(datetime.now())] +
                         [EtlEncoder.encode(rec_field) for rec_field in record])
                     data_to_insert.append(dict(izip(col_names, delta_rows)))
 
@@ -542,11 +539,11 @@ class UpdateMongodb(TaskProcessing):
         page = 1
         while True:
             delta_data = delta_collection.find(
-                {'_state': 'new'},
+                {'_state': DTSE.NEW},
                 limit=limit, skip=(page-1)*limit).sort('_date', ASCENDING)
             to_ins = []
             for record in delta_data:
-                record['_state'] = 'idle'
+                record['_state'] = STSE.IDLE
                 to_ins.append(record)
             if not to_ins:
                 break
@@ -555,17 +552,12 @@ class UpdateMongodb(TaskProcessing):
 
         # Обновляем статусы дельты-коллекции
         delta_collection.update_many(
-            {'_state': 'new'}, {'$set': {'_state': 'synced'}})
+            {'_state': DTSE.NEW}, {'$set': {'_state': DTSE.SYNCED}})
 
-        #     break
-        # else:
-        #     last_row = rows_with_keys[-1]  # получаем последнюю запись
-        #     # обновляем информацию о работе таска
-        #     loaded_count += settings_limit
-        #     queue_storage['date_updated'] = datetime_now_str()
+
 class LoadDb(TaskProcessing):
 
-    @celery.task(name='etl:cdc:load_data', filter=task_method)
+    @celery.task(name=DB_DATA_LOAD, filter=task_method)
     def load_data(self):
         return super(LoadDb, self).load_data()
 
@@ -586,7 +578,7 @@ class LoadDb(TaskProcessing):
             source, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"_id" text', '"_state" text', '"_date" timestamp']
+        col_names = ['"_id"  text UNIQUE', '"_state" text', '"_date" timestamp']
         clear_col_names = ['_id', '_state', '_date']
         for obj in cols:
             t = obj['table']
@@ -596,13 +588,10 @@ class LoadDb(TaskProcessing):
             clear_col_names.append('{0}{1}{2}'.format(
                 t, FIELD_NAME_SEP, c, col_types['{0}.{1}'.format(t, c)]))
 
-        # название новой таблицы
-        key = self.context['key']
-
         collection = MongodbConnection().get_collection(
-            'etl', get_table_name('sttm_datasource', key))
+            'etl', get_table_name(STTM_DATASOURCE, self.key))
 
-        source_table_name = get_table_name('sttm_datasource', key)
+        source_table_name = get_table_name(STTM_DATASOURCE, self.key)
         if not db_update:
             table_create_query = TableCreateQuery(DataSourceService())
             table_create_query.set_query(
@@ -621,7 +610,7 @@ class LoadDb(TaskProcessing):
         while True:
             try:
                 collection_cursor = collection.find(
-                    {'_state': 'idle'},
+                    {'_state': STSE.IDLE},
                     limit=limit, skip=offset)
                 # last_row = collection_cursor.limit(1).sort('$natural', -1)[0]
                 rows_dict = []
@@ -655,6 +644,8 @@ class LoadDb(TaskProcessing):
                 self.publisher.publish(TLSE.ERROR, self.err_msg)
                 break
             else:
+                # TODO: Найти последнюю строку
+                # last_row = rows_with_keys[-1]  # получаем последнюю запись
                 # обновляем информацию о работе таска
                 self.queue_storage.update()
                 self.publisher.loaded_count += limit
@@ -663,60 +654,60 @@ class LoadDb(TaskProcessing):
                     100 if self.publisher.is_complete else self.publisher.percent)
 
         collection.update_many(
-            {'_state': 'idle'}, {'$set': {'_state': 'loaded'}})
+            {'_state': STSE.IDLE}, {'$set': {'_state': STSE.LOADED}})
+
+        # DataSourceService.update_collections_stats(
+        #     self.context['collections_names'], last_row[0])
 
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
-            key, source, cols, json.loads(self.context['meta_info']), last_row)
+            self.key, source, cols, json.loads(self.context['meta_info']), last_row)
 
 
 class DetectRedundant(TaskProcessing):
 
-    @celery.task(name='etl:cdc:detect_redundant', filter=task_method)
+    @celery.task(name=DB_DETECT_REDUNDANT, filter=task_method)
     def load_data(self):
         return super(DetectRedundant, self).load_data()
 
-    # # работа с datasource_meta
-    # meta_tables = DataSourceService.update_datasource_meta(
-    #     key, source, cols, tables_info_for_meta, last_row)
-    # 
-    # DataSourceService.update_collections_stats(data['collections_names'], last_row[0])
     def processing(self):
         """
         Выявление записей на удаление
         """
-        key = self.context['key']
 
         source_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name('sttm_datasource', key))
+                    'etl', get_table_name(STTM_DATASOURCE, self.key))
         current_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name('sttm_datasource_keys', key))
+                    'etl', get_table_name(STTM_DATASOURCE_KEYS, self.key))
 
         # Дельта-коллекция
         delete_mc = MongodbConnection()
         delete_collection = delete_mc.get_collection(
-            'etl', get_table_name('sttm_datasource_keysall', key))
+            'etl', get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
         delete_mc.set_indexes([('_state', ASCENDING),
                          ('_deleted', ASCENDING)], name='delete_delta')
 
         source_collection.aggregate(
-            [{"$match": {"_state": "loaded"}},
+            [{"$match": {"_state": STSE.LOADED}},
              {"$project": {"_id": "$_id", "_state": {"$literal": "new"}}},
-             {"$out": "%s" % get_table_name('sttm_datasource_keysall', key)}])
+             {"$out": "%s" % get_table_name(STTM_DATASOURCE_KEYSALL, self.key)}])
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         page = 1
         while True:
 
             to_delete = []
-            for record in delete_collection.find(
-                    {'_state': 'new'}, limit=limit, skip=(page-1)*limit):
-                key = record['_id']
-                if not current_collection.find({'_id': key}).count():
-                    to_delete.append(key)
+            del_cursor = list(delete_collection.find(
+                    {'_state': DelTSE.NEW}, limit=limit, skip=(page-1)*limit))
+            if not len(del_cursor):
+                break
+            for record in del_cursor:
+                row_key = record['_id']
+                if not current_collection.find({'_id': row_key}).count():
+                    to_delete.append(row_key)
 
             delete_collection.update_many(
                 {'_id': {'$in': to_delete}},
-                {'$set': {'_state': 'deleted'}})
+                {'$set': {'_state': DelTSE.DELETED}})
 
             source_collection.delete_many({'_id': {'$in': to_delete}})
 
@@ -725,17 +716,16 @@ class DetectRedundant(TaskProcessing):
 
 class DeleteRedundant(TaskProcessing):
 
-    @celery.task(name='etl:cdc:delete_redundant', filter=task_method)
+    @celery.task(name=DB_DELETE_REDUNDANT, filter=task_method)
     def load_data(self):
         return super(DeleteRedundant, self).load_data()
 
     def processing(self):
-        key = self.context['key']
 
         del_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name('sttm_datasource_keysall', key))
+                    'etl', get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
 
-        source_table_name = get_table_name('sttm_datasource', key)
+        source_table_name = get_table_name(STTM_DATASOURCE, self.key)
         delete_query = DeleteQuery(DataSourceService())
         delete_query.set_query(
             table_name=source_table_name)
@@ -744,7 +734,7 @@ class DeleteRedundant(TaskProcessing):
         page = 1
         while True:
             delete_delta = del_collection.find(
-                {'_state': 'deleted'},
+                {'_state': DelTSE.DELETED},
                 limit=limit, skip=(page-1)*limit)
             l = [record['_id'] for record in delete_delta]
             if not l:
@@ -759,7 +749,7 @@ class LoadDimensions(TaskProcessing):
     """
     app_name = 'sttm'
     module = 'biplatform.etl.models'
-    table_prefix = 'dimension'
+    table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
     def get_actual_fields(self, meta_data):
@@ -792,17 +782,16 @@ class LoadDimensions(TaskProcessing):
         fields_str = '"'+'", "'.join(fields)+'"'
         query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
         source_table_name = get_table_name(
-            'sttm_datasource', self.context['key'])
+            STTM_DATASOURCE, self.key)
         return query.format(
             fields_str, source_table_name, '{0}', '{1}')
 
-    @celery.task(name='etl:database:generate_dimensions', filter=task_method)
+    @celery.task(name=GENERATE_DIMENSIONS, filter=task_method)
     def load_data(self):
         return super(LoadDimensions, self).load_data()
 
     def processing(self):
 
-        key = self.context['key']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['datasource_id'])
         meta_tables = {
@@ -810,11 +799,11 @@ class LoadDimensions(TaskProcessing):
             DatasourceMeta.objects.filter(
                 datasource=source).values_list('collection_name', 'id')}
         meta_data = DatasourceMetaKeys.objects.filter(
-            value=key).values('meta__collection_name', 'meta__fields')
+            value=self.key).values('meta__collection_name', 'meta__fields')
         self.actual_fields = self.get_actual_fields(meta_data)
 
         f_list = []
-        table_name = get_table_name(self.table_prefix, key)
+        table_name = get_table_name(self.table_prefix, self.key)
         for table, field in self.actual_fields:
             field_name = '{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name'])
@@ -843,12 +832,12 @@ class LoadDimensions(TaskProcessing):
 
         # Сохраняем метаданные
         self.save_meta_data(
-            self.user_id, key, self.actual_fields, meta_tables)
+            self.user_id, self.key, self.actual_fields, meta_tables)
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
         Сохранение метаинформации
-
+0
         Args:
             user_id(int): id пользователя
             table_name(str): Название создаваемой таблицы
@@ -921,7 +910,7 @@ class LoadMeasures(LoadDimensions):
     """
     Создание мер
     """
-    table_prefix = 'measures'
+    table_prefix = MEASURES
     actual_fields_type = [
         Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
 
@@ -942,7 +931,7 @@ class LoadMeasures(LoadDimensions):
                 datasources_meta=datasource_meta_id
             )
 
-    @celery.task(name='etl:database:generate_measures', filter=task_method)
+    @celery.task(name=GENERATE_MEASURES, filter=task_method)
     def load_data(self):
         """
         Создание размерностей

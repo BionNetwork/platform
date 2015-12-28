@@ -38,6 +38,9 @@ class QueueStorage(object):
             raise KeyError('Неверный ключ для словаря информации задачи!')
 
     def set_init_params(self):
+        """
+        Загрузка инициазицонных данных
+        """
         self.queue['task_id'] = self.task_id
         self.queue['user_id'] = self.user_id
         self.queue['date_created'] = datetime_now_str()
@@ -50,38 +53,28 @@ class QueueStorage(object):
         if status:
             self.queue['status'] = status
 
-MONGODB_DATA_LOAD = 'etl:load_data:mongo'
-DB_DATA_LOAD = 'etl:cdc:load_data'
-MONGODB_DELTA_LOAD = 'etl:cdc:load_delta'
-DB_DETECT_REDUNDANT = 'etl:cdc:detect_redundant'
-DB_DELETE_REDUNDANT = 'etl:cdc:delete_redundant'
-GENERATE_DIMENSIONS = 'etl:database:generate_dimensions'
-GENERATE_MEASURES = 'etl:database:generate_measures'
 
-init_load_series = (MONGODB_DATA_LOAD, DB_DATA_LOAD)
-additional_load_series = (
-    MONGODB_DELTA_LOAD, DB_DATA_LOAD, DB_DETECT_REDUNDANT, DB_DELETE_REDUNDANT)
-
-
-def run_task(task_params):
+def run_task(task_params, table_key):
     """
     Args:
         task_params(tuple or list):
     """
     if type(task_params) == tuple:
         task_id, channel = TaskService(task_params[0]).add_task(
-            arguments=task_params[2])
+            arguments=task_params[2], table_key=table_key)
         task_params[1](task_id, channel).load_data()
         return [channel]
     else:
         group_tasks = []
         channels = []
         for each in task_params:
-            task_id, channel = TaskService(each[0]).add_task(arguments=each[2])
-            group_tasks.append(each[1](task_id, channel).load_data.s())
+            task_id, channel = TaskService(each[0]).add_task(
+                arguments=each[2], table_key=table_key)
+            group_tasks.append(each[1](task_id, channel).load_data())
             channels.append(channel)
-        group(group_tasks)
+        # group(group_tasks)
         return channels
+
 
 class TaskService(object):
     """
@@ -102,6 +95,7 @@ class TaskService(object):
 
         Args:
             arguments(dict): Необходимые для выполнения задачи данные
+            table_key(str): ключ
 
         Returns:
             task_id(int): id задачи
@@ -196,4 +190,49 @@ class TaskLoadingStatusEnum(BaseEnum):
     }
 
 TLSE = TaskLoadingStatusEnum
+
+
+class SourceTableStatusEnum(BaseEnum):
+    """
+    Статус состояния таблице-источнике
+    """
+
+    IDLE, LOADED = ('idle', 'loaded')
+
+    values = {
+        IDLE: "Выполнено",
+        LOADED: "Загружено"
+    }
+
+STSE = SourceTableStatusEnum
+
+
+class DeltaTableStatusEnum(BaseEnum):
+    """
+    Статусы состояния в дельта-таблице
+    """
+
+    NEW, SYNCED = ('new', 'synced')
+
+    values = {
+        NEW: "Новое",
+        SYNCED: "Синхронизировано",
+    }
+
+DTSE = DeltaTableStatusEnum
+
+
+class DeleteTableStatusEnum(BaseEnum):
+    """
+    Статусы состояния в дельта-таблице
+    """
+
+    NEW, DELETED = ('new', 'deleted')
+
+    values = {
+        NEW: "Новое",
+        DELETED: "Удалено",
+    }
+
+DelTSE = DeleteTableStatusEnum
 

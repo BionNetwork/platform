@@ -19,7 +19,7 @@ import logging
 from . import helpers
 from . import services
 from . import tasks
-from etl.constants import FIELD_NAME_SEP
+from etl.constants import *
 from etl.services.queue.base import run_task
 from etl.tasks import UpdateMongodb, LoadDb, DetectRedundant, DeleteRedundant, \
     LoadMongodb, LoadDimensions, LoadMeasures
@@ -348,6 +348,7 @@ class LoadDataView(BaseEtlView):
         ).values_list('id', flat=True)
 
         queues_list = QueueList.objects.filter(
+            checksum__isnull=False,
             checksum=table_key,
             queue_id__in=queue_ids,
             queue_status_id__in=queue_status_ids,
@@ -372,14 +373,8 @@ class LoadDataView(BaseEtlView):
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
 
-        col_names = []
-        for t_name, col_group in groupby(json.loads(data['cols']), lambda x: x["table"]):
-            for x in col_group:
-                col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
-        key = generate_table_name_key(source, ','.join(sorted(col_names)))
         user_id = request.user.id
         arguments = {
-            'key': key,
             'cols': data['cols'],
             'tables': data['tables'],
             'col_types': data['col_types'],
@@ -393,38 +388,40 @@ class LoadDataView(BaseEtlView):
         dim_measure_args = {
                 'user_id': user_id,
                 'datasource_id': source.id,
-                'key': key,
         }
 
         redundant_args = {
-                'key': key,
-                'user_id': request.user.id,
+                'user_id': user_id,
             }
 
         create_tasks = [
-            (helpers.MONGODB_DATA_LOAD, LoadMongodb, arguments),
-            (helpers.DB_DATA_LOAD, LoadDb, arguments),
+            (MONGODB_DATA_LOAD, LoadMongodb, arguments),
+            (DB_DATA_LOAD, LoadDb, arguments),
             [
-                (helpers.GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
-                (helpers.GENERATE_MEASURES, LoadMeasures, dim_measure_args),
+                (GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
+                (GENERATE_MEASURES, LoadMeasures, dim_measure_args),
             ]
         ]
-
         update_tasks = [
-            (helpers.MONGODB_DELTA_LOAD, UpdateMongodb, arguments),
-            (helpers.DB_DATA_LOAD, LoadDb, arguments),
-            (helpers.DB_DETECT_REDUNDANT, DetectRedundant, redundant_args),
-            (helpers.DB_DELETE_REDUNDANT, DeleteRedundant, redundant_args),
+            # (MONGODB_DELTA_LOAD, UpdateMongodb, arguments),
+            # (DB_DATA_LOAD, LoadDb, arguments),
+            (DB_DETECT_REDUNDANT, DetectRedundant, redundant_args),
+            (DB_DELETE_REDUNDANT, DeleteRedundant, redundant_args),
         ]
 
-        to_update = DatasourceMetaKeys.objects.filter(value=key)
+        # to_update = DatasourceMetaKeys.objects.filter(value=table_key)
+        to_update = True
         channels = []
-        if not to_update:
-            for task_info in create_tasks:
-                channels.extend(run_task(task_info))
-        else:
-            for task_info in update_tasks:
-                channels.extend(run_task(task_info))
+        try:
+            if not to_update:
+                for task_info in create_tasks:
+                    channels.extend(run_task(task_info, table_key))
+            else:
+                arguments.update(db_update=True)
+                for task_info in update_tasks:
+                    channels.extend(run_task(task_info, table_key))
+        except Exception as e:
+            print e
 
         return {'channels': channels}
 

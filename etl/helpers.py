@@ -3,10 +3,7 @@ from __future__ import unicode_literals
 from etl.services.datasource.repository.storage import RedisSourceService
 from etl.services.datasource.base import DataSourceService
 from etl.services.queue.base import (
-    TaskService, TaskStatusEnum, TaskErrorCodeEnum, run_task,
-    MONGODB_DATA_LOAD, DB_DATA_LOAD, MONGODB_DELTA_LOAD,
-    DB_DETECT_REDUNDANT, DB_DELETE_REDUNDANT, GENERATE_DIMENSIONS,
-    GENERATE_MEASURES)
+    TaskService, TaskStatusEnum, TaskErrorCodeEnum, run_task)
 
 __author__ = 'miholeus'
 """

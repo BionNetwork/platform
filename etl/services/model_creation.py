@@ -15,7 +15,7 @@ from etl.services.middleware.base import datetime_now_str
 logger = logging.getLogger(__name__)
 
 type_match = {
-    'text': ('CharField', [('max_length', 255), ('blank', True), ('null', True)]),
+    'text': ('TextField', [('blank', True), ('null', True)]),
     'integer': ('IntegerField', [('blank', True), ('null', True)]),
     'double precision': ('FloatField', [('blank', True), ('null', True)]),
     'timestamp': ('DateTimeField', [('blank', True), ('null', True)])
