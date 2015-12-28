@@ -146,7 +146,7 @@ class Database(object):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type = xrange(3)
+        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -176,7 +176,11 @@ class Database(object):
                                          x[col_type]),
                                      "is_index": is_index,
                                      "is_unique": is_unique,
-                                     "is_primary": is_primary})
+                                     "is_primary": is_primary,
+                                     "origin_type": x[col_type],
+                                     "is_nullable": x[is_nullable],
+                                     "extra": x[extra_],
+                                     })
 
             # находим внешние ключи
             for c in t_consts:
@@ -189,8 +193,8 @@ class Database(object):
                         "on_delete": c["c_del"],
                         "on_update": c["c_upd"],
                     })
-        return columns, indexes, foreigns
 
+        return columns, indexes, foreigns
 
     def generate_join(self, structure, main_table=None):
         """

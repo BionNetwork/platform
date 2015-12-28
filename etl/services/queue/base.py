@@ -89,7 +89,7 @@ class TaskService(object):
         self.name = name
         self.task_id = None
 
-    def add_task(self, arguments, table_key):
+    def add_task(self, arguments):
         """
         Добавляем задачу юзеру в список задач и возвращаем идентификатор заадчи
 
@@ -107,7 +107,7 @@ class TaskService(object):
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
             app='etl',
-            checksum=table_key,
+            checksum=arguments.get('checksum', ''),
         )
 
         task_id = task.id

@@ -9,10 +9,13 @@ from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
 from django.conf import settings
+from django.db import transaction
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource, Queue, QueueList, QueueStatus, DatasourceMetaKeys
+from core.models import (
+    Datasource, Queue, QueueList, QueueStatus, 
+    DatasourceSettings as SourceSettings)
 from . import forms as etl_forms
 import logging
 
@@ -83,18 +86,41 @@ class NewSourceView(BaseTemplateView):
         form = etl_forms.SourceForm()
         return render(request, self.template_name, {'form': form, })
 
+    @transaction.atomic()
     def post(self, request, *args, **kwargs):
-        post = request.POST
-        form = etl_forms.SourceForm(post)
+        try:
+            post = request.POST
 
-        if not form.is_valid():
-            return self.render_to_response({'form': form, })
+            cdc_value = post.get('cdc_type')
 
-        source = form.save(commit=False)
-        source.user_id = request.user.id
-        source.save()
+            if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
+                return self.json_response(
+                    {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
 
-        return self.redirect('etl:datasources.index')
+            form = etl_forms.SourceForm(post)
+            if not form.is_valid():
+                return self.json_response(
+                    {'status': ERROR, 'message': 'Поля формы заполнены некорректно!'})
+
+            source = form.save(commit=False)
+            source.user_id = request.user.id
+            source.save()
+
+            # сохраняем настройки докачки
+            SourceSettings.objects.create(
+                name='cdc_type',
+                value=cdc_value,
+                datasource=source,
+            )
+
+            return self.json_response(
+                {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
+        except Exception as e:
+            logger.exception(e.message)
+            return self.json_response(
+                {'status': ERROR,
+                 'message': 'Произошла непредвиденная ошибка!'}
+            )
 
 
 class EditSourceView(BaseTemplateView):
@@ -285,7 +311,8 @@ class RemoveTablesView(BaseEtlView):
 class RemoveAllTablesView(BaseEtlView):
 
     def start_get_action(self, request, source):
-        helpers.RedisSourceService.tree_full_clean(source)
+        delete_ddl = request.GET.get('delete_ddl') == 'true'
+        helpers.RedisSourceService.tree_full_clean(source, delete_ddl)
         return []
 
 
@@ -332,11 +359,11 @@ class LoadDataView(BaseEtlView):
             raise ResponseError(u'Не удалось подключиться к источнику данных!')
 
         # копия, чтобы могли добавлять
-        data = request.POST.copy()
+        data = request.POST
 
         # генерируем название новой таблицы и
         # проверяем на существование дубликатов
-        cols = json.loads(data['cols'])
+        cols = json.loads(data.get('cols'))
         cols_str = generate_columns_string(cols)
         table_key = generate_table_name_key(source, cols_str)
 
@@ -363,27 +390,31 @@ class LoadDataView(BaseEtlView):
             source, tables)
         # достаем типы колонок
         col_types = helpers.DataSourceService.get_columns_types(source, tables)
-        data.appendlist('col_types', json.dumps(col_types))
 
         # достаем инфу колонок (статистика, типы, )
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
-        data.appendlist('meta_info', json.dumps(tables_info_for_meta))
+
+        # достаем инфу для расчета контрольных сумм строк
+        ddl_data = helpers.RedisSourceService.get_ddl_tables_info(
+            source, tables)
 
         structure = helpers.RedisSourceService.get_active_tree_structure(source)
         conn_dict = source.get_connection_dict()
 
         user_id = request.user.id
         arguments = {
-            'cols': data['cols'],
-            'tables': data['tables'],
-            'col_types': data['col_types'],
-            'meta_info': data['meta_info'],
+            'cols': data.get('cols'),
+            'tables': data.get('tables'),
+            'col_types': json.dumps(col_types),
+            'meta_info': json.dumps(tables_info_for_meta),
             'tree': structure,
             'source': conn_dict,
             'user_id': user_id,
             'db_update': False,
             'collections_names': collections_names,
+            'ddl_data': ddl_data,
+            'checksum': table_key,
         }
         dim_measure_args = {
                 'user_id': user_id,
