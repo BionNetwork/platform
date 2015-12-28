@@ -1,7 +1,9 @@
 # coding: utf-8
 from core.models import DatasourceMeta, DatasourceMetaKeys
+from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService
-from etl.services.datasource.repository.storage import RedisSourceService
+from etl.services.datasource.repository.storage import RedisSourceService, \
+    RedisCacheKeys
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
 from django.conf import settings
@@ -273,6 +275,19 @@ class DataSourceService(object):
 
         return data
 
+    @staticmethod
+    def get_collections_names(source, tables):
+        """
+        Получение списка имен коллекций
+
+        Args:
+            source(): Источник
+            table(list): Список названий таблиц
+        """
+
+        return [RedisSourceService.get_collection_name(source, table)
+                for table in tables]
+
     @classmethod
     def get_columns_types(cls, source, tables):
         """
@@ -360,6 +375,22 @@ class DataSourceService(object):
         return tables_info_for_meta
 
     @staticmethod
+    def update_collections_stats(collections_names, last_key):
+
+            pipe = r_server.pipeline()
+
+            for collection in collections_names:
+                table_info = json.loads(r_server.get(collection))
+                table_info['stats'].update({
+                    'last_row': {
+                        'cdc_key': last_key,
+                    }
+                })
+
+                pipe.set(collection, json.dumps(table_info))
+            pipe.execute()
+
+    @staticmethod
     def update_datasource_meta(key, source, cols,
                                tables_info_for_meta, last_row):
         """
@@ -429,6 +460,7 @@ class DataSourceService(object):
             res.update({
                 table: source_meta.id
             })
+        return res
 
     @classmethod
     def get_structure_rows_number(cls, source, structure,  cols):

@@ -10,4 +10,3 @@ git+https://github.com/evilkost/brukva.git
 pymongo
 crossbar==0.11.1
 txredisapi==1.2
-pymssql

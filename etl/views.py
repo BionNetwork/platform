@@ -12,7 +12,7 @@ from django.conf import settings
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource, DatasourceMetaKeys
+from core.models import Datasource, Queue, QueueList, QueueStatus, DatasourceMetaKeys
 from . import forms as etl_forms
 import logging
 
@@ -20,10 +20,12 @@ from . import helpers
 from . import services
 from . import tasks
 from etl.constants import FIELD_NAME_SEP
-from etl.services.middleware.base import generate_table_name_key
 from etl.services.queue.base import run_task
 from etl.tasks import UpdateMongodb, LoadDb, DetectRedundant, DeleteRedundant, \
     LoadMongodb, LoadDimensions, LoadMeasures
+from .services.queue.base import TaskStatusEnum
+from .services.middleware.base import (generate_columns_string,
+                                       generate_table_name_key)
 
 logger = logging.getLogger(__name__)
 
@@ -332,8 +334,32 @@ class LoadDataView(BaseEtlView):
         # копия, чтобы могли добавлять
         data = request.POST.copy()
 
+        # генерируем название новой таблицы и
+        # проверяем на существование дубликатов
+        cols = json.loads(data['cols'])
+        cols_str = generate_columns_string(cols)
+        table_key = generate_table_name_key(source, cols_str)
+
+        # берем все типы очередей
+        queue_ids = Queue.objects.values_list('id', flat=True)
+        # берем статусы (В ожидании, В обработке)
+        queue_status_ids = QueueStatus.objects.filter(
+            title__in=(TaskStatusEnum.IDLE, TaskStatusEnum.PROCESSING)
+        ).values_list('id', flat=True)
+
+        queues_list = QueueList.objects.filter(
+            checksum=table_key,
+            queue_id__in=queue_ids,
+            queue_status_id__in=queue_status_ids,
+        )
+
+        if queues_list.exists():
+            raise ResponseError(u'Данная задача уже находится в обработке!')
+
         tables = json.loads(data.get('tables'))
 
+        collections_names = helpers.DataSourceService.get_collections_names(
+            source, tables)
         # достаем типы колонок
         col_types = helpers.DataSourceService.get_columns_types(source, tables)
         data.appendlist('col_types', json.dumps(col_types))
@@ -361,7 +387,8 @@ class LoadDataView(BaseEtlView):
             'tree': structure,
             'source': conn_dict,
             'user_id': user_id,
-            'db_update': False
+            'db_update': False,
+            'collections_names': collections_names,
         }
         dim_measure_args = {
                 'user_id': user_id,

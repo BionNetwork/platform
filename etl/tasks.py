@@ -57,6 +57,7 @@ class Query(object):
         raise NotImplemented
 
 
+
 class TableCreateQuery(Query):
 
     def set_connection(self):
@@ -126,10 +127,18 @@ class RowKeysCreator(object):
     Расчет ключа для таблицы
     """
 
-    def __init__(self, table, cols, primary_key=None):
+    def __init__(self, table, cols, primary_keys=None):
+        """
+        Args:
+            table(str): Название таблицы
+            cols(list): Список словарей с названиями колонок и соотв. таблиц
+            primary_keys(list): Список уникальных ключей
+        """
         self.table = table
         self.cols = cols
-        self.primary_key = primary_key
+        self.primary_keys = primary_keys
+        # primary_keys_indexes(list): Порядковые номера первичных ключей
+        self.primary_keys_indexes = list()
 
     def calc_key(self, row, row_num):
         """
@@ -143,12 +152,13 @@ class RowKeysCreator(object):
         Returns:
             int: Ключ строки для таблицы
         """
-        if self.primary_key:
-            return binascii.crc32(str(self.primary_key))
+        if self.primary_keys:
+            return binascii.crc32(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         l.append(row_num)
         return binascii.crc32(
-                reduce(lambda res, x: '%s%s' % (res, x), l))
+                reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
     def set_primary_key(self, data):
         """
@@ -158,9 +168,12 @@ class RowKeysCreator(object):
             data(dict): метаданные по колонкам таблицы
         """
 
-        for record in data['columns']:
+        for record in data['indexes']:
             if record['is_primary']:
-                self.primary_key = record['name']
+                self.primary_keys = record['columns']
+                for ind, value in enumerate(self.cols):
+                    if value['col'] in self.primary_keys:
+                        self.primary_keys_indexes.append(ind)
                 break
 
 
@@ -361,6 +374,15 @@ class LoadMongodb(TaskProcessing):
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
 
+        # Returns:
+        #     tuple: Модифицированная строка с ключом в первой позиции
+        # """
+        # if len(tables_key_creator) > 1:
+        #     row_values_for_calc = [
+        #         str(each.calc_key(row, row_num)) for each in tables_key_creator]
+        #     return (binascii.crc32(''.join(row_values_for_calc)),) + row
+        # else:
+        #     return (tables_key_creator[0].calc_key(row, row_num),) + row
         page = 1
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
@@ -382,6 +404,7 @@ class LoadMongodb(TaskProcessing):
         mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
                         ('_date', ASCENDING)], name='test')
 
+    # col_names = ['"cdc_key" text UNIQUE']
         query = DataSourceService.get_rows_query_for_loading_task(
             source_model, structure, cols)
 
@@ -534,6 +557,12 @@ class UpdateMongodb(TaskProcessing):
         delta_collection.update_many(
             {'_state': 'new'}, {'$set': {'_state': 'synced'}})
 
+        #     break
+        # else:
+        #     last_row = rows_with_keys[-1]  # получаем последнюю запись
+        #     # обновляем информацию о работе таска
+        #     loaded_count += settings_limit
+        #     queue_storage['date_updated'] = datetime_now_str()
 class LoadDb(TaskProcessing):
 
     @celery.task(name='etl:cdc:load_data', filter=task_method)
@@ -647,6 +676,11 @@ class DetectRedundant(TaskProcessing):
     def load_data(self):
         return super(DetectRedundant, self).load_data()
 
+    # # работа с datasource_meta
+    # meta_tables = DataSourceService.update_datasource_meta(
+    #     key, source, cols, tables_info_for_meta, last_row)
+    # 
+    # DataSourceService.update_collections_stats(data['collections_names'], last_row[0])
     def processing(self):
         """
         Выявление записей на удаление
