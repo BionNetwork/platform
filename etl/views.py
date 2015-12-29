@@ -15,7 +15,8 @@ from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus, 
-    DatasourceSettings as SourceSettings, DatasourceSettings)
+    DatasourceSettings as SourceSettings, DatasourceSettings,
+    DatasourceMetaKeys, DatasourceMeta)
 from . import forms as etl_forms
 import logging
 
@@ -460,16 +461,22 @@ class LoadDataView(BaseEtlView):
             (DB_DETECT_REDUNDANT, DetectRedundant, redundant_args),
             (DB_DELETE_REDUNDANT, DeleteRedundant, redundant_args),
         ]
-
-        # to_update = DatasourceMetaKeys.objects.filter(value=table_key)
-        to_update = False
+        is_meta_stats = False
+        meta_key = DatasourceMetaKeys.objects.filter(value=table_key)
+        if meta_key:
+            is_meta_stats = True
+            try:
+                meta_stats = json.loads(
+                    meta_key[0].meta.stats)['tables_stat']['last_row']['cdc_key']
+            except:
+                pass
         channels = []
-
+        meta_stats = True
         if source_settings == DatasourceSettings.TRIGGERS:
             for task_info in trigger_tasks:
                 channels.extend(run_task(task_info))
 
-        elif not to_update:
+        elif not is_meta_stats:
             for task_info in create_tasks:
                 channels.extend(run_task(task_info))
         else:
