@@ -12,6 +12,7 @@ class SourceForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(SourceForm, self).__init__(*args, **kwargs)
         self.init_fields()
+        self.fields['password'].required = False
 
     def init_fields(self):
         for field in self.fields:
@@ -22,6 +23,8 @@ class SourceForm(forms.ModelForm):
         model = Datasource
         fields = ('conn_type', 'db', 'login', 'password', 'host', 'port')
         password = forms.CharField(widget=forms.PasswordInput)
+        port = forms.CharField(widget=forms.TextInput)
         widgets = {
             'password': forms.PasswordInput(render_value=True),
+            'port': forms.TextInput(),
         }

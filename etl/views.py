@@ -96,6 +96,12 @@ class NewSourceView(BaseTemplateView):
                 return self.json_response(
                     {'status': ERROR, 'message': 'Поля формы заполнены некорректно!'})
 
+            if Datasource.objects.filter(
+                host=post.get('host'), db=post.get('db'), user_id=request.user.id
+            ).exists():
+                return self.json_response(
+                    {'status': ERROR, 'message': 'Данный источник уже имеется в системе!'})
+
             source = form.save(commit=False)
             source.user_id = request.user.id
             source.save()

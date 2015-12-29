@@ -10,14 +10,44 @@ function confirmAlert(message){
     });
 }
 
+function validateSourceForm(f){
+    $.validator.messages.required = 'Обязательное поле!';
+    f.validate({
+        rules: {
+            port: {
+                number: true
+            },
+            password: {
+                required: false
+            }
+        },
+        messages: {
+            port: {
+                number: 'Введите целое число!'
+            }
+        },
+    });
+    $.each(f.find('.border-red'), function(i, el){
+        $(el).removeClass('border-red');
+    });
+
+    if(!f.valid()){
+        $.each(f.validate().errorList, function(i, el2){
+            $(el2.element).addClass('border-red');
+        })
+        return false
+    }
+    return true
+}
+
 function checkConnection(){
     var form = $('#conn_form'),
         formData = new FormData(form[0]),
         url = form.attr('data-url');
 
-    $.validator.messages.required = 'Обязательное поле!';
-
-    form.valid();
+    if(!validateSourceForm(form)){
+        return;
+    }
 
     $.ajax({
         url: url,
@@ -73,9 +103,9 @@ function removeSource(url){
 
 
 function createSettigns(){
-    $.validator.messages.required = 'Обязательное поле!';
-    if (!$('#conn_form').valid()) {
-      return;
+    var form = $('#conn_form');
+    if(!validateSourceForm(form)){
+        return;
     }
     $('#settings-window').modal('show');
 }

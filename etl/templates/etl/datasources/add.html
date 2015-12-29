@@ -8,6 +8,13 @@
     </h1>
 {% endblock %}
 
+{% block css %}
+    <style>
+        .border-red {
+            border-color: red;
+        }
+    </style>
+{% endblock css %}
 
 {% block content %}
 
@@ -28,7 +35,7 @@
                                 <div>
                                     {{field}}
                                 </div>
-                            <div>
+                            <div {% if field.errors %} style="color:red" {% endif %}>
                                 {{ field.errors }}
                             </div>
                         </div>
