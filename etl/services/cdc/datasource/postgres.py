@@ -3,5 +3,5 @@
 from etl.services.cdc.data_capture import CreateTriggers
 
 
-class PostgresqlCdc(CreateTriggers):
+class PostgresqlTriggerCdc(CreateTriggers):
     pass

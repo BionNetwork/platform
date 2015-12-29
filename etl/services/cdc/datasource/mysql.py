@@ -3,5 +3,5 @@
 from etl.services.cdc.data_capture import CreateTriggers
 
 
-class MysqlCdc(CreateTriggers):
+class MysqlTriggerCdc(CreateTriggers):
     pass

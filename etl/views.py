@@ -20,15 +20,13 @@ from . import forms as etl_forms
 import logging
 
 from . import helpers
-from . import services
-from . import tasks
 from etl.constants import *
-from etl.services.cdc.data_capture import CreateTriggers
 from etl.services.cdc.factory import CdcFactroy
 from etl.services.db.factory import DatabaseService
 from etl.services.queue.base import run_task
-from etl.tasks import UpdateMongodb, LoadDb, DetectRedundant, DeleteRedundant, \
-    LoadMongodb, LoadDimensions, LoadMeasures
+from etl.tasks import LoadDb, LoadMongodb, LoadDimensions, LoadMeasures
+from etl.services.cdc.data_capture import (
+    UpdateMongodb, DetectRedundant, DeleteRedundant)
 from .services.queue.base import TaskStatusEnum
 from .services.middleware.base import (generate_columns_string,
                                        generate_table_name_key)
@@ -391,34 +389,27 @@ class LoadDataView(BaseEtlView):
 
         collections_names = helpers.DataSourceService.get_collections_names(
             source, tables)
-        # достаем типы колонок
-        col_types = helpers.DataSourceService.get_columns_types(source, tables)
 
         # достаем инфу колонок (статистика, типы, )
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
 
-        # достаем инфу для расчета контрольных сумм строк
-        ddl_data = helpers.RedisSourceService.get_ddl_tables_info(
-            source, tables)
-
-        structure = helpers.RedisSourceService.get_active_tree_structure(source)
-        conn_dict = source.get_connection_dict()
-
-        cdc_class = CdcFactroy.factory(source)
-
-        # непонятно как это обрабатывать на ошибки
-        source_settings = DatasourceSettings.objects.get(
-                datasource_id=source.id).value
+        try:
+            source_settings = DatasourceSettings.objects.get(
+                    datasource_id=source.id).value
+        except DatasourceSettings.DoesNotExist:
+            raise ResponseError(u'Не определен тип дозагрузки данных.')
 
         user_id = request.user.id
+        # Параметры для задач
         load_args = {
             'cols': data.get('cols'),
             'tables': data.get('tables'),
-            'col_types': json.dumps(col_types),
+            'col_types': json.dumps(
+                helpers.DataSourceService.get_columns_types(source, tables)),
             'meta_info': json.dumps(tables_info_for_meta),
-            'tree': structure,
-            'source': conn_dict,
+            'tree': helpers.RedisSourceService.get_active_tree_structure(source),
+            'source': source.get_connection_dict(),
             'user_id': user_id,
             'db_update': False,
             'collections_names': collections_names,
@@ -438,18 +429,19 @@ class LoadDataView(BaseEtlView):
         trigger_args = {
             'checksum': table_key,
             'user_id': user_id,
-            'tables_info': ddl_data,
+            'tables_info': helpers.RedisSourceService.get_ddl_tables_info(
+                source, tables),
             # TODO: импорт DatabaseService
             'db_instance': DatabaseService.get_source_instance(source)
         }
-
+        # Сценарий загрузок
         trigger_tasks = [
             (MONGODB_DATA_LOAD, LoadMongodb, load_args),
             (DB_DATA_LOAD, LoadDb, load_args),
             [
                 (GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
                 (GENERATE_MEASURES, LoadMeasures, dim_measure_args),
-                (CREATE_TRIGGERS, cdc_class, trigger_args)
+                (CREATE_TRIGGERS, CdcFactroy.factory(source), trigger_args)
             ]
         ]
 
@@ -470,22 +462,20 @@ class LoadDataView(BaseEtlView):
         ]
 
         # to_update = DatasourceMetaKeys.objects.filter(value=table_key)
-        to_update = True
+        to_update = False
         channels = []
-        try:
-            if source_settings == DatasourceSettings.TRIGGERS:
-                for task_info in trigger_tasks:
-                    channels.extend(run_task(task_info))
 
-            elif not to_update:
-                for task_info in create_tasks:
-                    channels.extend(run_task(task_info))
-            else:
-                load_args.update(db_update=True)
-                for task_info in update_tasks:
-                    channels.extend(run_task(task_info))
-        except Exception as e:
-            print e
+        if source_settings == DatasourceSettings.TRIGGERS:
+            for task_info in trigger_tasks:
+                channels.extend(run_task(task_info))
+
+        elif not to_update:
+            for task_info in create_tasks:
+                channels.extend(run_task(task_info))
+        else:
+            load_args.update(db_update=True)
+            for task_info in update_tasks:
+                channels.extend(run_task(task_info))
 
         return {'channels': channels}
 

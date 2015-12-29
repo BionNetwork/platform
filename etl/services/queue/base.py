@@ -1,6 +1,10 @@
 # coding: utf-8
+import binascii
 from celery import group
 from django.conf import settings
+import brukva
+from pymongo import IndexModel
+import pymongo
 from etl.services.db.factory import DatabaseService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
@@ -8,6 +12,11 @@ from core.models import (QueueList, Queue, QueueStatus)
 import json
 import datetime
 from etl.services.middleware.base import datetime_now_str
+
+client = brukva.Client(host=settings.REDIS_HOST,
+                       port=int(settings.REDIS_PORT),
+                       selected_db=settings.REDIS_DB)
+client.connect()
 
 
 class QueueStorage(object):
@@ -54,6 +63,72 @@ class QueueStorage(object):
             self.queue['status'] = status
 
 
+class RPublish(object):
+    """
+    Запись в Редис состоянии загрузки
+
+    Attributes:
+        channel(str): Канал передачи на клиент
+        task_id(int): id задачи
+        row_count(int): Приблизительно число обрабатываемых строк
+        is_complete(bool): Флаг завершения задачи
+        loaded_count(float): Число загруженных данных
+    """
+
+    def __init__(self, channel, task_id, is_complete=False):
+        """
+        Args:
+            channel(str): Канал передачи на клиент
+            task_id(int): id задачи
+            is_complete(bool): Флаг завершения задачи
+        """
+        self.channel = channel
+        self.task_id = task_id
+        self.rows_count = None
+        self.is_complete = is_complete
+        self.loaded_count = 0.0
+
+    @property
+    def percent(self):
+        return int(round(self.loaded_count/self.rows_count*100))
+
+    def publish(self, status, msg=None):
+        """
+        Публиция состояния на клиент
+
+        Args:
+            status(str): Статус задачи
+            msg(str): Дополнительное сообщение (при ошибке)
+        """
+        percent = self.percent
+        if status == TLSE.FINISH or percent > 100:
+            client.publish(self.channel, json.dumps(
+                {'percent': 100,
+                 'taskId': self.task_id,
+                 'event': TLSE.FINISH}
+            ))
+            self.is_complete = True
+        elif status == TLSE.START:
+            client.publish(self.channel, json.dumps(
+                {'percent': 0,
+                 'taskId': self.task_id,
+                 'event': TLSE.START}
+            ))
+        elif status == TLSE.PROCESSING:
+            client.publish(self.channel, json.dumps(
+                {'percent': percent,
+                 'taskId': self.task_id,
+                 'event': TLSE.PROCESSING}
+            ))
+        else:
+            client.publish(self.channel, json.dumps(
+                {'percent': percent,
+                 'taskId': self.task_id,
+                 'event': TLSE.ERROR,
+                 'msg': msg}
+            ))
+
+
 def run_task(task_params):
     """
     Args:
@@ -74,6 +149,196 @@ def run_task(task_params):
             channels.append(channel)
         # group(group_tasks)
         return channels
+
+
+class RowKeysCreator(object):
+    """
+    Расчет ключа для таблицы
+    """
+
+    def __init__(self, table, cols, primary_keys=None):
+        """
+        Args:
+            table(str): Название таблицы
+            cols(list): Список словарей с названиями колонок и соотв. таблиц
+            primary_keys(list): Список уникальных ключей
+        """
+        self.table = table
+        self.cols = cols
+        self.primary_keys = primary_keys
+        # primary_keys_indexes(list): Порядковые номера первичных ключей
+        self.primary_keys_indexes = list()
+
+    def calc_key(self, row, row_num):
+        """
+        Расчет ключа для строки таблицы либо по первичному ключу
+        либо по номеру и значениям этой строки
+
+        Args:
+            row(tuple): Строка данных
+            row_num(int): Номер строки
+
+        Returns:
+            int: Ключ строки для таблицы
+        """
+        if self.primary_keys:
+            return binascii.crc32(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes]))
+        l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
+        l.append(row_num)
+        return binascii.crc32(
+                reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
+
+    def set_primary_key(self, data):
+        """
+        Установка первичного ключа, если есть
+
+        Args:
+            data(dict): метаданные по колонкам таблицы
+        """
+
+        for record in data['indexes']:
+            if record['is_primary']:
+                self.primary_keys = record['columns']
+                for ind, value in enumerate(self.cols):
+                    if value['col'] in self.primary_keys:
+                        self.primary_keys_indexes.append(ind)
+                break
+
+
+def calc_key_for_row(row, tables_key_creators, row_num):
+    """
+    Расчет ключа для отдельно взятой строки
+
+    Args:
+        row(tuple): строка данных
+        tables_key_creators(list of RowKeysCreator()): список экземпляров
+        класса, создающие ключи для строки конкретной таблицы
+        row_num(int): Номер строки
+
+    Returns:
+        int: Ключ для строки
+    """
+    if len(tables_key_creators) > 1:
+        row_values_for_calc = [
+            str(each.calc_key(row, row_num)) for each in tables_key_creators]
+        return binascii.crc32(''.join(row_values_for_calc))
+    else:
+        return tables_key_creators[0].calc_key(row, row_num)
+
+
+class Query(object):
+    """
+    Класс формирования и совершения запроса
+    """
+
+    def __init__(self, source_service, cursor=None, query=None):
+        self.source_service = source_service
+        self.cursor = cursor
+        self.query = query
+
+    def set_query(self, **kwargs):
+        raise NotImplemented
+
+    def execute(self, **kwargs):
+        raise NotImplemented
+
+
+class TableCreateQuery(Query):
+
+    def set_connection(self):
+        local_instance = self.source_service.get_local_instance()
+        self.connection = local_instance.connection
+
+    def set_query(self, **kwargs):
+        local_instance = self.source_service.get_local_instance()
+
+        self.query = self.source_service.get_table_create_query(
+            local_instance,
+            kwargs['table_name'],
+            ', '.join(kwargs['cols'])
+        )
+        self.set_connection()
+
+    def execute(self):
+        self.cursor = self.connection.cursor()
+
+        # create new table
+        self.cursor.execute(self.query)
+        self.connection.commit()
+        return
+
+
+class InsertQuery(TableCreateQuery):
+
+    def set_query(self, **kwargs):
+        local_instance = self.source_service.get_local_instance()
+        insert_table_query = self.source_service.get_table_insert_query(
+            local_instance, kwargs['table_name'])
+        self.query = insert_table_query.format(
+            '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(
+                kwargs['cols_nums'])]))
+        self.set_connection()
+
+    def execute(self, **kwargs):
+        self.cursor = self.connection.cursor()
+
+        # create new table
+        self.cursor.executemany(self.query, kwargs['data'])
+        self.connection.commit()
+        return
+
+
+class DeleteQuery(TableCreateQuery):
+
+    def set_query(self, **kwargs):
+        delete_table_query = "DELETE from {0} where _id in ('{1}');"
+        self.query = delete_table_query.format(
+            kwargs['table_name'], '{0}')
+        self.set_connection()
+
+    def execute(self, **kwargs):
+        self.cursor = self.connection.cursor()
+        [str(a) for a in kwargs['keys']]
+        self.query = self.query.format(
+            "','".join([str(a) for a in kwargs['keys']]))
+        self.cursor.execute(self.query)
+        self.connection.commit()
+        return
+
+
+class MongodbConnection(object):
+
+    def __init__(self):
+        self.collection = None
+
+    def get_collection(self, db_name, collection_name):
+        """
+        Получение коллекции с указанным названием
+
+        Args:
+            db_name(str): Название базы
+            collection_name(str): Название коллекции
+        """
+        connection = pymongo.MongoClient(
+            settings.MONGO_HOST, settings.MONGO_PORT)
+        # database name
+        db = connection[db_name]
+        self.collection = db[collection_name]
+        return self.collection
+
+    def set_indexes(self, index_list):
+        """
+        Установка индексов
+
+        Args:
+            index_list(list): Список необходимых индексов
+            ::
+                [('_id', ASCENDING), ('_state', ASCENDING),
+                        ('_date', ASCENDING)]
+        """
+        self.collection.create_indexes(
+            [IndexModel([index]) for index in index_list])
 
 
 class TaskService(object):

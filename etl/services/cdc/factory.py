@@ -1,15 +1,12 @@
 # coding: utf-8
 
-from core.models import ConnectionChoices, DatasourceSettings
+from core.models import ConnectionChoices
 from etl.services.cdc.datasource import postgres, mysql
-from etl.services.db.factory import DatabaseService
 
 
 class CdcFactroy(object):
-    """Фабрика для докачки
-    Реализация для инстансов разных методик по докачке
-    а) на основе триггеров
-    б) на основе рассчета контрольных сумм для строк
+    """
+    Фабрика для докачки
     """
 
     @staticmethod
@@ -19,13 +16,17 @@ class CdcFactroy(object):
 
         Args:
             source(`Datasource`): Объект источника
+
+        Returns:
+            `TaskProcessing`: Класс реализации докачки с помощью триггеров для
+            различных типов баз данных
         """
         conn_type = source.conn_type
 
         if conn_type == ConnectionChoices.POSTGRESQL:
-            cdc_class = postgres.PostgresqlCdc
+            cdc_class = postgres.PostgresqlTriggerCdc
         elif conn_type == ConnectionChoices.MYSQL:
-            cdc_class = mysql.MysqlCdc
+            cdc_class = mysql.MysqlTriggerCdc
         else:
             raise ValueError("Неизвестный тип подключения!")
 
