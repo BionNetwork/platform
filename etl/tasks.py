@@ -9,7 +9,7 @@ import json
 
 import binascii
 from psycopg2 import errorcodes
-from etl.constants import FIELD_NAME_SEP
+from etl.constants import FIELD_NAME_SEP, TYPES_MAP
 from etl.services.model_creation import OlapEntityCreation
 from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, get_table_name, datetime_now_str)
 from .helpers import (RedisSourceService, DataSourceService,
@@ -242,6 +242,7 @@ class RowKeysCreator(object):
         try:
             return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
+        # на русских символах падало при encode("utf8")
         except UnicodeDecodeError:
             return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l))
@@ -393,7 +394,9 @@ def load_data_database(user_id, task_id, data, channel):
         dotted = '{0}.{1}'.format(t, c)
 
         col_names.append('"{0}{1}{2}" {3}'.format(
-            t, FIELD_NAME_SEP, c, col_types[dotted]))
+            t, FIELD_NAME_SEP, c,
+            # соответствие типов в редисе и типов для создания таблиц локально
+            TYPES_MAP.get(col_types[dotted])))
 
     # название новой таблицы
     key = generate_table_name_key(source, cols_str)

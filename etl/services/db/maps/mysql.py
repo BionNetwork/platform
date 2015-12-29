@@ -56,7 +56,7 @@ for i in dates:
     DB_TYPES[i] = 'timestamp'
 
 for i in blobs:
-    DB_TYPES[i] = 'bytea'
+    DB_TYPES[i] = 'binary'
 
 
 table_query = """
