@@ -2,12 +2,22 @@
 
 
 class BaseCdc(object):
+    # инстанс базы данных для выполнения удаленных команд
+    db_instance = None
+
+    def get_db_instance(self):
+        if self.db_instance is None:
+            raise ValueError("Database instance for CDC is not set properly")
+        return self.db_instance
 
     def apply_triggers(self, tables_info):
         """
         Создание триггеров в БД пользователя
+
+        Args:
+            tables_info: tuple информация о колонках внутри таблиц. Приходит в виде кортежа (table, {name, type})
         """
-        db_instance = self.db_instance
+        db_instance = self.get_db_instance()
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
