@@ -73,6 +73,21 @@ class Datasource(models.Model):
         unique_together = ('host', 'db', 'user_id')
 
 
+class DatasourceSettings(models.Model):
+    """
+    Таблица настроек для источников
+    """
+    TRIGGERS = 'apply_triggers'
+    CHECKSUM = 'apply_checksum'
+
+    name = models.CharField(max_length=255, verbose_name=u'Название', db_index=True)
+    value = models.TextField(verbose_name=u'Значение')
+    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+
+    class Meta:
+        db_table = "datasources_settings"
+
+
 class DatasourceMeta(models.Model):
     """
     Мета информация для источников данных
@@ -173,6 +188,7 @@ class Measure(models.Model):
     DATE = 'date'
     TIME = 'time'
     TIMESTAMP = 'timestamp'
+    BYTEA = 'bytea'
     MEASURE_TYPE = (
         (STRING, 'string'),
         (INTEGER, 'integer'),
@@ -181,6 +197,7 @@ class Measure(models.Model):
         (DATE, 'date'),
         (TIME, 'time'),
         (TIMESTAMP, 'timestamp'),
+        (BYTEA, 'bytea'),
     )
 
     SUM = 'sum'
@@ -193,7 +210,7 @@ class Measure(models.Model):
     title = models.CharField(verbose_name="Название", max_length=255)
     type = models.CharField(
         verbose_name="Тип измерения",
-        choices=MEASURE_TYPE, default=STRING, max_length=50)
+        choices=MEASURE_TYPE, default=INTEGER, max_length=50)
     aggregator = models.CharField(
         verbose_name="Функция агрегирования",
         choices=AGR_FUNCTIONS, null=True, max_length=50)

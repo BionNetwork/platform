@@ -35,13 +35,13 @@ dates = [
     'time',
     'year',
 ]
+
 blobs = [
     'blob',
     'tinyblob',
     'mediumblob',
     'longblob',
 ]
-
 
 for i in ints:
     DB_TYPES[i] = 'integer'
@@ -56,7 +56,7 @@ for i in dates:
     DB_TYPES[i] = 'timestamp'
 
 for i in blobs:
-    DB_TYPES[i] = 'bytea'
+    DB_TYPES[i] = 'binary'
 
 
 table_query = """
@@ -102,9 +102,15 @@ remote_table_query = """
         `cdc_created_at` timestamp NOT NULL,
         `cdc_updated_at` timestamp,
         `cdc_delta_flag` smallint NOT NULL,
-        `cdc_synced` smallint NOT NULL,
-        PRIMARY KEY(`cdc_updated_at`, `cdc_synced`)
-    )
+        `cdc_synced` smallint NOT NULL
+    );
+    $$
+    CREATE INDEX {0}_together_index_bi ON `{0}` (`cdc_updated_at`, `cdc_synced`);
+    $$
+    CREATE INDEX {0}_cdc_created_at_index_bi ON `{0}` (`cdc_created_at`);
+    $$
+    CREATE INDEX {0}_cdc_synced_index_bi ON `{0}` (`cdc_synced`);
+
 """
 
 remote_triggers_query = """
@@ -112,7 +118,7 @@ remote_triggers_query = """
     CREATE TRIGGER `cdc_{orig_table}_insert` AFTER INSERT ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
-    VALUES ({new} now(), now(), 1, 0);
+    VALUES ({new} now(), null, 1, 0);
     END
     $$
 
@@ -120,7 +126,7 @@ remote_triggers_query = """
     CREATE  TRIGGER `cdc_{orig_table}_update` AFTER UPDATE ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
-    VALUES ({new} now(), now(), 2, 0);
+    VALUES ({new} now(), null, 2, 0);
     END
     $$
 
@@ -128,9 +134,8 @@ remote_triggers_query = """
     CREATE  TRIGGER `cdc_{orig_table}_delete` AFTER DELETE ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
-    VALUES ({old} now(), now(), 3, 0);
+    VALUES ({old} now(), null, 3, 0);
     END
-
 """
 
 row_query = """

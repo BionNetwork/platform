@@ -29,6 +29,7 @@ texts = [
     'char',
     'text',
 ]
+
 dates = [
     'timestamp without time zone',
     'timestamp with time zone',
@@ -38,6 +39,7 @@ dates = [
     'time with time zone',
     'interval',
 ]
+
 blobs = [
     'bytea',
 ]
@@ -55,7 +57,7 @@ for i in dates:
     DB_TYPES[i] = 'timestamp'
 
 for i in blobs:
-    DB_TYPES[i] = 'bytea'
+    DB_TYPES[i] = 'binary'
 
 
 table_query = """
@@ -112,10 +114,8 @@ constraints_query = """
     """
 
 indexes_query = """
-        SELECT t.relname, string_agg(a.attname, ','), i.relname,
-        case ix.indisprimary when 't' then 't' else 'f' end as primary,
-        case ix.indisunique when 't' then 't' else 'f' end as unique
-        FROM pg_class t
+        SELECT t.relname, string_agg(a.attname, ','), i.relname, ix.indisprimary,
+        ix.indisunique FROM pg_class t
         JOIN pg_index ix ON t.oid = ix.indrelid
         JOIN pg_class i ON i.oid = ix.indexrelid
         JOIN pg_attribute a ON a.attrelid = t.oid
@@ -135,9 +135,13 @@ remote_table_query = """
         "cdc_created_at" timestamp NOT NULL,
         "cdc_updated_at" timestamp,
         "cdc_delta_flag" smallint NOT NULL,
-        "cdc_synced" smallint NOT NULL,
-        PRIMARY KEY ("cdc_updated_at", "cdc_synced")
-    )
+        "cdc_synced" smallint NOT NULL
+    );
+    CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
+
+    CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
+
+    CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
 """
 
 
@@ -145,13 +149,13 @@ remote_triggers_query = """
     CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
-            INSERT INTO "{new_table}" SELECT {old} now(), now(), 3, 0;
+            INSERT INTO "{new_table}" SELECT {old} now(), null, 3, 0;
             RETURN OLD;
         ELSIF (TG_OP = 'UPDATE') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), now(), 2, 0;
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 2, 0;
             RETURN NEW;
         ELSIF (TG_OP = 'INSERT') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), now(), 1, 0;
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 1, 0;
             RETURN NEW;
         END IF;
         RETURN NULL;
