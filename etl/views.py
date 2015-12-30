@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 import json
 from itertools import groupby
+import celery
 
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -16,18 +17,17 @@ from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus, 
     DatasourceSettings as SourceSettings, DatasourceSettings,
-    DatasourceMetaKeys, DatasourceMeta)
+    DatasourceMetaKeys)
 from . import forms as etl_forms
 import logging
 
 from . import helpers
 from etl.constants import *
-from etl.services.cdc.factory import CdcFactroy
 from etl.services.db.factory import DatabaseService
 from etl.services.queue.base import run_task
-from etl.tasks import LoadDb, LoadMongodb, LoadDimensions, LoadMeasures
-from etl.services.cdc.data_capture import (
-    UpdateMongodb, DetectRedundant, DeleteRedundant)
+from etl.tasks import (load_db, load_mongo_db, load_dimensions, load_measures,
+                       update_mongo_db, detect_redundant, delete_redundant,
+                       create_triggers)
 from .services.queue.base import TaskStatusEnum
 from .services.middleware.base import (generate_columns_string,
                                        generate_table_name_key)
@@ -437,29 +437,27 @@ class LoadDataView(BaseEtlView):
         }
         # Сценарий загрузок
         trigger_tasks = [
-            (MONGODB_DATA_LOAD, LoadMongodb, load_args),
-            (DB_DATA_LOAD, LoadDb, load_args),
-            [
-                (GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
-                (GENERATE_MEASURES, LoadMeasures, dim_measure_args),
-                (CREATE_TRIGGERS, CdcFactroy.factory(source), trigger_args)
-            ]
+            (MONGODB_DATA_LOAD, load_mongo_db, load_args),
+            (DB_DATA_LOAD, load_db, load_args),
+
+            (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
+            (GENERATE_MEASURES, load_measures, dim_measure_args),
+            (CREATE_TRIGGERS, create_triggers, trigger_args)
         ]
 
         create_tasks = [
-            (MONGODB_DATA_LOAD, LoadMongodb, load_args),
-            (DB_DATA_LOAD, LoadDb, load_args),
-            [
-                (GENERATE_DIMENSIONS, LoadDimensions, dim_measure_args),
-                (GENERATE_MEASURES, LoadMeasures, dim_measure_args),
-            ]
+            (MONGODB_DATA_LOAD, load_mongo_db, load_args),
+            (DB_DATA_LOAD, load_db, load_args),
+
+            (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
+            (GENERATE_MEASURES, load_measures, dim_measure_args),
         ]
 
         update_tasks = [
-            (MONGODB_DELTA_LOAD, UpdateMongodb, load_args),
-            (DB_DATA_LOAD, LoadDb, load_args),
-            (DB_DETECT_REDUNDANT, DetectRedundant, redundant_args),
-            (DB_DELETE_REDUNDANT, DeleteRedundant, redundant_args),
+            (MONGODB_DELTA_LOAD, update_mongo_db, load_args),
+            (DB_DATA_LOAD, load_db, load_args),
+            (DB_DETECT_REDUNDANT, detect_redundant, redundant_args),
+            (DB_DELETE_REDUNDANT, delete_redundant, redundant_args),
         ]
         is_meta_stats = False
         meta_key = DatasourceMetaKeys.objects.filter(value=table_key)
@@ -471,19 +469,27 @@ class LoadDataView(BaseEtlView):
             except:
                 pass
         channels = []
-        meta_stats = True
+        tasks = []
         if source_settings == DatasourceSettings.TRIGGERS:
+
             for task_info in trigger_tasks:
-                channels.extend(run_task(task_info))
+                task, channel = run_task(task_info)
+                tasks.append(task)
+                channels.append(channel)
 
         elif not is_meta_stats:
             for task_info in create_tasks:
-                channels.extend(run_task(task_info))
+                task, channel = run_task(task_info)
+                tasks.append(task)
+                channels.append(channel)
+
         else:
             load_args.update(db_update=True)
             for task_info in update_tasks:
-                channels.extend(run_task(task_info))
-
+                task, channel = run_task(task_info)
+                tasks.append(task)
+                channels.append(channel)
+        celery.chain(*tasks)()
         return {'channels': channels}
 
 

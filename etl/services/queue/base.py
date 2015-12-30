@@ -132,23 +132,27 @@ class RPublish(object):
 def run_task(task_params):
     """
     Args:
-        task_params(tuple or list):
+        task_params(tuple or list): Данные для запуска задачи
+        ::
+            (<task_name>, <task_def>, <params_for_task>)
+
+    Returns:
+        list: Список каналов для сокетов
     """
     if type(task_params) == tuple:
         task_id, channel = TaskService(task_params[0]).add_task(
             arguments=task_params[2])
-        task_params[1](task_id, channel).load_data()
-        return [channel]
+        return task_params[1].si(task_id, channel), [channel]
     else:
         group_tasks = []
         channels = []
         for each in task_params:
             task_id, channel = TaskService(each[0]).add_task(
                 arguments=each[2])
-            group_tasks.append(each[1](task_id, channel).load_data())
+            group_tasks.append(each[1](task_id, channel).s())
             channels.append(channel)
-        # group(group_tasks)
-        return channels
+        return group(group_tasks), channels
+
 
 
 class RowKeysCreator(object):
