@@ -152,6 +152,10 @@ def get_tasks_chain(tasks_sets):
     channels = []
     for task_info in tasks_sets:
         if type(task_info) == tuple:
+            # Синхронный вариант
+            # task_id, channel = TaskService(task_info[0]).add_task(
+            #     arguments=task_info[2])
+            # task_info[1](task_id, channel)
             task, channel = get_single_task(task_info)
         else:
             task, channel = get_group_tasks(task_info)
@@ -341,7 +345,7 @@ class InsertQuery(TableCreateQuery):
 class DeleteQuery(TableCreateQuery):
 
     def set_query(self, **kwargs):
-        delete_table_query = "DELETE from {0} where _id in ('{1}');"
+        delete_table_query = "DELETE from {0} where cdc_key in ('{1}');"
         self.query = delete_table_query.format(
             kwargs['table_name'], '{0}')
         self.set_connection()

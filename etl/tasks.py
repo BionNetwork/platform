@@ -579,7 +579,6 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
-        print 'hi'
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         structure = self.context['tree']
