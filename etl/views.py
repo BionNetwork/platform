@@ -15,7 +15,7 @@ from django.db import transaction
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
 from core.models import (
-    Datasource, Queue, QueueList, QueueStatus, 
+    Datasource, Queue, QueueList, QueueStatus,
     DatasourceSettings as SourceSettings, DatasourceSettings,
     DatasourceMetaKeys)
 from . import forms as etl_forms
@@ -370,7 +370,10 @@ class LoadDataView(BaseEtlView):
         table_key = generate_table_name_key(source, cols_str)
 
         # берем все типы очередей
-        queue_ids = Queue.objects.values_list('id', flat=True)
+        queue_ids = Queue.objects.filter(
+            name__in=(MONGODB_DATA_LOAD,)
+        ).values_list('id', flat=True)
+
         # берем статусы (В ожидании, В обработке)
         queue_status_ids = QueueStatus.objects.filter(
             title__in=(TaskStatusEnum.IDLE, TaskStatusEnum.PROCESSING)
