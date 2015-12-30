@@ -90,7 +90,8 @@ class RPublish(object):
 
     @property
     def percent(self):
-        return int(round(self.loaded_count/self.rows_count*100))
+        return (int(round(self.loaded_count/self.rows_count*100))
+                if self.rows_count else 0)
 
     def publish(self, status, msg=None):
         """
