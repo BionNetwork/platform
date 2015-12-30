@@ -64,6 +64,11 @@ cols_query = """
             where table_name in {0} and table_schema = '{1}' order by table_name;
 """
 
+cdc_cols_query = """
+    SELECT table_name, column_name FROM information_schema.columns
+            where table_name in {0} and table_schema = '{1}' order by table_name;
+"""
+
 indexes_query = """
     SELECT
     table_name, group_concat(column_name), index_name,

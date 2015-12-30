@@ -65,6 +65,12 @@ cols_query = """
           table_schema = '{2}' order by table_name;
 """
 
+cdc_cols_query = """
+    SELECT table_name, column_name FROM information_schema.columns
+    where table_name in {0} and table_catalog = '{1}' and
+          table_schema = '{2}' order by table_name;
+"""
+
 constraints_query = """
     SELECT
         t.relname AS table_name,
@@ -140,13 +146,16 @@ remote_triggers_query = """
     CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
-            INSERT INTO "{new_table}" SELECT {old} now(), null, 3, 0;
+            INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
+            SELECT {old} now(), null, 3, 0;
             RETURN OLD;
         ELSIF (TG_OP = 'UPDATE') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), null, 2, 0;
+            INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
+            SELECT {new} now(), null, 2, 0;
             RETURN NEW;
         ELSIF (TG_OP = 'INSERT') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), null, 1, 0;
+            INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
+            SELECT {new} now(), null, 1, 0;
             RETURN NEW;
         END IF;
         RETURN NULL;

@@ -42,8 +42,8 @@ class CdcFactroy(object):
         source_settings = DatasourceSettings.objects.get(
             datasource_id=source.id)
 
-        if source_settings.value == 'apply_triggers':
-            cdc_instance.apply_triggers(tables_info)
+        if source_settings.value == DatasourceSettings.TRIGGERS:
+            cdc_instance.apply_triggers(source, tables_info)
 
-        elif source_settings.value == 'apply_checksum':
+        elif source_settings.value == DatasourceSettings.CHECKSUM:
             cdc_instance.apply_checksum()
