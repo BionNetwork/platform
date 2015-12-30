@@ -24,7 +24,7 @@ import logging
 from . import helpers
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
-from etl.services.queue.base import run_task
+from etl.services.queue.base import get_tasks_chain
 from etl.tasks import (load_db, load_mongo_db, load_dimensions, load_measures,
                        update_mongo_db, detect_redundant, delete_redundant,
                        create_triggers)
@@ -439,18 +439,20 @@ class LoadDataView(BaseEtlView):
         trigger_tasks = [
             (MONGODB_DATA_LOAD, load_mongo_db, load_args),
             (DB_DATA_LOAD, load_db, load_args),
-
-            (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
-            (GENERATE_MEASURES, load_measures, dim_measure_args),
-            (CREATE_TRIGGERS, create_triggers, trigger_args)
+            [
+                (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
+                (GENERATE_MEASURES, load_measures, dim_measure_args),
+                (CREATE_TRIGGERS, create_triggers, trigger_args)
+            ]
         ]
 
         create_tasks = [
             (MONGODB_DATA_LOAD, load_mongo_db, load_args),
             (DB_DATA_LOAD, load_db, load_args),
-
-            (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
-            (GENERATE_MEASURES, load_measures, dim_measure_args),
+            [
+                (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
+                (GENERATE_MEASURES, load_measures, dim_measure_args),
+            ]
         ]
 
         update_tasks = [
@@ -468,27 +470,13 @@ class LoadDataView(BaseEtlView):
                     meta_key[0].meta.stats)['tables_stat']['last_row']['cdc_key']
             except:
                 pass
-        channels = []
-        tasks = []
+
         if source_settings == DatasourceSettings.TRIGGERS:
-
-            for task_info in trigger_tasks:
-                task, channel = run_task(task_info)
-                tasks.append(task)
-                channels.append(channel)
-
+            tasks, channels = get_tasks_chain(trigger_tasks)
         elif not is_meta_stats:
-            for task_info in create_tasks:
-                task, channel = run_task(task_info)
-                tasks.append(task)
-                channels.append(channel)
-
+            tasks, channels = get_tasks_chain(create_tasks)
         else:
-            load_args.update(db_update=True)
-            for task_info in update_tasks:
-                task, channel = run_task(task_info)
-                tasks.append(task)
-                channels.append(channel)
+            tasks, channels = get_tasks_chain(update_tasks)
         celery.chain(*tasks)()
         return {'channels': channels}
 

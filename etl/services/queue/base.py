@@ -129,7 +129,37 @@ class RPublish(object):
             ))
 
 
-def run_task(task_params):
+def get_tasks_chain(tasks_sets):
+    """
+    Получение последовательности задач для выполнения
+
+    Args:
+        tasks_sets(list): Параметры для задач. В виде списка для группы задач
+        для параллельного выполнения
+        Пример::
+            [
+                (<task_name1>, <task_def1>, <params_for_task1>),
+                (<task_name2>, <task_def2>, <params_for_task2>),
+                [
+                    (<task_name3>, <task_def3>, <params_for_task3>),
+                    ...
+                ]
+                ...
+        ]
+    """
+    tasks = []
+    channels = []
+    for task_info in tasks_sets:
+        if type(task_info) == tuple:
+            task, channel = get_single_task(task_info)
+        else:
+            task, channel = get_group_tasks(task_info)
+        tasks.append(task)
+        channels.append(channel)
+    return tasks, channels
+
+
+def get_single_task(task_params):
     """
     Args:
         task_params(tuple or list): Данные для запуска задачи
@@ -137,22 +167,33 @@ def run_task(task_params):
             (<task_name>, <task_def>, <params_for_task>)
 
     Returns:
+        `Signature`: Celery-задача к выполнению
         list: Список каналов для сокетов
     """
-    if type(task_params) == tuple:
-        task_id, channel = TaskService(task_params[0]).add_task(
-            arguments=task_params[2])
-        return task_params[1].si(task_id, channel), [channel]
-    else:
-        group_tasks = []
-        channels = []
-        for each in task_params:
-            task_id, channel = TaskService(each[0]).add_task(
-                arguments=each[2])
-            group_tasks.append(each[1](task_id, channel).s())
-            channels.append(channel)
-        return group(group_tasks), channels
+    task_id, channel = TaskService(task_params[0]).add_task(
+        arguments=task_params[2])
+    return task_params[1].si(task_id, channel), [channel]
 
+
+def get_group_tasks(task_params):
+    """
+    Args:
+        task_params(tuple or list): Данные для запуска задачи
+        ::
+            (<task_name>, <task_def>, <params_for_task>)
+
+    Returns:
+        `group`: группа Celery-задач к параллельному выполнению
+        list: Список каналов для сокетов
+    """
+    group_tasks = []
+    channels = []
+    for each in task_params:
+        task_id, channel = TaskService(each[0]).add_task(
+            arguments=each[2])
+        group_tasks.append(each[1].si(task_id, channel))
+        channels.append(channel)
+    return group(group_tasks), channels
 
 
 class RowKeysCreator(object):
