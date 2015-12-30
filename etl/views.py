@@ -369,8 +369,10 @@ class LoadDataView(BaseEtlView):
         cols_str = generate_columns_string(cols)
         table_key = generate_table_name_key(source, cols_str)
 
-        # берем все типы очередей
-        queue_ids = Queue.objects.values_list('id', flat=True)
+        # берем начальные типы очередей
+        queue_ids = Queue.objects.filter(
+            name__in=[MONGODB_DATA_LOAD, MONGODB_DELTA_LOAD]).values_list(
+            'id', flat=True)
         # берем статусы (В ожидании, В обработке)
         queue_status_ids = QueueStatus.objects.filter(
             title__in=(TaskStatusEnum.IDLE, TaskStatusEnum.PROCESSING)

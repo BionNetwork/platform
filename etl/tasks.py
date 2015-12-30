@@ -92,7 +92,16 @@ class TaskProcessing(object):
         Точка входа
         """
         self.prepare()
-        self.processing()
+        try:
+            self.processing()
+        except Exception as e:
+            # В любой непонятной ситуации меняй статус задачи на ERROR
+            TaskService.update_task_status(self.task_id, TaskStatusEnum.ERROR)
+            self.publisher.publish(TLSE.ERROR, msg=e.message)
+            RedisSourceService.delete_queue(self.task_id)
+            RedisSourceService.delete_user_subscriber(
+                self.user_id, self.task_id)
+            raise
         self.exit()
 
     def processing(self):
@@ -170,7 +179,6 @@ class LoadMongodb(TaskProcessing):
     Первичная загрузка данных в Mongodb
     """
 
-    # @celery.task(name=MONGODB_DATA_LOAD, filter=task_method)
     def load_data(self):
         super(LoadMongodb, self).load_data()
 
@@ -252,7 +260,6 @@ class LoadMongodb(TaskProcessing):
 
 class LoadDb(TaskProcessing):
 
-    # @celery.task(name=DB_DATA_LOAD, filter=task_method)
     def load_data(self):
         super(LoadDb, self).load_data()
 
@@ -404,7 +411,6 @@ class LoadDimensions(TaskProcessing):
         return query.format(
             fields_str, source_table_name, '{0}', '{1}')
 
-    # @celery.task(name=GENERATE_DIMENSIONS, filter=task_method)
     def load_data(self):
         super(LoadDimensions, self).load_data()
 
@@ -549,7 +555,6 @@ class LoadMeasures(LoadDimensions):
                 datasources_meta=datasource_meta_id
             )
 
-    # @celery.task(name=GENERATE_MEASURES, filter=task_method)
     def load_data(self):
         """
         Создание размерностей
@@ -666,7 +671,6 @@ class UpdateMongodb(TaskProcessing):
 
 class DetectRedundant(TaskProcessing):
 
-    # @celery.task(name=DB_DETECT_REDUNDANT, filter=task_method)
     def load_data(self):
         super(DetectRedundant, self).load_data()
 
@@ -716,7 +720,6 @@ class DetectRedundant(TaskProcessing):
 
 class DeleteRedundant(TaskProcessing):
 
-    # @celery.task(name=DB_DELETE_REDUNDANT, filter=task_method)
     def load_data(self):
         super(DeleteRedundant, self).load_data()
 
@@ -745,7 +748,6 @@ class DeleteRedundant(TaskProcessing):
 
 class CreateTriggers(TaskProcessing):
 
-    # @celery.task(name=CREATE_TRIGGERS, filter=task_method)
     def load_data(self):
         super(CreateTriggers, self).load_data()
 
