@@ -507,7 +507,7 @@ TLSE = TaskLoadingStatusEnum
 
 class SourceTableStatusEnum(BaseEnum):
     """
-    Статус состояния таблице-источнике
+    Статус состояния записей в таблице-источнике
     """
 
     IDLE, LOADED = ('idle', 'loaded')
@@ -522,7 +522,7 @@ STSE = SourceTableStatusEnum
 
 class DeltaTableStatusEnum(BaseEnum):
     """
-    Статусы состояния в дельта-таблице
+    Статусы состояния записей в дельта-таблице
     """
 
     NEW, SYNCED = ('new', 'synced')
@@ -537,7 +537,7 @@ DTSE = DeltaTableStatusEnum
 
 class DeleteTableStatusEnum(BaseEnum):
     """
-    Статусы состояния в дельта-таблице
+    Статусы состояния записей в таблице с данными на удаления
     """
 
     NEW, DELETED = ('new', 'deleted')

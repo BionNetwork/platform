@@ -281,8 +281,8 @@ class LoadDb(TaskProcessing):
             source, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"_id" text UNIQUE', '"_state" text', '"_date" timestamp']
-        clear_col_names = ['_id', '_state', '_date']
+        col_names = ['"cdc_key" text UNIQUE']
+        clear_col_names = ['cdc_key']
         for obj in cols:
             t = obj['table']
             c = obj['col']
@@ -315,12 +315,13 @@ class LoadDb(TaskProcessing):
                 collection_cursor = collection.find(
                     {'_state': STSE.IDLE},
                     limit=limit, skip=offset)
-                # last_row = collection_cursor.limit(1).sort('$natural', -1)[0]
                 rows_dict = []
                 for record in collection_cursor:
                     temp_dict = {}
                     for ind, col_name in enumerate(clear_col_names):
-                        temp_dict.update({str(ind): record[col_name]})
+                        temp_dict.update(
+                            {str(ind): record['_id'] if col_name == 'cdc_key'
+                                else record[col_name]})
                     rows_dict.append(temp_dict)
                 if not rows_dict:
                     break

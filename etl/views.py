@@ -478,6 +478,7 @@ class LoadDataView(BaseEtlView):
         elif not is_meta_stats:
             tasks, channels = get_tasks_chain(create_tasks)
         else:
+            load_args['db_update'] = True
             tasks, channels = get_tasks_chain(update_tasks)
         celery.chain(*tasks)()
         return {'channels': channels}
