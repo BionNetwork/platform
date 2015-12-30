@@ -162,7 +162,7 @@ def get_tasks_chain(tasks_sets):
 def get_single_task(task_params):
     """
     Args:
-        task_params(tuple or list): Данные для запуска задачи
+        task_params(tuple): Данные для запуска задачи
         ::
             (<task_name>, <task_def>, <params_for_task>)
 
@@ -178,9 +178,12 @@ def get_single_task(task_params):
 def get_group_tasks(task_params):
     """
     Args:
-        task_params(tuple or list): Данные для запуска задачи
+        task_params(list): Данные для запуска задачи
         ::
-            (<task_name>, <task_def>, <params_for_task>)
+            [
+                (<task_name>, <task_def>, <params_for_task>)
+                ...
+            ]
 
     Returns:
         `group`: группа Celery-задач к параллельному выполнению
