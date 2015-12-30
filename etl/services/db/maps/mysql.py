@@ -41,6 +41,8 @@ blobs = [
     'tinyblob',
     'mediumblob',
     'longblob',
+    'varbinary',
+    'binary',
 ]
 
 for i in ints:
