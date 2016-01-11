@@ -1,4 +1,7 @@
 # coding: utf-8
+
+from __future__ import unicode_literals
+
 import logging
 
 import os
@@ -8,7 +11,7 @@ import pymongo
 import json
 
 import binascii
-from psycopg2 import errorcodes
+from psycopg2 import errorcodes, Binary
 from etl.constants import FIELD_NAME_SEP, TYPES_MAP
 from etl.services.model_creation import OlapEntityCreation
 from etl.services.middleware.base import (EtlEncoder, generate_table_name_key, get_table_name, datetime_now_str)
@@ -239,13 +242,8 @@ class RowKeysCreator(object):
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         l.append(row_num)
 
-        try:
-            return binascii.crc32(
-                reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
-        # на русских символах падало при encode("utf8")
-        except UnicodeDecodeError:
-            return binascii.crc32(
-                reduce(lambda res, x: '%s%s' % (res, x), l))
+        return binascii.crc32(
+            reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
     def set_primary_key(self, data):
         """
@@ -320,6 +318,14 @@ class InsertQuery(TableCreateQuery):
         self.set_connection()
         self.cursor = self.connection.cursor()
 
+        # передаем типы, чтобы вычислить бинарные данные
+        binary_types_dict = kwargs['binary_types_dict']
+
+        for dicti in kwargs['data']:
+            for k, v in dicti.iteritems():
+                if binary_types_dict.get(k):  # if binary data
+                    dicti[k] = Binary(v)
+
         # create new table
         self.cursor.executemany(self.query, kwargs['data'])
         self.connection.commit()
@@ -351,6 +357,18 @@ def load_data_database(user_id, task_id, data, channel):
         func
     """
 
+    def process_binaries_for_row(row):
+        """
+        Если пришли бинарные данные,
+        то вычисляем ключ отдельный для каждого из них
+        """
+        new_row = []
+        for i, r in enumerate(row):
+            if binary_types_list[i]:
+                r = binascii.b2a_base64(r)
+            new_row.append(r)
+        return tuple(new_row)
+
     def calc_key_for_row(row, tables_key_creator, row_num):
         """
         Расчет ключа для отдельно взятой строки
@@ -363,6 +381,10 @@ def load_data_database(user_id, task_id, data, channel):
         Returns:
             tuple: Модифицированная строка с ключом в первой позиции
         """
+
+        # преобразуем бинары в строку, если они есть
+        row = process_binaries_for_row(row)
+
         if len(tables_key_creator) > 1:
             row_values_for_calc = [
                 str(each.calc_key(row, row_num)) for each in tables_key_creator]
@@ -383,9 +405,14 @@ def load_data_database(user_id, task_id, data, channel):
 
     col_names = ['"cdc_key" text UNIQUE']
 
+    # инфа о бинарниках для инсерта данных
+    binary_types_dict = {'0': False, }
+    # инфа о бинарниках для генерации ключа
+    binary_types_list = []
+
     cols_str = ''
 
-    for obj in cols:
+    for i, obj in enumerate(cols, start=1):
         t = obj['table']
         c = obj['col']
 
@@ -393,10 +420,15 @@ def load_data_database(user_id, task_id, data, channel):
 
         dotted = '{0}.{1}'.format(t, c)
 
+        map_type = TYPES_MAP.get(col_types[dotted])
+
         col_names.append('"{0}{1}{2}" {3}'.format(
             t, FIELD_NAME_SEP, c,
             # соответствие типов в редисе и типов для создания таблиц локально
-            TYPES_MAP.get(col_types[dotted])))
+            map_type))
+
+        binary_types_dict[str(i)] = map_type == TYPES_MAP.get('binary')
+        binary_types_list.append(map_type == TYPES_MAP.get('binary'))
 
     # название новой таблицы
     key = generate_table_name_key(source, cols_str)
@@ -466,7 +498,8 @@ def load_data_database(user_id, task_id, data, channel):
                 lambda x: {str(k): v for (k, v) in izip(xrange(cols_nums), x)},
                 rows_with_keys)
 
-            insert_query.execute(data=rows_dict)
+            insert_query.execute(data=rows_dict,
+                                 binary_types_dict=binary_types_dict)
             offset += limit
         except Exception as e:
             print 'Exception'
