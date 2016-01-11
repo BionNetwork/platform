@@ -3,22 +3,34 @@ from __future__ import unicode_literals
 
 import json
 from itertools import groupby
+import celery
 
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
 from django.conf import settings
+from django.db import transaction
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource
+from core.models import (
+    Datasource, Queue, QueueList, QueueStatus,
+    DatasourceSettings as SourceSettings, DatasourceSettings,
+    DatasourceMetaKeys)
 from . import forms as etl_forms
 import logging
 
 from . import helpers
-from . import tasks
-
+from etl.constants import *
+from etl.services.db.factory import DatabaseService
+from etl.services.queue.base import get_tasks_chain
+from etl.tasks import (load_db, load_mongo_db, load_dimensions, load_measures,
+                       update_mongo_db, detect_redundant, delete_redundant,
+                       create_triggers)
+from .services.queue.base import TaskStatusEnum
+from .services.middleware.base import (generate_columns_string,
+                                       generate_table_name_key)
 
 logger = logging.getLogger(__name__)
 
@@ -76,18 +88,41 @@ class NewSourceView(BaseTemplateView):
         form = etl_forms.SourceForm()
         return render(request, self.template_name, {'form': form, })
 
+    @transaction.atomic()
     def post(self, request, *args, **kwargs):
-        post = request.POST
-        form = etl_forms.SourceForm(post)
+        try:
+            post = request.POST
 
-        if not form.is_valid():
-            return self.render_to_response({'form': form, })
+            cdc_value = post.get('cdc_type')
 
-        source = form.save(commit=False)
-        source.user_id = request.user.id
-        source.save()
+            if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
+                return self.json_response(
+                    {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
 
-        return self.redirect('etl:datasources.index')
+            form = etl_forms.SourceForm(post)
+            if not form.is_valid():
+                return self.json_response(
+                    {'status': ERROR, 'message': 'Поля формы заполнены некорректно!'})
+
+            source = form.save(commit=False)
+            source.user_id = request.user.id
+            source.save()
+
+            # сохраняем настройки докачки
+            SourceSettings.objects.create(
+                name='cdc_type',
+                value=cdc_value,
+                datasource=source,
+            )
+
+            return self.json_response(
+                {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
+        except Exception as e:
+            logger.exception(e.message)
+            return self.json_response(
+                {'status': ERROR,
+                 'message': 'Произошла непредвиденная ошибка!'}
+            )
 
 
 class EditSourceView(BaseTemplateView):
@@ -326,50 +361,127 @@ class LoadDataView(BaseEtlView):
             raise ResponseError(u'Не удалось подключиться к источнику данных!')
 
         # копия, чтобы могли добавлять
-        data = request.POST.copy()
+        data = request.POST
+
+        # генерируем название новой таблицы и
+        # проверяем на существование дубликатов
+        cols = json.loads(data.get('cols'))
+        cols_str = generate_columns_string(cols)
+        table_key = generate_table_name_key(source, cols_str)
+
+        # берем начальные типы очередей
+        queue_ids = Queue.objects.filter(
+            name__in=[MONGODB_DATA_LOAD, MONGODB_DELTA_LOAD]).values_list(
+            'id', flat=True)
+        # берем статусы (В ожидании, В обработке)
+        queue_status_ids = QueueStatus.objects.filter(
+            title__in=(TaskStatusEnum.IDLE, TaskStatusEnum.PROCESSING)
+        ).values_list('id', flat=True)
+
+        queues_list = QueueList.objects.filter(
+            checksum__isnull=False,
+            checksum=table_key,
+            queue_id__in=queue_ids,
+            queue_status_id__in=queue_status_ids,
+        )
+
+        if queues_list.exists():
+            raise ResponseError(u'Данная задача уже находится в обработке!')
 
         tables = json.loads(data.get('tables'))
 
-        # достаем типы колонок
-        col_types = helpers.DataSourceService.get_columns_types(source, tables)
-        data.appendlist('col_types', json.dumps(col_types))
+        collections_names = helpers.DataSourceService.get_collections_names(
+            source, tables)
 
         # достаем инфу колонок (статистика, типы, )
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
-        data.appendlist('meta_info', json.dumps(tables_info_for_meta))
 
-        # достаем инфу колонок (статистика, типы, )
-        for_triggers = helpers.RedisSourceService.tables_info_for_triggers(
-            source, tables)
-
-        structure = helpers.RedisSourceService.get_active_tree_structure(source)
-        conn_dict = source.get_connection_dict()
-
-        arguments = {
-            'cols': data['cols'],
-            'tables': data['tables'],
-            'col_types': data['col_types'],
-            'meta_info': data['meta_info'],
-            'for_triggers': for_triggers,
-            'tree': structure,
-            'source': conn_dict,
-            'user_id': request.user.id,
-        }
+        try:
+            source_settings = DatasourceSettings.objects.get(
+                    datasource_id=source.id).value
+        except DatasourceSettings.DoesNotExist:
+            raise ResponseError(u'Не определен тип дозагрузки данных.')
 
         user_id = request.user.id
+        # Параметры для задач
+        load_args = {
+            'cols': data.get('cols'),
+            'tables': data.get('tables'),
+            'col_types': json.dumps(
+                helpers.DataSourceService.get_columns_types(source, tables)),
+            'meta_info': json.dumps(tables_info_for_meta),
+            'tree': helpers.RedisSourceService.get_active_tree_structure(source),
+            'source': source.get_connection_dict(),
+            'user_id': user_id,
+            'db_update': False,
+            'collections_names': collections_names,
+            'checksum': table_key,
+        }
+        dim_measure_args = {
+            'user_id': user_id,
+            'checksum': table_key,
+            'datasource_id': source.id,
+        }
 
-        # добавляем задачу mongo в очередь
-        task = helpers.TaskService('etl:load_data:mongo')
-        task_id1, channel1 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id1, channel1),)
+        redundant_args = {
+            'checksum': table_key,
+            'user_id': user_id,
+            }
 
-        # добавляем задачу database в очередь
-        task = helpers.TaskService('etl:load_data:database')
-        task_id2, channel2 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id2, channel2),)
+        trigger_args = {
+            'checksum': table_key,
+            'user_id': user_id,
+            'tables_info': helpers.RedisSourceService.get_ddl_tables_info(
+                source, tables),
+            # TODO: импорт DatabaseService
+            'db_instance': DatabaseService.get_source_instance(source)
+        }
+        # Сценарий загрузок
+        trigger_tasks = [
+            (MONGODB_DATA_LOAD, load_mongo_db, load_args),
+            (DB_DATA_LOAD, load_db, load_args),
+            [
+                (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
+                (GENERATE_MEASURES, load_measures, dim_measure_args),
+                (CREATE_TRIGGERS, create_triggers, trigger_args)
+            ]
+        ]
 
-        return {'channels': [channel1, channel2]}
+        create_tasks = [
+            (MONGODB_DATA_LOAD, load_mongo_db, load_args),
+            (DB_DATA_LOAD, load_db, load_args),
+            [
+                (GENERATE_DIMENSIONS, load_dimensions, dim_measure_args),
+                (GENERATE_MEASURES, load_measures, dim_measure_args),
+            ]
+        ]
+
+        update_tasks = [
+            (MONGODB_DELTA_LOAD, update_mongo_db, load_args),
+            (DB_DATA_LOAD, load_db, load_args),
+            (DB_DETECT_REDUNDANT, detect_redundant, redundant_args),
+            (DB_DELETE_REDUNDANT, delete_redundant, redundant_args),
+        ]
+        is_meta_stats = False
+        meta_key = DatasourceMetaKeys.objects.filter(value=table_key)
+        if meta_key:
+            is_meta_stats = True
+            try:
+                meta_stats = json.loads(
+                    meta_key[0].meta.stats)['tables_stat']['last_row']['cdc_key']
+            except:
+                pass
+
+        if source_settings == DatasourceSettings.TRIGGERS:
+            tasks, channels = get_tasks_chain(trigger_tasks)
+        elif not is_meta_stats:
+            tasks, channels = get_tasks_chain(create_tasks)
+        else:
+            load_args['db_update'] = True
+            tasks, channels = get_tasks_chain(update_tasks)
+        celery.chain(*tasks)()
+        return {'channels': channels}
 
 
 class GetUserTasksView(BaseView):

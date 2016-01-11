@@ -19,7 +19,8 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-                <form novalidate role="form" method="post" id="conn_form" data-url="{% url "etl:datasources.check_conn" %}">
+                <form novalidate role="form" method="post" id="conn_form" data-url="{% url "etl:datasources.check_conn" %}"
+                    data-save-url="{% url "etl:datasources.add" %}">
                     {% csrf_token %}
                     {% for field in form %}
                         <div class="form-group">
@@ -34,7 +35,10 @@
                     {% endfor %}
                     <input type="hidden" id="win_type" data="{{type}}">
                     <button type="button" class="btn" onclick="checkConnection()">Проверить подключение</button>
-                    <button type="submit" class="btn">Сохранить</button>
+
+                    {% block submit-button %}
+                        <button type="button" class="btn" onclick="createSettigns()">Сохранить</button>
+                    {% endblock submit-button %}
 
                     <div class="form-group">
                         <label>{{error_message}}</label>
@@ -47,6 +51,39 @@
 </div>
 
 {% endblock content %}
+
+
+{% block modal %}
+    <div class="modal inmodal" tabindex="1" role="dialog" aria-hidden="true" id="settings-window">
+        <div class="modal-dialog" style="width:650px;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span aria-hidden="true">&times;</span>
+                        <span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title">Выберите вариант обновления данных</h4>
+                </div>
+                <div class="modal-body" style="height:80px; overflow-y:auto">
+                    <div class="row">
+                        <div class="col-md-offset-1 col-md-10">
+                            <select class="form-control col-md-11" id="cdc_select">
+                                <option value="apply_triggers">На основе триггеров (требуются права на создание триггеров)</option>
+                                <option value="apply_checksum">Полное сравнение на основе расчета контрольных сумм</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary"
+                            onclick="saveNewSource()">Сохранить</button>
+                    <button class="btn btn-danger"
+                            onclick="closeSettings()">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock modal %}
 
 
 {% block javascript %}

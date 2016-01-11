@@ -1,11 +1,21 @@
 # coding: utf-8
+import binascii
+from celery import group
 from django.conf import settings
-from etl.services.db.factory import DatabaseService
+import brukva
+from pymongo import IndexModel
+import pymongo
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
 import json
 import datetime
+from etl.services.middleware.base import datetime_now_str
+
+client = brukva.Client(host=settings.REDIS_HOST,
+                       port=int(settings.REDIS_PORT),
+                       selected_db=settings.REDIS_DB)
+client.connect()
 
 
 class QueueStorage(object):
@@ -17,41 +27,396 @@ class QueueStorage(object):
     allowed_keys = [
         'id', 'user_id', 'date_created', 'date_updated', 'status', 'percent']
 
-    def __init__(self, queue_redis_dict):
+    def __init__(self, queue_redis_dict, task_id, user_id):
         """
         :type queue_redis_dict: redis_collections.Dict
         """
         self.queue = queue_redis_dict
+        self.task_id = task_id
+        self.user_id = user_id
+        self.set_init_params()
 
     def __getitem__(self, key):
-        if key in self.allowed_keys:
-            return self.queue[key]
-        else:
+        if key not in self.allowed_keys:
             raise KeyError('Неверный ключ для словаря информации задачи!')
+        return self.queue[key]
 
     def __setitem__(self, key, val):
-        if key in self.allowed_keys:
-            self.queue[key] = val
-        else:
+        if key not in self.allowed_keys:
             raise KeyError('Неверный ключ для словаря информации задачи!')
 
+    def set_init_params(self):
+        """
+        Загрузка инициазицонных данных
+        """
+        self.queue['task_id'] = self.task_id
+        self.queue['user_id'] = self.user_id
+        self.queue['date_created'] = datetime_now_str()
+        self.queue['date_updated'] = None
+        self.queue['status'] = TaskStatusEnum.PROCESSING
+        self.queue['percent'] = 0
 
-class TaskService:
+    def update(self, status=None):
+        self.queue['date_created'] = datetime_now_str()
+        if status:
+            self.queue['status'] = status
+
+
+class RPublish(object):
+    """
+    Запись в Редис состоянии загрузки
+
+    Attributes:
+        channel(str): Канал передачи на клиент
+        task_id(int): id задачи
+        rows_count(int): Приблизительно число обрабатываемых строк
+        is_complete(bool): Флаг завершения задачи
+        loaded_count(float): Число загруженных данных
+    """
+
+    def __init__(self, channel, task_id, is_complete=False):
+        """
+        Args:
+            channel(str): Канал передачи на клиент
+            task_id(int): id задачи
+            is_complete(bool): Флаг завершения задачи
+        """
+        self.channel = channel
+        self.task_id = task_id
+        self.rows_count = None
+        self.is_complete = is_complete
+        self.loaded_count = 0.0
+
+    @property
+    def percent(self):
+        return (int(round(self.loaded_count/self.rows_count*100))
+                if self.rows_count else 0)
+
+    def publish(self, status, msg=None):
+        """
+        Публиция состояния на клиент
+
+        Args:
+            status(str): Статус задачи
+            msg(str): Дополнительное сообщение (при ошибке)
+        """
+        percent = self.percent
+        if status == TLSE.FINISH or percent >= 100:
+            client.publish(self.channel, json.dumps(
+                {'percent': 100,
+                 'taskId': self.task_id,
+                 'event': TLSE.FINISH}
+            ))
+            self.is_complete = True
+        elif status == TLSE.START:
+            client.publish(self.channel, json.dumps(
+                {'percent': 0,
+                 'taskId': self.task_id,
+                 'event': TLSE.START}
+            ))
+        elif status == TLSE.PROCESSING:
+            client.publish(self.channel, json.dumps(
+                {'percent': percent,
+                 'taskId': self.task_id,
+                 'event': TLSE.PROCESSING}
+            ))
+        else:
+            client.publish(self.channel, json.dumps(
+                {'percent': percent,
+                 'taskId': self.task_id,
+                 'event': TLSE.ERROR,
+                 'msg': msg}
+            ))
+
+
+def get_tasks_chain(tasks_sets):
+    """
+    Получение последовательности задач для выполнения
+
+    Args:
+        tasks_sets(list): Параметры для задач. В виде списка для группы задач
+        для параллельного выполнения
+        Пример::
+            [
+                (<task_name1>, <task_def1>, <params_for_task1>),
+                (<task_name2>, <task_def2>, <params_for_task2>),
+                [
+                    (<task_name3>, <task_def3>, <params_for_task3>),
+                    ...
+                ]
+                ...
+        ]
+    """
+    tasks = []
+    channels = []
+    for task_info in tasks_sets:
+        if type(task_info) == tuple:
+            # Синхронный вариант
+            # task_id, channel = TaskService(task_info[0]).add_task(
+            #     arguments=task_info[2])
+            # task_info[1](task_id, channel)
+            task, channel = get_single_task(task_info)
+        else:
+            task, channel = get_group_tasks(task_info)
+        tasks.append(task)
+        channels.append(channel)
+    return tasks, channels
+
+
+def get_single_task(task_params):
+    """
+    Args:
+        task_params(tuple): Данные для запуска задачи
+        ::
+            (<task_name>, <task_def>, <params_for_task>)
+
+    Returns:
+        `Signature`: Celery-задача к выполнению
+        list: Список каналов для сокетов
+    """
+    task_id, channel = TaskService(task_params[0]).add_task(
+        arguments=task_params[2])
+    return task_params[1].si(task_id, channel), [channel]
+
+
+def get_group_tasks(task_params):
+    """
+    Args:
+        task_params(list): Данные для запуска задачи
+        ::
+            [
+                (<task_name>, <task_def>, <params_for_task>)
+                ...
+            ]
+
+    Returns:
+        `group`: группа Celery-задач к параллельному выполнению
+        list: Список каналов для сокетов
+    """
+    group_tasks = []
+    channels = []
+    for each in task_params:
+        task_id, channel = TaskService(each[0]).add_task(
+            arguments=each[2])
+        group_tasks.append(each[1].si(task_id, channel))
+        channels.append(channel)
+    return group(group_tasks), channels
+
+
+class RowKeysCreator(object):
+    """
+    Расчет ключа для таблицы
+    """
+
+    def __init__(self, table, cols, primary_keys=None):
+        """
+        Args:
+            table(str): Название таблицы
+            cols(list): Список словарей с названиями колонок и соотв. таблиц
+            primary_keys(list): Список уникальных ключей
+        """
+        self.table = table
+        self.cols = cols
+        self.primary_keys = primary_keys
+        # primary_keys_indexes(list): Порядковые номера первичных ключей
+        self.primary_keys_indexes = list()
+
+    def calc_key(self, row, row_num):
+        """
+        Расчет ключа для строки таблицы либо по первичному ключу
+        либо по номеру и значениям этой строки
+
+        Args:
+            row(tuple): Строка данных
+            row_num(int): Номер строки
+
+        Returns:
+            int: Ключ строки для таблицы
+        """
+        if self.primary_keys:
+            return binascii.crc32(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes]))
+        l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
+        l.append(row_num)
+        return binascii.crc32(
+                reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
+
+    def set_primary_key(self, data):
+        """
+        Установка первичного ключа, если есть
+
+        Args:
+            data(dict): метаданные по колонкам таблицы
+        """
+
+        for record in data['indexes']:
+            if record['is_primary']:
+                self.primary_keys = record['columns']
+                for ind, value in enumerate(self.cols):
+                    if value['col'] in self.primary_keys:
+                        self.primary_keys_indexes.append(ind)
+                break
+
+
+def calc_key_for_row(row, tables_key_creators, row_num):
+    """
+    Расчет ключа для отдельно взятой строки
+
+    Args:
+        row(tuple): строка данных
+        tables_key_creators(list of RowKeysCreator()): список экземпляров
+        класса, создающие ключи для строки конкретной таблицы
+        row_num(int): Номер строки
+
+    Returns:
+        int: Ключ для строки
+    """
+    if len(tables_key_creators) > 1:
+        row_values_for_calc = [
+            str(each.calc_key(row, row_num)) for each in tables_key_creators]
+        return binascii.crc32(''.join(row_values_for_calc))
+    else:
+        return tables_key_creators[0].calc_key(row, row_num)
+
+
+class Query(object):
+    """
+    Класс формирования и совершения запроса
+    """
+
+    def __init__(self, source_service, cursor=None, query=None):
+        self.source_service = source_service
+        self.cursor = cursor
+        self.query = query
+
+    def set_query(self, **kwargs):
+        raise NotImplemented
+
+    def execute(self, **kwargs):
+        raise NotImplemented
+
+
+class TableCreateQuery(Query):
+
+    def set_connection(self):
+        local_instance = self.source_service.get_local_instance()
+        self.connection = local_instance.connection
+
+    def set_query(self, **kwargs):
+        local_instance = self.source_service.get_local_instance()
+
+        self.query = self.source_service.get_table_create_query(
+            local_instance,
+            kwargs['table_name'],
+            ', '.join(kwargs['cols'])
+        )
+        self.set_connection()
+
+    def execute(self):
+        self.cursor = self.connection.cursor()
+
+        # create new table
+        self.cursor.execute(self.query)
+        self.connection.commit()
+        return
+
+
+class InsertQuery(TableCreateQuery):
+
+    def set_query(self, **kwargs):
+        local_instance = self.source_service.get_local_instance()
+        insert_table_query = self.source_service.get_table_insert_query(
+            local_instance, kwargs['table_name'])
+        self.query = insert_table_query.format(
+            '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(
+                kwargs['cols_nums'])]))
+        self.set_connection()
+
+    def execute(self, **kwargs):
+        self.cursor = self.connection.cursor()
+
+        # create new table
+        self.cursor.executemany(self.query, kwargs['data'])
+        self.connection.commit()
+        return
+
+
+class DeleteQuery(TableCreateQuery):
+
+    def set_query(self, **kwargs):
+        delete_table_query = "DELETE from {0} where cdc_key in ('{1}');"
+        self.query = delete_table_query.format(
+            kwargs['table_name'], '{0}')
+        self.set_connection()
+
+    def execute(self, **kwargs):
+        self.cursor = self.connection.cursor()
+        [str(a) for a in kwargs['keys']]
+        self.query = self.query.format(
+            "','".join([str(a) for a in kwargs['keys']]))
+        self.cursor.execute(self.query)
+        self.connection.commit()
+        return
+
+
+class MongodbConnection(object):
+
+    def __init__(self):
+        self.collection = None
+
+    def get_collection(self, db_name, collection_name):
+        """
+        Получение коллекции с указанным названием
+
+        Args:
+            db_name(str): Название базы
+            collection_name(str): Название коллекции
+        """
+        connection = pymongo.MongoClient(
+            settings.MONGO_HOST, settings.MONGO_PORT)
+        # database name
+        db = connection[db_name]
+        self.collection = db[collection_name]
+        return self.collection
+
+    def set_indexes(self, index_list):
+        """
+        Установка индексов
+
+        Args:
+            index_list(list): Список необходимых индексов
+            ::
+                [('_id', ASCENDING), ('_state', ASCENDING),
+                        ('_date', ASCENDING)]
+        """
+        self.collection.create_indexes(
+            [IndexModel([index]) for index in index_list])
+
+
+class TaskService(object):
     """
     Добавление новых задач в очередь
     Управление пользовательскими задачами
     """
     def __init__(self, name):
+        """
+        Args:
+            name(str): Имя задачи
+        """
         self.name = name
+        self.task_id = None
 
     def add_task(self, arguments):
         """
         Добавляем задачу юзеру в список задач и возвращаем идентификатор заадчи
-        :type tree: dict дерево источника
-        :param user_id: integer
-        :param data: dict
-        :param source_dict: dict
-        :return: integer
+
+        Args:
+            arguments(dict): Необходимые для выполнения задачи данные
+            table_key(str): ключ
+
+        Returns:
+            task_id(int): id задачи
+            new_channel(str): Название канала для сокетов
         """
 
         task = QueueList.objects.create(
@@ -59,12 +424,13 @@ class TaskService:
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
             app='etl',
-            checksum='',
+            checksum=arguments.get('checksum', ''),
         )
 
         task_id = task.id
-        # канал для таска
-        new_channel = settings.SOCKET_CHANNEL.format(arguments['user_id'], task_id)
+        # канал для задач
+        new_channel = settings.SOCKET_CHANNEL.format(
+            arguments['user_id'], task_id)
 
         # добавляем канал подписки в редис
         channels = RedisSourceService.get_user_subscribers(arguments['user_id'])
@@ -79,18 +445,18 @@ class TaskService:
 
 
     @staticmethod
-    def get_queue(task_id):
+    def get_queue(task_id, user_id):
         """
-        информация о ходе работы таска
+        Информация о ходе работы задач
         :param task_id:
         """
         queue_dict = RedisSourceService.get_queue_dict(task_id)
-        return QueueStorage(queue_dict)
+        return QueueStorage(queue_dict, task_id, user_id)
 
     @staticmethod
     def update_task_status(task_id, status_id, error_code=None, error_msg=None):
         """
-            Меняем статусы тасков
+        Меняем статусы задач
         """
         task = QueueList.objects.get(id=task_id)
         task.queue_status = QueueStatus.objects.get(title=status_id)
@@ -126,3 +492,64 @@ class TaskStatusEnum(BaseEnum):
         DONE: "Выполнено",
         DELETED: "Удалено",
     }
+
+
+class TaskLoadingStatusEnum(BaseEnum):
+    """
+    Состояние загрузки задачи
+    """
+    START, PROCESSING, FINISH, ERROR = ('start', 'processing', 'finish', 'error')
+    values = {
+        START: "Старт",
+        PROCESSING: "В обработке",
+        FINISH: "Выполнено",
+        ERROR: "Ошибка",
+    }
+
+TLSE = TaskLoadingStatusEnum
+
+
+class SourceTableStatusEnum(BaseEnum):
+    """
+    Статус состояния записей в таблице-источнике
+    """
+
+    IDLE, LOADED = ('idle', 'loaded')
+
+    values = {
+        IDLE: "Выполнено",
+        LOADED: "Загружено"
+    }
+
+STSE = SourceTableStatusEnum
+
+
+class DeltaTableStatusEnum(BaseEnum):
+    """
+    Статусы состояния записей в дельта-таблице
+    """
+
+    NEW, SYNCED = ('new', 'synced')
+
+    values = {
+        NEW: "Новое",
+        SYNCED: "Синхронизировано",
+    }
+
+DTSE = DeltaTableStatusEnum
+
+
+class DeleteTableStatusEnum(BaseEnum):
+    """
+    Статусы состояния записей в таблице с данными на удаления
+    """
+
+    NEW, DELETED = ('new', 'deleted')
+
+    values = {
+        NEW: "Новое",
+        DELETED: "Удалено",
+    }
+
+DelTSE = DeleteTableStatusEnum
+

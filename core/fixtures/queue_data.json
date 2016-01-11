@@ -62,9 +62,44 @@
   },
   {
     "model": "core.queue",
-    "pk": 3,
+    "pk": 4,
     "fields": {
       "name": "etl:database:generate_measures"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 5,
+    "fields": {
+      "name": "etl:cdc:load_data"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 6,
+    "fields": {
+      "name": "etl:cdc:load_delta"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 7,
+    "fields": {
+      "name": "etl:cdc:detect_redundant"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 8,
+    "fields": {
+      "name": "etl:cdc:delete_redundant"
+    }
+  },
+  {
+    "model": "core.queue",
+    "pk": 9,
+    "fields": {
+      "name": "etl.tasks.create_triggers"
     }
   }
 

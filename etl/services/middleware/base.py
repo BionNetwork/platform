@@ -18,6 +18,19 @@ class EtlEncoder:
         return obj
 
 
+def generate_columns_string(columns):
+    """
+        Генерирует строку из имен таблиц и колонок для binascii.crc32
+    """
+    cols_str = ''
+    for obj in columns:
+        t = obj['table']
+        c = obj['col']
+        cols_str += '{0}-{1};'.format(t, c)
+
+    return cols_str
+
+
 def generate_table_name_key(source, cols_str):
     """Генерация ключа для названия промежуточной таблицы
 

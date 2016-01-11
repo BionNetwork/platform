@@ -49,6 +49,11 @@ class BaseTemplateView(TemplateView):
     def redirect_to_url(self, url, **kwargs):
         return HttpResponseRedirect(url, **kwargs)
 
+    def json_response(self, context, **response_kwargs):
+        response_kwargs['content_type'] = 'application/json'
+        return HttpResponse(
+            json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
+
 
 class HomeView(BaseTemplateView):
     """Главная страница dashboard"""
