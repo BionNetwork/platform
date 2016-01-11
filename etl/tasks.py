@@ -5,10 +5,9 @@ import os
 import sys
 import brukva
 from datetime import datetime
-import pymongo
 import json
 
-from pymongo import IndexModel, ASCENDING
+from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.middleware.base import (
@@ -27,7 +26,6 @@ from core.models import (
 from django.conf import settings
 
 from djcelery import celery
-from celery.contrib.methods import task_method
 from itertools import groupby, izip
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -179,9 +177,6 @@ class LoadMongodb(TaskProcessing):
     Первичная загрузка данных в Mongodb
     """
 
-    def load_data(self):
-        super(LoadMongodb, self).load_data()
-
     def processing(self):
         cols = json.loads(self.context['cols'])
         structure = self.context['tree']
@@ -260,9 +255,6 @@ class LoadMongodb(TaskProcessing):
 
 class LoadDb(TaskProcessing):
 
-    def load_data(self):
-        super(LoadDb, self).load_data()
-
     def processing(self):
         """
         Загрузка данных из Mongodb в базу данных
@@ -291,7 +283,7 @@ class LoadDb(TaskProcessing):
             clear_col_names.append('{0}{1}{2}'.format(
                 t, FIELD_NAME_SEP, c, col_types['{0}.{1}'.format(t, c)]))
 
-        collection = MongodbConnection().get_collection(
+        source_collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
 
         source_table_name = get_table_name(STTM_DATASOURCE, self.key)
@@ -312,7 +304,7 @@ class LoadDb(TaskProcessing):
         # Пишем данные в базу
         while True:
             try:
-                collection_cursor = collection.find(
+                collection_cursor = source_collection.find(
                     {'_state': STSE.IDLE},
                     limit=limit, skip=offset)
                 rows_dict = []
@@ -357,8 +349,20 @@ class LoadDb(TaskProcessing):
                 self.queue_storage['percent'] = (
                     100 if self.publisher.is_complete else self.publisher.percent)
 
-        collection.update_many(
+        source_collection.update_many(
             {'_state': STSE.IDLE}, {'$set': {'_state': STSE.LOADED}})
+
+        # Обновляем коллекцию всех ключей
+        all_keys_collection_name = get_table_name(STTM_DATASOURCE_KEYSALL, self.key)
+        all_keys_collection = MongodbConnection()
+        all_keys_collection.get_collection('etl', all_keys_collection_name)
+        all_keys_collection.set_indexes(
+            [('_state', ASCENDING), ('_deleted', ASCENDING)])
+
+        source_collection.aggregate(
+            [{"$match": {"_state": STSE.LOADED}},
+             {"$project": {"_id": "$_id", "_state": {"$literal": "new"}}},
+             {"$out": "%s" % all_keys_collection_name}])
 
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
@@ -371,7 +375,7 @@ class LoadDb(TaskProcessing):
 
 class LoadDimensions(TaskProcessing):
     """
-    Создание сущностей(рамерности, измерения) олап куба
+    Создание рамерности, измерения олап куба
     """
     app_name = 'sttm'
     module = 'biplatform.etl.models'
@@ -411,9 +415,6 @@ class LoadDimensions(TaskProcessing):
             STTM_DATASOURCE, self.key)
         return query.format(
             fields_str, source_table_name, '{0}', '{1}')
-
-    def load_data(self):
-        super(LoadDimensions, self).load_data()
 
     def processing(self):
         self.key = self.context['checksum']
@@ -568,10 +569,6 @@ class LoadMeasures(LoadDimensions):
 
 class UpdateMongodb(TaskProcessing):
 
-    # @celery.task(name=MONGODB_DELTA_LOAD, filter=task_method)
-    def load_data(self):
-        super(UpdateMongodb, self).load_data()
-
     def processing(self):
         """
         1. Процесс обновленения данных в коллекции `sttm_datasource_delta_{key}`
@@ -671,9 +668,6 @@ class UpdateMongodb(TaskProcessing):
 
 class DetectRedundant(TaskProcessing):
 
-    def load_data(self):
-        super(DetectRedundant, self).load_data()
-
     def processing(self):
         """
         Выявление записей на удаление
@@ -683,33 +677,24 @@ class DetectRedundant(TaskProcessing):
                     'etl', get_table_name(STTM_DATASOURCE, self.key))
         current_collection = MongodbConnection().get_collection(
                     'etl', get_table_name(STTM_DATASOURCE_KEYS, self.key))
-
-        # Дельта-коллекция
-        delete_mc = MongodbConnection()
-        delete_collection = delete_mc.get_collection(
+        all_keys_collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
-        delete_mc.set_indexes([('_state', ASCENDING),
-                         ('_deleted', ASCENDING)])
 
-        source_collection.aggregate(
-            [{"$match": {"_state": STSE.LOADED}},
-             {"$project": {"_id": "$_id", "_state": {"$literal": "new"}}},
-             {"$out": "%s" % get_table_name(STTM_DATASOURCE_KEYSALL, self.key)}])
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         page = 1
         while True:
 
             to_delete = []
-            del_cursor = list(delete_collection.find(
+            records_for_del = list(all_keys_collection.find(
                     {'_state': DelTSE.NEW}, limit=limit, skip=(page-1)*limit))
-            if not len(del_cursor):
+            if not len(records_for_del):
                 break
-            for record in del_cursor:
+            for record in records_for_del:
                 row_key = record['_id']
                 if not current_collection.find({'_id': row_key}).count():
                     to_delete.append(row_key)
 
-            delete_collection.update_many(
+            all_keys_collection.update_many(
                 {'_id': {'$in': to_delete}},
                 {'$set': {'_state': DelTSE.DELETED}})
 
@@ -719,9 +704,6 @@ class DetectRedundant(TaskProcessing):
 
 
 class DeleteRedundant(TaskProcessing):
-
-    def load_data(self):
-        super(DeleteRedundant, self).load_data()
 
     def processing(self):
         self.key = self.context['checksum']
@@ -747,9 +729,6 @@ class DeleteRedundant(TaskProcessing):
 
 
 class CreateTriggers(TaskProcessing):
-
-    def load_data(self):
-        super(CreateTriggers, self).load_data()
 
     def processing(self):
         """
