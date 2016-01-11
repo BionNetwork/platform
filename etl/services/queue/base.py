@@ -5,7 +5,6 @@ from django.conf import settings
 import brukva
 from pymongo import IndexModel
 import pymongo
-from etl.services.db.factory import DatabaseService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)

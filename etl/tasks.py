@@ -5,10 +5,9 @@ import os
 import sys
 import brukva
 from datetime import datetime
-import pymongo
 import json
 
-from pymongo import IndexModel, ASCENDING
+from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.middleware.base import (
@@ -27,7 +26,6 @@ from core.models import (
 from django.conf import settings
 
 from djcelery import celery
-from celery.contrib.methods import task_method
 from itertools import groupby, izip
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
