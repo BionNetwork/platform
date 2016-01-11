@@ -340,7 +340,6 @@ class LoadDb(TaskProcessing):
                 self.publisher.publish(TLSE.ERROR, self.err_msg)
                 break
             else:
-                # TODO: Найти последнюю строку
                 last_row = rows_dict[-1]  # получаем последнюю запись
                 # обновляем информацию о работе таска
                 self.queue_storage.update()
@@ -603,9 +602,11 @@ class UpdateMongodb(TaskProcessing):
                          ('_date', ASCENDING)])
 
         # Коллекция с текущими данными
+        current_collection_name = get_table_name(STTM_DATASOURCE_KEYS, self.key)
+        MongodbConnection.drop('etl', current_collection_name)
         current_mc = MongodbConnection()
         current_collection = current_mc.get_collection(
-            'etl', get_table_name(STTM_DATASOURCE_KEYS, self.key))
+            'etl', current_collection_name)
         current_mc.set_indexes([('_id', ASCENDING)])
 
         query = DataSourceService.get_rows_query_for_loading_task(
