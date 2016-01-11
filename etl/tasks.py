@@ -12,8 +12,6 @@ from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
-from etl.services.model_creation import (
-    get_django_model, install, get_field_settings)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
     DeleteQuery, DelTSE, DTSE
@@ -280,8 +278,7 @@ class LoadDb(TaskProcessing):
             c = obj['col']
             col_names.append('"{0}{1}{2}" {3}'.format(
                 t, FIELD_NAME_SEP, c, col_types['{0}.{1}'.format(t, c)]))
-            clear_col_names.append('{0}{1}{2}'.format(
-                t, FIELD_NAME_SEP, c, col_types['{0}.{1}'.format(t, c)]))
+            clear_col_names.append('{0}{1}{2}'.format(t, FIELD_NAME_SEP, c))
 
         source_collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
@@ -428,19 +425,18 @@ class LoadDimensions(TaskProcessing):
         self.actual_fields = self.get_actual_fields(meta_data)
 
         f_list = []
-        table_name = get_table_name(self.table_prefix, self.key)
+        col_names = []
         for table, field in self.actual_fields:
-            field_name = '{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name'])
+            col_names.append('"{0}{1}{2}" {3}'.format(
+                table, FIELD_NAME_SEP, field['name'], field['type']))
 
-            f_list.append(get_field_settings(field_name, field['type']))
+        create_query = TableCreateQuery(DataSourceService())
+        create_query.set_query(
+            table_name=get_table_name(self.table_prefix, self.key), cols=col_names)
+        create_query.execute()
 
-        model = get_django_model(
-            table_name, f_list, self.app_name,
-            self.module, table_name)
-        install(model)
         try:
-            self.save_fields(model)
+            self.save_fields()
         except Exception as e:
             # код и сообщение ошибки
             pg_code = getattr(e, 'pgcode', None)
@@ -499,7 +495,7 @@ class LoadDimensions(TaskProcessing):
                 # data=json.dumps(data)
             )
 
-    def save_fields(self, model):
+    def save_fields(self):
         """Заполняем таблицу данными
 
         Args:
@@ -509,6 +505,11 @@ class LoadDimensions(TaskProcessing):
         for table, field in self.actual_fields:
             column_names.append('{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name']))
+
+        insert_query = InsertQuery(DataSourceService())
+        insert_query.set_query(
+            table_name=get_table_name(self.table_prefix, self.key),
+            cols_nums=len(column_names))
         offset = 0
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
@@ -522,10 +523,13 @@ class LoadDimensions(TaskProcessing):
             rows = cursor.fetchall()
             if not rows:
                 break
-            column_data = [model(
-                **{column_names[i]: v for (i, v) in enumerate(x)})
-                        for x in rows]
-            model.objects.bulk_create(column_data)
+            rows_dict = []
+            for record in rows:
+                temp_dict = {}
+                for ind in xrange(len(column_names)):
+                    temp_dict.update({str(ind): record[ind]})
+                rows_dict.append(temp_dict)
+            insert_query.execute(data=rows_dict)
             offset = index_to
 
             self.queue_storage.update()
@@ -555,15 +559,6 @@ class LoadMeasures(LoadDimensions):
                 user_id=user_id,
                 datasources_meta=datasource_meta_id
             )
-
-    def load_data(self):
-        """
-        Создание размерностей
-        """
-        super(LoadMeasures, self).load_data()
-
-    def processing(self):
-        super(LoadMeasures, self).processing()
 
 
 class UpdateMongodb(TaskProcessing):

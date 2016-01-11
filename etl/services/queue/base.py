@@ -150,11 +150,11 @@ def get_tasks_chain(tasks_sets):
     tasks = []
     channels = []
     for task_info in tasks_sets:
+        # # Синхронный вариант
+        # task_id, channel = TaskService(task_info[0]).add_task(
+        #     arguments=task_info[2])
+        # task_info[1](task_id, channel)
         if type(task_info) == tuple:
-            # Синхронный вариант
-            # task_id, channel = TaskService(task_info[0]).add_task(
-            #     arguments=task_info[2])
-            # task_info[1](task_id, channel)
             task, channel = get_single_task(task_info)
         else:
             task, channel = get_group_tasks(task_info)
@@ -378,6 +378,14 @@ class MongodbConnection(object):
         db = connection[db_name]
         self.collection = db[collection_name]
         return self.collection
+
+    @staticmethod
+    def drop(db_name, collection_name):
+        connection = pymongo.MongoClient(
+            settings.MONGO_HOST, settings.MONGO_PORT)
+        # database name
+        db = connection[db_name]
+        db.drop_collection(collection_name)
 
     def set_indexes(self, index_list):
         """
