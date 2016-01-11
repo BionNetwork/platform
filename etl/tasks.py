@@ -513,10 +513,10 @@ class LoadDimensions(TaskProcessing):
         offset = 0
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
+        rows_query = self.rows_query(column_names)
+        connection = DataSourceService.get_local_instance().connection
         while True:
-            rows_query = self.rows_query(column_names)
             index_to = offset+step
-            connection = DataSourceService.get_local_instance().connection
             cursor = connection.cursor()
 
             cursor.execute(rows_query.format(index_to, offset))

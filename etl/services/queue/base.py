@@ -5,7 +5,6 @@ from django.conf import settings
 import brukva
 from pymongo import IndexModel
 import pymongo
-from etl.services.db.factory import DatabaseService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
@@ -70,7 +69,7 @@ class RPublish(object):
     Attributes:
         channel(str): Канал передачи на клиент
         task_id(int): id задачи
-        row_count(int): Приблизительно число обрабатываемых строк
+        rows_count(int): Приблизительно число обрабатываемых строк
         is_complete(bool): Флаг завершения задачи
         loaded_count(float): Число загруженных данных
     """
@@ -102,7 +101,7 @@ class RPublish(object):
             msg(str): Дополнительное сообщение (при ошибке)
         """
         percent = self.percent
-        if status == TLSE.FINISH or percent > 100:
+        if status == TLSE.FINISH or percent >= 100:
             client.publish(self.channel, json.dumps(
                 {'percent': 100,
                  'taskId': self.task_id,
