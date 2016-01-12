@@ -285,3 +285,31 @@ class QueueList(models.Model):
     class Meta:
         db_table = "queue_list"
         index_together = ["queue", "date_created", "queue_status"]
+
+
+class DatasetStateChoices(DjangoChoices):
+    """
+    Cтатусы для Dataset
+    """
+    IDLE = ChoiceItem(1, 'В ожидании данных')
+    FILUP = ChoiceItem(2, 'Наполнение данных')
+    DIMCR = ChoiceItem(3, 'Создание размерностей')
+    MSRCR = ChoiceItem(4, 'Создание мер')
+    LOADED = ChoiceItem(5, 'Загрузка данных завершилась')
+
+
+class Dataset(models.Model):
+    """
+    Модель
+    """
+    key = models.TextField(verbose_name=u'Ключ', unique=True)
+    date_created = models.DateTimeField(
+        verbose_name="Дата создания", auto_now_add=True, db_index=True)
+    update_date = models.DateTimeField(
+        verbose_name="Дата обновления", auto_now=True, db_index=True)
+    state = models.SmallIntegerField(
+        verbose_name='Статус', choices=DatasetStateChoices.choices,
+        default=DatasetStateChoices.IDLE, db_index=True)
+
+    class Meta:
+        db_table = "datasets"
