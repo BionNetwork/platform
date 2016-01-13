@@ -8,6 +8,7 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
 from djchoices import ChoiceItem, DjangoChoices
+from core.model_helpers import MultiPrimaryKeyModel
 
 from .db.services import RetryQueryset
 from .helpers import get_utf8_string
@@ -313,3 +314,29 @@ class Dataset(models.Model):
 
     class Meta:
         db_table = "datasets"
+
+
+class DatasetToMeta(models.Model, MultiPrimaryKeyModel):
+    """
+    Модель связи Мета источника и Dataset
+    """
+    meta = models.ForeignKey(
+        DatasourceMeta, verbose_name=u'Мета источника')
+    # FIXME обманка для Джанги, т.к. 1 primary key быть обязан
+    # FIXME всегда при регистрации модели
+    # FIXME на самом деле в миграции формируется primary key (meta, dataset)
+    dataset = models.ForeignKey(
+        Dataset, verbose_name=u'Данные', primary_key=True)
+
+    def delete(self, using=None):
+        MultiPrimaryKeyModel.delete(self, using)
+
+    # переопределяем save, ставим force_insert=True,
+    # чтобы inst.save() вызывал в бд тока инсерт запрос, а не
+    # апдейт+инсерт
+    def save(self, force_insert=False, force_update=False, using=None,
+             update_fields=None):
+        models.Model.save(self, force_insert=True)
+
+    class Meta:
+        db_table = "datasets_to_meta"

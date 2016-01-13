@@ -13,7 +13,9 @@ from django.db import transaction
 
 from core.exceptions import ResponseError
 from core.views import BaseView, BaseTemplateView
-from core.models import Datasource, Queue, QueueList, QueueStatus, DatasourceSettings as SourceSettings
+from core.models import (
+    Datasource, Queue, QueueList, QueueStatus,
+    DatasourceSettings as SourceSettings)
 from . import forms as etl_forms
 import logging
 
