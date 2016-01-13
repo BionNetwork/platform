@@ -129,6 +129,31 @@ class RPublish(object):
             ))
 
 
+def tasks_run(tasks_seq, start_params):
+    """
+    Последовательный запуск задач
+
+    Args:
+        tasks_seq(list): Список кортежей с название задач и рабочих методов
+        Пример::
+            [
+                    (<task_name1>, <task_def1>),
+                    (<task_name2>, <task_def2>),
+                    ...
+            ]
+        start_params(dict): Словарь параметров для первой задачи
+    """
+    current_params = None
+    channel = {}
+    for task_info in tasks_seq:
+        task_id, channel = TaskService(task_info[0]).add_task(
+                        arguments=start_params if not current_params
+                        else current_params)
+        async_result = task_info[1].apply_async((task_id, channel),)
+        current_params = [i[1] for i in async_result.collect()][0]
+    return [channel]
+
+
 def get_tasks_chain(tasks_sets):
     """
     Получение последовательности задач для выполнения
@@ -150,11 +175,11 @@ def get_tasks_chain(tasks_sets):
     tasks = []
     channels = []
     for task_info in tasks_sets:
+        # # Синхронный вариант
+        # task_id, channel = TaskService(task_info[0]).add_task(
+        #     arguments=task_info[2])
+        # task_info[1](task_id, channel)
         if type(task_info) == tuple:
-            # Синхронный вариант
-            # task_id, channel = TaskService(task_info[0]).add_task(
-            #     arguments=task_info[2])
-            # task_info[1](task_id, channel)
             task, channel = get_single_task(task_info)
         else:
             task, channel = get_group_tasks(task_info)
@@ -379,6 +404,14 @@ class MongodbConnection(object):
         self.collection = db[collection_name]
         return self.collection
 
+    @staticmethod
+    def drop(db_name, collection_name):
+        connection = pymongo.MongoClient(
+            settings.MONGO_HOST, settings.MONGO_PORT)
+        # database name
+        db = connection[db_name]
+        db.drop_collection(collection_name)
+
     def set_indexes(self, index_list):
         """
         Установка индексов
@@ -539,17 +572,18 @@ class DeltaTableStatusEnum(BaseEnum):
 DTSE = DeltaTableStatusEnum
 
 
-class DeleteTableStatusEnum(BaseEnum):
+class AllKeysTableStatusEnum(BaseEnum):
     """
     Статусы состояния записей в таблице с данными на удаления
     """
 
-    NEW, DELETED = ('new', 'deleted')
+    NEW, DELETED, SYNCED = ('new', 'deleted', 'synced')
 
     values = {
         NEW: "Новое",
         DELETED: "Удалено",
+        SYNCED: "Синхронизировано",
     }
 
-DelTSE = DeleteTableStatusEnum
+AKTSE = AllKeysTableStatusEnum
 
