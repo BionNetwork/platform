@@ -123,8 +123,8 @@ class Database(object):
                 indexes[ikey].append({
                     "name": ig[index_name],
                     "columns": ig[icol_names].split(','),
-                    "is_primary": ig[primary] == 't',
-                    "is_unique": ig[unique] == 't',
+                    "is_primary": ig[primary] == True,
+                    "is_unique": ig[unique] == True,
                 })
 
         constraints = defaultdict(list)

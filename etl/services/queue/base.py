@@ -151,6 +151,7 @@ def tasks_run(tasks_seq, start_params):
                         else current_params)
         async_result = task_info[1].apply_async((task_id, channel),)
         current_params = [i[1] for i in async_result.collect()][0]
+        # current_params = task_info[1](task_id, channel)
     return [channel]
 
 
@@ -258,11 +259,12 @@ class RowKeysCreator(object):
         Returns:
             int: Ключ строки для таблицы
         """
-        if self.primary_keys:
-            return binascii.crc32(''.join(
-                [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
-        l.append(row_num)
+        if self.primary_keys:
+            l.append(binascii.crc32(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes])))
+        else:
+            l.append(row_num)
         return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
@@ -278,7 +280,7 @@ class RowKeysCreator(object):
             if record['is_primary']:
                 self.primary_keys = record['columns']
                 for ind, value in enumerate(self.cols):
-                    if value['col'] in self.primary_keys:
+                    if value['table'] == self.table and value['col'] in self.primary_keys:
                         self.primary_keys_indexes.append(ind)
                 break
 
