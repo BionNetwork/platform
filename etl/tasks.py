@@ -14,7 +14,7 @@ from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, DelTSE, DTSE
+    DeleteQuery, AKTSE, DTSE
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
@@ -69,6 +69,7 @@ class TaskProcessing(object):
         self.publisher = RPublish(self.channel, self.task_id)
         self.queue_storage = None
         self.key = None
+        self.next_task_params = None
 
     def prepare(self):
         """
@@ -99,6 +100,7 @@ class TaskProcessing(object):
                 self.user_id, self.task_id)
             raise
         self.exit()
+        return self.next_task_params
 
     def processing(self):
         """
@@ -132,42 +134,42 @@ class TaskProcessing(object):
 
 @celery.task(name=MONGODB_DATA_LOAD)
 def load_mongo_db(task_id, channel):
-    LoadMongodb(task_id, channel).load_data()
+    return LoadMongodb(task_id, channel).load_data()
 
 
 @celery.task(name=DB_DATA_LOAD)
 def load_db(task_id, channel):
-    LoadDb(task_id, channel).load_data()
+    return LoadDb(task_id, channel).load_data()
 
 
 @celery.task(name=GENERATE_DIMENSIONS)
 def load_dimensions(task_id, channel):
-    LoadDimensions(task_id, channel).load_data()
+    return LoadDimensions(task_id, channel).load_data()
 
 
 @celery.task(name=GENERATE_MEASURES)
 def load_measures(task_id, channel):
-    LoadMeasures(task_id, channel).load_data()
+    return LoadMeasures(task_id, channel).load_data()
 
 
 @celery.task(name=MONGODB_DELTA_LOAD)
 def update_mongo_db(task_id, channel):
-    UpdateMongodb(task_id, channel).load_data()
+    return UpdateMongodb(task_id, channel).load_data()
 
 
 @celery.task(name=DB_DETECT_REDUNDANT)
 def detect_redundant(task_id, channel):
-    DetectRedundant(task_id, channel).load_data()
+    return DetectRedundant(task_id, channel).load_data()
 
 
 @celery.task(name=DB_DELETE_REDUNDANT)
 def delete_redundant(task_id, channel):
-    DeleteRedundant(task_id, channel).load_data()
+    return DeleteRedundant(task_id, channel).load_data()
 
 
 @celery.task(name=CREATE_TRIGGERS)
 def create_triggers(task_id, channel):
-    CreateTriggers(task_id, channel).load_data()
+    return CreateTriggers(task_id, channel).load_data()
 
 
 class LoadMongodb(TaskProcessing):
@@ -201,6 +203,14 @@ class LoadMongodb(TaskProcessing):
         mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
                         ('_date', ASCENDING)])
 
+        # Коллекция с текущими данными
+        current_collection_name = get_table_name(STTM_DATASOURCE_KEYS, self.key)
+        MongodbConnection.drop('etl', current_collection_name)
+        current_mc = MongodbConnection()
+        current_collection = current_mc.get_collection(
+            'etl', current_collection_name)
+        current_mc.set_indexes([('_id', ASCENDING)])
+
         query = DataSourceService.get_rows_query_for_loading_task(
             source_model, structure, cols)
 
@@ -218,6 +228,7 @@ class LoadMongodb(TaskProcessing):
             result = cursor.fetchall()
 
             data_to_insert = []
+            data_to_current_insert = []
             if not result:
                 break
 
@@ -228,8 +239,10 @@ class LoadMongodb(TaskProcessing):
                     [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
                     [EtlEncoder.encode(rec_field) for rec_field in record])
                 data_to_insert.append(dict(izip(col_names, record_normalized)))
+                data_to_current_insert.append(dict(_id=row_key))
             try:
                 collection.insert_many(data_to_insert, ordered=False)
+                current_collection.insert_many(data_to_current_insert, ordered=False)
                 print 'inserted %d rows to mongodb' % len(data_to_insert)
             except Exception as e:
                 self.was_error = True
@@ -249,6 +262,8 @@ class LoadMongodb(TaskProcessing):
                 100 if self.publisher.is_complete else self.publisher.percent)
 
             page += 1
+
+        self.next_task_params = self.context
 
 
 class LoadDb(TaskProcessing):
@@ -348,18 +363,6 @@ class LoadDb(TaskProcessing):
         source_collection.update_many(
             {'_state': STSE.IDLE}, {'$set': {'_state': STSE.LOADED}})
 
-        # Обновляем коллекцию всех ключей
-        all_keys_collection_name = get_table_name(STTM_DATASOURCE_KEYSALL, self.key)
-        all_keys_collection = MongodbConnection()
-        all_keys_collection.get_collection('etl', all_keys_collection_name)
-        all_keys_collection.set_indexes(
-            [('_state', ASCENDING), ('_deleted', ASCENDING)])
-
-        source_collection.aggregate(
-            [{"$match": {"_state": STSE.LOADED}},
-             {"$project": {"_id": "$_id", "_state": {"$literal": "new"}}},
-             {"$out": "%s" % all_keys_collection_name}])
-
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
             self.key, source, cols, json.loads(
@@ -367,6 +370,21 @@ class LoadDb(TaskProcessing):
         if last_row:
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
+
+        if not self.context['triggers']:
+            self.next_task_params = {
+                'checksum': self.key,
+                'user_id': self.user_id,
+                'source_id': source.id
+            }
+        else:
+            self.next_task_params = {
+                'checksum': self.key,
+                'user_id': self.user_id,
+                'tables_info': self.context['table_info'],
+                'db_instance': self.context['db_instance'],
+                'source_id': source.id
+            }
 
 
 class LoadDimensions(TaskProcessing):
@@ -415,7 +433,7 @@ class LoadDimensions(TaskProcessing):
     def processing(self):
         self.key = self.context['checksum']
         # Наполняем контекст
-        source = Datasource.objects.get(id=self.context['datasource_id'])
+        source = Datasource.objects.get(id=self.context['source_id'])
         meta_tables = {
             k: v for (k, v) in
             DatasourceMeta.objects.filter(
@@ -424,7 +442,6 @@ class LoadDimensions(TaskProcessing):
             value=self.key).values('meta__collection_name', 'meta__fields')
         self.actual_fields = self.get_actual_fields(meta_data)
 
-        f_list = []
         col_names = []
         for table, field in self.actual_fields:
             col_names.append('"{0}{1}{2}" {3}'.format(
@@ -454,6 +471,8 @@ class LoadDimensions(TaskProcessing):
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
+
+        self.next_task_params = self.context
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
@@ -589,13 +608,6 @@ class UpdateMongodb(TaskProcessing):
         collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
 
-        # Дельта-коллекция
-        delta_mc = MongodbConnection()
-        delta_collection = delta_mc.get_collection(
-            'etl', get_table_name(STTM_DATASOURCE_DELTA, self.key))
-        delta_mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
-                         ('_date', ASCENDING)])
-
         # Коллекция с текущими данными
         current_collection_name = get_table_name(STTM_DATASOURCE_KEYS, self.key)
         MongodbConnection.drop('etl', current_collection_name)
@@ -603,6 +615,13 @@ class UpdateMongodb(TaskProcessing):
         current_collection = current_mc.get_collection(
             'etl', current_collection_name)
         current_mc.set_indexes([('_id', ASCENDING)])
+
+        # Дельта-коллекция
+        delta_mc = MongodbConnection()
+        delta_collection = delta_mc.get_collection(
+            'etl', get_table_name(STTM_DATASOURCE_DELTA, self.key))
+        delta_mc.set_indexes([
+            ('_id', ASCENDING), ('_state', ASCENDING), ('_date', ASCENDING)])
 
         query = DataSourceService.get_rows_query_for_loading_task(
             source_model, structure, cols)
@@ -661,6 +680,8 @@ class UpdateMongodb(TaskProcessing):
         delta_collection.update_many(
             {'_state': DTSE.NEW}, {'$set': {'_state': DTSE.SYNCED}})
 
+        self.next_task_params = self.context
+
 
 class DetectRedundant(TaskProcessing):
 
@@ -673,8 +694,19 @@ class DetectRedundant(TaskProcessing):
                     'etl', get_table_name(STTM_DATASOURCE, self.key))
         current_collection = MongodbConnection().get_collection(
                     'etl', get_table_name(STTM_DATASOURCE_KEYS, self.key))
-        all_keys_collection = MongodbConnection().get_collection(
-            'etl', get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
+
+        # Обновляем коллекцию всех ключей
+        all_keys_collection_name = get_table_name(STTM_DATASOURCE_KEYSALL, self.key)
+        ak_collection = MongodbConnection()
+        all_keys_collection = ak_collection.get_collection(
+            'etl', all_keys_collection_name)
+        ak_collection.set_indexes(
+            [('_state', ASCENDING), ('_deleted', ASCENDING)])
+
+        source_collection.aggregate(
+            [{"$match": {"_state": STSE.LOADED}},
+             {"$project": {"_id": "$_id", "_state": {"$literal": AKTSE.NEW}}},
+             {"$out": "%s" % all_keys_collection_name}])
 
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         page = 1
@@ -682,7 +714,7 @@ class DetectRedundant(TaskProcessing):
 
             to_delete = []
             records_for_del = list(all_keys_collection.find(
-                    {'_state': DelTSE.NEW}, limit=limit, skip=(page-1)*limit))
+                    {'_state': AKTSE.NEW}, limit=limit, skip=(page-1)*limit))
             if not len(records_for_del):
                 break
             for record in records_for_del:
@@ -692,11 +724,16 @@ class DetectRedundant(TaskProcessing):
 
             all_keys_collection.update_many(
                 {'_id': {'$in': to_delete}},
-                {'$set': {'_state': DelTSE.DELETED}})
+                {'$set': {'_deleted': True}})
 
             source_collection.delete_many({'_id': {'$in': to_delete}})
 
             page += 1
+
+        all_keys_collection.update_many(
+            {'_state': AKTSE.NEW}, {'$set': {'_state': AKTSE.SYNCED}})
+
+        self.next_task_params = self.context
 
 
 class DeleteRedundant(TaskProcessing):
@@ -715,13 +752,15 @@ class DeleteRedundant(TaskProcessing):
         page = 1
         while True:
             delete_delta = del_collection.find(
-                {'_state': DelTSE.DELETED},
+                {'_deleted': True},
                 limit=limit, skip=(page-1)*limit)
             l = [record['_id'] for record in delete_delta]
             if not l:
                 break
             delete_query.execute(keys=l)
             page += 1
+
+        self.next_task_params = self.context
 
 
 class CreateTriggers(TaskProcessing):
@@ -772,5 +811,11 @@ class CreateTriggers(TaskProcessing):
                 cursor.execute(query)
 
             connection.commit()
+
+        self.next_task_params = {
+            'checksum': self.key,
+            'user_id': self.user_id,
+            'source_id': self.context['source_id']
+        }
 
 # write in console: python manage.py celery -A etl.tasks worker

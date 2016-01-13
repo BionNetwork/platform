@@ -129,6 +129,31 @@ class RPublish(object):
             ))
 
 
+def tasks_run(tasks_seq, start_params):
+    """
+    Последовательный запуск задач
+
+    Args:
+        tasks_seq(list): Список кортежей с название задач и рабочих методов
+        Пример::
+            [
+                    (<task_name1>, <task_def1>),
+                    (<task_name2>, <task_def2>),
+                    ...
+            ]
+        start_params(dict): Словарь параметров для первой задачи
+    """
+    current_params = None
+    channel = {}
+    for task_info in tasks_seq:
+        task_id, channel = TaskService(task_info[0]).add_task(
+                        arguments=start_params if not current_params
+                        else current_params)
+        async_result = task_info[1].apply_async((task_id, channel),)
+        current_params = [i[1] for i in async_result.collect()][0]
+    return [channel]
+
+
 def get_tasks_chain(tasks_sets):
     """
     Получение последовательности задач для выполнения
@@ -547,17 +572,18 @@ class DeltaTableStatusEnum(BaseEnum):
 DTSE = DeltaTableStatusEnum
 
 
-class DeleteTableStatusEnum(BaseEnum):
+class AllKeysTableStatusEnum(BaseEnum):
     """
     Статусы состояния записей в таблице с данными на удаления
     """
 
-    NEW, DELETED = ('new', 'deleted')
+    NEW, DELETED, SYNCED = ('new', 'deleted', 'synced')
 
     values = {
         NEW: "Новое",
         DELETED: "Удалено",
+        SYNCED: "Синхронизировано",
     }
 
-DelTSE = DeleteTableStatusEnum
+AKTSE = AllKeysTableStatusEnum
 
