@@ -76,3 +76,31 @@ $.ajaxSetup({
 });
 
 //# sourceMappingURL=core.js.map
+
+var urlsToActivateLi = {
+    '/users/': 'users-li-id',
+    '/etl/datasources/': 'sources-li-id'
+}
+
+function activateLi(){
+    // Активируем пункты левого меню, исходя из пришедшего урла
+
+    var activeLies = $('#left-sidebar-menu>li.active'),
+        path = window.location.pathname;
+
+    $.each(activeLies, function(i, el){
+        $(el).removeClass('active');
+    });
+
+    if(path=='/'){
+        $('#home-li-id').addClass('active');
+    } else {
+        $.each(urlsToActivateLi, function(url, liId){
+            if(path.startsWith(url)){
+                $('#'+liId).addClass('active');
+            }
+        });
+    }
+}
+
+activateLi();
