@@ -4,6 +4,7 @@
 FIELD_NAME_SEP = '__'
 
 # Название задач
+CREATE_DATASET = 'etl:database:create_dataset'
 MONGODB_DATA_LOAD = 'etl:load_data:mongo'
 DB_DATA_LOAD = 'etl:cdc:load_data'
 MONGODB_DELTA_LOAD = 'etl:cdc:load_delta'
