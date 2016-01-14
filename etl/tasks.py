@@ -20,7 +20,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys)
+    DatasourceMetaKeys, Dataset)
 from django.conf import settings
 
 from djcelery import celery
@@ -132,6 +132,11 @@ class TaskProcessing(object):
         RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
 
 
+@celery.task(name=CREATE_DATASET)
+def create_dataset(task_id, channel):
+    return CreateDataset(task_id, channel).load_data()
+
+
 @celery.task(name=MONGODB_DATA_LOAD)
 def load_mongo_db(task_id, channel):
     return LoadMongodb(task_id, channel).load_data()
@@ -172,12 +177,25 @@ def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
 
 
+class CreateDataset(TaskProcessing):
+    """
+    Создание Dataset
+    """
+
+    def processing(self):
+
+        dataset = Dataset.objects.create(key=self.key)
+        self.context['dataset_id'] = dataset.id
+        self.next_task_params = self.context
+
+
 class LoadMongodb(TaskProcessing):
     """
     Первичная загрузка данных в Mongodb
     """
 
     def processing(self):
+        print self.context
         cols = json.loads(self.context['cols'])
         structure = self.context['tree']
         source_model = Datasource()
