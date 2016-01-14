@@ -129,32 +129,6 @@ class RPublish(object):
             ))
 
 
-def tasks_run(tasks_seq, start_params):
-    """
-    Последовательный запуск задач
-
-    Args:
-        tasks_seq(list): Список кортежей с название задач и рабочих методов
-        Пример::
-            [
-                    (<task_name1>, <task_def1>),
-                    (<task_name2>, <task_def2>),
-                    ...
-            ]
-        start_params(dict): Словарь параметров для первой задачи
-    """
-    current_params = None
-    channel = {}
-    for task_info in tasks_seq:
-        task_id, channel = TaskService(task_info[0]).add_task(
-                        arguments=start_params if not current_params
-                        else current_params)
-        async_result = task_info[1].apply_async((task_id, channel),)
-        current_params = [i[1] for i in async_result.collect()][0]
-        # current_params = task_info[1](task_id, channel)
-    return [channel]
-
-
 def get_tasks_chain(tasks_sets):
     """
     Получение последовательности задач для выполнения
@@ -200,6 +174,8 @@ def get_single_task(task_params):
         `Signature`: Celery-задача к выполнению
         list: Список каналов для сокетов
     """
+    if not task_params:
+        return
     task_id, channel = TaskService(task_params[0]).add_task(
         arguments=task_params[2])
     return task_params[1].si(task_id, channel), [channel]

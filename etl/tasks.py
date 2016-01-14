@@ -10,17 +10,18 @@ import json
 from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
+from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, AKTSE, DTSE
+    DeleteQuery, AKTSE, DTSE, get_single_task
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys)
+    DatasourceMetaKeys, DatasourceSettings)
 from django.conf import settings
 
 from djcelery import celery
@@ -100,7 +101,8 @@ class TaskProcessing(object):
                 self.user_id, self.task_id)
             raise
         self.exit()
-        return self.next_task_params
+        if self.next_task_params:
+            get_single_task(self.next_task_params)
 
     def processing(self):
         """
@@ -263,7 +265,7 @@ class LoadMongodb(TaskProcessing):
 
             page += 1
 
-        self.next_task_params = self.context
+        self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
 class LoadDb(TaskProcessing):
@@ -371,20 +373,21 @@ class LoadDb(TaskProcessing):
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
 
-        if not self.context['triggers']:
-            self.next_task_params = {
+        if self.context['source_settings'] != DatasourceSettings.TRIGGERS:
+            self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
+                'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
                 'user_id': self.user_id,
                 'source_id': source.id
-            }
+            })
         else:
-            self.next_task_params = {
+            self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
                 'checksum': self.key,
                 'user_id': self.user_id,
                 'tables_info': self.context['table_info'],
                 'db_instance': self.context['db_instance'],
                 'source_id': source.id
-            }
+            })
 
 
 class LoadDimensions(TaskProcessing):
@@ -472,7 +475,11 @@ class LoadDimensions(TaskProcessing):
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
 
-        self.next_task_params = self.context
+        self.set_next_task_params()
+
+    def set_next_task_params(self):
+        self.next_task_params = (
+            GENERATE_MEASURES, load_measures, self.context)
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
@@ -579,6 +586,9 @@ class LoadMeasures(LoadDimensions):
                 datasources_meta=datasource_meta_id
             )
 
+    def set_next_task_params(self):
+        self.next_task_params = None
+
 
 class UpdateMongodb(TaskProcessing):
 
@@ -680,7 +690,7 @@ class UpdateMongodb(TaskProcessing):
         delta_collection.update_many(
             {'_state': DTSE.NEW}, {'$set': {'_state': DTSE.SYNCED}})
 
-        self.next_task_params = self.context
+        self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
 class DetectRedundant(TaskProcessing):
@@ -733,7 +743,8 @@ class DetectRedundant(TaskProcessing):
         all_keys_collection.update_many(
             {'_state': AKTSE.NEW}, {'$set': {'_state': AKTSE.SYNCED}})
 
-        self.next_task_params = self.context
+        self.next_task_params = (
+            DB_DELETE_REDUNDANT, delete_redundant, self.context)
 
 
 class DeleteRedundant(TaskProcessing):
@@ -760,7 +771,9 @@ class DeleteRedundant(TaskProcessing):
             delete_query.execute(keys=l)
             page += 1
 
-        self.next_task_params = self.context
+        if not self.context['is_meta_stats']:
+            self.next_task_params = (
+                        GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
@@ -770,7 +783,9 @@ class CreateTriggers(TaskProcessing):
         Создание триггеров в БД пользователя
         """
         tables_info = self.context['tables_info']
-        db_instance = self.context['db_instance']
+        # TODO: импорт DatabaseService
+        db_instance = DatabaseService.get_source_instance(
+            Datasource.objects.get(self.context['source_id']))
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
@@ -812,10 +827,11 @@ class CreateTriggers(TaskProcessing):
 
             connection.commit()
 
-        self.next_task_params = {
-            'checksum': self.key,
-            'user_id': self.user_id,
-            'source_id': self.context['source_id']
-        }
+        self.next_task_params = (
+            GENERATE_DIMENSIONS, load_dimensions, {
+                'checksum': self.key,
+                'user_id': self.user_id,
+                'source_id': self.context['source_id']
+            })
 
 # write in console: python manage.py celery -A etl.tasks worker
