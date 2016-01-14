@@ -80,11 +80,17 @@ function createSettigns(){
     $('#settings-window').modal('show');
 }
 
-function saveNewSource(){
-    var form = $('#conn_form'),
-        formData = new FormData(form[0]);
-        url = form.attr('data-save-url');
+function saveNewSource(save_url){
+    console.log(save_url);
+    var connection_form = $('#conn_form'),
+        formData = new FormData(connection_form[0]),
+        url = save_url || connection_form.attr('data-save-url');
         formData.append('cdc_type', $('#cdc_select').val());
+    console.log(formData);
+    $.validator.messages.required = 'Обязательное поле!';
+    if (!connection_form.valid()) {
+      return;
+    }
 
     $.ajax({
         url: url,
