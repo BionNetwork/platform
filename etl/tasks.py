@@ -18,7 +18,8 @@ from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, AKTSE, DTSE, get_single_task
+    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
+    process_binary_data, get_binary_types_dict
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
@@ -184,6 +185,7 @@ class LoadMongodb(TaskProcessing):
 
     def processing(self):
         cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
@@ -200,6 +202,9 @@ class LoadMongodb(TaskProcessing):
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+
+        # находим бинарные данные для 1) создания ключей 2) инсерта в монго
+        binary_types_list = get_binary_types_list(cols, col_types)
 
         # создаем коллекцию и индексы в Mongodb
         mc = MongodbConnection()
@@ -239,10 +244,15 @@ class LoadMongodb(TaskProcessing):
 
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                        record, tables_key_creator, (page-1)*limit + ind)
+                        record, tables_key_creator, (page-1)*limit + ind,
+                        binary_types_list)
+
+                # бинарные данные оборачиваем в Binary(), если они имеются
+                new_record = process_binary_data(record, binary_types_list)
+
                 record_normalized = (
                     [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
-                    [EtlEncoder.encode(rec_field) for rec_field in record])
+                    [EtlEncoder.encode(rec_field) for rec_field in new_record])
                 data_to_insert.append(dict(izip(col_names, record_normalized)))
                 data_to_current_insert.append(dict(_id=row_key))
             try:
@@ -297,8 +307,15 @@ class LoadDb(TaskProcessing):
             t = obj['table']
             c = obj['col']
             col_names.append('"{0}{1}{2}" {3}'.format(
-                t, FIELD_NAME_SEP, c, col_types['{0}.{1}'.format(t, c)]))
+                t, FIELD_NAME_SEP, c,
+                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)])))
             clear_col_names.append('{0}{1}{2}'.format(t, FIELD_NAME_SEP, c))
+
+        # инфа о бинарных данных для инсерта в постгрес
+        binary_types_dict = get_binary_types_dict(cols, col_types)
+
+        # инфа для колонки cdc_key, о том, что она не binary
+        binary_types_dict['0'] = False
 
         source_collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
@@ -334,7 +351,8 @@ class LoadDb(TaskProcessing):
                     rows_dict.append(temp_dict)
                 if not rows_dict:
                     break
-                insert_query.execute(data=rows_dict)
+                insert_query.execute(data=rows_dict,
+                                     binary_types_dict=binary_types_dict)
                 offset += limit
             except Exception as e:
                 print 'Exception'
@@ -535,6 +553,15 @@ class LoadDimensions(TaskProcessing):
             column_names.append('{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name']))
 
+        cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
+
+        # инфа о бинарных данных для инсерта в постгрес
+        binary_types_dict = get_binary_types_dict(cols, col_types)
+
+        # инфа для колонки cdc_key, о том, что она не binary
+        binary_types_dict['0'] = False
+
         insert_query = InsertQuery(DataSourceService())
         insert_query.set_query(
             table_name=get_table_name(self.table_prefix, self.key),
@@ -558,7 +585,8 @@ class LoadDimensions(TaskProcessing):
                 for ind in xrange(len(column_names)):
                     temp_dict.update({str(ind): record[ind]})
                 rows_dict.append(temp_dict)
-            insert_query.execute(data=rows_dict)
+            insert_query.execute(data=rows_dict,
+                                 binary_types_dict=binary_types_dict)
             offset = index_to
 
             self.queue_storage.update()
@@ -604,6 +632,7 @@ class UpdateMongodb(TaskProcessing):
         """
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
@@ -617,6 +646,9 @@ class UpdateMongodb(TaskProcessing):
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+
+        # находим бинарные данные для 1) создания ключей 2) инсерта в монго
+        binary_types_list = get_binary_types_list(cols, col_types)
 
         collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
@@ -660,11 +692,16 @@ class UpdateMongodb(TaskProcessing):
             data_to_current_insert = []
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                    record, tables_key_creator, (page-1)*limit + ind)
+                    record, tables_key_creator, (page-1)*limit + ind,
+                    binary_types_list)
+
+                # бинарные данные оборачиваем в Binary(), если они имеются
+                new_record = process_binary_data(record, binary_types_list)
+
                 if not collection.find({'_id': row_key}).count():
                     delta_rows = (
                         [row_key, DTSE.NEW, EtlEncoder.encode(datetime.now())] +
-                        [EtlEncoder.encode(rec_field) for rec_field in record])
+                        [EtlEncoder.encode(rec_field) for rec_field in new_record])
                     data_to_insert.append(dict(izip(col_names, delta_rows)))
 
                 data_to_current_insert.append(dict(_id=row_key))

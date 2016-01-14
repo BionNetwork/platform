@@ -6,11 +6,15 @@ import brukva
 from pymongo import IndexModel
 from psycopg2 import Binary
 import pymongo
+from etl.constants import TYPES_MAP
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
 import json
 import datetime
+from itertools import izip
+from bson import binary
+
 from etl.services.middleware.base import datetime_now_str
 
 client = brukva.Client(host=settings.REDIS_HOST,
@@ -262,14 +266,25 @@ class RowKeysCreator(object):
                 break
 
 
-def process_binaries_for_row(row):
+def process_binary_data(record, binary_types_list):
+    """
+    Если данные бинарные, то оборачиваем в bson.binary.Binary
+    """
+    new_record = list()
+
+    for (rec, is_binary) in izip(record, binary_types_list):
+        new_record.append(binary.Binary(rec) if is_binary else rec)
+
+    new_record = tuple(new_record)
+    return new_record
+
+
+def process_binaries_for_row(row, binary_types_list):
     """
     Если пришли бинарные данные,
     то вычисляем ключ отдельный для каждого из них
     """
     new_row = []
-    # @todo fix binary_types_list
-    raise NotImplemented("Fix binary types list")
     for i, r in enumerate(row):
         if binary_types_list[i]:
             r = binascii.b2a_base64(r)
@@ -277,7 +292,7 @@ def process_binaries_for_row(row):
     return tuple(new_row)
 
 
-def calc_key_for_row(row, tables_key_creators, row_num):
+def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
     """
     Расчет ключа для отдельно взятой строки
 
@@ -291,7 +306,7 @@ def calc_key_for_row(row, tables_key_creators, row_num):
         int: Ключ для строки
     """
     # преобразуем бинары в строку, если они есть
-    row = process_binaries_for_row(row)
+    row = process_binaries_for_row(row, binary_types_list)
 
     if len(tables_key_creators) > 1:
         row_values_for_calc = [
@@ -299,6 +314,30 @@ def calc_key_for_row(row, tables_key_creators, row_num):
         return binascii.crc32(''.join(row_values_for_calc))
     else:
         return tables_key_creators[0].calc_key(row, row_num)
+
+
+def get_binary_types_list(cols, col_types):
+    # инфа о бинарниках для генерации ключа
+    binary_types_list = []
+
+    for i, obj in enumerate(cols, start=1):
+        dotted = '{0}.{1}'.format(obj['table'], obj['col'])
+        map_type = TYPES_MAP.get(col_types[dotted])
+        binary_types_list.append(map_type == TYPES_MAP.get('binary'))
+
+    return binary_types_list
+
+
+def get_binary_types_dict(cols, col_types):
+    # инфа о бинарниках для инсерта в бд
+    binary_types_dict = {}
+
+    for i, obj in enumerate(cols, start=1):
+        dotted = '{0}.{1}'.format(obj['table'], obj['col'])
+        map_type = TYPES_MAP.get(col_types[dotted])
+        binary_types_dict[str(i)] = map_type == TYPES_MAP.get('binary')
+
+    return binary_types_dict
 
 
 class Query(object):
@@ -358,12 +397,13 @@ class InsertQuery(TableCreateQuery):
         self.cursor = self.connection.cursor()
 
         # передаем типы, чтобы вычислить бинарные данные
-        binary_types_dict = kwargs['binary_types_dict']
+        binary_types_dict = kwargs.get('binary_types_dict', None)
 
-        for dicti in kwargs['data']:
-            for k, v in dicti.iteritems():
-                if binary_types_dict.get(k):  # if binary data
-                    dicti[k] = Binary(v)
+        if binary_types_dict is not None:
+            for dicti in kwargs['data']:
+                for k, v in dicti.iteritems():
+                    if binary_types_dict.get(k):  # if binary data
+                        dicti[k] = Binary(v)
 
         # create new table
         self.cursor.executemany(self.query, kwargs['data'])
