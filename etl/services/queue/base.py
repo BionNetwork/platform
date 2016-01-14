@@ -4,6 +4,7 @@ from celery import group
 from django.conf import settings
 import brukva
 from pymongo import IndexModel
+from psycopg2 import Binary
 import pymongo
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
@@ -261,6 +262,21 @@ class RowKeysCreator(object):
                 break
 
 
+def process_binaries_for_row(row):
+    """
+    Если пришли бинарные данные,
+    то вычисляем ключ отдельный для каждого из них
+    """
+    new_row = []
+    # @todo fix binary_types_list
+    raise NotImplemented("Fix binary types list")
+    for i, r in enumerate(row):
+        if binary_types_list[i]:
+            r = binascii.b2a_base64(r)
+        new_row.append(r)
+    return tuple(new_row)
+
+
 def calc_key_for_row(row, tables_key_creators, row_num):
     """
     Расчет ключа для отдельно взятой строки
@@ -274,6 +290,9 @@ def calc_key_for_row(row, tables_key_creators, row_num):
     Returns:
         int: Ключ для строки
     """
+    # преобразуем бинары в строку, если они есть
+    row = process_binaries_for_row(row)
+
     if len(tables_key_creators) > 1:
         row_values_for_calc = [
             str(each.calc_key(row, row_num)) for each in tables_key_creators]
@@ -337,6 +356,14 @@ class InsertQuery(TableCreateQuery):
 
     def execute(self, **kwargs):
         self.cursor = self.connection.cursor()
+
+        # передаем типы, чтобы вычислить бинарные данные
+        binary_types_dict = kwargs['binary_types_dict']
+
+        for dicti in kwargs['data']:
+            for k, v in dicti.iteritems():
+                if binary_types_dict.get(k):  # if binary data
+                    dicti[k] = Binary(v)
 
         # create new table
         self.cursor.executemany(self.query, kwargs['data'])

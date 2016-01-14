@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 
 from pymongo import ASCENDING
-from psycopg2 import errorcodes, Binary
+from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
