@@ -22,7 +22,7 @@ import logging
 
 from . import helpers
 from etl.constants import *
-from etl.tasks import load_mongo_db
+from etl.tasks import load_mongo_db, update_mongo_db
 from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (generate_columns_string,
                                        generate_table_name_key)
@@ -432,7 +432,7 @@ class LoadDataView(BaseEtlView):
         else:
             load_args['db_update'] = True
             task, channels = get_single_task(
-                (MONGODB_DELTA_LOAD, load_mongo_db, load_args),)
+                (MONGODB_DELTA_LOAD, update_mongo_db, load_args),)
 
         return {'channels': channels}
 
