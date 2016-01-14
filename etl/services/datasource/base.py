@@ -381,11 +381,12 @@ class DataSourceService(object):
 
             for collection in collections_names:
                 table_info = json.loads(r_server.get(collection))
-                table_info['stats'].update({
-                    'last_row': {
-                        'cdc_key': last_key,
-                    }
-                })
+                if table_info['stats']:
+                    table_info['stats'].update({
+                        'last_row': {
+                            'cdc_key': last_key,
+                        }
+                    })
 
                 pipe.set(collection, json.dumps(table_info))
             pipe.execute()
@@ -460,7 +461,6 @@ class DataSourceService(object):
             res.update({
                 table: source_meta.id
             })
-
         return res
 
     @classmethod

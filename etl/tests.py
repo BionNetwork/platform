@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 import json
 
+from django.db import connections
 from django.test import TestCase
 from etl.services.datasource.repository import r_server
 from etl.services.db.postgresql import Postgresql
@@ -350,17 +351,22 @@ class DatasourceTest(TestCase):
 
 class RedisKeysTest(TestCase):
     def setUp(self):
-        connection = {'host': 'localhost', 'port': 5432, 'db': 'test_biplatform',
-                      'login': 'biplatform', 'password': 'biplatform'}
+
+        db_conn = connections['default']
+        conn_params = db_conn.get_connection_params()
+
+        connection = {
+            'host': conn_params.get('host'),
+            'port': int(conn_params.get('port')),
+            'db': conn_params.get('database'),
+            'login': conn_params.get('user'),
+            'password': conn_params.get('password')
+        }
 
         self.source = Datasource.objects.create(
-            db='test_biplatform',
-            host='localhost',
-            port=5432,
-            login='biplatform',
-            password='biplatform',
             user_id=11,
             conn_type=ConnectionChoices.POSTGRESQL,
+            **connection
         )
 
         self.database = Postgresql(connection)
