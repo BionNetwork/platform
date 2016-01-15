@@ -125,7 +125,7 @@ indexes_query = """
 
 stat_query = """
     SELECT relname, reltuples as count, relpages*8192 as size FROM pg_class
-    where oid in {0};
+    where relname in {0};
 """
 
 
