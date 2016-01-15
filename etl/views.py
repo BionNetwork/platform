@@ -268,9 +268,11 @@ class GetColumnsView(BaseEtlView):
 
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
-        columns = helpers.DataSourceService.get_columns_info(
+        info = helpers.DataSourceService.get_columns_info(
             source, tables)
-        return columns
+        if not info or len(info['cols']) == 0:
+            raise ValueError("Таблица не содержит колонок")
+        return info
 
 
 class GetDataRowsView(BaseEtlView):
