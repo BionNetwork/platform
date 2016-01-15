@@ -399,15 +399,18 @@ class LoadDb(TaskProcessing):
                 'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'source_id': source.id
+                'source_id': source.id,
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'tables_info': self.context['table_info'],
-                'db_instance': self.context['db_instance'],
-                'source_id': source.id
+                'tables_info': self.context['tables_info'],
+                'source_id': source.id,
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
             })
 
 
@@ -476,25 +479,26 @@ class LoadDimensions(TaskProcessing):
             table_name=get_table_name(self.table_prefix, self.key), cols=col_names)
         create_query.execute()
 
-        try:
-            self.save_fields()
-        except Exception as e:
-            # код и сообщение ошибки
-            pg_code = getattr(e, 'pgcode', None)
+        if self.actual_fields:
+            try:
+                self.save_fields()
+            except Exception as e:
+                # код и сообщение ошибки
+                pg_code = getattr(e, 'pgcode', None)
 
-            err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
-            err_msg += e.message
+                err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+                err_msg += e.message
 
-            # меняем статус задачи на 'Ошибка'
-            TaskService.update_task_status(
-                self.task_id, TaskStatusEnum.ERROR, error_msg=err_msg,
-                error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,)
-            logger.exception(err_msg)
-            self.queue_storage.update(TaskStatusEnum.ERROR)
+                # меняем статус задачи на 'Ошибка'
+                TaskService.update_task_status(
+                    self.task_id, TaskStatusEnum.ERROR, error_msg=err_msg,
+                    error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,)
+                logger.exception(err_msg)
+                self.queue_storage.update(TaskStatusEnum.ERROR)
 
-        # Сохраняем метаданные
-        self.save_meta_data(
-            self.user_id, self.key, self.actual_fields, meta_tables)
+            # Сохраняем метаданные
+            self.save_meta_data(
+                self.user_id, self.key, self.actual_fields, meta_tables)
 
         self.set_next_task_params()
 
@@ -570,6 +574,7 @@ class LoadDimensions(TaskProcessing):
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
         rows_query = self.rows_query(column_names)
+
         connection = DataSourceService.get_local_instance().connection
         while True:
             index_to = offset+step
@@ -825,7 +830,7 @@ class CreateTriggers(TaskProcessing):
         tables_info = self.context['tables_info']
         # TODO: импорт DatabaseService
         db_instance = DatabaseService.get_source_instance(
-            Datasource.objects.get(self.context['source_id']))
+            Datasource.objects.get(id=self.context['source_id']))
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
@@ -871,7 +876,9 @@ class CreateTriggers(TaskProcessing):
             GENERATE_DIMENSIONS, load_dimensions, {
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'source_id': self.context['source_id']
+                'source_id': self.context['source_id'],
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
             })
 
 # write in console: python manage.py celery -A etl.tasks worker
