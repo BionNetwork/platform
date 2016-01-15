@@ -665,7 +665,7 @@ class RedisSourceService(object):
                     "columns": columns[t_name],
                     "indexes": indexes[t_name],
                     "foreigns": foreigns[t_name],
-                    "stats": stats[t_name],
+                    "stats": stats[t_name.lower()],
                 }
             ))
         pipe.execute()

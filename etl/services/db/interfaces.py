@@ -365,8 +365,8 @@ class Database(object):
                      ...
                 }
         """
-        return {x[0]: ({'count': int(x[1]), 'size': x[2]}
-                       if (x[1] and x[2]) else None) for x in records}
+        return {x[0].lower(): ({'count': int(x[1]), 'size': x[2]}
+                if (x[1] and x[2]) else None) for x in records}
 
     def get_columns(self, source, tables):
         """
