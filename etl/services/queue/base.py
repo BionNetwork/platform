@@ -129,31 +129,6 @@ class RPublish(object):
             ))
 
 
-def tasks_run(tasks_seq, start_params):
-    """
-    Последовательный запуск задач
-
-    Args:
-        tasks_seq(list): Список кортежей с название задач и рабочих методов
-        Пример::
-            [
-                    (<task_name1>, <task_def1>),
-                    (<task_name2>, <task_def2>),
-                    ...
-            ]
-        start_params(dict): Словарь параметров для первой задачи
-    """
-    current_params = None
-    channel = {}
-    for task_info in tasks_seq:
-        task_id, channel = TaskService(task_info[0]).add_task(
-                        arguments=start_params if not current_params
-                        else current_params)
-        async_result = task_info[1].apply_async((task_id, channel),)
-        current_params = [i[1] for i in async_result.collect()][0]
-    return [channel]
-
-
 def get_tasks_chain(tasks_sets):
     """
     Получение последовательности задач для выполнения
@@ -199,9 +174,11 @@ def get_single_task(task_params):
         `Signature`: Celery-задача к выполнению
         list: Список каналов для сокетов
     """
+    if not task_params:
+        return
     task_id, channel = TaskService(task_params[0]).add_task(
         arguments=task_params[2])
-    return task_params[1].si(task_id, channel), [channel]
+    return task_params[1].apply_async((task_id, channel),), [channel]
 
 
 def get_group_tasks(task_params):
@@ -258,11 +235,12 @@ class RowKeysCreator(object):
         Returns:
             int: Ключ строки для таблицы
         """
-        if self.primary_keys:
-            return binascii.crc32(''.join(
-                [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
-        l.append(row_num)
+        if self.primary_keys:
+            l.append(binascii.crc32(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes])))
+        else:
+            l.append(row_num)
         return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
@@ -278,7 +256,7 @@ class RowKeysCreator(object):
             if record['is_primary']:
                 self.primary_keys = record['columns']
                 for ind, value in enumerate(self.cols):
-                    if value['col'] in self.primary_keys:
+                    if value['table'] == self.table and value['col'] in self.primary_keys:
                         self.primary_keys_indexes.append(ind)
                 break
 

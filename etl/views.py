@@ -22,11 +22,8 @@ import logging
 
 from . import helpers
 from etl.constants import *
-from etl.services.db.factory import DatabaseService
-from etl.tasks import (load_db, load_mongo_db, load_dimensions, load_measures,
-                       update_mongo_db, detect_redundant, delete_redundant,
-                       create_triggers)
-from .services.queue.base import TaskStatusEnum, tasks_run
+from etl.tasks import load_mongo_db, update_mongo_db
+from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (generate_columns_string,
                                        generate_table_name_key)
 
@@ -404,7 +401,7 @@ class LoadDataView(BaseEtlView):
         user_id = request.user.id
         # Параметры для задач
         load_args = {
-            'triggers': False,
+            'source_settings': source_settings,
             'cols': data.get('cols'),
             'tables': data.get('tables'),
             'col_types': json.dumps(
@@ -416,31 +413,9 @@ class LoadDataView(BaseEtlView):
             'db_update': False,
             'collections_names': collections_names,
             'checksum': table_key,
+            'tables_info': helpers.RedisSourceService.get_ddl_tables_info(
+                    source, tables),
         }
-        # Сценарий загрузок
-        trigger_tasks = [
-            (MONGODB_DATA_LOAD, load_mongo_db),
-            (DB_DATA_LOAD, load_db),
-            (CREATE_TRIGGERS, create_triggers),
-            (GENERATE_DIMENSIONS, load_dimensions),
-            (GENERATE_MEASURES, load_measures),
-        ]
-
-        create_tasks = [
-            (MONGODB_DATA_LOAD, load_mongo_db),
-            (DB_DATA_LOAD, load_db),
-            (DB_DETECT_REDUNDANT, detect_redundant),
-            (DB_DELETE_REDUNDANT, delete_redundant),
-            (GENERATE_DIMENSIONS, load_dimensions),
-            (GENERATE_MEASURES, load_measures),
-        ]
-
-        update_tasks = [
-            (MONGODB_DELTA_LOAD, update_mongo_db, load_args),
-            (DB_DATA_LOAD, load_db, load_args),
-            (DB_DETECT_REDUNDANT, detect_redundant),
-            (DB_DELETE_REDUNDANT, delete_redundant),
-        ]
         is_meta_stats = False
         meta_key = DatasourceMetaKeys.objects.filter(value=table_key)
         if meta_key:
@@ -450,21 +425,14 @@ class LoadDataView(BaseEtlView):
                     meta_key[0].meta.stats)['tables_stat']['last_row']['cdc_key']
             except:
                 pass
-
-        if source_settings == DatasourceSettings.TRIGGERS:
-            load_args.update({
-                'triggers': True,
-                'tables_info': helpers.RedisSourceService.get_ddl_tables_info(
-                    source, tables),
-                # TODO: импорт DatabaseService
-                'db_instance': DatabaseService.get_source_instance(source)
-            })
-            channels = tasks_run(trigger_tasks, load_args)
-        elif not is_meta_stats:
-            channels = tasks_run(create_tasks, load_args)
+        load_args.update({'is_meta_stats': is_meta_stats})
+        if not is_meta_stats:
+            task, channels = get_single_task(
+                (MONGODB_DATA_LOAD, load_mongo_db, load_args),)
         else:
             load_args['db_update'] = True
-            channels = tasks_run(update_tasks, load_args)
+            task, channels = get_single_task(
+                (MONGODB_DELTA_LOAD, update_mongo_db, load_args),)
 
         return {'channels': channels}
 
