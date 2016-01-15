@@ -55,19 +55,22 @@
                     <!-- /.box-body -->
                 </div>
                 <div class="tab-pane" id="settings">
+{#                    {% for field in settings_form %}#}
                     <div class="box-body">
-                        <h4 class="modal-title">Выберите вариант обновления данных</h4>
+                        <h4 class="modal-title">{{ settings_form.cdc_type_field.label_tag }}</h4>
                     </div>
                     <div class="box-body">
                         <div class="row">
                             <div class="col-md-offset-1 col-md-10">
                                 <select class="form-control col-md-6" id="cdc_select" style="width: 50%">
-                                    <option value="apply_triggers">На основе триггеров (требуются права на создание триггеров)</option>
-                                    <option value="apply_checksum">Полное сравнение на основе расчета контрольных сумм</option>
+                                    {% for choice in settings_form.cdc_type_field.field.choices %}
+                                    <option value="{{ choice.0 }}" {% if settings_form.initial.cdc_type_field == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                                    {% endfor %}
                                 </select>
                             </div>
                         </div>
                     </div>
+{#                    {% endfor %}#}
                 </div>
                 <div class="box-body">
                     {% block submit-button %}
