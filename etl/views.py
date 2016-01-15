@@ -81,7 +81,9 @@ class NewSourceView(BaseTemplateView):
 
     def get(self, request, *args, **kwargs):
         form = etl_forms.SourceForm()
-        return render(request, self.template_name, {'form': form, })
+        settings_form = etl_forms.SettingsForm()
+        return render(request, self.template_name, {
+            'form': form, 'settings_form': settings_form})
 
     @transaction.atomic()
     def post(self, request, *args, **kwargs):
@@ -126,9 +128,17 @@ class EditSourceView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
 
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
+        try:
+            cdc_value = source.datasourcesettings_set.get(name='cdc_type').value
+        except DatasourceSettings.DoesNotExist:
+            cdc_value = SourceSettings.CHECKSUM
 
         form = etl_forms.SourceForm(instance=source)
-        return self.render_to_response({'form': form, 'datasource_id': kwargs.get('id')})
+        settings_form = etl_forms.SettingsForm(initial={
+            'cdc_type_field': cdc_value})
+        return self.render_to_response(
+            {'form': form, 'settings_form': settings_form,
+             'datasource_id': kwargs.get('id')})
 
     def post(self, request, *args, **kwargs):
 
