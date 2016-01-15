@@ -270,8 +270,6 @@ class GetColumnsView(BaseEtlView):
         tables = json.loads(request.GET.get('tables', ''))
         info = helpers.DataSourceService.get_columns_info(
             source, tables)
-        if not info or len(info['cols']) == 0:
-            raise ValueError("Таблица не содержит колонок")
         return info
 
 
