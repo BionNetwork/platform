@@ -188,7 +188,17 @@ class CreateDataset(TaskProcessing):
 
         dataset = Dataset.objects.create(key=self.key)
         self.context['dataset_id'] = dataset.id
-        self.next_task_params = self.context
+
+        is_meta_stats = self.context['is_meta_stats']
+
+        if not is_meta_stats:
+            self.next_task_params = (
+                MONGODB_DATA_LOAD, load_mongo_db, self.context)
+        else:
+            self.context['db_update'] = True
+
+            self.next_task_params = (
+                MONGODB_DELTA_LOAD, update_mongo_db, self.context)
 
 
 class LoadMongodb(TaskProcessing):
@@ -395,15 +405,16 @@ class LoadDb(TaskProcessing):
                 'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'source_id': source.id
+                'source_id': source.id,
+                'dataset_id': self.context['dataset_id'],
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'tables_info': self.context['table_info'],
-                'db_instance': self.context['db_instance'],
-                'source_id': source.id
+                'tables_info': self.context['tables_info'],
+                'source_id': source.id,
+                'dataset_id': self.context['dataset_id'],
             })
 
 
@@ -848,7 +859,8 @@ class CreateTriggers(TaskProcessing):
             GENERATE_DIMENSIONS, load_dimensions, {
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'source_id': self.context['source_id']
+                'source_id': self.context['source_id'],
+                'dataset_id': self.context['dataset_id'],
             })
 
 # write in console: python manage.py celery -A etl.tasks worker
