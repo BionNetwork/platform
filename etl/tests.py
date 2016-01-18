@@ -9,7 +9,11 @@ from django.test import TestCase
 from etl.services.datasource.repository import r_server
 from etl.services.db.postgresql import Postgresql
 from etl.services.datasource.base import TablesTree, DataSourceService
-from core.models import Datasource, ConnectionChoices
+from core.models import Datasource, ConnectionChoices, DatasourceMeta, \
+    DatasourceMetaKeys, Measure
+from etl.services.queue.base import get_single_task
+from etl.constants import GENERATE_DIMENSIONS
+from etl.tasks import load_dimensions
 
 """
 Тестирование etl методов
@@ -490,3 +494,231 @@ class RedisKeysTest(TestCase):
 
         self.database.connection.close()
 
+
+class DimCreateTest(TestCase):
+    def setUp(self):
+
+        db_conn = connections['default']
+        conn_params = db_conn.get_connection_params()
+
+        connection_params = {
+            'host': conn_params.get('host'),
+            'port': int(conn_params.get('port')),
+            'db': conn_params.get('database'),
+            'login': conn_params.get('user'),
+            'password': conn_params.get('password')
+        }
+
+        self.source = Datasource.objects.create(
+            user_id=11,
+            conn_type=ConnectionChoices.POSTGRESQL,
+            **connection_params
+        )
+
+        fields_info = {
+            'columns': [{
+                'is_index': True,
+                'is_unique': True,
+                'type': 'integer',
+                'name': 'id',
+                'is_primary': True
+            }, {
+                'is_index': False,
+                'is_unique': False,
+                'type': 'text',
+                'name': 'arguments',
+                'is_primary': False
+            }, {
+                'is_index': False,
+                'is_unique': False,
+                'type': 'text',
+                'name': 'comment',
+                'is_primary': False
+            }, {
+                'is_index': False,
+                'is_unique': False,
+                'type': 'integer',
+                'name': 'queue_id',
+                'is_primary': False
+            },
+            ]
+        }
+
+        source_meta = DatasourceMeta.objects.create(
+            datasource=self.source,
+            collection_name='table1',
+            fields=json.dumps(fields_info)
+        )
+
+        self.meta_data = DatasourceMetaKeys.objects.create(
+            meta=source_meta,
+            value=123456789,
+        )
+
+        self.db = Postgresql(connection_params)
+        self.cursor = self.db.connection.cursor()
+        self.cursor.execute("""
+            drop table if exists sttm_datasource_123456789;
+
+            create table sttm_datasource_123456789(
+              table1__id serial NOT NULL,
+              table1__arguments text NOT NULL,
+              table1__comment character varying(1024),
+              table1__queue_id integer NOT NULL
+            )
+            """)
+
+        self.db.connection.commit()
+
+    def test_dim_create(self):
+        arguments = {
+            'is_meta_stats': True,
+            'checksum': 123456789,
+            'user_id': 11,
+            'source_id': self.source.id
+        }
+
+        task_id, channel = TaskService(GENERATE_DIMENSIONS).add_task(
+            arguments=arguments)
+        load_dimensions(task_id, channel)
+
+
+        self.cursor.execute("""
+          select column_name, data_type from information_schema.columns where table_name='dimensions_123456789';
+        """)
+
+        dim_info = self.cursor.fetchall()
+
+        self.cursor.execute("""
+          select column_name, data_type from information_schema.columns where table_name='measures_123456789';
+        """)
+
+        measures_info = self.cursor.fetchall()
+
+        self.assertEqual(len(dim_info) + len(measures_info), 4)
+
+        for el in dim_info:
+            self.assertTrue(el[1] in ['text'])
+
+        for el in measures_info:
+            self.assertTrue(el[1] in [
+                Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP])
+
+        self.db.connection.commit()
+
+
+class DatasourceMetaTest(TestCase):
+    def setUp(self):
+
+        db_conn = connections['default']
+        conn_params = db_conn.get_connection_params()
+
+        connection_params = {
+            'host': conn_params.get('host'),
+            'port': int(conn_params.get('port')),
+            'db': conn_params.get('database'),
+            'login': conn_params.get('user'),
+            'password': conn_params.get('password')
+        }
+
+        self.key = 123456789
+
+        self.source = Datasource.objects.create(
+            user_id=11,
+            conn_type=ConnectionChoices.POSTGRESQL,
+            **connection_params
+        )
+
+        # self.tables = ['datasources', u'datasources_meta']
+
+        self.cols = [{u'table': u'datasources', u'col': u'db'},
+                {u'table': u'datasources', u'col': u'host'},
+                {u'table': u'datasources', u'col': u'user_id'},
+                {u'table': u'datasources', u'col': u'id'},
+                {u'table': u'datasources_meta', u'col': u'datasource_id'},
+                {u'table': u'datasources_meta', u'col': u'id'}
+                ]
+
+        self.meta_info = {
+            u'datasources': {
+                u'foreigns': [],
+                u'stats': {
+                    u'count': 2,
+                    u'size': 8192
+                },
+                u'columns': [
+                    {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'db', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'host', u'is_primary': False},
+                    {u'is_index': False, u'is_unique': False, u'type': u'integer', u'name': u'port', u'is_primary': False},
+                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'login', u'is_primary': False},
+                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'password', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': False, u'type': u'timestamp', u'name': u'create_date', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'user_id', u'is_primary': False},
+                    {u'is_index': False, u'is_unique': False, u'type': u'integer', u'name': u'conn_type', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}],
+                u'indexes': [
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_3d8252a0', u'columns': [u'create_date']},
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_67b3dba8', u'columns': [u'host']},
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_host_175fd78a6f0fe936_uniq', u'columns': [u'db', u'host', u'user_id']},
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_host_303054fe224cb4d4_like', u'columns': [u'host']},
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_pkey', u'columns': [u'id']}]},
+            u'datasources_meta': {
+                u'foreigns': [
+                    {u'on_update': u'NO ACTION',
+                     u'source': {u'column': u'datasource_id', u'table': u'datasources_meta'},
+                     u'destination': {u'column': u'id', u'table': u'datasources'},
+                     u'name': u'datasources_me_datasource_id_2bccd05d1d1955f1_fk_datasources_id', u'on_delete': u'NO ACTION'}
+                ],
+                u'stats': {u'count': 10, u'size': 24576},
+                u'columns': [
+                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'collection_name', u'is_primary': False},
+                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'fields', u'is_primary': False},
+                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'stats', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': False, u'type': u'timestamp', u'name': u'create_date', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': False, u'type': u'timestamp', u'name': u'update_date', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'datasource_id', u'is_primary': False},
+                    {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}],
+                u'indexes': [
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_3d8252a0', u'columns': [u'create_date']},
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_3ec3fa10', u'columns': [u'datasource_id']},
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_41747ca0', u'columns': [u'update_date']},
+                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_pkey', u'columns': [u'id']}]}}
+
+        self.last_row = ('biplatform', 'localhost', 11, 4,  4,  37)
+
+    def test_source_meta(self):
+
+        DataSourceService.update_datasource_meta(
+            self.key, self.source, self.cols, self.meta_info, self.last_row)
+
+        dm = DatasourceMeta.objects.filter(datasource=self.source)
+
+        ds = dm.get(collection_name='datasources')
+        dsm = dm.get(collection_name='datasources_meta')
+
+        ds_stats = {'row_key_value': [{u'id': 4}],
+                    'row_key': [u'id'],
+                    'tables_stat': {u'count': 2, u'size': 8192}}
+        ds_fields = {'columns':
+                         [
+                             {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'db', u'is_primary': False},
+                             {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'host', u'is_primary': False},
+                             {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'user_id', u'is_primary': False},
+                             {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}
+                         ]
+        }
+
+        self.assertEqual(json.loads(ds.stats), ds_stats)
+        self.assertEqual(json.loads(ds.fields), ds_fields)
+
+        dsm_stats = {'row_key_value': [{u'id': 37}],
+                     'row_key': [u'id'],
+                     'tables_stat': {u'count': 10, u'size': 24576}}
+        dsm_fields = {'columns':
+                          [
+                              {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'datasource_id', u'is_primary': False},
+                              {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}
+                          ]
+        }
+        self.assertEqual(json.loads(dsm.stats), dsm_stats)
+        self.assertEqual(json.loads(dsm.fields), dsm_fields)
