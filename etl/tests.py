@@ -11,9 +11,9 @@ from etl.services.db.postgresql import Postgresql
 from etl.services.datasource.base import TablesTree, DataSourceService
 from core.models import Datasource, ConnectionChoices, DatasourceMeta, \
     DatasourceMetaKeys, Measure
-from etl.services.queue.base import get_single_task
-from etl.constants import GENERATE_DIMENSIONS
-from etl.tasks import load_dimensions
+from etl.services.queue.base import TaskService
+from etl.constants import GENERATE_DIMENSIONS, GENERATE_MEASURES
+from etl.tasks import LoadDimensions, LoadMeasures
 
 """
 Тестирование etl методов
@@ -580,7 +580,7 @@ class DimCreateTest(TestCase):
 
         task_id, channel = TaskService(GENERATE_DIMENSIONS).add_task(
             arguments=arguments)
-        load_dimensions(task_id, channel)
+        LoadDimensions(task_id, channel, last_task=True).load_data()
 
 
         self.cursor.execute("""
@@ -588,6 +588,10 @@ class DimCreateTest(TestCase):
         """)
 
         dim_info = self.cursor.fetchall()
+
+        task_id, channel = TaskService(GENERATE_MEASURES).add_task(
+            arguments=arguments)
+        LoadMeasures(task_id, channel, last_task=True).load_data()
 
         self.cursor.execute("""
           select column_name, data_type from information_schema.columns where table_name='measures_123456789';

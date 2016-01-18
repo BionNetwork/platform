@@ -50,6 +50,7 @@ class TaskProcessing(object):
     Attributes:
         task_id(int): id задачи
         channel(str): Канал передачи на клиент
+        last_task(bool): Флаг последней задачи
         user_id(str): id пользователя
         context(dict): контекстные данные для задачи
         was_error(bool): Факт наличия ошибки
@@ -60,7 +61,7 @@ class TaskProcessing(object):
         next_task_params(tuple): Набор данных для след. задачи
     """
 
-    def __init__(self, task_id, channel):
+    def __init__(self, task_id, channel, last_task=False):
         """
         Args:
             task_id(int): id задачи
@@ -68,6 +69,7 @@ class TaskProcessing(object):
         """
         self.task_id = task_id
         self.channel = channel
+        self.last_task=last_task
         self.user_id = None
         self.context = None
         self.was_error = False
@@ -498,8 +500,8 @@ class LoadDimensions(TaskProcessing):
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
-
-        self.set_next_task_params()
+        if not self.last_task:
+            self.set_next_task_params()
 
     def set_next_task_params(self):
         self.next_task_params = (
