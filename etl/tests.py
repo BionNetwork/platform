@@ -7,9 +7,7 @@ from mock import patch
 from django.db import connections
 from django.test import TestCase
 from etl.services.datasource.repository import r_server
-from etl.services.datasource.repository.storage import RedisSourceService
 from etl.services.db.postgresql import Postgresql
-from etl.services.db.factory import DatabaseService
 from etl.services.datasource.base import TablesTree, DataSourceService
 from core.models import Datasource, ConnectionChoices
 
