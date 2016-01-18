@@ -403,7 +403,7 @@ class LoadDb(TaskProcessing):
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
             self.key, source, cols, json.loads(
-                self.context['meta_info']), last_row)
+                self.context['meta_info']), last_row, self.context['dataset_id'])
         if last_row:
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
