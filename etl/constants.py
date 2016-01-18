@@ -3,6 +3,15 @@
 # Разделитель
 FIELD_NAME_SEP = '__'
 
+# соответствие типов в редисе и типов для создания таблиц локально
+TYPES_MAP = {
+    'integer': 'integer',
+    'double precision': 'double precision',
+    'text': 'text',
+    'timestamp': 'timestamp',
+    'binary': 'bytea',
+}
+
 # Название задач
 MONGODB_DATA_LOAD = 'etl:load_data:mongo'
 DB_DATA_LOAD = 'etl:cdc:load_data'

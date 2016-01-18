@@ -10,8 +10,10 @@ from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.db import transaction
+from django.http import HttpResponse
 
 from core.exceptions import ResponseError, ValidationError, ExceptionCode
+from core.helpers import CustomJsonEncoder
 from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus,
@@ -295,9 +297,9 @@ class GetColumnsView(BaseEtlView):
 
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
-        columns = helpers.DataSourceService.get_columns_info(
+        info = helpers.DataSourceService.get_columns_info(
             source, tables)
-        return columns
+        return info
 
 
 class GetDataRowsView(BaseEtlView):
@@ -323,6 +325,26 @@ class GetDataRowsView(BaseEtlView):
         data = helpers.DataSourceService.get_rows_info(
             source, col_names)
         return data
+
+    def json_response(self, context, **response_kwargs):
+        response_kwargs['content_type'] = 'application/json'
+
+        # стараемся отобразить бинарные данные
+        new_context_data = []
+
+        for item in context['data']:
+            new_list = list(item)
+            for i, item in enumerate(new_list):
+                try:
+                    json.dumps(item, cls=CustomJsonEncoder)
+                except Exception:
+                    new_list[i] = 'binary'
+
+            new_context_data.append(new_list)
+
+        context['data'] = new_context_data
+        return HttpResponse(
+            json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
 class RemoveTablesView(BaseEtlView):

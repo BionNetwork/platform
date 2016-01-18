@@ -188,6 +188,7 @@ class Measure(models.Model):
     DATE = 'date'
     TIME = 'time'
     TIMESTAMP = 'timestamp'
+    BYTEA = 'bytea'
     MEASURE_TYPE = (
         (STRING, 'string'),
         (INTEGER, 'integer'),
@@ -196,6 +197,7 @@ class Measure(models.Model):
         (DATE, 'date'),
         (TIME, 'time'),
         (TIMESTAMP, 'timestamp'),
+        (BYTEA, 'bytea'),
     )
 
     SUM = 'sum'
@@ -208,7 +210,7 @@ class Measure(models.Model):
     title = models.CharField(verbose_name="Название", max_length=255)
     type = models.CharField(
         verbose_name="Тип измерения",
-        choices=MEASURE_TYPE, default=STRING, max_length=50)
+        choices=MEASURE_TYPE, default=INTEGER, max_length=50)
     aggregator = models.CharField(
         verbose_name="Функция агрегирования",
         choices=AGR_FUNCTIONS, null=True, max_length=50)
