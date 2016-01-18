@@ -58,7 +58,9 @@ table_query = """
         """
 
 cols_query = """
-    SELECT table_name, column_name, column_type FROM information_schema.columns
+    SELECT table_name, column_name, column_type, is_nullable,
+    case extra when 'auto_increment' then extra else null end
+    FROM information_schema.columns
             where table_name in {0} and table_schema = '{1}' order by table_name;
 """
 
@@ -87,6 +89,48 @@ stat_query = """
     where table_name in {0} and table_schema = '{1}' order by table_name;
 """
 
+remote_table_query = """
+    CREATE TABLE IF NOT EXISTS `{0}` (
+        {1}
+        `cdc_created_at` timestamp NOT NULL,
+        `cdc_updated_at` timestamp,
+        `cdc_delta_flag` smallint NOT NULL,
+        `cdc_synced` smallint NOT NULL
+    );
+    $$
+    CREATE INDEX {0}_together_index_bi ON `{0}` (`cdc_updated_at`, `cdc_synced`);
+    $$
+    CREATE INDEX {0}_cdc_created_at_index_bi ON `{0}` (`cdc_created_at`);
+    $$
+    CREATE INDEX {0}_cdc_synced_index_bi ON `{0}` (`cdc_synced`);
+
+"""
+
+remote_triggers_query = """
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_insert` $$
+    CREATE TRIGGER `cdc_{orig_table}_insert` AFTER INSERT ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({new} now(), null, 1, 0);
+    END
+    $$
+
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_update` $$
+    CREATE  TRIGGER `cdc_{orig_table}_update` AFTER UPDATE ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({new} now(), null, 2, 0);
+    END
+    $$
+
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_delete` $$
+    CREATE  TRIGGER `cdc_{orig_table}_delete` AFTER DELETE ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({old} now(), null, 3, 0);
+    END
+"""
+
 row_query = """
     SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
-    """
+"""

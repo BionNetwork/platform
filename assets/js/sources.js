@@ -95,6 +95,50 @@ function removeSource(url){
     });
 }
 
+
+function createSettigns(){
+    $.validator.messages.required = 'Обязательное поле!';
+    if (!$('#conn_form').valid()) {
+      return;
+    }
+    $('#settings-window').modal('show');
+}
+
+function saveNewSource(save_url)
+{
+    var connection_form = $('#conn_form'),
+        formData = new FormData(connection_form[0]),
+        url = save_url || connection_form.attr('data-save-url');
+        formData.append('cdc_type', $('#cdc_select').val());
+
+    $.validator.messages.required = 'Обязательное поле!';
+    if (!connection_form.valid()) {
+      return;
+    }
+
+    $.ajax({
+        url: url,
+        data: formData,
+        processData: false,
+        contentType: false,
+        type: 'POST',
+        success: function(result){
+            $('#settings-window').modal('hide');
+
+            if (result.status=='error'){
+                confirmAlert(result.message);
+            } else {
+                window.location = result.redirect_url;
+            }
+        }
+    });
+}
+
+function closeSettings(){
+    $('#settings-window').modal('hide');
+}
+
+
 var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
     selectedRow, dataWorkspace, loader, initDataTable, closeUrl,
     dataWindow;
@@ -102,6 +146,8 @@ var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
 // событие на закрытие модального окна
 $('#modal-data').on('hidden.bs.modal', function(e){
     var info = getSourceInfo();
+    // если окно закрылось при нажатии кнопки, то удалять ddl не надо
+    info['delete_ddl'] = !dataWindow.data('load');
     $.get(closeUrl, info, function(res){
         if (res.status == 'error'){
             confirmAlert(res.message);
@@ -118,7 +164,7 @@ function getConnectionData(dataUrl, closingUrl){
     joinWinRow = _.template($("#join-win-row").html());
 
     dataWindow = $('#modal-data');
-    joinWin = $('#join-window')
+    joinWin = $('#join-window');
 
     loader = $('#loader');
     loader.hide();
@@ -425,6 +471,8 @@ function tablesToLeft(url){
     }
 
     var info = getSourceInfo();
+    // удалять ddl надо
+    info['delete_ddl'] = true;
 
     $.get(url, info, function(res){
         if (res.status == 'error') {
@@ -697,7 +745,10 @@ function startLoading(userId, loadUrl){
         if(response.status == 'error') {
                 confirmAlert(response.message);
         } else {
+            // признак того, что окно закрылось при нажатии кнопки
+            dataWindow.data('load', true);
             dataWindow.modal('hide');// clear data
+            dataWindow.data('load', false);
 
             var channels = response.data['channels'],
                 tasksUl = $('#user_tasks_bar');
