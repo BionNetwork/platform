@@ -53,6 +53,7 @@ class TaskProcessing(object):
         publisher(`RPublish`): Посыльный к клиенту о текущем статусе задачи
         queue_storage(`QueueStorage`): Посыльный к redis о текущем статусе задачи
         key(str): Ключ
+        next_task_params(tuple): Набор данных для след. задачи
     """
 
     def __init__(self, task_id, channel):
@@ -94,11 +95,15 @@ class TaskProcessing(object):
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
-            TaskService.update_task_status(self.task_id, TaskStatusEnum.ERROR)
+            TaskService.update_task_status(
+                self.task_id, TaskStatusEnum.ERROR,
+                error_code=TaskErrorCodeEnum.DEFAULT_CODE,
+                error_msg=e.message)
             self.publisher.publish(TLSE.ERROR, msg=e.message)
             RedisSourceService.delete_queue(self.task_id)
             RedisSourceService.delete_user_subscriber(
                 self.user_id, self.task_id)
+            logger.exception(self.err_msg)
             raise
         self.exit()
         if self.next_task_params:
@@ -109,6 +114,28 @@ class TaskProcessing(object):
         Непосредственное выполнение задачи
         """
         raise NotImplementedError
+
+    def error_handling(self, err_msg, err_code=None):
+        """
+        Обработка ошибки
+
+        Args:
+            err_msg(str): Текст ошибки
+            err_code(str): Код ошибки
+        """
+        self.was_error = True
+        # fixme перезаписывается при каждой ошибке
+        self.err_msg = err_msg
+        TaskService.update_task_status(
+            self.task_id, TaskStatusEnum.ERROR,
+            error_code=err_code or TaskErrorCodeEnum.DEFAULT_CODE,
+            error_msg=self.err_msg)
+
+        self.queue_storage['status'] = TaskStatusEnum.ERROR
+
+        # сообщаем об ошибке
+        self.publisher.publish(TLSE.ERROR, self.err_msg)
+        logger.exception(self.err_msg)
 
     def exit(self):
         """
@@ -274,14 +301,7 @@ class LoadMongodb(TaskProcessing):
                 current_collection.insert_many(data_to_current_insert, ordered=False)
                 print 'inserted %d rows to mongodb' % len(data_to_insert)
             except Exception as e:
-                self.was_error = True
-                # fixme перезаписывается при каждой ошибке
-                self.err_msg = e.message
-                print "Unexpected error:", type(e), e
-                self.queue_storage['status'] = TaskStatusEnum.ERROR
-
-                # сообщаем об ошибке
-                self.publisher.publish(TLSE.ERROR, self.err_msg)
+                self.error_handling(e.message)
 
             # обновляем информацию о работе таска
             self.queue_storage.update()
@@ -341,23 +361,22 @@ class LoadDb(TaskProcessing):
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         offset = 0
         last_row = None
-
         # Пишем данные в базу
         while True:
+            collection_cursor = source_collection.find(
+                {'_state': STSE.IDLE},
+                limit=limit, skip=offset)
+            rows_dict = []
+            for record in collection_cursor:
+                temp_dict = {}
+                for ind, col_name in enumerate(clear_col_names):
+                    temp_dict.update(
+                        {str(ind): record['_id'] if col_name == 'cdc_key'
+                            else record[col_name]})
+                rows_dict.append(temp_dict)
+            if not rows_dict:
+                break
             try:
-                collection_cursor = source_collection.find(
-                    {'_state': STSE.IDLE},
-                    limit=limit, skip=offset)
-                rows_dict = []
-                for record in collection_cursor:
-                    temp_dict = {}
-                    for ind, col_name in enumerate(clear_col_names):
-                        temp_dict.update(
-                            {str(ind): record['_id'] if col_name == 'cdc_key'
-                                else record[col_name]})
-                    rows_dict.append(temp_dict)
-                if not rows_dict:
-                    break
                 insert_query.execute(data=rows_dict)
                 offset += limit
             except Exception as e:
@@ -366,20 +385,9 @@ class LoadDb(TaskProcessing):
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
 
-                self.err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
-                self.err_msg += e.message
-
-                # меняем статус задачи на 'Ошибка'
-                TaskService.update_task_status(
-                    self.task_id, TaskStatusEnum.ERROR,
-                    error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,
-                    error_msg=self.err_msg)
-                logger.exception(self.err_msg)
-                self.queue_storage.update(TaskStatusEnum.ERROR)
-
-                # сообщаем об ошибке
-                self.publisher.publish(TLSE.ERROR, self.err_msg)
-                break
+                err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+                err_msg += e.message
+                self.error_handling(err_msg, pg_code)
             else:
                 last_row = rows_dict[-1]  # получаем последнюю запись
                 # обновляем информацию о работе таска
@@ -422,8 +430,6 @@ class LoadDimensions(TaskProcessing):
     """
     Создание рамерности, измерения олап куба
     """
-    app_name = 'sttm'
-    module = 'biplatform.etl.models'
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
@@ -491,13 +497,7 @@ class LoadDimensions(TaskProcessing):
 
             err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
             err_msg += e.message
-
-            # меняем статус задачи на 'Ошибка'
-            TaskService.update_task_status(
-                self.task_id, TaskStatusEnum.ERROR, error_msg=err_msg,
-                error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,)
-            logger.exception(err_msg)
-            self.queue_storage.update(TaskStatusEnum.ERROR)
+            self.error_handling(err_msg)
 
         # Сохраняем метаданные
         self.save_meta_data(
@@ -693,10 +693,12 @@ class UpdateMongodb(TaskProcessing):
                     data_to_insert.append(dict(izip(col_names, delta_rows)))
 
                 data_to_current_insert.append(dict(_id=row_key))
-
-            if data_to_insert:
-                delta_collection.insert_many(data_to_insert, ordered=False)
-            current_collection.insert_many(data_to_current_insert, ordered=False)
+            try:
+                if data_to_insert:
+                    delta_collection.insert_many(data_to_insert, ordered=False)
+                current_collection.insert_many(data_to_current_insert, ordered=False)
+            except Exception as e:
+                self.error_handling(e.message)
             page += 1
 
         # Обновляем основную коллекцию новыми данными
@@ -711,7 +713,11 @@ class UpdateMongodb(TaskProcessing):
                 to_ins.append(record)
             if not to_ins:
                 break
-            collection.insert_many(to_ins, ordered=False)
+            try:
+                collection.insert_many(to_ins, ordered=False)
+            except Exception as e:
+                self.error_handling(e.message)
+
             page += 1
 
         # Обновляем статусы дельты-коллекции
@@ -759,12 +765,14 @@ class DetectRedundant(TaskProcessing):
                 row_key = record['_id']
                 if not current_collection.find({'_id': row_key}).count():
                     to_delete.append(row_key)
+            try:
+                all_keys_collection.update_many(
+                    {'_id': {'$in': to_delete}},
+                    {'$set': {'_deleted': True}})
 
-            all_keys_collection.update_many(
-                {'_id': {'$in': to_delete}},
-                {'$set': {'_deleted': True}})
-
-            source_collection.delete_many({'_id': {'$in': to_delete}})
+                source_collection.delete_many({'_id': {'$in': to_delete}})
+            except Exception as e:
+                self.error_handling(e.message)
 
             page += 1
 
@@ -796,7 +804,10 @@ class DeleteRedundant(TaskProcessing):
             l = [record['_id'] for record in delete_delta]
             if not l:
                 break
-            delete_query.execute(keys=l)
+            try:
+                delete_query.execute(keys=l)
+            except Exception as e:
+                self.error_handling(e.message)
             page += 1
 
         if not self.context['is_meta_stats']:
@@ -813,7 +824,7 @@ class CreateTriggers(TaskProcessing):
         tables_info = self.context['tables_info']
         # TODO: импорт DatabaseService
         db_instance = DatabaseService.get_source_instance(
-            Datasource.objects.get(self.context['source_id']))
+            Datasource.objects.get(id=self.context['source_id']))
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
