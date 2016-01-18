@@ -11,7 +11,7 @@ from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.db import transaction
 
-from core.exceptions import ResponseError
+from core.exceptions import ResponseError, ValidationError, ExceptionCode
 from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus,
@@ -93,13 +93,16 @@ class NewSourceView(BaseTemplateView):
             cdc_value = post.get('cdc_type')
 
             if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
-                return self.json_response(
-                    {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
+                raise ValidationError("Неверное значение для метода докачки данных")
 
             form = etl_forms.SourceForm(post)
             if not form.is_valid():
-                return self.json_response(
-                    {'status': ERROR, 'message': 'Поля формы заполнены некорректно!'})
+                raise ValidationError('Поля формы заполнены неверно')
+
+            if Datasource.objects.filter(
+                host=post.get('host'), db=post.get('db'), user_id=request.user.id
+            ).exists():
+                raise ValidationError("Данный источник уже имеется в системе")
 
             source = form.save(commit=False)
             source.user_id = request.user.id
@@ -114,6 +117,9 @@ class NewSourceView(BaseTemplateView):
 
             return self.json_response(
                 {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
+        except ValidationError as e:
+            return self.json_response(
+                {'status': ERROR, 'message': e.message})
         except Exception as e:
             logger.exception(e.message)
             return self.json_response(
@@ -376,7 +382,7 @@ class LoadDataView(BaseEtlView):
         # подключение к источнику данных
         source_conn = helpers.DataSourceService.get_source_connection(source)
         if not source_conn:
-            raise ResponseError(u'Не удалось подключиться к источнику данных!')
+            raise ResponseError(u'Не удалось подключиться к источнику данных!', ExceptionCode.ERR_CONNECT_TO_DATASOURCE)
 
         # копия, чтобы могли добавлять
         data = request.POST
@@ -404,7 +410,7 @@ class LoadDataView(BaseEtlView):
         )
 
         if queues_list.exists():
-            raise ResponseError(u'Данная задача уже находится в обработке!')
+            raise ResponseError(u'Данная задача уже находится в обработке!', ExceptionCode.ERR_TASK_ALREADY_IN_QUEUE)
 
         tables = json.loads(data.get('tables'))
 
@@ -419,7 +425,7 @@ class LoadDataView(BaseEtlView):
             source_settings = DatasourceSettings.objects.get(
                     datasource_id=source.id).value
         except DatasourceSettings.DoesNotExist:
-            raise ResponseError(u'Не определен тип дозагрузки данных.')
+            raise ResponseError(u'Не определен тип дозагрузки данных', ExceptionCode.ERR_CDC_TYPE_IS_NOT_SET)
 
         user_id = request.user.id
         # Параметры для задач
