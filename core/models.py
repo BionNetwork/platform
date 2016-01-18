@@ -79,7 +79,6 @@ class DatasourceSettings(models.Model):
     """
     TRIGGERS = 'apply_triggers'
     CHECKSUM = 'apply_checksum'
-
     name = models.CharField(max_length=255, verbose_name=u'Название', db_index=True)
     value = models.TextField(verbose_name=u'Значение')
     datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')

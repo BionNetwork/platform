@@ -81,7 +81,9 @@ class NewSourceView(BaseTemplateView):
 
     def get(self, request, *args, **kwargs):
         form = etl_forms.SourceForm()
-        return render(request, self.template_name, {'form': form, })
+        settings_form = etl_forms.SettingsForm()
+        return render(request, self.template_name, {
+            'form': form, 'settings_form': settings_form})
 
     @transaction.atomic()
     def post(self, request, *args, **kwargs):
@@ -126,15 +128,35 @@ class EditSourceView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
 
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
+        try:
+            cdc_value = source.datasourcesettings_set.get(name='cdc_type').value
+        except DatasourceSettings.DoesNotExist:
+            cdc_value = SourceSettings.CHECKSUM
 
         form = etl_forms.SourceForm(instance=source)
-        return self.render_to_response({'form': form, })
+        settings_form = etl_forms.SettingsForm(initial={
+            'cdc_type_field': cdc_value})
+        return self.render_to_response(
+            {'form': form, 'settings_form': settings_form,
+             'datasource_id': kwargs.get('id')})
 
     def post(self, request, *args, **kwargs):
 
         post = request.POST
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
         form = etl_forms.SourceForm(post, instance=source)
+
+        cdc_value = post.get('cdc_type')
+        if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
+            return self.json_response(
+                {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
+        # сохраняем настройки докачки
+        source_settings, create = SourceSettings.objects.get_or_create(
+            name='cdc_type',
+            datasource=source,
+        )
+        source_settings.value = cdc_value
+        source_settings.save()
 
         if not form.is_valid():
             return self.render_to_response({'form': form, })
@@ -146,7 +168,8 @@ class EditSourceView(BaseTemplateView):
             helpers.DataSourceService.tree_full_clean(source)
         form.save()
 
-        return self.redirect('etl:datasources.index')
+        return self.json_response(
+                {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
 
 
 class RemoveSourceView(BaseView):
