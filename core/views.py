@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 class BaseView(View):
+    """
+    Базовый класс для View
+    """
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
 
     def redirect(self, reverse_name, args=None, **kwargs):
         return HttpResponseRedirect(reverse(reverse_name, args=args), **kwargs)
@@ -41,18 +47,11 @@ class BaseView(View):
             json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
-class BaseTemplateView(TemplateView):
-
-    def redirect(self, reverse_name, args=None, **kwargs):
-        return HttpResponseRedirect(reverse(reverse_name, args=args), **kwargs)
-
-    def redirect_to_url(self, url, **kwargs):
-        return HttpResponseRedirect(url, **kwargs)
-
-    def json_response(self, context, **response_kwargs):
-        response_kwargs['content_type'] = 'application/json'
-        return HttpResponse(
-            json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
+class BaseTemplateView(TemplateView, BaseView):
+    """
+    Базовый класс для View для работ с template
+    """
+    pass
 
 
 class HomeView(BaseTemplateView):
@@ -70,6 +69,9 @@ class LoginView(BaseTemplateView):
     Вход пользователя в систему
     """
     template_name = 'core/login.html'
+
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
 
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated():
@@ -132,6 +134,10 @@ class LogoutView(BaseView):
     """
     Выход пользователя
     """
+
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
+
     def get(self, request, *args, **kwargs):
         logout(request)
         return self.redirect('login')
