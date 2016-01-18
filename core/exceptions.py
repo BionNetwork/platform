@@ -25,7 +25,7 @@ class ExceptionWithCodes(Exception):
         ExceptionCode.ERR_VALIDATION_ERROR: 2000
     }
 
-    def __init__(self, message, code='default'):
+    def __init__(self, message, code=ExceptionCode.ERR_SYSTEM):
         """
         Get code from code map
         Args:
