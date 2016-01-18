@@ -30,17 +30,18 @@ function checkConnection(){
             port: {
                 number: 'Введите целое число!'
             }
-        },
+        }
     });
 
-    $.each(form.find('.border-red'), function(i, el){
-            $(el).removeClass('border-red');
-        });
-    if(!form.valid()){
-        $.each(form.validate().errorList, function(i, el2){
+    $.each(form.find('.border-red'), function (i, el) {
+        console.log(el);
+        $(el).removeClass('border-red');
+    });
+    if (!form.valid()) {
+        $.each(form.validate().errorList, function (i, el2) {
             $(el2.element).addClass('border-red');
         })
-        return;
+        return false;
     }
 
     $.ajax({
@@ -113,7 +114,7 @@ function saveNewSource(save_url)
 
     $.validator.messages.required = 'Обязательное поле!';
     if (!connection_form.valid()) {
-      return;
+      return false;
     }
 
     $.ajax({

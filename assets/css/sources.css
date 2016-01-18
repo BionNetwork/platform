@@ -30,3 +30,12 @@ a {
 .width150 {
     width: 150%;
 }
+input.error {
+    border: 1px solid #b94a48;
+}
+.border-red {
+    border-color: red;
+}
+label.error {
+    color: #f89406;
+}
