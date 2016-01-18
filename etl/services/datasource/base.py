@@ -381,11 +381,12 @@ class DataSourceService(object):
 
             for collection in collections_names:
                 table_info = json.loads(r_server.get(collection))
-                table_info['stats'].update({
-                    'last_row': {
-                        'cdc_key': last_key,
-                    }
-                })
+                if table_info['stats']:
+                    table_info['stats'].update({
+                        'last_row': {
+                            'cdc_key': last_key,
+                        }
+                    })
 
                 pipe.set(collection, json.dumps(table_info))
             pipe.execute()
@@ -460,7 +461,6 @@ class DataSourceService(object):
             res.update({
                 table: source_meta.id
             })
-
         return res
 
     @classmethod
@@ -474,3 +474,17 @@ class DataSourceService(object):
         """
         return DatabaseService.get_structure_rows_number(
             source, structure,  cols)
+
+    @classmethod
+    def get_remote_table_create_query(cls, source):
+        """
+        возвращает запрос на создание таблицы в БД клиента
+        """
+        return DatabaseService.get_remote_table_create_query(source)
+
+    @classmethod
+    def get_remote_triggers_create_query(cls, source):
+        """
+        возвращает запрос на создание триггеров в БД клиента
+        """
+        return DatabaseService.get_remote_triggers_create_query(source)

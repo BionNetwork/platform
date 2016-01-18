@@ -57,8 +57,12 @@ table_query = """
         """
 
 cols_query = """
-    SELECT table_name, column_name, data_type FROM information_schema.columns
-            where table_name in {0} and table_catalog = '{1}' and table_schema = '{2}' order by table_name;
+    SELECT table_name, column_name, data_type as column_type, is_nullable,
+    case when substring(column_default, 0, 8) = 'nextval'
+         then 'serial' else null end as extra
+    FROM information_schema.columns
+    where table_name in {0} and table_catalog = '{1}' and
+          table_schema = '{2}' order by table_name;
 """
 
 constraints_query = """
@@ -101,8 +105,10 @@ constraints_query = """
     """
 
 indexes_query = """
-        SELECT t.relname, string_agg(a.attname, ','), i.relname, ix.indisprimary,
-        ix.indisunique FROM pg_class t
+        SELECT t.relname, string_agg(a.attname, ','), i.relname,
+        case ix.indisprimary when 't' then 't' else 'f' end as primary,
+        case ix.indisunique when 't' then 't' else 'f' end as unique
+        FROM pg_class t
         JOIN pg_index ix ON t.oid = ix.indrelid
         JOIN pg_class i ON i.oid = ix.indexrelid
         JOIN pg_attribute a ON a.attrelid = t.oid
@@ -113,6 +119,47 @@ indexes_query = """
 stat_query = """
     SELECT relname, reltuples as count, relpages*8192 as size FROM pg_class
     where oid in {0};
+"""
+
+
+remote_table_query = """
+    CREATE TABLE IF NOT EXISTS "{0}" (
+        {1}
+        "cdc_created_at" timestamp NOT NULL,
+        "cdc_updated_at" timestamp,
+        "cdc_delta_flag" smallint NOT NULL,
+        "cdc_synced" smallint NOT NULL
+    );
+    CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
+
+    CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
+
+    CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
+"""
+
+
+remote_triggers_query = """
+    CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
+    BEGIN
+        IF (TG_OP = 'DELETE') THEN
+            INSERT INTO "{new_table}" SELECT {old} now(), null, 3, 0;
+            RETURN OLD;
+        ELSIF (TG_OP = 'UPDATE') THEN
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 2, 0;
+            RETURN NEW;
+        ELSIF (TG_OP = 'INSERT') THEN
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 1, 0;
+            RETURN NEW;
+        END IF;
+        RETURN NULL;
+    END;
+$cdc_audit$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "{new_table}_audit" on "{orig_table}";
+
+CREATE TRIGGER "{new_table}_audit"
+AFTER INSERT OR UPDATE OR DELETE ON "{orig_table}"
+    FOR EACH ROW EXECUTE PROCEDURE process_{new_table}_audit();
 """
 
 row_query = """

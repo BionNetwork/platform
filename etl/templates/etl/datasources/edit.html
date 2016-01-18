@@ -5,3 +5,7 @@
         Редактирование источника
     </h1>
 {% endblock %}
+
+{% block submit-button %}
+    <button type="button" class="btn" onclick='saveNewSource("{% url "etl:datasources.edit" datasource_id %}")'>Сохранить</button>
+{% endblock submit-button %}

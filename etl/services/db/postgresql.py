@@ -72,91 +72,6 @@ class Postgresql(Database):
         indexes_query = pgsql_map.indexes_query.format(tables_str)
         return cols_query, constraints_query, indexes_query
 
-
-    @classmethod
-    def processing_records(cls, col_records, index_records, const_records):
-        """
-        обработка колонок, констраинтов, индексов соурса
-        :param col_records: str
-        :param index_records: str
-        :param const_records: str
-        :return: tuple
-        """
-        indexes = defaultdict(list)
-        itable_name, icol_names, index_name, primary, unique = xrange(5)
-
-        for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
-            for ig in igroup:
-                indexes[ikey].append({
-                    "name": ig[index_name],
-                    "columns": ig[icol_names].split(','),
-                    "is_primary": ig[primary] == 't',
-                    "is_unique": ig[unique] == 't',
-                })
-
-        constraints = defaultdict(list)
-        (c_table_name, c_col_name, c_name, c_type,
-         c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
-
-        for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
-            for ig in igroup:
-                constraints[ikey].append({
-                    "c_col_name": ig[c_col_name],
-                    "c_name": ig[c_name],
-                    "c_type": ig[c_type],
-                    "c_f_table": ig[c_foreign_table],
-                    "c_f_col": ig[c_foreign_col],
-                    "c_upd": ig[c_update],
-                    "c_del": ig[c_delete],
-                })
-
-        columns = defaultdict(list)
-        foreigns = defaultdict(list)
-
-        table_name, col_name, col_type = xrange(3)
-
-        for key, group in groupby(col_records, lambda x: x[table_name]):
-
-            t_indexes = indexes[key]
-            t_consts = constraints[key]
-
-            for x in group:
-                is_index = is_unique = is_primary = False
-                col = x[col_name]
-
-                for i in t_indexes:
-                    if col in i['columns']:
-                        is_index = True
-                        index_name = i['name']
-                        for c in t_consts:
-                            const_type = c['c_type']
-                            if index_name == c['c_name']:
-                                if const_type == 'UNIQUE':
-                                    is_unique = True
-                                elif const_type == 'PRIMARY KEY':
-                                    is_unique = True
-                                    is_primary = True
-
-                columns[key].append({
-                    "name": col,
-                    "type": (cls.db_map.DB_TYPES[cls.lose_brackets(x[col_type])]
-                                              or x[col_type]),
-                    "is_index": is_index,
-                    "is_unique": is_unique, "is_primary": is_primary})
-
-            # находим внешние ключи
-            for c in t_consts:
-                if c['c_type'] == 'FOREIGN KEY':
-                    foreigns[key].append({
-                        "name": c['c_name'],
-                        "source": {"table": key, "column": c["c_col_name"]},
-                        "destination":
-                            {"table": c["c_f_table"], "column": c["c_f_col"]},
-                        "on_delete": c["c_del"],
-                        "on_update": c["c_upd"],
-                    })
-        return columns, indexes, foreigns
-
     @staticmethod
     def get_select_query():
         """
@@ -197,3 +112,17 @@ class Postgresql(Database):
         """
         insert_query = "INSERT INTO {0} VALUES {1}".format(key_str, '{0}')
         return insert_query
+
+    @staticmethod
+    def remote_table_create_query():
+        """
+        запрос на создание новой таблицы в БД клиента
+        """
+        return pgsql_map.remote_table_query
+
+    @staticmethod
+    def remote_triggers_create_query():
+        """
+        запрос на создание триггеров в БД клиента
+        """
+        return pgsql_map.remote_triggers_query
