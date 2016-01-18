@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import datetime
 
 from django.db import models
+from core.db.models.fields import *
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
@@ -176,7 +177,7 @@ class Dimension(models.Model):
         db_table = "dimensions"
         verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'
-        
+
 
 class Measure(models.Model):
     """Меры для кубов"""
@@ -284,3 +285,16 @@ class QueueList(models.Model):
     class Meta:
         db_table = "queue_list"
         index_together = ["queue", "date_created", "queue_status"]
+
+
+class Cube(models.Model):
+    name = models.CharField(max_length=1024, verbose_name="название куба")
+    data = XmlField(verbose_name="xml схема куба", null=False)
+    create_date = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True, db_index=True)
+    update_date = models.DateTimeField(
+        verbose_name="дата обновления", auto_now=True, db_index=True)
+    user = models.ForeignKey(User, verbose_name=u'Пользователь')
+
+    class Meta:
+        db_table = "cubes"
