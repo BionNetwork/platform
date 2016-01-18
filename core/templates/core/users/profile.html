@@ -8,6 +8,12 @@
     </h1>
 {% endblock %}
 
+
+{% block css %}
+    <link rel="stylesheet" href="{% static "system/jQuery-File-Upload-9.11.2/css/jquery.fileupload.css" %}">
+{% endblock css %}
+
+
 {% block content %}
 
     <div class="row">
@@ -16,8 +22,13 @@
             <!-- Profile Image -->
             <div class="box box-primary">
                 <div class="box-body box-profile">
-                    <img class="profile-user-img img-responsive img-circle" src="{% static "system/dist/img/anonymous-160x160.gif" %}"
-                         alt="User profile picture">
+                    <div>
+                        <img class="profile-user-img img-responsive img-circle" src="{% static "system/dist/img/anonymous-160x160.gif" %}"
+                             alt="User profile picture">
+                        <div >
+                            <input id="fileupload" type="file" name="file" multiple>
+                        </div>
+                    </div>
 
                     <h3 class="profile-username text-center">{{ user.first_name }} {{ user.last_name }}</h3>
 
@@ -358,3 +369,9 @@
 
 
 {% endblock %}
+
+{% block javascript %}
+    <script src="{% static "system/jQuery-File-Upload-9.11.2/js/vendor/jquery.ui.widget.js" %}"></script>
+    <script src="{% static "system/jQuery-File-Upload-9.11.2/js/jquery.iframe-transport.js" %}"></script>
+    <script src="{% static "system/jQuery-File-Upload-9.11.2/js/jquery.fileupload.js" %}"></script>
+{% endblock javascript %}
