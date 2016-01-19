@@ -179,6 +179,10 @@ class Dimension(models.Model):
         verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'
 
+    def get_dimension_type(self):
+        return ('StandardDimension' if self.type == self.STANDART_DIMENSION
+                else 'TimeDimension')
+
 
 class Measure(models.Model):
     """Меры для кубов"""

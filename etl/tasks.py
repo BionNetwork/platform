@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 
 import logging
 
+import lxml.etree as etree
+
 import os
 import sys
 import brukva
@@ -25,7 +27,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
 
 from djcelery import celery
@@ -208,6 +210,11 @@ def delete_redundant(task_id, channel):
 @celery.task(name=CREATE_TRIGGERS)
 def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
+
+
+@celery.task(name=CREATE_CUBE)
+def create_cube(task_id, channel):
+    return CreateCube(task_id, channel).load_data()
 
 
 class CreateDataset(TaskProcessing):
@@ -651,7 +658,8 @@ class LoadMeasures(LoadDimensions):
             )
 
     def set_next_task_params(self):
-        self.next_task_params = None
+        self.next_task_params = (
+            CREATE_CUBE, create_cube, self.context)
 
 
 class UpdateMongodb(TaskProcessing):
@@ -920,5 +928,105 @@ class CreateTriggers(TaskProcessing):
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
             })
+
+
+class CreateCube(TaskProcessing):
+
+    def processing(self):
+
+        print 'Start cube creation'
+
+        dataset_id = self.context['dataset_id']
+        dataset = Dataset.objects.get(id=dataset_id)
+        key = dataset.key
+
+        meta_ids = DatasetToMeta.objects.filter(dataset_id=dataset_id).values_list(
+            'meta_id', flat=True)
+
+        dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+        measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+
+        if dimensions.exists() and measures.exists():
+            # <Schecma>
+            cube_key = "cube_{key}".format(key=key)
+            schema = etree.Element('Schema', name=cube_key)
+
+            cube_info = {
+                'name': cube_key,
+                'caption': cube_key,
+                'visible': "true",
+                'cache': "false",
+                'enabled': "true",
+            }
+
+            # <Cube>
+            cube = etree.Element('Cube', **cube_info)
+            etree.SubElement(cube, 'Table', name="measures_{0}".format(key))
+
+            for dim in dimensions:
+                # <Dimension>
+                typ = dim.get_dimension_type()
+                visible = 'true' if dim.visible else 'false'
+                name = dim.name
+                title = dim.title
+
+                dim_info = {
+                    'type': typ,
+                    'visible': visible,
+                    'highCardinality': 'true' if dim.high_cardinality else 'false',
+                    'name': name,
+                    'caption': title,
+                }
+                dimension = etree.SubElement(schema, 'Dimension', **dim_info)
+
+                hier_info = {
+                    'name': name,
+                    'description': title,
+                    'hasAll': 'true',
+                }
+
+                hierarchy = etree.SubElement(dimension, 'Hierarchy', **hier_info)
+
+                etree.SubElement(hierarchy, 'Table', name="dimensions_{0}".format(key))
+
+                level_info = {
+                    'name': name,
+                    'column': name,
+                    'caption': title,
+                    'visible': visible,
+                    'type': "String",
+                    'uniqueMembers': "false",
+                    'levelType': "Regular",
+                    'hideMemberIf': "Never",
+                }
+
+                etree.SubElement(hierarchy, 'Level', **level_info)
+
+                # <DimensionUsage>
+                del dim_info['type']
+                dim_info['source'] = name
+                dimension_usage = etree.SubElement(cube, 'DimensionUsage', **dim_info)
+
+            for meas in measures:
+                meas_info = {
+                    'name': meas.name,
+                    'column': meas.name,
+                    'caption': meas.title,
+                    'visible': 'true' if meas.visible else 'false',
+                    'aggregator': 'sum',
+                }
+                etree.SubElement(cube, 'Measure', **meas_info)
+
+            schema.append(cube)
+
+            cube_string = etree.tostring(schema, pretty_print=True)
+
+            Cube.objects.create(
+                name=cube_key,
+                data=cube_string,
+                user_id=self.context['user_id'],
+            )
+
+            self.next_task_params = None
 
 # write in console: python manage.py celery -A etl.tasks worker
