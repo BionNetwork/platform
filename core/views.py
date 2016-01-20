@@ -4,11 +4,13 @@ from __future__ import unicode_literals
 import uuid
 import json
 import logging
+import datetime
+import os
 
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import TemplateView, View
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
@@ -286,6 +288,7 @@ class NewUserView(BaseTemplateView):
         form = core_forms.NewUserForm(post)
 
         if not form.is_valid():
+            print form.errors
             return self.render_to_response({'form': form})
 
         user = form.save(commit=False)
@@ -335,9 +338,45 @@ class UserProfileView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
         user = get_object_or_404(User, pk=kwargs.get('id'))
 
-        return self.render_to_response({
-            'user': user
-        })
+        form = core_forms.NewUserForm(instance=user)
+        return render(request, self.template_name, {'form': form, })
 
     def post(self, request, *args, **kwargs):
-        pass
+        print request.POST
+
+        post = request.POST
+        user_id = kwargs.get('id')
+        user = get_object_or_404(User, pk=user_id)
+        form = core_forms.UserForm(post, instance=user)
+
+        if not form.is_valid():
+            print form.errors
+            return self.render_to_response({'form': form})
+
+        user = form.save(commit=False)
+        user.is_active = True
+        user.save()
+
+        return redirect(reverse('users.profile', kwargs={'id': user_id}))
+
+
+class TempImageView(BaseView):
+
+    def post(self, request, *args, **kwargs):
+        file_ = request.FILES['file']
+        format_ = file_.name.rsplit('.', 1)[-1]
+        name = '{0}.{1}'.format(str(uuid.uuid4()), format_)
+
+        temp_dir = os.path.join(settings.MEDIA_ROOT, 'temporary')
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+
+        file_dir = os.path.join(temp_dir, name)
+
+        with open(file_dir, 'wb+') as f:
+            for chunk in file_.chunks():
+                f.write(chunk)
+
+        return self.json_response({
+            'img_url': os.path.join(os.sep, 'media', 'temporary', name)
+        })
