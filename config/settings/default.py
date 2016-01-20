@@ -206,6 +206,12 @@ STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "assets"),
 )
 
+
+MEDIA_URL = '/media/'
+
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
 # redis conf
 REDIS_HOST = 'localhost'
 REDIS_PORT = '6379'
