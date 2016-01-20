@@ -136,6 +136,10 @@ class User(AbstractUser):
     middle_name = models.CharField(max_length=50, blank=True, verbose_name='Отчество', default='')
     birth_date = models.DateField(verbose_name='Дата рождения', null=True, blank=True)
     verify_email_uuid = models.CharField(max_length=50, null=True, blank=True)
+    big_image = models.ImageField(
+        verbose_name='Аватарка', upload_to='users', null=True, blank=True)
+    small_image = models.ImageField(
+        verbose_name='Аватарка', upload_to='users', null=True, blank=True)
 
     # objects = models.Manager.from_queryset(RetryQueryset)()
 
