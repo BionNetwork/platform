@@ -4,9 +4,9 @@ from __future__ import unicode_literals
 import uuid
 import json
 import logging
-import datetime
 import os
 
+from django.core.files import File
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
@@ -338,23 +338,55 @@ class UserProfileView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
         user = get_object_or_404(User, pk=kwargs.get('id'))
 
-        form = core_forms.NewUserForm(instance=user)
+        form = core_forms.UserProfileForm(instance=user)
         return render(request, self.template_name, {'form': form, })
 
+    @staticmethod
+    def save_file_remove(fpath):
+        if os.path.exists(fpath):
+            os.remove(fpath)
+
     def post(self, request, *args, **kwargs):
-        print request.POST
 
         post = request.POST
         user_id = kwargs.get('id')
         user = get_object_or_404(User, pk=user_id)
-        form = core_forms.UserForm(post, instance=user)
+        form = core_forms.UserProfileForm(post, instance=user)
 
         if not form.is_valid():
-            print form.errors
             return self.render_to_response({'form': form})
 
         user = form.save(commit=False)
         user.is_active = True
+
+        old_file = user.big_image
+
+        # work with photos
+        temp_file = post.get('temp_file')
+
+        if not old_file:
+            if temp_file:
+                file_name = temp_file.rsplit(os.sep, 1)[-1]
+                temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
+                user.big_image.save(file_name, File(open(temp_dir), 'r'))
+                # удаляем временный файл
+                self.save_file_remove(temp_dir)
+        else:
+            if temp_file:
+                file_name = temp_file.rsplit(os.sep, 1)[-1]
+                old_file_name = old_file.name.rsplit(os.sep, 1)[-1]
+
+                if file_name != old_file_name:
+                    temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
+                    user.big_image.save(file_name, File(open(temp_dir), 'r'))
+                    # удаляем временный файл
+                    self.save_file_remove(temp_dir)
+                    # удаляем старое фото
+                    self.save_file_remove(os.path.join(old_file.path))
+            else:
+                user.big_image = None
+                self.save_file_remove(os.path.join(old_file.path))
+
         user.save()
 
         return redirect(reverse('users.profile', kwargs={'id': user_id}))

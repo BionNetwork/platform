@@ -20,7 +20,7 @@
 
     <div class="row">
         <div class="col-md-8">
-            <form class="form-horizontal form-color" method="POST">{% csrf_token %}
+            <form class="form-horizontal form-color" method="POST" enctype="multipart/form-data">{% csrf_token %}
                 <div class="nav-tabs-custom">
                     <ul class="nav nav-tabs">
                         <li class="active"><a href="#main" data-toggle="tab" aria-expanded="true">Главная</a></li>
@@ -29,7 +29,6 @@
                     <div class="tab-content">
                         <div class="tab-pane active" id="main">
                             <div class="form-group">
-
                                 <label class="col-md-2 control-label">Фото</label>
 
                                 <div class="col-md-3">
@@ -38,13 +37,26 @@
                                             <div class="upload_div">
                                                 <div class="img_bl" id="img_div" data-url="{% url "users.temp_image" user.id %}">
                                                     <img id="profile_img" class="profile-user-img img-responsive img-circle"
-                                                         src="/assets/system/dist/img/anonymous-160x160.gif"
-                                                         alt="User profile picture">
+                                                         {% if form.big_image.value %}
+                                                            src="{{ MEDIA_URL }}{{form.big_image.value}}"
+                                                         {% else %}
+                                                            src="/assets/system/dist/img/anonymous-160x160.gif"
+                                                         {% endif %}
+                                                         alt="User profile picture" width="140" height="140">
                                                     <div class="upload_btn img-circle">
-                                                        <button class="btn btn-success fileinput-button plus_centr">
+                                                        <button id="add-btn" hidden="true" class="btn btn-success fileinput-button plus_centr"
+                                                                {% if form.big_image.value %}
+                                                                    style="display: none"
+                                                                {% endif %}>
                                                             <i class="glyphicon glyphicon-plus"></i>
                                                             <input id="fileupload" type="file" name="file" multiple>
                                                         </button>
+                                                        <span id="clear-btn" class="btn btn-danger fileinput-button plus_centr"
+                                                             {% if not form.big_image.value %}
+                                                                 style="display: none"
+                                                             {% endif %}>
+                                                            <i class="glyphicon glyphicon-remove" onclick="clearImage()"></i>
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -53,12 +65,17 @@
 
                                         </div>
                                     </div>
-                                    <input type="hidden" id="temp_file" name="temp_file">
+                                    <input type="hidden" id="temp_file" name="temp_file"
+                                            {% if form.big_image.value %}
+                                                value="{{ MEDIA_URL }}{{form.big_image.value}}"
+                                            {% else %}
+                                                value=""
+                                            {% endif %}>
                                 </div>
                             </div>
 
-                            <div class="form-group">
-                                <label for="first_name" class="col-sm-2 control-label">Имя</label>
+                            <div class="form-group {% if form.first_name.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Имя</label>
 
                                 <div class="col-sm-9 input-group">
                                     {{form.first_name}}
@@ -69,8 +86,8 @@
                                     </div>
                                 {% endif %}
                             </div>
-                            <div class="form-group">
-                                <label for="last_name" class="col-sm-2 control-label">Фамилия</label>
+                            <div class="form-group {% if form.last_name.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Фамилия</label>
 
                                 <div class="col-sm-9 input-group">
                                     {{form.last_name}}
@@ -81,8 +98,8 @@
                                     </div>
                                 {% endif %}
                             </div>
-                            <div class="form-group">
-                                <label for="middle_name" class="col-sm-2 control-label">Отчество</label>
+                            <div class="form-group {% if form.middle_name.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Отчество</label>
 
                                 <div class="col-sm-9 input-group">
                                     {{form.middle_name}}
@@ -96,9 +113,9 @@
                         </div>
                         <!-- /.tab-pane -->
 
-                        <div class="tab-pane " id="optional">
-                            <div class="form-group">
-                                <label for="id_username" class="col-sm-2 control-label">Логин</label>
+                        <div class="tab-pane" id="optional">
+                            <div class="form-group {% if form.username.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Логин</label>
 
                                 <div class="col-sm-9 input-group">
                                     {{form.username}}
@@ -110,8 +127,8 @@
                                 {% endif %}
                             </div>
 
-                            <div class="form-group">
-                                <label for="email" class="col-sm-2 control-label">Email</label>
+                            <div class="form-group {% if form.email.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Email</label>
 
                                 <div class="col-sm-9 input-group">
                                     <div class="input-group-addon">
@@ -125,8 +142,8 @@
                                     </div>
                                 {% endif %}
                             </div>
-                            <div class="form-group">
-                                <label for="birth_date" class="col-sm-2 control-label">Дата рождения</label>
+                            <div class="form-group {% if form.birth_date.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Дата рождения</label>
 
                                 <div class="col-sm-9 input-group">
                                     <div class="input-group-addon">
@@ -140,8 +157,8 @@
                                     </div>
                                 {% endif %}
                             </div>
-                            <div class="form-group">
-                                <label for="phone" class="col-sm-2 control-label">Телефон</label>
+                            <div class="form-group {% if form.phone.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Телефон</label>
 
                                 <div class="col-sm-9 input-group">
 
@@ -156,8 +173,8 @@
                                     </div>
                                 {% endif %}
                             </div>
-                            <div class="form-group">
-                                <label for="skype" class="col-sm-2 control-label">Skype</label>
+                            <div class="form-group {% if form.skype.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Skype</label>
 
                                 <div class="col-sm-9 input-group">
                                     <div class="input-group-addon">
@@ -171,8 +188,8 @@
                                     </div>
                                 {% endif %}
                             </div>
-                            <div class="form-group">
-                                <label for="city" class="col-sm-2 control-label">Город</label>
+                            <div class="form-group {% if form.city.errors %}has-error{% endif %}">
+                                <label class="col-sm-2 control-label">Город</label>
 
                                 <div class="col-sm-9 input-group">
                                     {{form.city}}
@@ -188,10 +205,16 @@
                 </div>
 
                 <div class="form-group form_bottom_btn">
-                    <div class="col-sm-offset-1">
+                    <div class="col-sm-2 col-sm-offset-1">
                         <button type="submit" class="btn btn-danger">Сохранить</button>
                     </div>
+                    {% if form.errors %}
+                        <div class="col-sm-offset-1 has-error">
+                            <label class="control-label">На форме имеются некорректно заполненные поля!</label>
+                        </div>
+                    {% endif %}
                 </div>
+
             </form>
         </div>
     </div>
