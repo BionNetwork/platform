@@ -10,21 +10,24 @@ from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.db import transaction
+from django.http import HttpResponse
 
-from core.exceptions import ResponseError
+from core.exceptions import ResponseError, ValidationError, ExceptionCode
+from core.helpers import CustomJsonEncoder
 from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus,
-    DatasourceSettings as SourceSettings)
+    DatasourceSettings as SourceSettings, DatasourceSettings,
+    DatasourceMetaKeys)
 from . import forms as etl_forms
 import logging
 
 from . import helpers
-from . import tasks
-from .services.queue.base import TaskStatusEnum
+from etl.constants import *
+from etl.tasks import load_mongo_db, update_mongo_db
+from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (generate_columns_string,
                                        generate_table_name_key)
-
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +83,9 @@ class NewSourceView(BaseTemplateView):
 
     def get(self, request, *args, **kwargs):
         form = etl_forms.SourceForm()
-        return render(request, self.template_name, {'form': form, })
+        settings_form = etl_forms.SettingsForm()
+        return render(request, self.template_name, {
+            'form': form, 'settings_form': settings_form})
 
     @transaction.atomic()
     def post(self, request, *args, **kwargs):
@@ -90,13 +95,16 @@ class NewSourceView(BaseTemplateView):
             cdc_value = post.get('cdc_type')
 
             if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
-                return self.json_response(
-                    {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
+                raise ValidationError("Неверное значение для метода докачки данных")
 
             form = etl_forms.SourceForm(post)
             if not form.is_valid():
-                return self.json_response(
-                    {'status': ERROR, 'message': 'Поля формы заполнены некорректно!'})
+                raise ValidationError('Поля формы заполнены неверно')
+
+            if Datasource.objects.filter(
+                host=post.get('host'), db=post.get('db'), user_id=request.user.id
+            ).exists():
+                raise ValidationError("Данный источник уже имеется в системе")
 
             source = form.save(commit=False)
             source.user_id = request.user.id
@@ -111,6 +119,9 @@ class NewSourceView(BaseTemplateView):
 
             return self.json_response(
                 {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
+        except ValidationError as e:
+            return self.json_response(
+                {'status': ERROR, 'message': e.message})
         except Exception as e:
             logger.exception(e.message)
             return self.json_response(
@@ -125,15 +136,35 @@ class EditSourceView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
 
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
+        try:
+            cdc_value = source.datasourcesettings_set.get(name='cdc_type').value
+        except DatasourceSettings.DoesNotExist:
+            cdc_value = SourceSettings.CHECKSUM
 
         form = etl_forms.SourceForm(instance=source)
-        return self.render_to_response({'form': form, })
+        settings_form = etl_forms.SettingsForm(initial={
+            'cdc_type_field': cdc_value})
+        return self.render_to_response(
+            {'form': form, 'settings_form': settings_form,
+             'datasource_id': kwargs.get('id')})
 
     def post(self, request, *args, **kwargs):
 
         post = request.POST
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
         form = etl_forms.SourceForm(post, instance=source)
+
+        cdc_value = post.get('cdc_type')
+        if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
+            return self.json_response(
+                {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
+        # сохраняем настройки докачки
+        source_settings, create = SourceSettings.objects.get_or_create(
+            name='cdc_type',
+            datasource=source,
+        )
+        source_settings.value = cdc_value
+        source_settings.save()
 
         if not form.is_valid():
             return self.render_to_response({'form': form, })
@@ -145,7 +176,8 @@ class EditSourceView(BaseTemplateView):
             helpers.DataSourceService.tree_full_clean(source)
         form.save()
 
-        return self.redirect('etl:datasources.index')
+        return self.json_response(
+                {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
 
 
 class RemoveSourceView(BaseView):
@@ -265,9 +297,9 @@ class GetColumnsView(BaseEtlView):
 
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
-        columns = helpers.DataSourceService.get_columns_info(
+        info = helpers.DataSourceService.get_columns_info(
             source, tables)
-        return columns
+        return info
 
 
 class GetDataRowsView(BaseEtlView):
@@ -293,6 +325,26 @@ class GetDataRowsView(BaseEtlView):
         data = helpers.DataSourceService.get_rows_info(
             source, col_names)
         return data
+
+    def json_response(self, context, **response_kwargs):
+        response_kwargs['content_type'] = 'application/json'
+
+        # стараемся отобразить бинарные данные
+        new_context_data = []
+
+        for item in context['data']:
+            new_list = list(item)
+            for i, item in enumerate(new_list):
+                try:
+                    json.dumps(item, cls=CustomJsonEncoder)
+                except Exception:
+                    new_list[i] = 'binary'
+
+            new_context_data.append(new_list)
+
+        context['data'] = new_context_data
+        return HttpResponse(
+            json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
 class RemoveTablesView(BaseEtlView):
@@ -352,7 +404,7 @@ class LoadDataView(BaseEtlView):
         # подключение к источнику данных
         source_conn = helpers.DataSourceService.get_source_connection(source)
         if not source_conn:
-            raise ResponseError(u'Не удалось подключиться к источнику данных!')
+            raise ResponseError(u'Не удалось подключиться к источнику данных!', ExceptionCode.ERR_CONNECT_TO_DATASOURCE)
 
         # копия, чтобы могли добавлять
         data = request.POST
@@ -363,66 +415,77 @@ class LoadDataView(BaseEtlView):
         cols_str = generate_columns_string(cols)
         table_key = generate_table_name_key(source, cols_str)
 
-        # берем все типы очередей
-        queue_ids = Queue.objects.values_list('id', flat=True)
+        # берем начальные типы очередей
+        queue_ids = Queue.objects.filter(
+            name__in=[MONGODB_DATA_LOAD, MONGODB_DELTA_LOAD]).values_list(
+            'id', flat=True)
         # берем статусы (В ожидании, В обработке)
         queue_status_ids = QueueStatus.objects.filter(
             title__in=(TaskStatusEnum.IDLE, TaskStatusEnum.PROCESSING)
         ).values_list('id', flat=True)
 
         queues_list = QueueList.objects.filter(
+            checksum__isnull=False,
             checksum=table_key,
             queue_id__in=queue_ids,
             queue_status_id__in=queue_status_ids,
         )
 
         if queues_list.exists():
-            raise ResponseError(u'Данная задача уже находится в обработке!')
+            raise ResponseError(u'Данная задача уже находится в обработке!', ExceptionCode.ERR_TASK_ALREADY_IN_QUEUE)
 
         tables = json.loads(data.get('tables'))
 
         collections_names = helpers.DataSourceService.get_collections_names(
             source, tables)
-        # достаем типы колонок
-        col_types = helpers.DataSourceService.get_columns_types(source, tables)
 
         # достаем инфу колонок (статистика, типы, )
         tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
             source, tables)
 
-        # достаем инфу для расчета контрольных сумм строк
-        ddl_data = helpers.RedisSourceService.get_ddl_tables_info(
-            source, tables)
-
-        structure = helpers.RedisSourceService.get_active_tree_structure(source)
-        conn_dict = source.get_connection_dict()
-
-        arguments = {
-            'cols': data.get('cols'),
-            'tables': data.get('tables'),
-            'col_types': json.dumps(col_types),
-            'meta_info': json.dumps(tables_info_for_meta),
-            'tree': structure,
-            'source': conn_dict,
-            'user_id': request.user.id,
-            'collections_names': collections_names,
-            'ddl_data': ddl_data,
-            'checksum': table_key,
-        }
+        try:
+            source_settings = DatasourceSettings.objects.get(
+                    datasource_id=source.id).value
+        except DatasourceSettings.DoesNotExist:
+            raise ResponseError(u'Не определен тип дозагрузки данных', ExceptionCode.ERR_CDC_TYPE_IS_NOT_SET)
 
         user_id = request.user.id
+        # Параметры для задач
+        load_args = {
+            'source_settings': source_settings,
+            'cols': data.get('cols'),
+            'tables': data.get('tables'),
+            'col_types': json.dumps(
+                helpers.DataSourceService.get_columns_types(source, tables)),
+            'meta_info': json.dumps(tables_info_for_meta),
+            'tree': helpers.RedisSourceService.get_active_tree_structure(source),
+            'source': source.get_connection_dict(),
+            'user_id': user_id,
+            'db_update': False,
+            'collections_names': collections_names,
+            'checksum': table_key,
+            'tables_info': helpers.RedisSourceService.get_ddl_tables_info(
+                    source, tables),
+        }
+        is_meta_stats = False
+        meta_key = DatasourceMetaKeys.objects.filter(value=table_key)
+        if meta_key:
+            is_meta_stats = True
+            try:
+                meta_stats = json.loads(
+                    meta_key[0].meta.stats)['tables_stat']['last_row']['cdc_key']
+            except:
+                pass
+        load_args.update({'is_meta_stats': is_meta_stats})
+        if not is_meta_stats:
+            task, channels = get_single_task(
+                (MONGODB_DATA_LOAD, load_mongo_db, load_args),)
+        else:
+            load_args['db_update'] = True
+            task, channels = get_single_task(
+                (MONGODB_DELTA_LOAD, update_mongo_db, load_args),)
 
-        # добавляем задачу mongo в очередь
-        task = helpers.TaskService('etl:load_data:mongo')
-        task_id1, channel1 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id1, channel1),)
-
-        # добавляем задачу database в очередь
-        task = helpers.TaskService('etl:load_data:database')
-        task_id2, channel2 = task.add_task(arguments)
-        tasks.load_data.apply_async((user_id, task_id2, channel2),)
-
-        return {'channels': [channel1, channel2]}
+        return {'channels': channels}
 
 
 class GetUserTasksView(BaseView):

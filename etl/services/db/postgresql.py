@@ -88,7 +88,7 @@ class Postgresql(Database):
         :param tables: list
         :return: str
         """
-        tables_str = '(' + ', '.join(["'{0}'::regclass::oid".format(y) for y in tables]) + ')'
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
         return cls.db_map.stat_query.format(tables_str)
 
     @staticmethod
