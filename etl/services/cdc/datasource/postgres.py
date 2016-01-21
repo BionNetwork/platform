@@ -1,8 +1,8 @@
 # coding: utf-8
 
-from etl.services.cdc.data_capture import BaseCdc
+# from etl.services.cdc.data_capture import CreateTriggers
+from etl.tasks import CreateTriggers
 
 
-class PostgresqlCdc(BaseCdc):
-
+class PostgresqlTriggerCdc(CreateTriggers):
     pass

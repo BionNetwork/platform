@@ -662,10 +662,10 @@ class RedisSourceService(object):
         for t_name in tables:
             pipe.set(str_table_by_name.format(t_name), json.dumps(
                 {
-                    "columns": columns[t_name],
-                    "indexes": indexes[t_name],
-                    "foreigns": foreigns[t_name],
-                    "stats": stats[t_name],
+                    "columns": columns[t_name.lower()],
+                    "indexes": indexes[t_name.lower()],
+                    "foreigns": foreigns[t_name.lower()],
+                    "stats": stats[t_name.lower()],
                 }
             ))
         pipe.execute()
@@ -810,9 +810,12 @@ class RedisSourceService(object):
         """
         counter = RedisCacheKeys.get_user_collection_counter(user_id, source_id)
         if not r_server.exists(counter):
-            r_server.set(counter, 1)
+            r_server.set(counter, 2)
             return 1
-        return r_server.incr(counter)
+        else:
+            next_count = r_server.get(counter)
+            r_server.incr(counter)
+        return next_count
 
     @classmethod
     def get_active_list(cls, user_id, source_id):
