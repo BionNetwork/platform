@@ -8,4 +8,6 @@ redis-collections==0.1.7
 tornado==4.2.1
 git+https://github.com/evilkost/brukva.git
 pymongo
-pymssql
+crossbar==0.11.1
+txredisapi==1.2
+mock

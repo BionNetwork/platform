@@ -2,7 +2,7 @@
 from django.conf import settings
 
 from core.models import ConnectionChoices
-from etl.services.db import mysql, postgresql, mssql
+from etl.services.db import mysql, postgresql
 
 
 class DatabaseService(object):
@@ -23,9 +23,11 @@ class DatabaseService(object):
         elif conn_type == ConnectionChoices.MYSQL:
             return mysql.Mysql(connection)
         elif conn_type == ConnectionChoices.MS_SQL:
+            import mssql
             return mssql.MsSql(connection)
         elif conn_type == ConnectionChoices.ORACLE:
-            raise ValueError("Write Here!")
+            import oracle
+            return oracle.Oracle(connection)
         else:
             raise ValueError("Неизвестный тип подключения!")
 
@@ -82,14 +84,14 @@ class DatabaseService(object):
         return instance.get_statistic(source, tables)
 
     @classmethod
-    def get_rows_query(cls, source):
+    def get_rows_query(cls, source, cols, structure):
         """
         Получение запроса выбранных колонок из указанных таблиц выбранного источника
         :param source: Datasource
         :return:
         """
         instance = cls.get_source_instance(source)
-        return instance.get_rows_query()
+        return instance.get_rows_query(cols, structure)
 
     @classmethod
     def get_rows(cls, source, cols, structure):
@@ -113,8 +115,7 @@ class DatabaseService(object):
         :param cols_str: str
         :return: str
         """
-        create_query = local_instance.local_table_create_query(key_str, cols_str)
-        return create_query
+        return local_instance.local_table_create_query(key_str, cols_str)
 
     @classmethod
     def get_table_insert_query(cls, local_instance, key_str):
@@ -204,6 +205,7 @@ class DatabaseService(object):
         instance = cls.factory(**local_data)
         return instance
 
+    # fixme: не использутеся
     @classmethod
     def get_separator(cls, source):
         instance = cls.get_source_instance(source)
@@ -220,3 +222,19 @@ class DatabaseService(object):
         """
         instance = cls.get_source_instance(source)
         return instance.get_structure_rows_number(structure, cols)
+
+    @classmethod
+    def get_remote_table_create_query(cls, source):
+        """
+        возвращает запрос на создание таблицы в БД клиента
+        """
+        instance = cls.get_source_instance(source)
+        return instance.remote_table_create_query()
+
+    @classmethod
+    def get_remote_triggers_create_query(cls, source):
+        """
+        возвращает запрос на создание григгеров в БД клиента
+        """
+        instance = cls.get_source_instance(source)
+        return instance.remote_triggers_create_query()

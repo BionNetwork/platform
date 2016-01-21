@@ -169,6 +169,16 @@ LOGGING = {
             'handlers': ['core'],
             'level': 'ERROR',
             'propagate': True
+        },
+        'etl.tasks': {
+            'handlers': ['etl'],
+            'level': 'ERROR',
+            'propagate': True
+        },
+        'etl.services.model_creation': {
+            'handlers': ['etl'],
+            'level': 'ERROR',
+            'propagate': True
         }
     }
 }
@@ -213,10 +223,10 @@ ETL_COLLECTION_PREVIEW_LIMIT = 1000
 ETL_COLLECTION_LOAD_ROWS_LIMIT = 1000
 
 # host, port for websockets
-SOCKET_HOST = ''
-SOCKET_PORT = ''
-SOCKET_URL = SOCKET_HOST + (SOCKET_PORT and (':' + SOCKET_PORT)) + '/socket/'
-SOCKET_CHANNEL = 'jobs:etl:extract:{0}:{1}'
+SOCKET_HOST = ''  # localhost
+SOCKET_PORT = ''  # 8080
+# dvoetochie ne nravitsya autobahn connection, poetomu tire '-'
+SOCKET_CHANNEL = 'jobs-etl-extract-{0}-{1}'
 
 RETRY_COUNT = 3
 DEADLOCK_WAIT_TIMEOUT = 500

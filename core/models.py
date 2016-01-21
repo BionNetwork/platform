@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import datetime
 
 from django.db import models
+from core.db.models.fields import *
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
@@ -71,6 +72,20 @@ class Datasource(models.Model):
     class Meta:
         db_table = "datasources"
         unique_together = ('host', 'db', 'user_id')
+
+
+class DatasourceSettings(models.Model):
+    """
+    Таблица настроек для источников
+    """
+    TRIGGERS = 'apply_triggers'
+    CHECKSUM = 'apply_checksum'
+    name = models.CharField(max_length=255, verbose_name=u'Название', db_index=True)
+    value = models.TextField(verbose_name=u'Значение')
+    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+
+    class Meta:
+        db_table = "datasources_settings"
 
 
 class DatasourceMeta(models.Model):
@@ -162,7 +177,7 @@ class Dimension(models.Model):
         db_table = "dimensions"
         verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'
-        
+
 
 class Measure(models.Model):
     """Меры для кубов"""
@@ -173,6 +188,7 @@ class Measure(models.Model):
     DATE = 'date'
     TIME = 'time'
     TIMESTAMP = 'timestamp'
+    BYTEA = 'bytea'
     MEASURE_TYPE = (
         (STRING, 'string'),
         (INTEGER, 'integer'),
@@ -181,6 +197,7 @@ class Measure(models.Model):
         (DATE, 'date'),
         (TIME, 'time'),
         (TIMESTAMP, 'timestamp'),
+        (BYTEA, 'bytea'),
     )
 
     SUM = 'sum'
@@ -193,7 +210,7 @@ class Measure(models.Model):
     title = models.CharField(verbose_name="Название", max_length=255)
     type = models.CharField(
         verbose_name="Тип измерения",
-        choices=MEASURE_TYPE, default=STRING, max_length=50)
+        choices=MEASURE_TYPE, default=INTEGER, max_length=50)
     aggregator = models.CharField(
         verbose_name="Функция агрегирования",
         choices=AGR_FUNCTIONS, null=True, max_length=50)
@@ -270,3 +287,16 @@ class QueueList(models.Model):
     class Meta:
         db_table = "queue_list"
         index_together = ["queue", "date_created", "queue_status"]
+
+
+class Cube(models.Model):
+    name = models.CharField(max_length=1024, verbose_name="название куба")
+    data = XmlField(verbose_name="xml схема куба", null=False)
+    create_date = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True, db_index=True)
+    update_date = models.DateTimeField(
+        verbose_name="дата обновления", auto_now=True, db_index=True)
+    user = models.ForeignKey(User, verbose_name=u'Пользователь')
+
+    class Meta:
+        db_table = "cubes"

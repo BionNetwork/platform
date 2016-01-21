@@ -17,7 +17,32 @@ function checkConnection(){
 
     $.validator.messages.required = 'Обязательное поле!';
 
-    form.valid();
+    form.validate({
+        rules: {
+            port: {
+                number: true
+            },
+            password: {
+                required: false
+            }
+        },
+        messages: {
+            port: {
+                number: 'Введите целое число!'
+            }
+        }
+    });
+
+    $.each(form.find('.border-red'), function (i, el) {
+        console.log(el);
+        $(el).removeClass('border-red');
+    });
+    if (!form.valid()) {
+        $.each(form.validate().errorList, function (i, el2) {
+            $(el2.element).addClass('border-red');
+        })
+        return false;
+    }
 
     $.ajax({
         url: url,
@@ -71,6 +96,50 @@ function removeSource(url){
     });
 }
 
+
+function createSettigns(){
+    $.validator.messages.required = 'Обязательное поле!';
+    if (!$('#conn_form').valid()) {
+      return;
+    }
+    $('#settings-window').modal('show');
+}
+
+function saveNewSource(save_url)
+{
+    var connection_form = $('#conn_form'),
+        formData = new FormData(connection_form[0]),
+        url = save_url || connection_form.attr('data-save-url');
+        formData.append('cdc_type', $('#cdc_select').val());
+
+    $.validator.messages.required = 'Обязательное поле!';
+    if (!connection_form.valid()) {
+      return false;
+    }
+
+    $.ajax({
+        url: url,
+        data: formData,
+        processData: false,
+        contentType: false,
+        type: 'POST',
+        success: function(result){
+            $('#settings-window').modal('hide');
+
+            if (result.status=='error'){
+                confirmAlert(result.message);
+            } else {
+                window.location = result.redirect_url;
+            }
+        }
+    });
+}
+
+function closeSettings(){
+    $('#settings-window').modal('hide');
+}
+
+
 var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
     selectedRow, dataWorkspace, loader, initDataTable, closeUrl,
     dataWindow;
@@ -78,6 +147,8 @@ var chosenTables, colsTemplate, colsHeaders, joinWinRow, joinWin,
 // событие на закрытие модального окна
 $('#modal-data').on('hidden.bs.modal', function(e){
     var info = getSourceInfo();
+    // если окно закрылось при нажатии кнопки, то удалять ddl не надо
+    info['delete_ddl'] = !dataWindow.data('load');
     $.get(closeUrl, info, function(res){
         if (res.status == 'error'){
             confirmAlert(res.message);
@@ -94,7 +165,7 @@ function getConnectionData(dataUrl, closingUrl){
     joinWinRow = _.template($("#join-win-row").html());
 
     dataWindow = $('#modal-data');
-    joinWin = $('#join-window')
+    joinWin = $('#join-window');
 
     loader = $('#loader');
     loader.hide();
@@ -401,6 +472,8 @@ function tablesToLeft(url){
     }
 
     var info = getSourceInfo();
+    // удалять ddl надо
+    info['delete_ddl'] = true;
 
     $.get(url, info, function(res){
         if (res.status == 'error') {
@@ -673,30 +746,20 @@ function startLoading(userId, loadUrl){
         if(response.status == 'error') {
                 confirmAlert(response.message);
         } else {
+            // признак того, что окно закрылось при нажатии кнопки
+            dataWindow.data('load', true);
             dataWindow.modal('hide');// clear data
+            dataWindow.data('load', false);
 
             var channels = response.data['channels'],
                 tasksUl = $('#user_tasks_bar');
 
             _.each(channels, function(channel){
-                var ws = new WebSocket(
-                    "ws://"+tasksUl.data('host')+"channel/"+channel);
+                var q = new Queue2(
+                            tasksUl.data('host'), tasksUl.data('port'), '/ws');
 
-                ws.onopen = function(){
-                }
-                ws.onmessage = function (evt){
-                    var data = JSON.parse(evt.data),
-                        taskId = data.taskId;
-
-                    if(!$('#task-li-'+taskId).length){
-                        var taskTmpl = _.template($('#tasks_progress').html());
-                        tasksUl.append(taskTmpl({data: [taskId ]}));
-                    }
-                    $('#task-text-'+taskId).text(data.percent+'%');
-                    $('#task-measure-'+taskId).css('width', data.percent+'%');
-                };
-                ws.onclose = function(){
-                };
+                // подписка на канал
+                q.subscribe(channel);
             });
         }
     });

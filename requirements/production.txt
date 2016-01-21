@@ -1,0 +1,5 @@
+-r base.txt
+
+uWSGI
+pymssql
+cx_Oracle

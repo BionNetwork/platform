@@ -4,7 +4,7 @@
 from collections import defaultdict
 
 
-MYSQL_TYPES = defaultdict(lambda: 0)
+DB_TYPES = defaultdict(lambda: 0)
 
 
 ints = [
@@ -23,13 +23,9 @@ texts = [
     'char',
     'varchar',
     'text',
-    'blob',
     'tinytext',
-    'tinyblob',
     'mediumtext',
-    'mediumblob',
     'longtext',
-    'longblob',
     'enum',
 ]
 dates = [
@@ -40,20 +36,40 @@ dates = [
     'year',
 ]
 
+blobs = [
+    'blob',
+    'tinyblob',
+    'mediumblob',
+    'longblob',
+    'varbinary',
+    'binary',
+]
+
 for i in ints:
-    MYSQL_TYPES[i] = 'integer'
+    DB_TYPES[i] = 'integer'
 
 for i in floats:
-    MYSQL_TYPES[i] = 'double precision'
+    DB_TYPES[i] = 'double precision'
 
 for i in texts:
-    MYSQL_TYPES[i] = 'text'
+    DB_TYPES[i] = 'text'
 
 for i in dates:
-    MYSQL_TYPES[i] = 'timestamp'
+    DB_TYPES[i] = 'timestamp'
+
+for i in blobs:
+    DB_TYPES[i] = 'binary'
+
+
+table_query = """
+    SELECT table_name FROM information_schema.tables
+            where table_schema='{0}' order by table_name;
+        """
 
 cols_query = """
-    SELECT table_name, column_name, column_type FROM information_schema.columns
+    SELECT table_name, column_name, column_type, is_nullable,
+    case extra when 'auto_increment' then extra else null end
+    FROM information_schema.columns
             where table_name in {0} and table_schema = '{1}' order by table_name;
 """
 
@@ -80,4 +96,50 @@ constraints_query = """
 stat_query = """
     SELECT TABLE_NAME, TABLE_ROWS as count, DATA_LENGTH as size FROM INFORMATION_SCHEMA.TABLES
     where table_name in {0} and table_schema = '{1}' order by table_name;
+"""
+
+remote_table_query = """
+    CREATE TABLE IF NOT EXISTS `{0}` (
+        {1}
+        `cdc_created_at` timestamp NOT NULL,
+        `cdc_updated_at` timestamp,
+        `cdc_delta_flag` smallint NOT NULL,
+        `cdc_synced` smallint NOT NULL
+    );
+    $$
+    CREATE INDEX {0}_together_index_bi ON `{0}` (`cdc_updated_at`, `cdc_synced`);
+    $$
+    CREATE INDEX {0}_cdc_created_at_index_bi ON `{0}` (`cdc_created_at`);
+    $$
+    CREATE INDEX {0}_cdc_synced_index_bi ON `{0}` (`cdc_synced`);
+
+"""
+
+remote_triggers_query = """
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_insert` $$
+    CREATE TRIGGER `cdc_{orig_table}_insert` AFTER INSERT ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({new} now(), null, 1, 0);
+    END
+    $$
+
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_update` $$
+    CREATE  TRIGGER `cdc_{orig_table}_update` AFTER UPDATE ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({new} now(), null, 2, 0);
+    END
+    $$
+
+    DROP TRIGGER IF EXISTS `cdc_{orig_table}_delete` $$
+    CREATE  TRIGGER `cdc_{orig_table}_delete` AFTER DELETE ON `{orig_table}`
+    FOR EACH ROW BEGIN
+    INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
+    VALUES ({old} now(), null, 3, 0);
+    END
+"""
+
+row_query = """
+    SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """

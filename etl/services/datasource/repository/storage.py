@@ -1,6 +1,7 @@
 # coding: utf-8
 from . import r_server
 import json
+from copy import deepcopy
 from django.conf import settings
 from collections import defaultdict
 from redis_collections import Dict as RedisDict, List as RedisList
@@ -52,6 +53,18 @@ class RedisCacheKeys(object):
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
 
     @staticmethod
+    def get_active_table_ddl(user_id, datasource_id, number):
+        """
+        фулл инфа таблицы, которая в дереве для ddl
+        :param user_id:
+        :param datasource_id:
+        :param number:
+        :return:
+        """
+        return '{0}:ddl:{1}'.format(
+            RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
+
+    @staticmethod
     def get_active_tables(user_id, datasource_id):
         """
         список таблиц из дерева
@@ -84,7 +97,6 @@ class RedisCacheKeys(object):
         """
         return '{0}:joins'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
-
 
     @staticmethod
     def get_source_remain(user_id, datasource_id):
@@ -180,6 +192,7 @@ class RedisSourceService(object):
         rck = RedisCacheKeys
 
         str_table = rck.get_active_table(source.user_id, source.id, '{0}')
+        str_table_ddl = rck.get_active_table_ddl(source.user_id, source.id, '{0}')
         str_table_by_name = rck.get_active_table(source.user_id, source.id, '{0}')
         str_active_tables = rck.get_active_tables(source.user_id, source.id)
         str_joins = rck.get_source_joins(source.user_id, source.id)
@@ -201,7 +214,7 @@ class RedisSourceService(object):
         r_server.set(str_joins, json.dumps(joins))
 
         # удаляем полную инфу пришедших таблиц
-        cls.delete_tables_info(tables, actives, str_table)
+        cls.delete_tables_info(tables, actives, str_table, str_table_ddl)
         r_server.set(str_active_tables, json.dumps(actives))
 
     @classmethod
@@ -230,7 +243,7 @@ class RedisSourceService(object):
         return destinations
 
     @classmethod
-    def delete_tables_info(cls, tables, actives, str_table):
+    def delete_tables_info(cls, tables, actives, str_table, str_table_ddl):
         """
         удаляет инфу о таблицах
         :param tables: list
@@ -242,16 +255,22 @@ class RedisSourceService(object):
             if table in names:
                 found = [x for x in actives if x['name'] == table][0]
                 r_server.delete(str_table.format(found['order']))
+                r_server.delete(str_table_ddl.format(found['order']))
                 actives.remove(found)
 
-    @classmethod
-    def get_table_full_info(cls, source, table):
+    @staticmethod
+    def get_collection_name(source, table):
         """
-        Получение полной информации по источнику из хранилища
-        :param source: Datasource
-        :param table: string
-        :return:
+        Получение название коллекции для таблицы
+
+        Args:
+            source(`Datasource`): Объект источника
+            table(str): Название таблицы
+
+        Returns:
+            str: Название коллекции
         """
+
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source.user_id, source.id, '{0}')
         str_table = RedisCacheKeys.get_active_table(
@@ -262,10 +281,25 @@ class RedisSourceService(object):
         active_tables = json.loads(r_server.get(str_active_tables))
 
         if r_server.exists(str_table_by_name.format(table)):
-            return r_server.get(str_table_by_name.format(table))
+            return str_table_by_name.format(table)
         else:
             order = [x for x in active_tables if x['name'] == table][0]['order']
-            return r_server.get(str_table.format(order))
+            return str_table.format(order)
+
+    @classmethod
+    def get_table_full_info(cls, source, table):
+        """
+        Получение полной информации по источнику из хранилища
+
+        Args:
+            source(`Datasource`): Объект источника
+            table(str): Название таблицы
+
+        Returns:
+            str: Данные по коллекции
+        """
+        return r_server.get(cls.get_collection_name(source, table))
+
 
     @classmethod
     def save_active_tree(cls, tree_structure, source):
@@ -305,6 +339,8 @@ class RedisSourceService(object):
 
         str_table = RedisCacheKeys.get_active_table(
             user_id, source.id, '{0}')
+        str_table_ddl = RedisCacheKeys.get_active_table_ddl(
+            user_id, source.id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             user_id, source_id, '{0}')
         str_active_tables = RedisCacheKeys.get_active_tables(
@@ -330,9 +366,27 @@ class RedisSourceService(object):
                 # cчетчик коллекций пользователя
                 coll_counter = cls.get_next_user_collection_counter(
                     user_id, source_id)
+
                 # достаем инфу либо по имени, либо по порядковому номеру
-                pipe.set(str_table.format(coll_counter),
-                         RedisSourceService.get_table_full_info(source, n_val))
+                table_info = RedisSourceService.get_table_full_info(source, n_val)
+                table_info = json.loads(table_info)
+
+                info_for_coll = deepcopy(table_info)
+                info_for_ddl = deepcopy(table_info)
+
+                for column in info_for_coll["columns"]:
+                    del column["origin_type"]
+                    del column["is_nullable"]
+                    del column["extra"]
+
+                pipe.set(str_table.format(coll_counter), json.dumps(info_for_coll))
+
+                for column in info_for_ddl["columns"]:
+                    column["type"] = column["origin_type"]
+                    del column["origin_type"]
+
+                pipe.set(str_table_ddl.format(coll_counter), json.dumps(info_for_ddl))
+
                 # удаляем таблицы с именованными ключами
                 pipe.delete(str_table_by_name.format(n_val))
                 # добавляем новую таблциу в карту активных таблиц
@@ -357,7 +411,7 @@ class RedisSourceService(object):
         RedisSourceService.save_active_tree(structure, source)
 
     @classmethod
-    def tree_full_clean(cls, source):
+    def tree_full_clean(cls, source, delete_ddl=True):
         """ удаляет информацию о таблицах, джоинах, дереве
             из редиса
         """
@@ -374,17 +428,21 @@ class RedisSourceService(object):
             user_id, source_id)
         table_by_name_key = RedisCacheKeys.get_active_table_by_name(
             user_id, source_id, '{0}')
+        table_str = RedisCacheKeys.get_active_table(
+                user_id, source_id, '{0}')
+        table_str_ddl = RedisCacheKeys.get_active_table_ddl(
+                user_id, source_id, '{0}')
 
         # delete keys in redis
         pipe = r_server.pipeline()
         pipe.delete(table_by_name_key.format(r_server.get(tables_remain_key)))
         pipe.delete(tables_remain_key)
 
-        actives = cls.get_active_list(source.user_id, source.id)
-        for t in actives:
-            table_str = RedisCacheKeys.get_active_table(
-                user_id, source_id, t['order'])
-            pipe.delete(table_str)
+        # actives = cls.get_active_list(source.user_id, source.id)
+        # for t in actives:
+        #     table_str = RedisCacheKeys.get_active_table(
+        #         user_id, source_id, t['order'])
+        #     pipe.delete(table_str)
 
         pipe.delete(active_tables_key)
         pipe.delete(tables_joins_key)
@@ -528,11 +586,28 @@ class RedisSourceService(object):
     @classmethod
     def get_final_info(cls, ordered_nodes, source, last=None):
         """
-        инфа дерева для отрисовки на фронте
-        :param ordered_nodes:
-        :param source:
-        :param last:
-        :return:
+        Информация о дереве для передачи на клиент
+
+        Args:
+            ordered_nodes(list): Список узлов
+            source(`Datasource`): Источник
+            last():
+
+        Returns:
+            list: Список словарей с информацией о дереве
+            ::
+                [
+                    {
+                        'db': 'XE',
+                        'host': localhost,
+                        'tname': 'EMPLOYEES',
+                        'cols': [u'EMPLOYEE_ID', u'FIRST_NAME', ...],
+                        'is_root': True,
+                        'dest': None,
+                        'without_bind': False,
+                    }
+                    ...
+                ]
         """
         result = []
         str_table = RedisCacheKeys.get_active_table(source.user_id, source.id, '{0}')
@@ -579,7 +654,6 @@ class RedisSourceService(object):
         user_id = source.user_id
         source_id = source.id
 
-        str_table = RedisCacheKeys.get_active_table(user_id, source_id, '{0}')
         str_table_by_name = RedisCacheKeys.get_active_table(
             user_id, source_id, '{0}')
 
@@ -588,13 +662,12 @@ class RedisSourceService(object):
         for t_name in tables:
             pipe.set(str_table_by_name.format(t_name), json.dumps(
                 {
-                    "columns": columns[t_name],
-                    "indexes": indexes[t_name],
-                    "foreigns": foreigns[t_name],
-                    "stats": stats[t_name],
+                    "columns": columns[t_name.lower()],
+                    "indexes": indexes[t_name.lower()],
+                    "foreigns": foreigns[t_name.lower()],
+                    "stats": stats[t_name.lower()],
                 }
             ))
-            pipe.expire(str_table.format(t_name), settings.REDIS_EXPIRE)
         pipe.execute()
 
     @classmethod
@@ -666,6 +739,27 @@ class RedisSourceService(object):
                 )))
         return tables_info_for_meta
 
+    @classmethod
+    def get_ddl_tables_info(cls, source, tables):
+        """
+        Достает инфу о колонках, выбранных таблиц для cdc стратегии
+        """
+        data = {}
+
+        str_table = RedisCacheKeys.get_active_table_ddl(
+            source.user_id, source.id, '{0}')
+        str_active_tables = RedisCacheKeys.get_active_tables(
+            source.user_id, source.id)
+        actives_list = json.loads(r_server.get(str_active_tables))
+
+        for table in tables:
+            data[table] = json.loads(
+                r_server.get(str_table.format(
+                    RedisSourceService.get_order_from_actives(
+                        table, actives_list)
+                )))['columns']
+        return data
+
     @staticmethod
     def get_user_subscribers(user_id):
         """
@@ -716,9 +810,12 @@ class RedisSourceService(object):
         """
         counter = RedisCacheKeys.get_user_collection_counter(user_id, source_id)
         if not r_server.exists(counter):
-            r_server.set(counter, 1)
+            r_server.set(counter, 2)
             return 1
-        return r_server.incr(counter)
+        else:
+            next_count = r_server.get(counter)
+            r_server.incr(counter)
+        return next_count
 
     @classmethod
     def get_active_list(cls, user_id, source_id):

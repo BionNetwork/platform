@@ -4,7 +4,7 @@
 from collections import defaultdict
 
 
-PSQL_TYPES = defaultdict(lambda: 0)
+DB_TYPES = defaultdict(lambda: 0)
 
 
 ints = [
@@ -29,6 +29,7 @@ texts = [
     'char',
     'text',
 ]
+
 dates = [
     'timestamp without time zone',
     'timestamp with time zone',
@@ -39,21 +40,38 @@ dates = [
     'interval',
 ]
 
+blobs = [
+    'bytea',
+]
+
 for i in ints:
-    PSQL_TYPES[i] = 'integer'
+    DB_TYPES[i] = 'integer'
 
 for i in floats:
-    PSQL_TYPES[i] = 'double precision'
+    DB_TYPES[i] = 'double precision'
 
 for i in texts:
-    PSQL_TYPES[i] = 'text'
+    DB_TYPES[i] = 'text'
 
 for i in dates:
-    PSQL_TYPES[i] = 'timestamp'
+    DB_TYPES[i] = 'timestamp'
+
+for i in blobs:
+    DB_TYPES[i] = 'binary'
+
+
+table_query = """
+            SELECT table_name FROM information_schema.tables
+            where table_schema='public' order by table_name;
+        """
 
 cols_query = """
-    SELECT table_name, column_name, data_type FROM information_schema.columns
-            where table_name in {0} and table_catalog = '{1}' and table_schema = '{2}' order by table_name;
+    SELECT table_name, column_name, data_type as column_type, is_nullable,
+    case when substring(column_default, 0, 8) = 'nextval'
+         then 'serial' else null end as extra
+    FROM information_schema.columns
+    where table_name in {0} and table_catalog = '{1}' and
+          table_schema = '{2}' order by table_name;
 """
 
 constraints_query = """
@@ -107,5 +125,50 @@ indexes_query = """
 
 stat_query = """
     SELECT relname, reltuples as count, relpages*8192 as size FROM pg_class
-    where oid in {0};
+    where relname in {0};
+"""
+
+
+remote_table_query = """
+    CREATE TABLE IF NOT EXISTS "{0}" (
+        {1}
+        "cdc_created_at" timestamp NOT NULL,
+        "cdc_updated_at" timestamp,
+        "cdc_delta_flag" smallint NOT NULL,
+        "cdc_synced" smallint NOT NULL
+    );
+    CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
+
+    CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
+
+    CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
+"""
+
+
+remote_triggers_query = """
+    CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
+    BEGIN
+        IF (TG_OP = 'DELETE') THEN
+            INSERT INTO "{new_table}" SELECT {old} now(), null, 3, 0;
+            RETURN OLD;
+        ELSIF (TG_OP = 'UPDATE') THEN
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 2, 0;
+            RETURN NEW;
+        ELSIF (TG_OP = 'INSERT') THEN
+            INSERT INTO "{new_table}" SELECT {new} now(), null, 1, 0;
+            RETURN NEW;
+        END IF;
+        RETURN NULL;
+    END;
+$cdc_audit$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "{new_table}_audit" on "{orig_table}";
+
+CREATE TRIGGER "{new_table}_audit"
+AFTER INSERT OR UPDATE OR DELETE ON "{orig_table}"
+    FOR EACH ROW EXECUTE PROCEDURE process_{new_table}_audit();
+"""
+
+row_query = """
+        SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """

@@ -8,40 +8,86 @@
     </h1>
 {% endblock %}
 
+{% block css %}
+    <link href="{% static 'css/sources.css' %}" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
 
 <div class="row">
     <div class="col-lg-12">
         <div class="box box-warning">
-            <div class="box-header with-border">
-                <h3 class="box-title">Данные источника</h3>
-            </div>
-            <!-- /.box-header -->
-            <div class="box-body">
-                <form novalidate role="form" method="post" id="conn_form" data-url="{% url "etl:datasources.check_conn" %}">
-                    {% csrf_token %}
-                    {% for field in form %}
-                        <div class="form-group">
-                            <label>{{field.label}}</label>
-                                <div>
-                                    {{field}}
+            <ul class="nav nav-tabs">
+                <li class="active"><a href="#source" data-toggle="tab">
+                        <div class="box-header with-border">
+                            <h3 class="box-title">Источник</h3>
+                        </div>
+                    </a>
+                </li>
+                <li>
+                    <a href="#settings" data-toggle="tab">
+                        <div class="box-header with-border">
+                            <h3 class="box-title">Настройки</h3>
+                        </div>
+                    </a>
+                </li>
+            </ul>
+            <form novalidate role="form" method="post" id="conn_form" data-url="{% url "etl:datasources.check_conn" %}"
+                  data-save-url="{% url "etl:datasources.add" %}">
+            <div class="tab-content">
+
+                <div class="tab-pane active" id="source">
+                    <!-- /.box-header -->
+                    <div class="box-body">
+                            {% csrf_token %}
+                            {% for field in form %}
+                                <div class="form-group">
+                                    <label>{{field.label}}</label>
+                                        <div>
+                                            {{field}}
+                                        </div>
+                                    <div>
+                                        {{ field.errors }}
+                                    </div>
                                 </div>
-                            <div>
-                                {{ field.errors }}
+                            {% endfor %}
+                            <input type="hidden" id="win_type" data="{{type}}">
+                            <button type="button" class="btn" onclick="checkConnection()">Проверить подключение</button>
+
+                    </div>
+                    <!-- /.box-body -->
+                </div>
+                <div class="tab-pane" id="settings">
+{#                    {% for field in settings_form %}#}
+                    <div class="box-body">
+                        <h4 class="modal-title">{{ settings_form.cdc_type_field.label_tag }}</h4>
+                    </div>
+                    <div class="box-body">
+                        <div class="row">
+                            <div class="col-md-offset-1 col-md-10">
+                                <select class="form-control col-md-6" id="cdc_select" style="width: 50%">
+                                    {% for choice in settings_form.cdc_type_field.field.choices %}
+                                    <option value="{{ choice.0 }}" {% if settings_form.initial.cdc_type_field == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
                         </div>
-                    {% endfor %}
-                    <input type="hidden" id="win_type" data="{{type}}">
-                    <button type="button" class="btn" onclick="checkConnection()">Проверить подключение</button>
-                    <button type="submit" class="btn">Сохранить</button>
-
-                    <div class="form-group">
-                        <label>{{error_message}}</label>
                     </div>
-                </form>
+{#                    {% endfor %}#}
+                </div>
+                <div class="box-body">
+                    {% block submit-button %}
+{#                        <button type="submit" class="btn">Сохранить</button>#}
+                        <button type="button" class="btn" onclick="saveNewSource()">Сохранить</button>
+                    {% endblock submit-button %}
+                </div>
+
+                <div class="form-group">
+                    <label>{{error_message}}</label>
+                </div>
+
             </div>
-            <!-- /.box-body -->
+        </form>
         </div>
     </div>
 </div>
