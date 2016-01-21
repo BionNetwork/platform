@@ -475,7 +475,7 @@ class LoadDimensions(TaskProcessing):
             value=self.key).values('meta__collection_name', 'meta__fields')
         self.actual_fields = self.get_actual_fields(meta_data)
 
-        col_names = []
+        col_names = ['"cdc_key" text']
         for table, field in self.actual_fields:
             col_names.append('"{0}{1}{2}" {3}'.format(
                 table, FIELD_NAME_SEP, field['name'], field['type']))
@@ -551,7 +551,7 @@ class LoadDimensions(TaskProcessing):
         Args:
             model: Модель к целевой таблице
         """
-        column_names = []
+        column_names = ['cdc_key']
         for table, field in self.actual_fields:
             column_names.append('{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name']))
