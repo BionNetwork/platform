@@ -5,7 +5,10 @@ import uuid
 import json
 import logging
 import os
+from PIL import Image
+import StringIO
 
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.core.files import File
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
@@ -359,33 +362,81 @@ class UserProfileView(BaseTemplateView):
         user = form.save(commit=False)
         user.is_active = True
 
-        old_file = user.big_image
+        old_big_file = user.big_image
+        old_small_file = user.small_image
 
         # work with photos
         temp_file = post.get('temp_file')
 
-        if not old_file:
+        if not old_big_file:
             if temp_file:
                 file_name = temp_file.rsplit(os.sep, 1)[-1]
                 temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
-                user.big_image.save(file_name, File(open(temp_dir), 'r'))
+
+                big_img = Image.open(temp_dir)
+                small_img = Image.open(temp_dir)
+
+                big_img_io = StringIO.StringIO()
+                small_img_io = StringIO.StringIO()
+
+                big_img.save(big_img_io, format='JPEG')
+                small_img.save(small_img_io, format='JPEG')
+
+                big_image_file = InMemoryUploadedFile(
+                    big_img_io, None, file_name, 'image/jpeg', big_img_io.len, None)
+
+                small_image_file = InMemoryUploadedFile(
+                    small_img_io, None, 'sm-{0}'.format(file_name),
+                    'image/jpeg', small_img_io.len, None)
+
+                user.big_image.save(file_name, big_image_file)
+                user.small_image.save('sm-{0}'.format(file_name), small_image_file)
+
                 # удаляем временный файл
                 self.save_file_remove(temp_dir)
         else:
             if temp_file:
                 file_name = temp_file.rsplit(os.sep, 1)[-1]
-                old_file_name = old_file.name.rsplit(os.sep, 1)[-1]
+                old_file_name = old_big_file.name.rsplit(os.sep, 1)[-1]
+                temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
 
                 if file_name != old_file_name:
-                    temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
-                    user.big_image.save(file_name, File(open(temp_dir), 'r'))
+
+                    old_big_file_path = old_big_file.path
+                    old_small_file_path = old_small_file.path
+
+                    big_img = Image.open(temp_dir)
+                    small_img = Image.open(temp_dir)
+
+                    big_img_io = StringIO.StringIO()
+                    small_img_io = StringIO.StringIO()
+
+                    big_img.save(big_img_io, format='JPEG')
+                    small_img.save(small_img_io, format='JPEG')
+
+                    big_image_file = InMemoryUploadedFile(
+                        big_img_io, None, file_name, 'image/jpeg', big_img_io.len, None)
+
+                    small_image_file = InMemoryUploadedFile(
+                        small_img_io, None, 'sm-{0}'.format(file_name),
+                        'image/jpeg', small_img_io.len, None)
+
+                    user.big_image.save(file_name, big_image_file)
+                    user.small_image.save('sm-{0}'.format(file_name), small_image_file)
+
                     # удаляем временный файл
                     self.save_file_remove(temp_dir)
-                    # удаляем старое фото
-                    self.save_file_remove(os.path.join(old_file.path))
+                    # удаляем старое большое фото
+                    # os.remove(old_file.path)
+                    self.save_file_remove(old_big_file_path)
+                    # удаляем старое мини фото
+                    # os.remove(old_small_file.path)
+                    self.save_file_remove(old_small_file_path)
             else:
                 user.big_image = None
-                self.save_file_remove(os.path.join(old_file.path))
+                self.save_file_remove(old_big_file.path)
+                user.small_image = None
+                self.save_file_remove(old_small_file.path)
 
         user.save()
 
