@@ -107,6 +107,11 @@ EMAIL_PORT = 25
 EMAIL_HOST_USER = ''
 EMAIL_HOST_PASSWORD = ''
 
+OLAP_SERVER_HOST = 'localhost'
+OLAP_SERVER_PORT = '8080'
+OLAP_SERVER_USER = 'admin'
+OLAP_SERVER_PASS = 'admin'
+
 
 import djcelery
 djcelery.setup_loader()
