@@ -29,6 +29,7 @@ texts = [
     'char',
     'text',
 ]
+
 dates = [
     'timestamp without time zone',
     'timestamp with time zone',
@@ -37,6 +38,10 @@ dates = [
     'time without time zone',
     'time with time zone',
     'interval',
+]
+
+blobs = [
+    'bytea',
 ]
 
 for i in ints:
@@ -50,6 +55,10 @@ for i in texts:
 
 for i in dates:
     DB_TYPES[i] = 'timestamp'
+
+for i in blobs:
+    DB_TYPES[i] = 'binary'
+
 
 table_query = """
             SELECT table_name FROM information_schema.tables
@@ -105,10 +114,8 @@ constraints_query = """
     """
 
 indexes_query = """
-        SELECT t.relname, string_agg(a.attname, ','), i.relname,
-        case ix.indisprimary when 't' then 't' else 'f' end as primary,
-        case ix.indisunique when 't' then 't' else 'f' end as unique
-        FROM pg_class t
+        SELECT t.relname, string_agg(a.attname, ','), i.relname, ix.indisprimary,
+        ix.indisunique FROM pg_class t
         JOIN pg_index ix ON t.oid = ix.indrelid
         JOIN pg_class i ON i.oid = ix.indexrelid
         JOIN pg_attribute a ON a.attrelid = t.oid
@@ -118,7 +125,7 @@ indexes_query = """
 
 stat_query = """
     SELECT relname, reltuples as count, relpages*8192 as size FROM pg_class
-    where oid in {0};
+    where relname in {0};
 """
 
 

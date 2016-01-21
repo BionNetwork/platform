@@ -1,4 +1,7 @@
 # coding: utf-8
+
+from __future__ import unicode_literals
+
 import logging
 
 import os
@@ -10,17 +13,19 @@ import json
 from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
+from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, AKTSE, DTSE
+    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
+    process_binary_data, get_binary_types_dict
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, Dataset)
+    DatasourceMetaKeys, DatasourceSettings, Dataset)
 from django.conf import settings
 
 from djcelery import celery
@@ -52,6 +57,7 @@ class TaskProcessing(object):
         publisher(`RPublish`): Посыльный к клиенту о текущем статусе задачи
         queue_storage(`QueueStorage`): Посыльный к redis о текущем статусе задачи
         key(str): Ключ
+        next_task_params(tuple): Набор данных для след. задачи
     """
 
     def __init__(self, task_id, channel):
@@ -93,20 +99,47 @@ class TaskProcessing(object):
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
-            TaskService.update_task_status(self.task_id, TaskStatusEnum.ERROR)
+            TaskService.update_task_status(
+                self.task_id, TaskStatusEnum.ERROR,
+                error_code=TaskErrorCodeEnum.DEFAULT_CODE,
+                error_msg=e.message)
             self.publisher.publish(TLSE.ERROR, msg=e.message)
             RedisSourceService.delete_queue(self.task_id)
             RedisSourceService.delete_user_subscriber(
                 self.user_id, self.task_id)
+            logger.exception(self.err_msg)
             raise
         self.exit()
-        return self.next_task_params
+        if self.next_task_params:
+            get_single_task(self.next_task_params)
 
     def processing(self):
         """
         Непосредственное выполнение задачи
         """
         raise NotImplementedError
+
+    def error_handling(self, err_msg, err_code=None):
+        """
+        Обработка ошибки
+
+        Args:
+            err_msg(str): Текст ошибки
+            err_code(str): Код ошибки
+        """
+        self.was_error = True
+        # fixme перезаписывается при каждой ошибке
+        self.err_msg = err_msg
+        TaskService.update_task_status(
+            self.task_id, TaskStatusEnum.ERROR,
+            error_code=err_code or TaskErrorCodeEnum.DEFAULT_CODE,
+            error_msg=self.err_msg)
+
+        self.queue_storage['status'] = TaskStatusEnum.ERROR
+
+        # сообщаем об ошибке
+        self.publisher.publish(TLSE.ERROR, self.err_msg)
+        logger.exception(self.err_msg)
 
     def exit(self):
         """
@@ -195,8 +228,8 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
-        print self.context
         cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
@@ -213,6 +246,9 @@ class LoadMongodb(TaskProcessing):
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+
+        # находим бинарные данные для 1) создания ключей 2) инсерта в монго
+        binary_types_list = get_binary_types_list(cols, col_types)
 
         # создаем коллекцию и индексы в Mongodb
         mc = MongodbConnection()
@@ -252,10 +288,15 @@ class LoadMongodb(TaskProcessing):
 
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                        record, tables_key_creator, (page-1)*limit + ind)
+                        record, tables_key_creator, (page-1)*limit + ind,
+                        binary_types_list)
+
+                # бинарные данные оборачиваем в Binary(), если они имеются
+                new_record = process_binary_data(record, binary_types_list)
+
                 record_normalized = (
                     [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
-                    [EtlEncoder.encode(rec_field) for rec_field in record])
+                    [EtlEncoder.encode(rec_field) for rec_field in new_record])
                 data_to_insert.append(dict(izip(col_names, record_normalized)))
                 data_to_current_insert.append(dict(_id=row_key))
             try:
@@ -263,14 +304,7 @@ class LoadMongodb(TaskProcessing):
                 current_collection.insert_many(data_to_current_insert, ordered=False)
                 print 'inserted %d rows to mongodb' % len(data_to_insert)
             except Exception as e:
-                self.was_error = True
-                # fixme перезаписывается при каждой ошибке
-                self.err_msg = e.message
-                print "Unexpected error:", type(e), e
-                self.queue_storage['status'] = TaskStatusEnum.ERROR
-
-                # сообщаем об ошибке
-                self.publisher.publish(TLSE.ERROR, self.err_msg)
+                self.error_handling(e.message)
 
             # обновляем информацию о работе таска
             self.queue_storage.update()
@@ -281,7 +315,7 @@ class LoadMongodb(TaskProcessing):
 
             page += 1
 
-        self.next_task_params = self.context
+        self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
 class LoadDb(TaskProcessing):
@@ -310,8 +344,15 @@ class LoadDb(TaskProcessing):
             t = obj['table']
             c = obj['col']
             col_names.append('"{0}{1}{2}" {3}'.format(
-                t, FIELD_NAME_SEP, c, col_types['{0}.{1}'.format(t, c)]))
+                t, FIELD_NAME_SEP, c,
+                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)])))
             clear_col_names.append('{0}{1}{2}'.format(t, FIELD_NAME_SEP, c))
+
+        # инфа о бинарных данных для инсерта в постгрес
+        binary_types_dict = get_binary_types_dict(cols, col_types)
+
+        # инфа для колонки cdc_key, о том, что она не binary
+        binary_types_dict['0'] = False
 
         source_collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
@@ -330,7 +371,6 @@ class LoadDb(TaskProcessing):
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         offset = 0
         last_row = None
-
         # Пишем данные в базу
         while True:
             try:
@@ -347,7 +387,8 @@ class LoadDb(TaskProcessing):
                     rows_dict.append(temp_dict)
                 if not rows_dict:
                     break
-                insert_query.execute(data=rows_dict)
+                insert_query.execute(data=rows_dict,
+                                     binary_types_dict=binary_types_dict)
                 offset += limit
             except Exception as e:
                 print 'Exception'
@@ -355,20 +396,9 @@ class LoadDb(TaskProcessing):
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
 
-                self.err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
-                self.err_msg += e.message
-
-                # меняем статус задачи на 'Ошибка'
-                TaskService.update_task_status(
-                    self.task_id, TaskStatusEnum.ERROR,
-                    error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,
-                    error_msg=self.err_msg)
-                logger.exception(self.err_msg)
-                self.queue_storage.update(TaskStatusEnum.ERROR)
-
-                # сообщаем об ошибке
-                self.publisher.publish(TLSE.ERROR, self.err_msg)
-                break
+                err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+                err_msg += e.message
+                self.error_handling(err_msg, pg_code)
             else:
                 last_row = rows_dict[-1]  # получаем последнюю запись
                 # обновляем информацию о работе таска
@@ -389,28 +419,30 @@ class LoadDb(TaskProcessing):
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
 
-        if not self.context['triggers']:
-            self.next_task_params = {
+        if self.context['source_settings'] != DatasourceSettings.TRIGGERS:
+            self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
+                'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'source_id': source.id
-            }
+                'source_id': source.id,
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
+            })
         else:
-            self.next_task_params = {
+            self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'tables_info': self.context['table_info'],
-                'db_instance': self.context['db_instance'],
-                'source_id': source.id
-            }
+                'tables_info': self.context['tables_info'],
+                'source_id': source.id,
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
+            })
 
 
 class LoadDimensions(TaskProcessing):
     """
     Создание рамерности, измерения олап куба
     """
-    app_name = 'sttm'
-    module = 'biplatform.etl.models'
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
@@ -478,19 +510,17 @@ class LoadDimensions(TaskProcessing):
 
             err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
             err_msg += e.message
-
-            # меняем статус задачи на 'Ошибка'
-            TaskService.update_task_status(
-                self.task_id, TaskStatusEnum.ERROR, error_msg=err_msg,
-                error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,)
-            logger.exception(err_msg)
-            self.queue_storage.update(TaskStatusEnum.ERROR)
+            self.error_handling(err_msg)
 
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
 
-        self.next_task_params = self.context
+        self.set_next_task_params()
+
+    def set_next_task_params(self):
+        self.next_task_params = (
+            GENERATE_MEASURES, load_measures, self.context)
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
@@ -543,6 +573,15 @@ class LoadDimensions(TaskProcessing):
             column_names.append('{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name']))
 
+        cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
+
+        # инфа о бинарных данных для инсерта в постгрес
+        binary_types_dict = get_binary_types_dict(cols, col_types)
+
+        # инфа для колонки cdc_key, о том, что она не binary
+        binary_types_dict['0'] = False
+
         insert_query = InsertQuery(DataSourceService())
         insert_query.set_query(
             table_name=get_table_name(self.table_prefix, self.key),
@@ -551,6 +590,7 @@ class LoadDimensions(TaskProcessing):
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
         rows_query = self.rows_query(column_names)
+
         connection = DataSourceService.get_local_instance().connection
         while True:
             index_to = offset+step
@@ -566,7 +606,8 @@ class LoadDimensions(TaskProcessing):
                 for ind in xrange(len(column_names)):
                     temp_dict.update({str(ind): record[ind]})
                 rows_dict.append(temp_dict)
-            insert_query.execute(data=rows_dict)
+            insert_query.execute(data=rows_dict,
+                                 binary_types_dict=binary_types_dict)
             offset = index_to
 
             self.queue_storage.update()
@@ -597,6 +638,9 @@ class LoadMeasures(LoadDimensions):
                 datasources_meta=datasource_meta_id
             )
 
+    def set_next_task_params(self):
+        self.next_task_params = None
+
 
 class UpdateMongodb(TaskProcessing):
 
@@ -609,6 +653,7 @@ class UpdateMongodb(TaskProcessing):
         """
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
@@ -622,6 +667,9 @@ class UpdateMongodb(TaskProcessing):
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+
+        # находим бинарные данные для 1) создания ключей 2) инсерта в монго
+        binary_types_list = get_binary_types_list(cols, col_types)
 
         collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
@@ -665,18 +713,25 @@ class UpdateMongodb(TaskProcessing):
             data_to_current_insert = []
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                    record, tables_key_creator, (page-1)*limit + ind)
+                    record, tables_key_creator, (page-1)*limit + ind,
+                    binary_types_list)
+
+                # бинарные данные оборачиваем в Binary(), если они имеются
+                new_record = process_binary_data(record, binary_types_list)
+
                 if not collection.find({'_id': row_key}).count():
                     delta_rows = (
                         [row_key, DTSE.NEW, EtlEncoder.encode(datetime.now())] +
-                        [EtlEncoder.encode(rec_field) for rec_field in record])
+                        [EtlEncoder.encode(rec_field) for rec_field in new_record])
                     data_to_insert.append(dict(izip(col_names, delta_rows)))
 
                 data_to_current_insert.append(dict(_id=row_key))
-
-            if data_to_insert:
-                delta_collection.insert_many(data_to_insert, ordered=False)
-            current_collection.insert_many(data_to_current_insert, ordered=False)
+            try:
+                if data_to_insert:
+                    delta_collection.insert_many(data_to_insert, ordered=False)
+                current_collection.insert_many(data_to_current_insert, ordered=False)
+            except Exception as e:
+                self.error_handling(e.message)
             page += 1
 
         # Обновляем основную коллекцию новыми данными
@@ -691,14 +746,18 @@ class UpdateMongodb(TaskProcessing):
                 to_ins.append(record)
             if not to_ins:
                 break
-            collection.insert_many(to_ins, ordered=False)
+            try:
+                collection.insert_many(to_ins, ordered=False)
+            except Exception as e:
+                self.error_handling(e.message)
+
             page += 1
 
         # Обновляем статусы дельты-коллекции
         delta_collection.update_many(
             {'_state': DTSE.NEW}, {'$set': {'_state': DTSE.SYNCED}})
 
-        self.next_task_params = self.context
+        self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
 class DetectRedundant(TaskProcessing):
@@ -739,19 +798,22 @@ class DetectRedundant(TaskProcessing):
                 row_key = record['_id']
                 if not current_collection.find({'_id': row_key}).count():
                     to_delete.append(row_key)
+            try:
+                all_keys_collection.update_many(
+                    {'_id': {'$in': to_delete}},
+                    {'$set': {'_deleted': True}})
 
-            all_keys_collection.update_many(
-                {'_id': {'$in': to_delete}},
-                {'$set': {'_deleted': True}})
-
-            source_collection.delete_many({'_id': {'$in': to_delete}})
+                source_collection.delete_many({'_id': {'$in': to_delete}})
+            except Exception as e:
+                self.error_handling(e.message)
 
             page += 1
 
         all_keys_collection.update_many(
             {'_state': AKTSE.NEW}, {'$set': {'_state': AKTSE.SYNCED}})
 
-        self.next_task_params = self.context
+        self.next_task_params = (
+            DB_DELETE_REDUNDANT, delete_redundant, self.context)
 
 
 class DeleteRedundant(TaskProcessing):
@@ -775,10 +837,15 @@ class DeleteRedundant(TaskProcessing):
             l = [record['_id'] for record in delete_delta]
             if not l:
                 break
-            delete_query.execute(keys=l)
+            try:
+                delete_query.execute(keys=l)
+            except Exception as e:
+                self.error_handling(e.message)
             page += 1
 
-        self.next_task_params = self.context
+        if not self.context['is_meta_stats']:
+            self.next_task_params = (
+                        GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
@@ -788,7 +855,9 @@ class CreateTriggers(TaskProcessing):
         Создание триггеров в БД пользователя
         """
         tables_info = self.context['tables_info']
-        db_instance = self.context['db_instance']
+        # TODO: импорт DatabaseService
+        db_instance = DatabaseService.get_source_instance(
+            Datasource.objects.get(id=self.context['source_id']))
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
@@ -830,10 +899,13 @@ class CreateTriggers(TaskProcessing):
 
             connection.commit()
 
-        self.next_task_params = {
-            'checksum': self.key,
-            'user_id': self.user_id,
-            'source_id': self.context['source_id']
-        }
+        self.next_task_params = (
+            GENERATE_DIMENSIONS, load_dimensions, {
+                'checksum': self.key,
+                'user_id': self.user_id,
+                'source_id': self.context['source_id'],
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
+            })
 
 # write in console: python manage.py celery -A etl.tasks worker

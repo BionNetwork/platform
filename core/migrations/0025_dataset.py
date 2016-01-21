@@ -7,7 +7,7 @@ from django.db import models, migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0022_datasourcesettings'),
+        ('core', '0024_cube'),
     ]
 
     operations = [

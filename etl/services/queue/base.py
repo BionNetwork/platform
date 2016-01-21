@@ -4,12 +4,17 @@ from celery import group
 from django.conf import settings
 import brukva
 from pymongo import IndexModel
+from psycopg2 import Binary
 import pymongo
+from etl.constants import TYPES_MAP
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
 import json
 import datetime
+from itertools import izip
+from bson import binary
+
 from etl.services.middleware.base import datetime_now_str
 
 client = brukva.Client(host=settings.REDIS_HOST,
@@ -129,31 +134,6 @@ class RPublish(object):
             ))
 
 
-def tasks_run(tasks_seq, start_params):
-    """
-    Последовательный запуск задач
-
-    Args:
-        tasks_seq(list): Список кортежей с название задач и рабочих методов
-        Пример::
-            [
-                    (<task_name1>, <task_def1>),
-                    (<task_name2>, <task_def2>),
-                    ...
-            ]
-        start_params(dict): Словарь параметров для первой задачи
-    """
-    current_params = None
-    channel = {}
-    for task_info in tasks_seq:
-        task_id, channel = TaskService(task_info[0]).add_task(
-                        arguments=start_params if not current_params
-                        else current_params)
-        async_result = task_info[1].apply_async((task_id, channel),)
-        current_params = [i[1] for i in async_result.collect()][0]
-    return [channel]
-
-
 def get_tasks_chain(tasks_sets):
     """
     Получение последовательности задач для выполнения
@@ -199,9 +179,11 @@ def get_single_task(task_params):
         `Signature`: Celery-задача к выполнению
         list: Список каналов для сокетов
     """
+    if not task_params:
+        return
     task_id, channel = TaskService(task_params[0]).add_task(
         arguments=task_params[2])
-    return task_params[1].si(task_id, channel), [channel]
+    return task_params[1].apply_async((task_id, channel),), [channel]
 
 
 def get_group_tasks(task_params):
@@ -258,11 +240,12 @@ class RowKeysCreator(object):
         Returns:
             int: Ключ строки для таблицы
         """
-        if self.primary_keys:
-            return binascii.crc32(''.join(
-                [str(row[index]) for index in self.primary_keys_indexes]))
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
-        l.append(row_num)
+        if self.primary_keys:
+            l.append(binascii.crc32(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes])))
+        else:
+            l.append(row_num)
         return binascii.crc32(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
@@ -278,12 +261,38 @@ class RowKeysCreator(object):
             if record['is_primary']:
                 self.primary_keys = record['columns']
                 for ind, value in enumerate(self.cols):
-                    if value['col'] in self.primary_keys:
+                    if value['table'] == self.table and value['col'] in self.primary_keys:
                         self.primary_keys_indexes.append(ind)
                 break
 
 
-def calc_key_for_row(row, tables_key_creators, row_num):
+def process_binary_data(record, binary_types_list):
+    """
+    Если данные бинарные, то оборачиваем в bson.binary.Binary
+    """
+    new_record = list()
+
+    for (rec, is_binary) in izip(record, binary_types_list):
+        new_record.append(binary.Binary(rec) if is_binary else rec)
+
+    new_record = tuple(new_record)
+    return new_record
+
+
+def process_binaries_for_row(row, binary_types_list):
+    """
+    Если пришли бинарные данные,
+    то вычисляем ключ отдельный для каждого из них
+    """
+    new_row = []
+    for i, r in enumerate(row):
+        if binary_types_list[i]:
+            r = binascii.b2a_base64(r)
+        new_row.append(r)
+    return tuple(new_row)
+
+
+def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
     """
     Расчет ключа для отдельно взятой строки
 
@@ -296,12 +305,39 @@ def calc_key_for_row(row, tables_key_creators, row_num):
     Returns:
         int: Ключ для строки
     """
+    # преобразуем бинары в строку, если они есть
+    row = process_binaries_for_row(row, binary_types_list)
+
     if len(tables_key_creators) > 1:
         row_values_for_calc = [
             str(each.calc_key(row, row_num)) for each in tables_key_creators]
         return binascii.crc32(''.join(row_values_for_calc))
     else:
         return tables_key_creators[0].calc_key(row, row_num)
+
+
+def get_binary_types_list(cols, col_types):
+    # инфа о бинарниках для генерации ключа
+    binary_types_list = []
+
+    for i, obj in enumerate(cols, start=1):
+        dotted = '{0}.{1}'.format(obj['table'], obj['col'])
+        map_type = TYPES_MAP.get(col_types[dotted])
+        binary_types_list.append(map_type == TYPES_MAP.get('binary'))
+
+    return binary_types_list
+
+
+def get_binary_types_dict(cols, col_types):
+    # инфа о бинарниках для инсерта в бд
+    binary_types_dict = {}
+
+    for i, obj in enumerate(cols, start=1):
+        dotted = '{0}.{1}'.format(obj['table'], obj['col'])
+        map_type = TYPES_MAP.get(col_types[dotted])
+        binary_types_dict[str(i)] = map_type == TYPES_MAP.get('binary')
+
+    return binary_types_dict
 
 
 class Query(object):
@@ -359,6 +395,15 @@ class InsertQuery(TableCreateQuery):
 
     def execute(self, **kwargs):
         self.cursor = self.connection.cursor()
+
+        # передаем типы, чтобы вычислить бинарные данные
+        binary_types_dict = kwargs.get('binary_types_dict', None)
+
+        if binary_types_dict is not None:
+            for dicti in kwargs['data']:
+                for k, v in dicti.iteritems():
+                    if binary_types_dict.get(k):  # if binary data
+                        dicti[k] = Binary(v)
 
         # create new table
         self.cursor.executemany(self.query, kwargs['data'])

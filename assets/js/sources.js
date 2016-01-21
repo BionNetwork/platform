@@ -17,7 +17,32 @@ function checkConnection(){
 
     $.validator.messages.required = 'Обязательное поле!';
 
-    form.valid();
+    form.validate({
+        rules: {
+            port: {
+                number: true
+            },
+            password: {
+                required: false
+            }
+        },
+        messages: {
+            port: {
+                number: 'Введите целое число!'
+            }
+        }
+    });
+
+    $.each(form.find('.border-red'), function (i, el) {
+        console.log(el);
+        $(el).removeClass('border-red');
+    });
+    if (!form.valid()) {
+        $.each(form.validate().errorList, function (i, el2) {
+            $(el2.element).addClass('border-red');
+        })
+        return false;
+    }
 
     $.ajax({
         url: url,
@@ -80,11 +105,17 @@ function createSettigns(){
     $('#settings-window').modal('show');
 }
 
-function saveNewSource(){
-    var form = $('#conn_form'),
-        formData = new FormData(form[0]);
-        url = form.attr('data-save-url');
+function saveNewSource(save_url)
+{
+    var connection_form = $('#conn_form'),
+        formData = new FormData(connection_form[0]),
+        url = save_url || connection_form.attr('data-save-url');
         formData.append('cdc_type', $('#cdc_select').val());
+
+    $.validator.messages.required = 'Обязательное поле!';
+    if (!connection_form.valid()) {
+      return false;
+    }
 
     $.ajax({
         url: url,

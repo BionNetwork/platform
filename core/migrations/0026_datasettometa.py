@@ -8,7 +8,7 @@ import core.model_helpers
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0023_dataset'),
+        ('core', '0025_dataset'),
     ]
 
     operations = [
