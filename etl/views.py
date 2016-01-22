@@ -444,15 +444,15 @@ class LoadDataView(BaseEtlView):
             source, tables)
 
         try:
-            source_settings = DatasourceSettings.objects.get(
-                    datasource_id=source.id).value
+            cdc_type = DatasourceSettings.objects.get(
+                    datasource_id=source.id, name=DatasourceSettings.SETTING_CDC_NAME).value
         except DatasourceSettings.DoesNotExist:
             raise ResponseError(u'Не определен тип дозагрузки данных', ExceptionCode.ERR_CDC_TYPE_IS_NOT_SET)
 
         user_id = request.user.id
         # Параметры для задач
         load_args = {
-            'source_settings': source_settings,
+            'cdc_type': cdc_type,
             'cols': data.get('cols'),
             'tables': data.get('tables'),
             'col_types': json.dumps(

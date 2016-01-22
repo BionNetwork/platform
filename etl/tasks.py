@@ -429,7 +429,7 @@ class LoadDb(TaskProcessing):
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
 
-        if self.context['source_settings'] != DatasourceSettings.TRIGGERS:
+        if self.context['cdc_type'] != DatasourceSettings.TRIGGERS:
             self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
                 'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
