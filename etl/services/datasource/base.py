@@ -2,8 +2,7 @@
 from core.models import DatasourceMeta, DatasourceMetaKeys, DatasetToMeta
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService
-from etl.services.datasource.repository.storage import RedisSourceService, \
-    RedisCacheKeys
+from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
 from django.conf import settings
