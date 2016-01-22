@@ -192,3 +192,5 @@ pr_key_query = """
 delete_primary_key = """
     alter table {0} drop constraint {1}
 """
+
+drop_index = """drop index {0}"""

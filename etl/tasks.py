@@ -942,11 +942,9 @@ class CreateTriggers(TaskProcessing):
                     x[index_name] for x in indexes
                     if x[index_name] not in required_fullname_indexes]
 
-                print 'del_indexes', del_indexes
-
-                # for d_i in del_indexes:
-                # TODO
-                #     del_query =
+                for d_i in del_indexes:
+                    del_query = db_instance.db_map.drop_index.format(d_i, table_name)
+                    cursor.execute(del_query)
 
                 connection.commit()
 
