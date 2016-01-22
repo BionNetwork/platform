@@ -217,7 +217,7 @@ class CreateDataset(TaskProcessing):
 
     def processing(self):
 
-        dataset = Dataset.objects.create(key=self.key)
+        dataset, created = Dataset.objects.get_or_create(key=self.key)
         self.context['dataset_id'] = dataset.id
 
         is_meta_stats = self.context['is_meta_stats']
