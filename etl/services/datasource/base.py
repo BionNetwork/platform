@@ -398,6 +398,7 @@ class DataSourceService(object):
         Создание DatasourceMeta для Datasource
 
         Args:
+            dataset_id(int): data set identifier
             key(str): Ключ
             source(Datasource): Источник данных
             cols(list): Список колонок

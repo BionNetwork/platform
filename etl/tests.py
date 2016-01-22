@@ -692,8 +692,9 @@ class DatasourceMetaTest(TestCase):
 
     def test_source_meta(self):
 
+        dataset_id = 1
         DataSourceService.update_datasource_meta(
-            self.key, self.source, self.cols, self.meta_info, self.last_row)
+            self.key, self.source, self.cols, self.meta_info, self.last_row, dataset_id)
 
         dm = DatasourceMeta.objects.filter(datasource=self.source)
 
