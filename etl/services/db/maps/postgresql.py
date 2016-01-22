@@ -181,3 +181,14 @@ AFTER INSERT OR UPDATE OR DELETE ON "{orig_table}"
 row_query = """
         SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """
+
+pr_key_query = """
+    SELECT c.conname AS constraint_name FROM pg_constraint c
+        LEFT JOIN pg_class t  ON c.conrelid  = t.oid
+            WHERE t.relname in {0} and c.contype = 'p' order by t.relname
+"""
+
+
+delete_primary_key = """
+    alter table {0} drop constraint {1}
+"""

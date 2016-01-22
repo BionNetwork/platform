@@ -148,3 +148,16 @@ remote_triggers_query = """
 row_query = """
     SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """
+
+
+pr_key_query = """
+    select a.constraint_name
+    from information_schema.TABLE_CONSTRAINTS as a
+    inner join information_schema.KEY_COLUMN_USAGE as b on a.CONSTRAINT_NAME=b.CONSTRAINT_NAME
+    WHERE a.constraint_type='PRIMARY KEY' and a.TABLE_NAME = b.TABLE_NAME
+    and a.TABLE_NAME in {0} and a.TABLE_SCHEMA = '{1}';
+"""
+
+delete_primary_key = """
+    ALTER TABLE {0} drop primary key
+"""

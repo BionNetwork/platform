@@ -878,6 +878,14 @@ class CreateTriggers(TaskProcessing):
 
             # если таблица существует
             if existing_cols:
+                primary_query = db_instance.get_primary_key(table_name, source.db)
+                cursor.execute(primary_query)
+                primary = cursor.fetchall()
+
+                if primary:
+                    primary_name = primary[0][0]
+                    del_pr_query = db_instance.delete_primary_query(table_name, primary_name)
+                    cursor.execute(del_pr_query)
 
                 new_foreign_cols = [(x['name'], x["type"]) for x in columns]
 
@@ -901,7 +909,7 @@ class CreateTriggers(TaskProcessing):
                     connection.commit()
 
                 # проверяем индексы
-                required_indexes = [
+                required_index_columns = [
                     ['cdc_created_at', ],
                     ['cdc_synced', ],
                     ['cdc_synced', 'cdc_updated_at'], ]
@@ -911,8 +919,7 @@ class CreateTriggers(TaskProcessing):
                 cursor.execute(indexes_query)
                 indexes = cursor.fetchall()
                 existing_indexes = map(lambda i: sorted(i[1].split(',')), indexes)
-
-                diff_indexes = [x for x in required_indexes if x not in existing_indexes]
+                diff_indexes = [x for x in required_index_columns if x not in existing_indexes]
 
                 for d_ind in diff_indexes:
                     ind_query = """
@@ -921,6 +928,25 @@ class CreateTriggers(TaskProcessing):
                         t=table_name, n='_'.join(d_ind),
                         sep=sep, cols=','.join(d_ind))
                     cursor.execute(ind_query)
+
+                # проверяем индексы
+                required_index_names = ['cdc_created_at', 'cdc_synced', 'together', ]
+
+                required_fullname_indexes = [
+                    '{t}_{n}_index_bi'.format(t=table_name, n=ind)
+                    for ind in required_index_names]
+
+                index_name = 2
+
+                del_indexes = [
+                    x[index_name] for x in indexes
+                    if x[index_name] not in required_fullname_indexes]
+
+                print 'del_indexes', del_indexes
+
+                # for d_i in del_indexes:
+                # TODO
+                #     del_query =
 
                 connection.commit()
 
