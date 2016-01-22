@@ -1,4 +1,5 @@
 .idea
+*.iml
 *.pyc
 config/settings/local.py
 .crossbar/node.pid
