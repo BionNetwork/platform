@@ -461,7 +461,7 @@ class DataSourceService(object):
                     value=key,
                 )
                 # связываем Dataset и мета информацию
-                DatasetToMeta.objects.create(
+                DatasetToMeta.objects.get_or_create(
                     meta_id=source_meta.id,
                     dataset_id=dataset_id,
                 )
