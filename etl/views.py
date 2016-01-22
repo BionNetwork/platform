@@ -12,7 +12,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
 
-from core.exceptions import ResponseError, ValidationError, ExceptionCode
+from core.exceptions import ResponseError, ValidationError, ExceptionCode, TaskError
 from core.helpers import CustomJsonEncoder
 from core.views import BaseView, BaseTemplateView
 from core.models import (
@@ -271,7 +271,7 @@ class BaseEtlView(BaseView):
                     {'status': SUCCESS, 'data': data, 'message': ''})
         except (Datasource.DoesNotExist, ResponseError) as err:
             return self.json_response(
-                {'status': err.code, 'message': err.message})
+                {'status': ERROR, 'code': err.code, 'message': err.message})
         except Exception as e:
             logger.exception(e.message)
             return self.json_response({
@@ -478,8 +478,11 @@ class LoadDataView(BaseEtlView):
                 pass
         load_args.update({'is_meta_stats': is_meta_stats})
 
-        task, channels = get_single_task(
-                (CREATE_DATASET, create_dataset, load_args),)
+        try:
+            task, channels = get_single_task(
+                    (CREATE_DATASET, create_dataset, load_args),)
+        except TaskError as e:
+            raise ResponseError(e.message)
 
         return {'channels': channels}
 
