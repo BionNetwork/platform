@@ -9,6 +9,7 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
 from djchoices import ChoiceItem, DjangoChoices
+from core.model_helpers import MultiPrimaryKeyModel
 
 from .db.services import RetryQueryset
 from .helpers import get_utf8_string
@@ -80,6 +81,7 @@ class DatasourceSettings(models.Model):
     """
     TRIGGERS = 'apply_triggers'
     CHECKSUM = 'apply_checksum'
+    SETTING_CDC_NAME = 'cdc_type'
     name = models.CharField(max_length=255, verbose_name=u'Название', db_index=True)
     value = models.TextField(verbose_name=u'Значение')
     datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
@@ -300,3 +302,57 @@ class Cube(models.Model):
 
     class Meta:
         db_table = "cubes"
+
+
+class DatasetStateChoices(DjangoChoices):
+    """
+    Cтатусы для Dataset
+    """
+    IDLE = ChoiceItem(1, 'В ожидании данных')
+    FILUP = ChoiceItem(2, 'Наполнение данных')
+    DIMCR = ChoiceItem(3, 'Создание размерностей')
+    MSRCR = ChoiceItem(4, 'Создание мер')
+    LOADED = ChoiceItem(5, 'Загрузка данных завершилась')
+
+
+class Dataset(models.Model):
+    """
+    Модель
+    """
+    key = models.TextField(verbose_name=u'Ключ', unique=True)
+    date_created = models.DateTimeField(
+        verbose_name="Дата создания", auto_now_add=True, db_index=True)
+    update_date = models.DateTimeField(
+        verbose_name="Дата обновления", auto_now=True, db_index=True)
+    state = models.SmallIntegerField(
+        verbose_name='Статус', choices=DatasetStateChoices.choices,
+        default=DatasetStateChoices.IDLE, db_index=True)
+
+    class Meta:
+        db_table = "datasets"
+
+
+class DatasetToMeta(models.Model, MultiPrimaryKeyModel):
+    """
+    Модель связи Мета источника и Dataset
+    """
+    meta = models.ForeignKey(
+        DatasourceMeta, verbose_name=u'Мета источника')
+    # FIXME обманка для Джанги, т.к. 1 primary key быть обязан
+    # FIXME всегда при регистрации модели
+    # FIXME на самом деле в миграции формируется primary key (meta, dataset)
+    dataset = models.ForeignKey(
+        Dataset, verbose_name=u'Данные', primary_key=True)
+
+    def delete(self, using=None):
+        MultiPrimaryKeyModel.delete(self, using)
+
+    # переопределяем save, ставим force_insert=True,
+    # чтобы inst.save() вызывал в бд тока инсерт запрос, а не
+    # апдейт+инсерт
+    def save(self, force_insert=False, force_update=False, using=None,
+             update_fields=None):
+        models.Model.save(self, force_insert=True)
+
+    class Meta:
+        db_table = "datasets_to_meta"

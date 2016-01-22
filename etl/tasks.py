@@ -25,7 +25,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings)
+    DatasourceMetaKeys, DatasourceSettings, Dataset)
 from django.conf import settings
 
 from djcelery import celery
@@ -167,6 +167,11 @@ class TaskProcessing(object):
         RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
 
 
+@celery.task(name=CREATE_DATASET)
+def create_dataset(task_id, channel):
+    return CreateDataset(task_id, channel).load_data()
+
+
 @celery.task(name=MONGODB_DATA_LOAD)
 def load_mongo_db(task_id, channel):
     return LoadMongodb(task_id, channel).load_data()
@@ -205,6 +210,28 @@ def delete_redundant(task_id, channel):
 @celery.task(name=CREATE_TRIGGERS)
 def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
+
+
+class CreateDataset(TaskProcessing):
+    """
+    Создание Dataset
+    """
+
+    def processing(self):
+
+        dataset, created = Dataset.objects.get_or_create(key=self.key)
+        self.context['dataset_id'] = dataset.id
+
+        is_meta_stats = self.context['is_meta_stats']
+
+        if not is_meta_stats:
+            self.next_task_params = (
+                MONGODB_DATA_LOAD, load_mongo_db, self.context)
+        else:
+            self.context['db_update'] = True
+
+            self.next_task_params = (
+                MONGODB_DELTA_LOAD, update_mongo_db, self.context)
 
 
 class LoadMongodb(TaskProcessing):
@@ -399,12 +426,12 @@ class LoadDb(TaskProcessing):
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
             self.key, source, cols, json.loads(
-                self.context['meta_info']), last_row)
+                self.context['meta_info']), last_row, self.context['dataset_id'])
         if last_row:
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
 
-        if self.context['source_settings'] != DatasourceSettings.TRIGGERS:
+        if self.context['cdc_type'] != DatasourceSettings.TRIGGERS:
             self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
                 'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
@@ -412,6 +439,7 @@ class LoadDb(TaskProcessing):
                 'source_id': source.id,
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
@@ -421,6 +449,7 @@ class LoadDb(TaskProcessing):
                 'source_id': source.id,
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
             })
 
 
@@ -891,6 +920,7 @@ class CreateTriggers(TaskProcessing):
                 'source_id': self.context['source_id'],
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
             })
 
 # write in console: python manage.py celery -A etl.tasks worker

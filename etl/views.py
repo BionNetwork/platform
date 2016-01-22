@@ -12,7 +12,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
 
-from core.exceptions import ResponseError, ValidationError, ExceptionCode
+from core.exceptions import ResponseError, ValidationError, ExceptionCode, TaskError
 from core.helpers import CustomJsonEncoder
 from core.views import BaseView, BaseTemplateView
 from core.models import (
@@ -24,7 +24,7 @@ import logging
 
 from . import helpers
 from etl.constants import *
-from etl.tasks import load_mongo_db, update_mongo_db
+from etl.tasks import create_dataset
 from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (generate_columns_string,
                                        generate_table_name_key)
@@ -271,7 +271,7 @@ class BaseEtlView(BaseView):
                     {'status': SUCCESS, 'data': data, 'message': ''})
         except (Datasource.DoesNotExist, ResponseError) as err:
             return self.json_response(
-                {'status': err.code, 'message': err.message})
+                {'status': ERROR, 'code': err.code, 'message': err.message})
         except Exception as e:
             logger.exception(e.message)
             return self.json_response({
@@ -444,15 +444,15 @@ class LoadDataView(BaseEtlView):
             source, tables)
 
         try:
-            source_settings = DatasourceSettings.objects.get(
-                    datasource_id=source.id).value
+            cdc_type = DatasourceSettings.objects.get(
+                    datasource_id=source.id, name=DatasourceSettings.SETTING_CDC_NAME).value
         except DatasourceSettings.DoesNotExist:
             raise ResponseError(u'Не определен тип дозагрузки данных', ExceptionCode.ERR_CDC_TYPE_IS_NOT_SET)
 
         user_id = request.user.id
         # Параметры для задач
         load_args = {
-            'source_settings': source_settings,
+            'cdc_type': cdc_type,
             'cols': data.get('cols'),
             'tables': data.get('tables'),
             'col_types': json.dumps(
@@ -477,13 +477,12 @@ class LoadDataView(BaseEtlView):
             except:
                 pass
         load_args.update({'is_meta_stats': is_meta_stats})
-        if not is_meta_stats:
+
+        try:
             task, channels = get_single_task(
-                (MONGODB_DATA_LOAD, load_mongo_db, load_args),)
-        else:
-            load_args['db_update'] = True
-            task, channels = get_single_task(
-                (MONGODB_DELTA_LOAD, update_mongo_db, load_args),)
+                    (CREATE_DATASET, create_dataset, load_args),)
+        except TaskError as e:
+            raise ResponseError(e.message)
 
         return {'channels': channels}
 
