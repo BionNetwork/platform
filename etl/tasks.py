@@ -6,11 +6,12 @@ import logging
 
 import os
 import sys
+import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
 
-from pymongo import ASCENDING
+# from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
@@ -25,7 +26,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
 from django.conf import settings
 
 from djcelery import celery
@@ -41,6 +42,8 @@ client = brukva.Client(host=settings.REDIS_HOST,
 client.connect()
 
 logger = logging.getLogger(__name__)
+
+ASCENDING = 1
 
 
 class TaskProcessing(object):
@@ -922,5 +925,183 @@ class CreateTriggers(TaskProcessing):
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
             })
+
+
+class CreateCube(object):
+
+    @staticmethod
+    def processing():
+
+        print 'Start cube creation'
+
+        # dataset_id = self.context['dataset_id']
+        dataset_id = 1
+        dataset = Dataset.objects.get(id=dataset_id)
+        key = dataset.key
+
+        meta_ids = DatasetToMeta.objects.filter(dataset_id=dataset_id).values_list(
+            'meta_id', flat=True)
+
+        dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+        measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+
+        if not dimensions.exists() and not measures.exists():
+            pass
+        # <Schema>
+        cube_key = "cube_{key}".format(key=key)
+        schema = etree.Element('Schema', name=cube_key)
+
+        # <Physical schema>
+        physical_schema = etree.Element('PhysicalSchema')
+        etree.SubElement(
+            physical_schema, 'Table', name=get_table_name(MEASURES, key))
+        etree.SubElement(
+            physical_schema, 'Table', name=get_table_name(DIMENSIONS, key))
+
+        cube_info = {
+            'name': cube_key,
+            'caption': cube_key,
+            'visible': "true",
+            'cache': "false",
+            'enabled': "true",
+        }
+
+        # <Cube>
+        cube = etree.Element('Cube', **cube_info)
+
+        dimensions_tag = etree.SubElement(cube, 'Dimensions')
+
+        # <Dimensions>
+        for dim in dimensions:
+
+            dim_type = dim.get_dimension_type()
+            visible = 'true' if dim.visible else 'false'
+            name = dim.name
+            title = dim.title
+
+            dim_info = {
+                'table': get_table_name(DIMENSIONS, key),
+                'type': dim_type,
+                'visible': visible,
+                'highCardinality': 'true' if dim.high_cardinality else 'false',
+                'name': name,
+                'caption': title,
+            }
+            dimension = etree.SubElement(dimensions_tag, 'Dimension', **dim_info)
+
+            # <Attributes>
+            attributes = etree.SubElement(dimension, 'Attributes')
+            attr_info = {
+                'name': title,
+                'keyColumn': name,
+                'hasHierarchy': 'false',
+            }
+            etree.SubElement(attributes, 'Attribute', **attr_info)
+
+            # <Attributes>
+            hierarchies = etree.SubElement(dimension, 'Hierarchies')
+            hierarchy = etree.SubElement(hierarchies, 'Hierarchy', **{'name': title})
+
+            level_info = {
+                'attribute': title,
+                'name': '%s level' % title,
+                'visible': visible,
+                'caption': title,
+            }
+            etree.SubElement(hierarchy, 'Level', **level_info)
+
+        measure_groups = etree.SubElement(cube, 'MeasureGroups')
+
+        measure_group_info = {
+            'name': get_table_name(MEASURES, key),
+            'table': get_table_name(MEASURES, key)
+        }
+
+        measure_group = etree.SubElement(
+            measure_groups, 'MeasureGroup', **measure_group_info)
+        measures_tag = etree.SubElement(measure_group, 'Measures')
+
+        for measure in measures:
+            measure_info = {
+                'name': measure.name,
+                'column': measure.name,
+                'caption': measure.title,
+                'visible': 'true' if measure.visible else 'false',
+                'aggregator': 'sum',
+            }
+            etree.SubElement(measures_tag, 'Measure', **measure_info)
+
+        schema.extend([physical_schema, cube])
+
+        cube_string = etree.tostring(schema, pretty_print=True)
+
+        # Cube.objects.create(
+        #     name=cube_key,
+        #     data=cube_string,
+        #     user_id=self.context['user_id'],
+        # )
+
+        send_xml(cube_key, cube_string)
+
+        a = 3
+# write in console: python manage.py celery -A etl.tasks worker
+
+
+from olap.xmla import xmla
+import easywebdav
+
+def send_xml(f_name, xml):
+
+    with open(os.path.join(
+            settings.BASE_DIR, 'data/resources/cubes/1', '{0}.xml'.format(
+                f_name)), 'w') as schema_file:
+        schema_file.write(xml)
+
+    oc = OlapClient(1)
+    try:
+        oc.file_delete('schema.xml')
+    except easywebdav.OperationFailed as e:
+        pass
+    oc.file_upload('schema.xml')
+    oc.connect.getDatasources()
+
+XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
+    host='localhost', port=8080)
+REPOSITORY_PATH = 'saiku/repository/default'
+
+
+class OlapClient(object):
+    """
+    Клиент Saiku
+    """
+
+    def __init__(self, cude_id):
+        """
+        Args:
+            cube_id(int): id куба
+        """
+        self.cube_id = cude_id
+        self.connect = xmla.XMLAProvider().connect(location=XMLA_URL)
+        self.webdav = easywebdav.connect(
+            host='localhost',
+            port='8080',
+            path=REPOSITORY_PATH,
+            username='admin',
+            password='admin'
+        )
+
+    def file_upload(self, file_name):
+        self.webdav.upload(
+            os.path.join(
+                settings.BASE_DIR, 'data/resources/cubes/', '{0}/{1}'.format(
+                    self.cube_id, file_name)),
+            remote_path='datasources/{0}'.format(file_name))
+
+    def file_delete(self, file_name):
+        self.webdav.delete('datasources/{0}'.format(file_name))
+
+    def execute(self, mdx=None):
+        return self.connect.Execute(mdx, Catalog='cube_848272420')
+
 
 # write in console: python manage.py celery -A etl.tasks worker
