@@ -126,3 +126,10 @@ class Postgresql(Database):
         запрос на создание триггеров в БД клиента
         """
         return pgsql_map.remote_triggers_query
+
+    @staticmethod
+    def dim_meas_triggers_create_query():
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+        """
+        return pgsql_map.dimension_measure_triggers_query

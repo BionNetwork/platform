@@ -429,7 +429,8 @@ class LoadDimensions(TaskProcessing):
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
-    def get_actual_fields(self, meta_data):
+    @classmethod
+    def get_actual_fields(cls, meta_data):
         """
         Фильтруем поля по необходимому нам типу
 
@@ -440,7 +441,7 @@ class LoadDimensions(TaskProcessing):
         for record in meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                if field['type'] in self.actual_fields_type:
+                if field['type'] in cls.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
@@ -499,6 +500,8 @@ class LoadDimensions(TaskProcessing):
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
 
+        self.create_reload_triggers()
+
         self.set_next_task_params()
 
     def set_next_task_params(self):
@@ -545,6 +548,13 @@ class LoadDimensions(TaskProcessing):
                 # data=json.dumps(data)
             )
 
+    def get_splitted_table_column_names(self):
+        """
+        Возвращает имена колонки вида 'table__column'
+        """
+        return map(lambda (table, field): '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name']), self.actual_fields)
+
     def save_fields(self):
         """Заполняем таблицу данными
 
@@ -552,9 +562,7 @@ class LoadDimensions(TaskProcessing):
             model: Модель к целевой таблице
         """
         column_names = ['cdc_key']
-        for table, field in self.actual_fields:
-            column_names.append('{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name']))
+        column_names += self.get_splitted_table_column_names()
 
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -576,10 +584,8 @@ class LoadDimensions(TaskProcessing):
 
         connection = DataSourceService.get_local_instance().connection
         while True:
-            index_to = offset+step
             cursor = connection.cursor()
-
-            cursor.execute(rows_query.format(index_to, offset))
+            cursor.execute(rows_query.format(step, offset))
             rows = cursor.fetchall()
             if not rows:
                 break
@@ -591,9 +597,37 @@ class LoadDimensions(TaskProcessing):
                 rows_dict.append(temp_dict)
             insert_query.execute(data=rows_dict,
                                  binary_types_dict=binary_types_dict)
-            offset = index_to
+
+            offset += step
 
             self.queue_storage.update()
+
+    def create_reload_triggers(self):
+        """
+        Создание триггеров для размерностей и мер
+        """
+        local_instance = DataSourceService.get_local_instance()
+        connection = local_instance.connection
+        cursor = connection.cursor()
+
+        column_names = ['cdc_key']
+        column_names += self.get_splitted_table_column_names()
+
+        insert_cols = []
+        for col in column_names:
+            insert_cols.append('NEW.{0}'.format(col))
+
+        dim_meas_triggers_query = local_instance.dim_meas_triggers_create_query()
+
+        cursor.execute(dim_meas_triggers_query.format(
+            new_table=get_table_name(self.table_prefix, self.key),
+            orig_table=get_table_name(STTM_DATASOURCE, self.key),
+            del_condition="cdc_key=OLD.cdc_key",
+            insert_cols=','.join(insert_cols),
+            cols="({0})".format(','.join(column_names)),
+        ))
+
+        connection.commit()
 
 
 class LoadMeasures(LoadDimensions):
