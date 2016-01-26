@@ -872,11 +872,13 @@ class CreateTriggers(TaskProcessing):
         Создание триггеров в БД пользователя
         """
         tables_info = self.context['tables_info']
-        # TODO: импорт DatabaseService
-        db_instance = DatabaseService.get_source_instance(
-            Datasource.objects.get(id=self.context['source_id']))
+
+        source = Datasource.objects.get(id=self.context['source_id'])
+
+        db_instance = DatabaseService.get_source_instance(source)
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
+        remote_table_indexes = db_instance.remote_table_indexes()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
 
         connection = db_instance.connection
@@ -899,10 +901,13 @@ class CreateTriggers(TaskProcessing):
                     sep=sep, name=name, typ=col['type']
                 )
 
-            # multi queries of mysql, delimiter $$
-            for query in remote_table_create_query.format(
-                    table_name, cols_str).split('$$'):
-                cursor.execute(query)
+            # создание таблицы у юзера
+            cursor.execute(remote_table_create_query.format(
+                    table_name, cols_str))
+
+            for index_query in remote_table_indexes:
+                for command in index_query.format(table_name, source.db).split('$$'):
+                    cursor.execute(command)
 
             connection.commit()
 

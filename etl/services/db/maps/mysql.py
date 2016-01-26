@@ -106,13 +106,57 @@ remote_table_query = """
         `cdc_delta_flag` smallint NOT NULL,
         `cdc_synced` smallint NOT NULL
     );
-    $$
-    CREATE INDEX {0}_together_index_bi ON `{0}` (`cdc_updated_at`, `cdc_synced`);
-    $$
-    CREATE INDEX {0}_cdc_created_at_index_bi ON `{0}` (`cdc_created_at`);
-    $$
-    CREATE INDEX {0}_cdc_synced_index_bi ON `{0}` (`cdc_synced`);
+"""
 
+updated_synced_index = """
+    DROP PROCEDURE IF EXISTS updated_synced_proc_bi $$
+    CREATE PROCEDURE updated_synced_proc_bi()
+    begin
+        IF NOT EXISTS(
+            select distinct index_name from information_schema.statistics
+                WHERE table_name='{0}' and
+                TABLE_SCHEMA='{1}' and
+                index_name='{0}_together_index_bi'
+            )
+        then
+        CREATE INDEX {0}_together_index_bi ON `{0}` (`cdc_updated_at`, `cdc_synced`);
+    END IF;
+    end $$
+    call updated_synced_proc_bi();
+"""
+
+created_index = """
+    DROP PROCEDURE IF EXISTS created_proc_bi $$
+    CREATE PROCEDURE created_proc_bi()
+    begin
+        IF NOT EXISTS(
+            select distinct index_name from information_schema.statistics
+                WHERE table_name='{0}' and
+                TABLE_SCHEMA='{1}' and
+                index_name='{0}_cdc_created_at_index_bi'
+            )
+        then
+        CREATE INDEX {0}_cdc_created_at_index_bi ON `{0}` (`cdc_created_at`);
+    END IF;
+    end $$
+    call created_proc_bi();
+"""
+
+synced_index = """
+    DROP PROCEDURE IF EXISTS synced_proc_bi $$
+    CREATE PROCEDURE synced_proc_bi()
+    begin
+        IF NOT EXISTS(
+            select distinct index_name from information_schema.statistics
+                WHERE table_name='{0}' and
+                TABLE_SCHEMA='{1}' and
+                index_name='{0}_cdc_synced_index_bi'
+            )
+        then
+        CREATE INDEX {0}_cdc_synced_index_bi ON `{0}` (`cdc_synced`);
+    END IF;
+    end $$
+    call synced_proc_bi();
 """
 
 remote_triggers_query = """

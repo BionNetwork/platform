@@ -137,11 +137,51 @@ remote_table_query = """
         "cdc_delta_flag" smallint NOT NULL,
         "cdc_synced" smallint NOT NULL
     );
-    CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
+"""
 
-    CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
+updated_synced_index = """
+    DO $$
+    BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class t
+            JOIN pg_index ix ON t.oid = ix.indrelid
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            WHERE t.relname in ('{0}') and
+            i.relname='{0}_together_index_bi'
+        ) THEN
+        CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
+    END IF;
+    END$$;
+"""
 
-    CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
+created_index = """
+    DO $$
+    BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class t
+            JOIN pg_index ix ON t.oid = ix.indrelid
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            WHERE t.relname in ('{0}') and
+            i.relname='{0}_cdc_created_at_index_bi'
+        ) THEN
+        CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
+    END IF;
+    END$$;
+"""
+
+synced_index = """
+    DO $$
+    BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class t
+            JOIN pg_index ix ON t.oid = ix.indrelid
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            WHERE t.relname in ('{0}') and
+            i.relname='{0}_cdc_synced_index_bi'
+        ) THEN
+        CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
+    END IF;
+    END$$;
 """
 
 
