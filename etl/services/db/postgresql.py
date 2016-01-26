@@ -121,6 +121,15 @@ class Postgresql(Database):
         return pgsql_map.remote_table_query
 
     @staticmethod
+    def remote_table_indexes():
+        """
+        запрос на создание индексов новой таблицы в БД клиента
+        """
+        return (pgsql_map.updated_synced_index,
+                pgsql_map.created_index,
+                pgsql_map.synced_index, )
+
+    @staticmethod
     def remote_triggers_create_query():
         """
         запрос на создание триггеров в БД клиента

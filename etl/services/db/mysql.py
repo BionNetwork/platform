@@ -118,9 +118,17 @@ class Mysql(Database):
         return mysql_map.remote_table_query
 
     @staticmethod
+    def remote_table_indexes():
+        """
+        запрос на создание индексов новой таблицы в БД клиента
+        """
+        return (mysql_map.updated_synced_index,
+                mysql_map.created_index,
+                mysql_map.synced_index, )
+
+    @staticmethod
     def remote_triggers_create_query():
         """
         запрос на создание триггеров в БД клиента
         """
         return mysql_map.remote_triggers_query
-
