@@ -4,7 +4,7 @@ __author__ = 'damir(GDR)'
 
 from django.core.management.base import BaseCommand, CommandError
 from core.models import (DatasourceMetaKeys, DatasourceMeta,
-                         Dimension, Measure, )
+                         Dimension, Measure, DatasetToMeta, Cube, Dataset)
 from etl.services.datasource.base import DataSourceService
 
 
@@ -39,6 +39,14 @@ class Command(BaseCommand):
 
         Dimension.objects.filter(datasources_meta_id__in=meta_ids).delete()
         Measure.objects.filter(datasources_meta_id__in=meta_ids).delete()
+
+        dtms = DatasetToMeta.objects.filter(dataset__key__in=meta_values)
+        Dataset.objects.filter(
+            id__in=dtms.values_list('dataset', flat=True)).delete()
+        dtms.delete()
+
+        cubes_name = ['cube_%s' % x for x in meta_values]
+        Cube.objects.filter(name__in=cubes_name).delete()
 
         meta_keys.delete()
         metas.delete()
