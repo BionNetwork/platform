@@ -4,9 +4,10 @@ from __future__ import unicode_literals
 
 import logging
 
+import lxml.etree as etree
+
 import os
 import sys
-import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
@@ -17,6 +18,7 @@ from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
+from etl.services.olap.base import send_xml
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
     DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
@@ -26,7 +28,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
 
 from djcelery import celery
@@ -213,6 +215,11 @@ def delete_redundant(task_id, channel):
 @celery.task(name=CREATE_TRIGGERS)
 def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
+
+
+@celery.task(name=CREATE_CUBE)
+def create_cube(task_id, channel):
+    return CreateCube(task_id, channel).load_data()
 
 
 class CreateDataset(TaskProcessing):
@@ -407,6 +414,7 @@ class LoadDb(TaskProcessing):
                 offset += limit
             except Exception as e:
                 print 'Exception'
+                insert_query.connection.rollback()
                 self.was_error = True
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
@@ -927,15 +935,13 @@ class CreateTriggers(TaskProcessing):
             })
 
 
-class CreateCube(object):
+class CreateCube(TaskProcessing):
 
-    @staticmethod
-    def processing():
+    def processing(self):
 
         print 'Start cube creation'
 
-        # dataset_id = self.context['dataset_id']
-        dataset_id = 1
+        dataset_id = self.context['dataset_id']
         dataset = Dataset.objects.get(id=dataset_id)
         key = dataset.key
 
@@ -949,7 +955,7 @@ class CreateCube(object):
             pass
         # <Schema>
         cube_key = "cube_{key}".format(key=key)
-        schema = etree.Element('Schema', name=cube_key)
+        schema = etree.Element('Schema', name=cube_key, metamodelVersion='4.0')
 
         # <Physical schema>
         physical_schema = etree.Element('PhysicalSchema')
@@ -993,7 +999,8 @@ class CreateCube(object):
             attributes = etree.SubElement(dimension, 'Attributes')
             attr_info = {
                 'name': title,
-                'keyColumn': name,
+                # 'keyColumn': name,
+                'keyColumn': 'dim_id',
                 'hasHierarchy': 'false',
             }
             etree.SubElement(attributes, 'Attribute', **attr_info)
@@ -1031,77 +1038,24 @@ class CreateCube(object):
             }
             etree.SubElement(measures_tag, 'Measure', **measure_info)
 
+        dimension_links = etree.SubElement(measure_group, 'DimensionLinks')
+
+        for dim in dimensions:
+
+            etree.SubElement(dimension_links, 'NoLink', dimension=dim.name)
+            # etree.SubElement(dimension_links, 'ForeignKeyLink', dimension=dim.name, foreignKeyColumn='dimension_id')
+
         schema.extend([physical_schema, cube])
 
         cube_string = etree.tostring(schema, pretty_print=True)
 
-        # Cube.objects.create(
-        #     name=cube_key,
-        #     data=cube_string,
-        #     user_id=self.context['user_id'],
-        # )
-
-        send_xml(cube_key, cube_string)
-
-        a = 3
-# write in console: python manage.py celery -A etl.tasks worker
-
-
-from olap.xmla import xmla
-import easywebdav
-
-def send_xml(f_name, xml):
-
-    with open(os.path.join(
-            settings.BASE_DIR, 'data/resources/cubes/1', '{0}.xml'.format(
-                f_name)), 'w') as schema_file:
-        schema_file.write(xml)
-
-    oc = OlapClient(1)
-    try:
-        oc.file_delete('schema.xml')
-    except easywebdav.OperationFailed as e:
-        pass
-    oc.file_upload('schema.xml')
-    oc.connect.getDatasources()
-
-XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
-    host='localhost', port=8080)
-REPOSITORY_PATH = 'saiku/repository/default'
-
-
-class OlapClient(object):
-    """
-    Клиент Saiku
-    """
-
-    def __init__(self, cude_id):
-        """
-        Args:
-            cube_id(int): id куба
-        """
-        self.cube_id = cude_id
-        self.connect = xmla.XMLAProvider().connect(location=XMLA_URL)
-        self.webdav = easywebdav.connect(
-            host='localhost',
-            port='8080',
-            path=REPOSITORY_PATH,
-            username='admin',
-            password='admin'
+        cube = Cube.objects.create(
+            name=cube_key,
+            data=cube_string,
+            user_id=self.context['user_id'],
+            # user_id=11,
         )
 
-    def file_upload(self, file_name):
-        self.webdav.upload(
-            os.path.join(
-                settings.BASE_DIR, 'data/resources/cubes/', '{0}/{1}'.format(
-                    self.cube_id, file_name)),
-            remote_path='datasources/{0}'.format(file_name))
-
-    def file_delete(self, file_name):
-        self.webdav.delete('datasources/{0}'.format(file_name))
-
-    def execute(self, mdx=None):
-        return self.connect.Execute(mdx, Catalog='cube_848272420')
-
+        send_xml(key, cube.id, cube_string)
 
 # write in console: python manage.py celery -A etl.tasks worker

@@ -39,5 +39,48 @@ class OlapClient(object):
     def file_delete(self, file_name):
         self.webdav.delete('datasources/{0}'.format(file_name))
 
-    def execute(self, mdx=None):
-        return self.connect.Execute(mdx, Catalog='cube_848272420')
+
+def send_xml(key, cube_id, xml):
+    """
+    Отправка файлов в mondrian-server
+
+    Args:
+        key(str): ключ
+        cube_id(int): id куба
+        xml(str): содержимое схемы
+    """
+
+    directory = os.path.join(
+        settings.BASE_DIR, 'data/resources/cubes/{0}/'.format(cube_id))
+    os.makedirs(directory)
+
+    datasource_file_name = 'datasource_{0}.sds'.format(key)
+    schema_name = 'cube_{0}.xml'.format(key)
+
+    settings_str = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <dataSource>
+        <driver>mondrian.olap4j.MondrianOlap4jDriver</driver>
+        <id>{schema_name}</id>
+        <location>jdbc:mondrian:Jdbc=jdbc:postgresql://localhost/biplatform;Catalog=mondrian:///datasources/{schema_name}</location>
+        <name>{schema_name}</name>
+        <type>OLAP</type>
+        <username>biplatform</username>
+    </dataSource>""".format(schema_name=schema_name)
+
+    with open(os.path.join(
+            directory, datasource_file_name), 'w') as df:
+        df.write(settings_str)
+
+    with open(os.path.join(
+            directory, schema_name), 'w') as sf:
+        sf.write(xml)
+
+    oc = OlapClient(cube_id)
+    try:
+        oc.file_delete(datasource_file_name)
+        oc.file_delete(schema_name)
+    except easywebdav.OperationFailed as e:
+        pass
+    oc.file_upload(datasource_file_name)
+    oc.file_upload(schema_name)
+    # oc.connect.getDatasources()
