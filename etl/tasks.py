@@ -664,7 +664,8 @@ class LoadMeasures(LoadDimensions):
             )
 
     def set_next_task_params(self):
-        self.next_task_params = None
+        self.next_task_params = (
+            CREATE_CUBE, create_cube, self.context)
 
 
 class UpdateMongodb(TaskProcessing):
