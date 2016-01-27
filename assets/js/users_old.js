@@ -1,4 +1,5 @@
 
+
 function removeUser(url){
     $.confirm({
         text: "Вы действительно хотите удалить пользователя?",
@@ -36,7 +37,7 @@ $(document).ready(function(){
 
 function prev(){
     var search = $('#search').val();
-    activePage = activePage===0 ? activePage : activePage - 1
+    activePage = activePage==0 ? activePage : activePage - 1
     document.location = usersUrl+'?page='+activePage+';search='+search;
 }
 
