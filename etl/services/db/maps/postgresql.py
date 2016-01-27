@@ -75,9 +75,25 @@ cols_query = """
 """
 
 cdc_cols_query = """
-    SELECT table_name, column_name FROM information_schema.columns
+    SELECT column_name, data_type FROM information_schema.columns
     where table_name in {0} and table_catalog = '{1}' and
           table_schema = '{2}' order by table_name;
+"""
+
+add_column_query = """
+    alter table {0} add column {1} {2} {3};
+"""
+
+del_column_query = """
+    alter table {0} drop column {1};
+"""
+
+create_index_query = """
+    CREATE INDEX {0} ON {1} ({2});
+"""
+
+drop_index_query = """
+    drop index {0};
 """
 
 constraints_query = """
@@ -143,12 +159,14 @@ remote_table_query = """
         "cdc_delta_flag" smallint NOT NULL,
         "cdc_synced" smallint NOT NULL
     );
-    CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
-
-    CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
-
-    CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
 """
+
+cdc_required_types = {
+    "cdc_created_at": {"type": "timestamp", "nullable": "NOT NULL"},
+    "cdc_updated_at": {"type": "timestamp", "nullable": ""},
+    "cdc_delta_flag": {"type": "smallint", "nullable": "NOT NULL"},
+    "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
+}
 
 
 remote_triggers_query = """

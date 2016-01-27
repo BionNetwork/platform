@@ -860,7 +860,11 @@ class CreateTriggers(TaskProcessing):
 
             cursor.execute(cdc_cols_query)
             fetched_cols = cursor.fetchall()
-            existing_cols = map(itemgetter(1), fetched_cols)
+
+            existing_cols = {k: v for (k, v) in fetched_cols}
+
+            required_indexes = {k.format(table_name): v
+                           for k, v in REQUIRED_INDEXES.iteritems()}
 
             cols_str = ''
             new = ''
@@ -878,26 +882,21 @@ class CreateTriggers(TaskProcessing):
 
             # если таблица существует
             if existing_cols:
+                # удаление primary key, если он есть
                 primary_query = db_instance.get_primary_key(table_name, source.db)
                 cursor.execute(primary_query)
                 primary = cursor.fetchall()
 
                 if primary:
                     primary_name = primary[0][0]
-                    del_pr_query = db_instance.delete_primary_query(table_name, primary_name)
+                    del_pr_query = db_instance.delete_primary_query(
+                        table_name, primary_name)
                     cursor.execute(del_pr_query)
 
-                new_foreign_cols = [(x['name'], x["type"]) for x in columns]
+                # добавление недостающих колонок, не учитывая cdc-колонки
+                new_came_cols = [(x['name'], x["type"]) for x in columns]
 
-                # добавление недостающих колонок
-                new_cols = new_foreign_cols + [
-                    ('cdc_created_at', 'timestamp'),
-                    ('cdc_updated_at', 'timestamp'),
-                    ('cdc_delta_flag', 'smallint'),
-                    ('cdc_synced', 'smallint'),
-                ]
-
-                diff_cols = [x for x in new_cols if x[0] not in existing_cols]
+                diff_cols = [x for x in new_came_cols if x[0] not in existing_cols]
 
                 if diff_cols:
                     add_cols_str = """
@@ -908,53 +907,81 @@ class CreateTriggers(TaskProcessing):
                     cursor.execute(add_cols_str)
                     connection.commit()
 
-                # проверяем индексы
-                required_index_columns = [
-                    ['cdc_created_at', ],
-                    ['cdc_synced', ],
-                    ['cdc_synced', 'cdc_updated_at'], ]
+                # проверка cdc-колонок на существование и типы
+                cdc_required_types = db_instance.db_map.cdc_required_types
+
+                add_col_q = db_instance.db_map.add_column_query
+                del_col_q = db_instance.db_map.del_column_query
+
+                for cdc_k, v in cdc_required_types.iteritems():
+                    if not cdc_k in existing_cols:
+                        cursor.execute(add_col_q.format(
+                            table_name, cdc_k, v["type"], v["nullable"]))
+                    else:
+                        # если типы не совпадают
+                        if not existing_cols[cdc_k].startswith(v["type"]):
+                            cursor.execute(del_col_q.format(table_name, cdc_k))
+                            cursor.execute(add_col_q.format(
+                                table_name, cdc_k, v["type"], v["nullable"]))
+
+                connection.commit()
+
+                # проверяем индексы на колонки и существование,
+                # лишние индексы удаляем
 
                 indexes_query = db_instance.db_map.indexes_query.format(
                     tables_str, source.db)
                 cursor.execute(indexes_query)
-                indexes = cursor.fetchall()
-                existing_indexes = map(lambda i: sorted(i[1].split(',')), indexes)
-                diff_indexes = [x for x in required_index_columns if x not in existing_indexes]
+                exist_indexes = cursor.fetchall()
 
-                for d_ind in diff_indexes:
-                    ind_query = """
-                        CREATE INDEX {t}_{n}_index_bi ON {sep}{t}{sep} ({cols});
-                    """.format(
-                        t=table_name, n='_'.join(d_ind),
-                        sep=sep, cols=','.join(d_ind))
-                    cursor.execute(ind_query)
+                index_cols_i, index_name_i = 1, 2
 
-                # проверяем индексы
-                required_index_names = ['cdc_created_at', 'cdc_synced', 'together', ]
+                create_index_q = db_instance.db_map.create_index_query
+                drop_index_q = db_instance.db_map.drop_index_query
 
-                required_fullname_indexes = [
-                    '{t}_{n}_index_bi'.format(t=table_name, n=ind)
-                    for ind in required_index_names]
+                allright_index_names = []
 
-                index_name = 2
+                for index in exist_indexes:
+                    index_name = index[index_name_i]
 
-                del_indexes = [
-                    x[index_name] for x in indexes
-                    if x[index_name] not in required_fullname_indexes]
+                    if index_name not in required_indexes:
+                        cursor.execute(drop_index_q.format(index_name))
+                    else:
+                        index_cols = sorted(index_name[index_cols_i].split(','))
+                        if index_cols != required_indexes[index_name]:
 
-                for d_i in del_indexes:
-                    del_query = db_instance.db_map.drop_index.format(d_i, table_name)
-                    cursor.execute(del_query)
+                            cursor.execute(drop_index_q.format(index_name))
+                            cursor.execute(create_index_q.format(
+                                index_name, table_name,
+                                ','.join(required_indexes[index_name]),
+                                source.db))
+
+                        allright_index_names.append(index_name)
+
+                diff_indexes_names = [
+                    x for x in required_indexes if x not in allright_index_names]
+
+                for d_index in diff_indexes_names:
+                    cursor.execute(
+                        create_index_q.format(
+                            d_index, table_name,
+                            ','.join(required_indexes[d_index])))
 
                 connection.commit()
 
             # если таблица не существует
             else:
+                # создание таблицы у юзера
+                cursor.execute(remote_table_create_query.format(
+                        table_name, cols_str))
 
-                # multi queries of mysql, delimiter $$
-                for query in remote_table_create_query.format(
-                        table_name, cols_str).split('$$'):
-                    cursor.execute(query)
+                # создание индексов
+                create_index_q = db_instance.db_map.create_index_query
+
+                for index_name, index_cols in required_indexes.iteritems():
+                    cursor.execute(create_index_q.format(
+                        index_name, table_name,
+                        ','.join(index_cols), source.db))
 
                 connection.commit()
 
@@ -967,6 +994,9 @@ class CreateTriggers(TaskProcessing):
                 cursor.execute(query)
 
             connection.commit()
+
+        cursor.close()
+        connection.close()
 
         self.next_task_params = (
             GENERATE_DIMENSIONS, load_dimensions, {
