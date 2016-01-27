@@ -69,6 +69,12 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
+    def get_structure_rows_number(self, structure, cols):
+        """
+        Получение предполагаемые кол-во строк
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
     @staticmethod
     def lose_brackets(str_):
         """
@@ -432,4 +438,4 @@ class Database(object):
         Returns:
             str: Запрос на выборку
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        return "SELECT {0} FROM {1}"

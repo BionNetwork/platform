@@ -216,15 +216,6 @@ class MsSql(Database):
         return mssql_map.rows_query
 
     @staticmethod
-    def get_select_query():
-        """
-        возвращает селект запрос
-        :return: str
-        """
-        query = "SELECT {0} FROM {1};"
-        return query
-
-    @staticmethod
     def get_statistic_query(source, tables):
         """
         запрос для статистики

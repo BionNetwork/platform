@@ -3,36 +3,20 @@ from collections import defaultdict
 DB_TYPES = defaultdict(lambda: 0)
 
 ints = [
-    'int',
-    'tinyint',
-    'smallint',
-    'mediumint',
-    'bigint',
+    'number',
 ]
 floats = [
-    'float',
-    'double',
-    'decimal',
+
 ]
 texts = [
     'char',
     'varchar',
-    'text',
-    'blob',
-    'tinytext',
-    'tinyblob',
-    'mediumtext',
-    'mediumblob',
-    'longtext',
-    'longblob',
-    'enum',
+    'varchar2',
+    'nchar',
+    'nvarchar2',
 ]
 dates = [
-    'date',
-    'datetime',
-    'timestamp',
-    'time',
-    'year',
+
 ]
 
 for i in ints:
@@ -49,8 +33,11 @@ for i in dates:
 
 table_query = """SELECT table_name FROM user_tables"""
 
-columns_query = """SELECT table_name, column_name, data_type FROM user_tab_columns
-          WHERE table_name IN {0}"""
+columns_query = """SELECT table_name, column_name, data_type,
+                    CASE WHEN nullable='N' THEN 'NO'
+                    ELSE 'YES' END as is_nullable,
+                    null as extra
+ FROM user_tab_columns WHERE table_name IN {0}"""
 
 
 constraints_query = """
