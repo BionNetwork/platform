@@ -942,8 +942,8 @@ class CreateCube(object):
 
         print 'Start cube creation'
 
-        # dataset_id = self.context['dataset_id']
-        dataset_id = 1
+        dataset_id = self.context['dataset_id']
+
         dataset = Dataset.objects.get(id=dataset_id)
         key = dataset.key
 
