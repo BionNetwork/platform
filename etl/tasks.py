@@ -26,7 +26,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
 
 from djcelery import celery
@@ -213,6 +213,11 @@ def delete_redundant(task_id, channel):
 @celery.task(name=CREATE_TRIGGERS)
 def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
+
+
+@celery.task(name=CREATE_CUBE)
+def create_cube(task_id, channel):
+    return CreateCube(task_id, channel).load_data()
 
 
 class CreateDataset(TaskProcessing):
@@ -658,7 +663,8 @@ class LoadMeasures(LoadDimensions):
             )
 
     def set_next_task_params(self):
-        self.next_task_params = None
+        self.next_task_params = (
+            CREATE_CUBE, create_cube, self.context)
 
 
 class UpdateMongodb(TaskProcessing):
