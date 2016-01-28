@@ -57,15 +57,16 @@ def send_xml(key, cube_id, xml):
     datasource_file_name = 'datasource_{0}.sds'.format(key)
     schema_name = 'cube_{0}.xml'.format(key)
 
+    db_info = settings.DATABASES['default']
     settings_str = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <dataSource>
         <driver>mondrian.olap4j.MondrianOlap4jDriver</driver>
         <id>{schema_name}</id>
-        <location>jdbc:mondrian:Jdbc=jdbc:postgresql://localhost/biplatform;Catalog=mondrian:///datasources/{schema_name}</location>
+        <location>jdbc:mondrian:Jdbc=jdbc:postgresql://{host}/{db_name};Catalog=mondrian:///datasources/{schema_name}</location>
         <name>{schema_name}</name>
         <type>OLAP</type>
         <username>biplatform</username>
-    </dataSource>""".format(schema_name=schema_name)
+    </dataSource>""".format(schema_name=schema_name, host=db_info['HOST'], db_name=db_info['NAME'])
 
     with open(os.path.join(
             directory, datasource_file_name), 'w') as df:
@@ -75,12 +76,12 @@ def send_xml(key, cube_id, xml):
             directory, schema_name), 'w') as sf:
         sf.write(xml)
 
-    oc = OlapClient(cube_id)
+    client = OlapClient(cube_id)
     try:
-        oc.file_delete(datasource_file_name)
-        oc.file_delete(schema_name)
+        client.file_delete(datasource_file_name)
+        client.file_delete(schema_name)
     except easywebdav.OperationFailed as e:
         pass
-    oc.file_upload(datasource_file_name)
-    oc.file_upload(schema_name)
+    client.file_upload(datasource_file_name)
+    client.file_upload(schema_name)
     # oc.connect.getDatasources()
