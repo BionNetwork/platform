@@ -937,8 +937,7 @@ class CreateTriggers(TaskProcessing):
 
 class CreateCube(object):
 
-    @staticmethod
-    def processing():
+    def processing(self):
 
         print 'Start cube creation'
 
@@ -1055,9 +1054,6 @@ class CreateCube(object):
 # write in console: python manage.py celery -A etl.tasks worker
 
 
-from olap.xmla import xmla
-import easywebdav
-
 def send_xml(f_name, xml):
 
     with open(os.path.join(
@@ -1072,44 +1068,6 @@ def send_xml(f_name, xml):
         pass
     oc.file_upload('schema.xml')
     oc.connect.getDatasources()
-
-XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
-    host='localhost', port=8080)
-REPOSITORY_PATH = 'saiku/repository/default'
-
-
-class OlapClient(object):
-    """
-    Клиент Saiku
-    """
-
-    def __init__(self, cude_id):
-        """
-        Args:
-            cube_id(int): id куба
-        """
-        self.cube_id = cude_id
-        self.connect = xmla.XMLAProvider().connect(location=XMLA_URL)
-        self.webdav = easywebdav.connect(
-            host='localhost',
-            port='8080',
-            path=REPOSITORY_PATH,
-            username='admin',
-            password='admin'
-        )
-
-    def file_upload(self, file_name):
-        self.webdav.upload(
-            os.path.join(
-                settings.BASE_DIR, 'data/resources/cubes/', '{0}/{1}'.format(
-                    self.cube_id, file_name)),
-            remote_path='datasources/{0}'.format(file_name))
-
-    def file_delete(self, file_name):
-        self.webdav.delete('datasources/{0}'.format(file_name))
-
-    def execute(self, mdx=None):
-        return self.connect.Execute(mdx, Catalog='cube_848272420')
 
 
 # write in console: python manage.py celery -A etl.tasks worker

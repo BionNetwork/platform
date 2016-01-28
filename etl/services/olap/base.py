@@ -39,5 +39,5 @@ class OlapClient(object):
     def file_delete(self, file_name):
         self.webdav.delete('datasources/{0}'.format(file_name))
 
-    def execute(self, mdx=None):
-        return self.connect.Execute(mdx, Catalog='cube_848272420')
+    def execute(self, mdx, Catalog):
+        return self.connect.Execute(mdx, Catalog)
