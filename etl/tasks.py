@@ -864,7 +864,7 @@ class CreateTriggers(TaskProcessing):
             existing_cols = {k: v for (k, v) in fetched_cols}
 
             required_indexes = {k.format(table_name): v
-                           for k, v in REQUIRED_INDEXES.iteritems()}
+                                for k, v in REQUIRED_INDEXES.iteritems()}
 
             cols_str = ''
             new = ''
@@ -945,12 +945,12 @@ class CreateTriggers(TaskProcessing):
                     index_name = index[index_name_i]
 
                     if index_name not in required_indexes:
-                        cursor.execute(drop_index_q.format(index_name))
+                        cursor.execute(drop_index_q.format(index_name, table_name))
                     else:
                         index_cols = sorted(index_name[index_cols_i].split(','))
                         if index_cols != required_indexes[index_name]:
 
-                            cursor.execute(drop_index_q.format(index_name))
+                            cursor.execute(drop_index_q.format(index_name, table_name))
                             cursor.execute(create_index_q.format(
                                 index_name, table_name,
                                 ','.join(required_indexes[index_name]),
