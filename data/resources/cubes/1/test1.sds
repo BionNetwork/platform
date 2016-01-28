@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<dataSource>
+    <driver>mondrian.olap4j.MondrianOlap4jDriver</driver>
+    <id>test1</id>
+    <location>jdbc:mondrian:Jdbc=jdbc:postgresql://localhost/biplatform;Catalog=mondrian:///datasources/schema.xml</location>
+    <name>test1</name>
+    <type>OLAP</type>
+    <username>biplatform</username>
+</dataSource>

@@ -22,6 +22,7 @@ REQUIRED_INDEXES = {
 
 
 # Название задач
+CREATE_DATASET = 'etl:database:create_dataset'
 MONGODB_DATA_LOAD = 'etl:load_data:mongo'
 DB_DATA_LOAD = 'etl:cdc:load_data'
 MONGODB_DELTA_LOAD = 'etl:cdc:load_delta'
@@ -30,6 +31,7 @@ DB_DELETE_REDUNDANT = 'etl:cdc:delete_redundant'
 GENERATE_DIMENSIONS = 'etl:database:generate_dimensions'
 GENERATE_MEASURES = 'etl:database:generate_measures'
 CREATE_TRIGGERS = 'etl.tasks.create_triggers'
+CREATE_CUBE = 'etl:database:generate_cube'
 
 # Префиксы названий таблиц
 STTM_DATASOURCE = 'sttm_datasource'  # Временная загружаемая таблица
