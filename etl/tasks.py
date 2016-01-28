@@ -4,10 +4,9 @@ from __future__ import unicode_literals
 
 import logging
 
-import lxml.etree as etree
-
 import os
 import sys
+import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
@@ -411,6 +410,7 @@ class LoadDb(TaskProcessing):
                     break
                 insert_query.execute(data=rows_dict,
                                      binary_types_dict=binary_types_dict)
+                print 'load in db %s records' % len(rows_dict)
                 offset += limit
             except Exception as e:
                 print 'Exception'
@@ -618,10 +618,10 @@ class LoadDimensions(TaskProcessing):
 
         connection = DataSourceService.get_local_instance().connection
         while True:
-            index_to = offset+step
+            # index_to = offset+step
             cursor = connection.cursor()
 
-            cursor.execute(rows_query.format(index_to, offset))
+            cursor.execute(rows_query.format(step, offset))
             rows = cursor.fetchall()
             if not rows:
                 break
@@ -633,7 +633,8 @@ class LoadDimensions(TaskProcessing):
                 rows_dict.append(temp_dict)
             insert_query.execute(data=rows_dict,
                                  binary_types_dict=binary_types_dict)
-            offset = index_to
+            print 'load in db %s records' % len(rows_dict)
+            offset += step
 
             self.queue_storage.update()
 
@@ -1000,8 +1001,7 @@ class CreateCube(TaskProcessing):
             attributes = etree.SubElement(dimension, 'Attributes')
             attr_info = {
                 'name': title,
-                # 'keyColumn': name,
-                'keyColumn': 'dim_id',
+                'keyColumn': name,
                 'hasHierarchy': 'false',
             }
             etree.SubElement(attributes, 'Attribute', **attr_info)

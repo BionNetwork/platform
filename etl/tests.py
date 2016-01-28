@@ -610,6 +610,8 @@ class DimCreateTest(TestCase):
 
         self.db.connection.commit()
 
+        self.db.connection.close()
+
 
 class DatasourceMetaTest(TestCase):
     def setUp(self):

@@ -185,6 +185,7 @@ def get_single_task(task_params):
     task_id, channel = TaskService(task_params[0]).add_task(
         arguments=task_params[2])
     return task_params[1].apply_async((task_id, channel),), [channel]
+    # return task_params[1](task_id, channel), [channel]
 
 
 def get_group_tasks(task_params):
