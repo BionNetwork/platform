@@ -9,7 +9,7 @@ from django.conf import settings
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0022_datasourcesettings'),
+        ('core', '0023_auto_20151229_1231'),
     ]
 
     operations = [

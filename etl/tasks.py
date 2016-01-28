@@ -6,11 +6,12 @@ import logging
 
 import os
 import sys
+import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
 
-from pymongo import ASCENDING
+# from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
@@ -25,7 +26,7 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
 
 from djcelery import celery
@@ -42,6 +43,8 @@ client.connect()
 
 logger = logging.getLogger(__name__)
 
+ASCENDING = 1
+
 
 class TaskProcessing(object):
     """
@@ -50,6 +53,7 @@ class TaskProcessing(object):
     Attributes:
         task_id(int): id задачи
         channel(str): Канал передачи на клиент
+        last_task(bool): Флаг последней задачи
         user_id(str): id пользователя
         context(dict): контекстные данные для задачи
         was_error(bool): Факт наличия ошибки
@@ -60,7 +64,7 @@ class TaskProcessing(object):
         next_task_params(tuple): Набор данных для след. задачи
     """
 
-    def __init__(self, task_id, channel):
+    def __init__(self, task_id, channel, last_task=False):
         """
         Args:
             task_id(int): id задачи
@@ -68,6 +72,7 @@ class TaskProcessing(object):
         """
         self.task_id = task_id
         self.channel = channel
+        self.last_task=last_task
         self.user_id = None
         self.context = None
         self.was_error = False
@@ -165,6 +170,11 @@ class TaskProcessing(object):
         RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
 
 
+@celery.task(name=CREATE_DATASET)
+def create_dataset(task_id, channel):
+    return CreateDataset(task_id, channel).load_data()
+
+
 @celery.task(name=MONGODB_DATA_LOAD)
 def load_mongo_db(task_id, channel):
     return LoadMongodb(task_id, channel).load_data()
@@ -203,6 +213,33 @@ def delete_redundant(task_id, channel):
 @celery.task(name=CREATE_TRIGGERS)
 def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
+
+
+@celery.task(name=CREATE_CUBE)
+def create_cube(task_id, channel):
+    return CreateCube(task_id, channel).load_data()
+
+
+class CreateDataset(TaskProcessing):
+    """
+    Создание Dataset
+    """
+
+    def processing(self):
+
+        dataset, created = Dataset.objects.get_or_create(key=self.key)
+        self.context['dataset_id'] = dataset.id
+
+        is_meta_stats = self.context['is_meta_stats']
+
+        if not is_meta_stats:
+            self.next_task_params = (
+                MONGODB_DATA_LOAD, load_mongo_db, self.context)
+        else:
+            self.context['db_update'] = True
+
+            self.next_task_params = (
+                MONGODB_DELTA_LOAD, update_mongo_db, self.context)
 
 
 class LoadMongodb(TaskProcessing):
@@ -372,6 +409,7 @@ class LoadDb(TaskProcessing):
                     break
                 insert_query.execute(data=rows_dict,
                                      binary_types_dict=binary_types_dict)
+                print 'load in db %s records' % len(rows_dict)
                 offset += limit
             except Exception as e:
                 print 'Exception'
@@ -397,12 +435,12 @@ class LoadDb(TaskProcessing):
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
             self.key, source, cols, json.loads(
-                self.context['meta_info']), last_row)
+                self.context['meta_info']), last_row, self.context['dataset_id'])
         if last_row:
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
 
-        if self.context['source_settings'] != DatasourceSettings.TRIGGERS:
+        if self.context['cdc_type'] != DatasourceSettings.TRIGGERS:
             self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
                 'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
@@ -410,6 +448,7 @@ class LoadDb(TaskProcessing):
                 'source_id': source.id,
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
@@ -419,6 +458,7 @@ class LoadDb(TaskProcessing):
                 'source_id': source.id,
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
             })
 
 
@@ -498,8 +538,8 @@ class LoadDimensions(TaskProcessing):
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
-
-        self.set_next_task_params()
+        if not self.last_task:
+            self.set_next_task_params()
 
     def set_next_task_params(self):
         self.next_task_params = (
@@ -576,10 +616,10 @@ class LoadDimensions(TaskProcessing):
 
         connection = DataSourceService.get_local_instance().connection
         while True:
-            index_to = offset+step
+            # index_to = offset+step
             cursor = connection.cursor()
 
-            cursor.execute(rows_query.format(index_to, offset))
+            cursor.execute(rows_query.format(step, offset))
             rows = cursor.fetchall()
             if not rows:
                 break
@@ -591,7 +631,8 @@ class LoadDimensions(TaskProcessing):
                 rows_dict.append(temp_dict)
             insert_query.execute(data=rows_dict,
                                  binary_types_dict=binary_types_dict)
-            offset = index_to
+            print 'load in db %s records' % len(rows_dict)
+            offset += step
 
             self.queue_storage.update()
 
@@ -622,7 +663,8 @@ class LoadMeasures(LoadDimensions):
             )
 
     def set_next_task_params(self):
-        self.next_task_params = None
+        self.next_task_params = (
+            CREATE_CUBE, create_cube, self.context)
 
 
 class UpdateMongodb(TaskProcessing):
@@ -889,6 +931,185 @@ class CreateTriggers(TaskProcessing):
                 'source_id': self.context['source_id'],
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
             })
+
+
+class CreateCube(object):
+
+    @staticmethod
+    def processing():
+
+        print 'Start cube creation'
+
+        dataset_id = self.context['dataset_id']
+
+        dataset = Dataset.objects.get(id=dataset_id)
+        key = dataset.key
+
+        meta_ids = DatasetToMeta.objects.filter(dataset_id=dataset_id).values_list(
+            'meta_id', flat=True)
+
+        dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+        measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+
+        if not dimensions.exists() and not measures.exists():
+            pass
+        # <Schema>
+        cube_key = "cube_{key}".format(key=key)
+        schema = etree.Element('Schema', name=cube_key)
+
+        # <Physical schema>
+        physical_schema = etree.Element('PhysicalSchema')
+        etree.SubElement(
+            physical_schema, 'Table', name=get_table_name(MEASURES, key))
+        etree.SubElement(
+            physical_schema, 'Table', name=get_table_name(DIMENSIONS, key))
+
+        cube_info = {
+            'name': cube_key,
+            'caption': cube_key,
+            'visible': "true",
+            'cache': "false",
+            'enabled': "true",
+        }
+
+        # <Cube>
+        cube = etree.Element('Cube', **cube_info)
+
+        dimensions_tag = etree.SubElement(cube, 'Dimensions')
+
+        # <Dimensions>
+        for dim in dimensions:
+
+            dim_type = dim.get_dimension_type()
+            visible = 'true' if dim.visible else 'false'
+            name = dim.name
+            title = dim.title
+
+            dim_info = {
+                'table': get_table_name(DIMENSIONS, key),
+                'type': dim_type,
+                'visible': visible,
+                'highCardinality': 'true' if dim.high_cardinality else 'false',
+                'name': name,
+                'caption': title,
+            }
+            dimension = etree.SubElement(dimensions_tag, 'Dimension', **dim_info)
+
+            # <Attributes>
+            attributes = etree.SubElement(dimension, 'Attributes')
+            attr_info = {
+                'name': title,
+                'keyColumn': name,
+                'hasHierarchy': 'false',
+            }
+            etree.SubElement(attributes, 'Attribute', **attr_info)
+
+            # <Attributes>
+            hierarchies = etree.SubElement(dimension, 'Hierarchies')
+            hierarchy = etree.SubElement(hierarchies, 'Hierarchy', **{'name': title})
+
+            level_info = {
+                'attribute': title,
+                'name': '%s level' % title,
+                'visible': visible,
+                'caption': title,
+            }
+            etree.SubElement(hierarchy, 'Level', **level_info)
+
+        measure_groups = etree.SubElement(cube, 'MeasureGroups')
+
+        measure_group_info = {
+            'name': get_table_name(MEASURES, key),
+            'table': get_table_name(MEASURES, key)
+        }
+
+        measure_group = etree.SubElement(
+            measure_groups, 'MeasureGroup', **measure_group_info)
+        measures_tag = etree.SubElement(measure_group, 'Measures')
+
+        for measure in measures:
+            measure_info = {
+                'name': measure.name,
+                'column': measure.name,
+                'caption': measure.title,
+                'visible': 'true' if measure.visible else 'false',
+                'aggregator': 'sum',
+            }
+            etree.SubElement(measures_tag, 'Measure', **measure_info)
+
+        schema.extend([physical_schema, cube])
+
+        cube_string = etree.tostring(schema, pretty_print=True)
+
+        # Cube.objects.create(
+        #     name=cube_key,
+        #     data=cube_string,
+        #     user_id=self.context['user_id'],
+        # )
+
+        send_xml(cube_key, cube_string)
+
+        a = 3
+# write in console: python manage.py celery -A etl.tasks worker
+
+
+from olap.xmla import xmla
+import easywebdav
+
+def send_xml(f_name, xml):
+
+    with open(os.path.join(
+            settings.BASE_DIR, 'data/resources/cubes/1', '{0}.xml'.format(
+                f_name)), 'w') as schema_file:
+        schema_file.write(xml)
+
+    oc = OlapClient(1)
+    try:
+        oc.file_delete('schema.xml')
+    except easywebdav.OperationFailed as e:
+        pass
+    oc.file_upload('schema.xml')
+    oc.connect.getDatasources()
+
+XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
+    host='localhost', port=8080)
+REPOSITORY_PATH = 'saiku/repository/default'
+
+
+class OlapClient(object):
+    """
+    Клиент Saiku
+    """
+
+    def __init__(self, cude_id):
+        """
+        Args:
+            cube_id(int): id куба
+        """
+        self.cube_id = cude_id
+        self.connect = xmla.XMLAProvider().connect(location=XMLA_URL)
+        self.webdav = easywebdav.connect(
+            host='localhost',
+            port='8080',
+            path=REPOSITORY_PATH,
+            username='admin',
+            password='admin'
+        )
+
+    def file_upload(self, file_name):
+        self.webdav.upload(
+            os.path.join(
+                settings.BASE_DIR, 'data/resources/cubes/', '{0}/{1}'.format(
+                    self.cube_id, file_name)),
+            remote_path='datasources/{0}'.format(file_name))
+
+    def file_delete(self, file_name):
+        self.webdav.delete('datasources/{0}'.format(file_name))
+
+    def execute(self, mdx=None):
+        return self.connect.Execute(mdx, Catalog='cube_848272420')
+
 
 # write in console: python manage.py celery -A etl.tasks worker
