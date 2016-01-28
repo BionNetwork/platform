@@ -360,7 +360,7 @@ class LoadDb(TaskProcessing):
             c = obj['col']
             col_names.append('"{0}{1}{2}" {3}'.format(
                 t, FIELD_NAME_SEP, c,
-                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)])))
+                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)].lower())))  # oracle types are uppercase
             clear_col_names.append('{0}{1}{2}'.format(t, FIELD_NAME_SEP, c))
 
         # инфа о бинарных данных для инсерта в постгрес

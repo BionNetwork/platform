@@ -3,20 +3,39 @@ from collections import defaultdict
 DB_TYPES = defaultdict(lambda: 0)
 
 ints = [
-    'number',
+    'integer',
+    'shortinteger',
+    'longinteger',
 ]
-floats = [
 
+floats = [
+    'number',
+    'decimal',
+    'shortdecimal',
+    'binary_float',
+    'binary_decimal',
 ]
+
 texts = [
     'char',
     'varchar',
     'varchar2',
     'nchar',
     'nvarchar2',
+    'clob',
+    'nclob',
+    'long',
 ]
-dates = [
 
+dates = [
+    'date',
+    'timestamp',
+]
+
+blobs = [
+    'blob',
+    'binary',
+    'varbinary',
 ]
 
 for i in ints:
@@ -30,6 +49,9 @@ for i in texts:
 
 for i in dates:
     DB_TYPES[i] = 'timestamp'
+
+for i in blobs:
+    DB_TYPES[i] = 'binary'
 
 table_query = """SELECT table_name FROM user_tables"""
 

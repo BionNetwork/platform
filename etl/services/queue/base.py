@@ -15,6 +15,7 @@ import json
 import datetime
 from itertools import izip
 from bson import binary
+import cx_Oracle
 
 from etl.services.middleware.base import datetime_now_str
 
@@ -274,7 +275,8 @@ def process_binary_data(record, binary_types_list):
     new_record = list()
 
     for (rec, is_binary) in izip(record, binary_types_list):
-        new_record.append(binary.Binary(rec) if is_binary else rec)
+        new_record.append(binary.Binary(
+            reform_binary_data(rec)) if is_binary else rec)
 
     new_record = tuple(new_record)
     return new_record
@@ -288,9 +290,16 @@ def process_binaries_for_row(row, binary_types_list):
     new_row = []
     for i, r in enumerate(row):
         if binary_types_list[i]:
-            r = binascii.b2a_base64(r)
+            r = binascii.b2a_base64(reform_binary_data(r))
         new_row.append(r)
     return tuple(new_row)
+
+
+def reform_binary_data(data):
+    # проблемы с Oracle
+    if isinstance(data, cx_Oracle.LOB):
+        return data.read()
+    return data
 
 
 def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
