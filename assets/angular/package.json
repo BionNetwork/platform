@@ -7,7 +7,7 @@
     "postinstall": "bower install",
     "prestart": "npm install",
     "start": "gulp",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jasmine"
   },
   "author": "",
   "license": "ISC",
@@ -16,6 +16,7 @@
     "gulp": "^3.9.0",
     "gulp-concat": "^2.6.0",
     "gulp-minify-css": "^1.2.3",
+    "gulp-minify-html": "^1.0.5",
     "gulp-uglify": "^1.5.1",
     "gulp-usemin": "^0.3.20",
     "gulp-watch": "^4.3.5",
