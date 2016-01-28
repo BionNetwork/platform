@@ -33,6 +33,9 @@ gulp.task('usemin', function() {
     .pipe(gulp.dest('dist/'));
 });
 
+gulp.task('watch', function() {
+  gulp.watch([paths.index], ['usemin']);
+});
 
-gulp.task('default', ['usemin']);
+gulp.task('default', ['usemin', 'watch']);
 
