@@ -13,7 +13,8 @@
     $stateProvider
       .state('users', {
         url: "/users",
-        template: 'Here should be the user\'s table'
+        controller: 'usersController',
+        templateUrl: '/assets/angular/dist/components/users/usersTmpl.html'
       });
   }
 

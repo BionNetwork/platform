@@ -289,7 +289,7 @@
     </nav>
   </header>
   <!-- Left side column. contains the logo and sidebar -->
-  <menu></menu>
+  <menu style="float: left;"></menu>
 
   <!-- Content Wrapper. Contains page content -->
   <div class="content-wrapper">
@@ -300,11 +300,11 @@
         <small>Version 2.0</small>
       </h1>
       <ol class="breadcrumb">
-        <li><a href="#"><i class="fa fa-dashboard"></i>Home</a></li>
+        <li><a ui-sref="home"><i class="fa fa-dashboard"></i>Home</a></li>
         <li class="active">Dashboard</li>
       </ol>
     </section>
-    <div ui-view></div>
+    <div ui-view class="content"></div>
   </div>
   <!-- /.content-wrapper -->
 
