@@ -11,7 +11,10 @@ var gulp = require('gulp'),
 
 var paths = {
   dist: 'dist/',
-  scripts: 'src/**/*.js', distScripts: 'app.js',
+  scriptsMain: 'src/main/**/*.js',
+  scriptsShared: 'src/shared/**/*.js',
+  scriptsComponents: 'src/components/**/*.js',
+  distScripts: 'app.js',
   htmlComponents: 'src/components/**/*.html', distHtmlComponents: 'dist/components/',
   htmlShared: 'src/shared/**/*.html', distHtmlShared: 'dist/shared/',
   htmlMain: 'src/main/**/*.html', distHtmlMain: 'dist/main',
@@ -61,7 +64,9 @@ gulp.task('htmlMain', function() {
 
 gulp.task('scripts', function() {
   return gulp.src([
-    paths.scripts
+    paths.scriptsMain,
+    paths.scriptsShared,
+    paths.scriptsComponents
   ])
   .pipe(eslint())
   .pipe(eslint.format())
@@ -72,7 +77,7 @@ gulp.task('scripts', function() {
 });
 
 gulp.task('watch', function() {
-  gulp.watch([paths.scripts], ['scripts']);
+  gulp.watch([paths.scriptsMain, paths.scriptsShared, paths.scriptsComponents], ['scripts']);
   gulp.watch([paths.htmlComponents], ['htmlComponents']);
   gulp.watch([paths.htmlShared], ['htmlShared']);
   gulp.watch([paths.htmlMain], ['htmlMain']);
