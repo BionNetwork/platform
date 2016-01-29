@@ -5,17 +5,19 @@ var gulp = require('gulp'),
     minifyJS = require('gulp-uglify'),
     minifyCSS = require('gulp-minify-css'),
     minifyHTML = require('gulp-minify-html'),
-    usemin = require('gulp-usemin');
+    usemin = require('gulp-usemin'),
+    eslint = require('gulp-eslint');
 
 
 var paths = {
   dist: 'dist/',
-  scripts: 'src/**/*.js',
+  scripts: 'src/**/*.js', distScripts: 'app.js',
   htmlComponents: 'src/components/**/*.html', distHtmlComponents: 'dist/components/',
   htmlShared: 'src/shared/**/*.html', distHtmlShared: 'dist/shared/',
   htmlMain: 'src/main/**/*.html', distHtmlMain: 'dist/main',
   index: 'src/index.html'
 };
+
 
 gulp.task('usemin', function() {
   return gulp.src(paths.index)
@@ -61,18 +63,21 @@ gulp.task('scripts', function() {
   return gulp.src([
     paths.scripts
   ])
+  .pipe(eslint())
+  .pipe(eslint.format())
+  //.pipe(eslint.failAfterError())
   //.pipe(minifyJS())
-  .pipe(concat('main.js'))
+  .pipe(concat(paths.distScripts))
   .pipe(gulp.dest(paths.dist));
 });
 
 gulp.task('watch', function() {
+  gulp.watch([paths.scripts], ['scripts']);
   gulp.watch([paths.htmlComponents], ['htmlComponents']);
   gulp.watch([paths.htmlShared], ['htmlShared']);
   gulp.watch([paths.htmlMain], ['htmlMain']);
   gulp.watch([paths.index], ['usemin']);
-  gulp.watch([paths.scripts], ['scripts']);
 });
 
-gulp.task('default', ['usemin','htmlShared', 'htmlMain', 'htmlComponents', 'scripts', 'watch']);
+gulp.task('default', ['usemin', 'htmlShared', 'htmlMain', 'htmlComponents', 'scripts', 'watch']);
 

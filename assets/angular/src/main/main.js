@@ -1,7 +1,9 @@
 
 (function main() {
   'use strict';
-  var bi = angular.module('BIPlatform', []);
+  angular.module('BIPlatform', [
+    'ui.router'
+  ]);
 })();
 
 
