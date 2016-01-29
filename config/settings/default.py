@@ -46,6 +46,7 @@ INSTALLED_APPS = (
     'djcelery',
     'core',
     'etl',
+    'api',
 )
 
 MIDDLEWARE_CLASSES = (
