@@ -11,12 +11,11 @@
 
   function route($stateProvider, $urlRouterProvider) {
     $stateProvider
-      .state('users.add', {
-        url: "/add",
-        controller: 'usersFormController',
-        templateUrl: '/assets/angular/dist/components/users/form/usersFormTmpl.html'
+      .state('users.view', {
+        url: "/view",
+        controller: 'usersViewController',
+        templateUrl: '/assets/angular/dist/components/users/view/usersViewTmpl.html'
       });
   }
-
 })();
 
