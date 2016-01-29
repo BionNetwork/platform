@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "apolog": "0.0.5",
+    "bower": "^1.7.7",
     "gulp": "^3.9.0",
     "gulp-concat": "^2.6.0",
     "gulp-eslint": "^1.1.1",
