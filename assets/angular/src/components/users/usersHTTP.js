@@ -8,13 +8,13 @@
     var users = [
         {
           id: 11,
-          user: 'etton',
+          username: 'etton',
           email: 'bi@etton.ru',
           status: 'active'
         },
         {
           id: 12,
-          user: 'test',
+          username: 'test',
           email: 'rios@etton.ru',
           status: 'nonactive'
         }
