@@ -384,6 +384,23 @@ class TableCreateQuery(Query):
         return
 
 
+class WhetherTableExistsQuery(TableCreateQuery):
+
+    def set_query(self, **kwargs):
+        local_instance = self.source_service.get_local_instance()
+
+        self.query = self.source_service.check_table_exists_query(
+            local_instance, kwargs['table_name'], kwargs['db'])
+        self.set_connection()
+
+    def execute(self):
+        self.cursor = self.connection.cursor()
+
+        # create new table
+        self.cursor.execute(self.query)
+        return self.cursor.fetchall()
+
+
 class InsertQuery(TableCreateQuery):
 
     def set_query(self, **kwargs):

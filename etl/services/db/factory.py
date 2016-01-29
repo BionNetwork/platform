@@ -118,6 +118,13 @@ class DatabaseService(object):
         return local_instance.local_table_create_query(key_str, cols_str)
 
     @classmethod
+    def check_table_exists_query(cls, local_instance, table, db):
+        """
+        Проверка на существование таблицы
+        """
+        return local_instance.check_table_exists_query(table, db)
+
+    @classmethod
     def get_table_insert_query(cls, local_instance, key_str):
         """
         Получение запроса на заполнение таблицы

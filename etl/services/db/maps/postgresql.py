@@ -212,3 +212,10 @@ delete_primary_key = """
 """
 
 drop_index = """drop index {0}"""
+
+check_table_exists = """
+    SELECT EXISTS (
+        SELECT * FROM   information_schema.tables
+        WHERE table_name = '{0}' AND table_catalog = '{1}'
+   );
+"""

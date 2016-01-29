@@ -19,10 +19,11 @@ from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.olap.base import send_xml
-from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
-    calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
-    process_binary_data, get_binary_types_dict
+from etl.services.queue.base import (
+    TLSE,  STSE, RPublish, RowKeysCreator,
+    calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection,
+    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,
+    process_binary_data, get_binary_types_dict, WhetherTableExistsQuery)
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
@@ -523,24 +524,36 @@ class LoadDimensions(TaskProcessing):
             col_names.append('"{0}{1}{2}" {3}'.format(
                 table, FIELD_NAME_SEP, field['name'], field['type']))
 
-        create_query = TableCreateQuery(DataSourceService())
-        create_query.set_query(
-            table_name=get_table_name(self.table_prefix, self.key), cols=col_names)
-        create_query.execute()
+        source_service = DataSourceService()
 
-        try:
-            self.save_fields()
-        except Exception as e:
-            # код и сообщение ошибки
-            pg_code = getattr(e, 'pgcode', None)
+        table_key_name = get_table_name(self.table_prefix, self.key)
 
-            err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
-            err_msg += e.message
-            self.error_handling(err_msg)
+        table_exists_query = WhetherTableExistsQuery(source_service)
+        table_exists_query.set_query(table_name=table_key_name, db=source.db)
+        exists = table_exists_query.execute()
 
-        # Сохраняем метаданные
-        self.save_meta_data(
-            self.user_id, self.key, self.actual_fields, meta_tables)
+        exists = exists[0][0]
+
+        if not exists:
+            create_query = TableCreateQuery(source_service)
+            create_query.set_query(
+                table_name=get_table_name(self.table_prefix, self.key), cols=col_names)
+            create_query.execute()
+
+            try:
+                self.save_fields()
+            except Exception as e:
+                # код и сообщение ошибки
+                pg_code = getattr(e, 'pgcode', None)
+
+                err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+                err_msg += e.message
+                self.error_handling(err_msg)
+
+            # Сохраняем метаданные
+            self.save_meta_data(
+                self.user_id, self.key, self.actual_fields, meta_tables)
+
         if not self.last_task:
             self.set_next_task_params()
 

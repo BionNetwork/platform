@@ -103,6 +103,15 @@ class Postgresql(Database):
 
         return create_query
 
+    @classmethod
+    def check_table_exists_query(cls, table, db):
+        """
+        Проверка на существование таблицы
+        """
+        table_exists_query = cls.db_map.check_table_exists.format(table, db)
+
+        return table_exists_query
+
     @staticmethod
     def local_table_insert_query(key_str):
         """
