@@ -2,9 +2,17 @@
   'use strict';
   angular
     .module('BIPlatform')
-    .controller('usersFormController', ['$scope', usersFormController]);
+    .controller('usersFormController', ['$scope', '$state', '$usersHTTP', usersFormController]);
 
-  function usersFormController($scope) {
-    console.log('users form controller');
+  function usersFormController($scope, $state, $usersHTTP) {
+    $scope.user = {
+      status: 'active'
+    };
+
+    $scope.submit = function submit(user) {
+      $usersHTTP.add(user).then(function(response) {
+        $state.go('users.view');
+      });
+    };
   }
 })();

@@ -2,22 +2,12 @@
   'use strict';
   angular
     .module('BIPlatform')
-    .controller('usersViewController', ['$scope', usersViewController]);
+    .controller('usersViewController', ['$scope', '$usersHTTP', usersViewController]);
 
-  function usersViewController($scope) {
-    $scope.users = [
-      {
-        id: 11,
-        user: 'etton',
-        email: 'bi@etton.ru',
-        status: 'active'
-      },
-      {
-        id: 12,
-        user: 'test',
-        email: 'rios@etton.ru',
-        status: 'nonactive'
-      }
-    ];
+  function usersViewController($scope, $usersHTTP) {
+    $scope.users = [];
+    $usersHTTP.read().then(function(response) {
+      $scope.users = response;
+    });
   }
 })();
