@@ -12,6 +12,28 @@
       $scope.users = users;
     }
 
+    function successRemove(user) {
+      var users = $scope.users,
+          l = users.length,
+          found = false,
+          i;
+
+      for (i = 0; i < l; i++) {
+        if (users[i].id == user.id) {
+          found = true;
+          users.splice(i, 1);
+          break;
+        }
+      }
+
+      if (found) {
+        $('#userRemoveModal').modal('hide');
+      }
+      else {
+        console.log('Something went wrong...');
+      }
+    }
+
     function errorHandler(reason) {
       console.log('error', reason);
     }
@@ -21,7 +43,9 @@
       .then(successRead, errorHandler);
 
     $scope.confirmRemove = function confirmRemove() {
-      console.log('confirmRemove item', $scope.currentUser);
+      $usersHTTP
+        .remove($scope.currentUser)
+        .then(successRemove, errorHandler);
     };
 
     $scope.cancelRemove = function cancelRemove() {
