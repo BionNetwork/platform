@@ -32,7 +32,7 @@
               <td>{{user.email}}</td>
               <td><span ng-if="user.status=='active'" class="label label-success">Активный</span></td>
               <td>
-                <a href="/users/edit/11/"><i class="fa fa-edit text-blue"></i></a> &nbsp;
+                <a ui-sref="users.edit({ id: user.id })"><i class="fa fa-edit text-blue"></i></a> &nbsp;
                 <button data-toggle="modal" data-target="#userRemoveModal" ng-click="prepareRemove(user)">
                   <i class="fa fa-remove text-danger"></i>
                 </button>

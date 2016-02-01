@@ -15,7 +15,13 @@
         url: "/add",
         controller: 'usersFormController',
         templateUrl: '/assets/angular/dist/components/users/form/usersFormTmpl.html'
+      })
+      .state('users.edit', {
+        url: "/edit/:id",
+        controller: 'usersFormController',
+        templateUrl: '/assets/angular/dist/components/users/form/usersFormTmpl.html'
       });
+
   }
 
 })();

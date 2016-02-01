@@ -27,17 +27,52 @@
       return deferred.promise;
     };
 
-    this.update = function update() {
+    this.update = function update(user) {
+      var deferred = $q.defer(),
+          found = false;
 
+      users.forEach(function(_user) {
+        if (_user.id == user.id) {
+          found = true;
+          _user = JSON.parse(JSON.stringify(user));
+          deferred.resolve(_user);
+        }
+      });
+      if (!found) {
+        deferred.reject({
+          message: 'cannot update'
+        });
+      }
+     return deferred.promise;
     };
 
-    this.read = function read() {
-      var deferred = $q.defer();
-      deferred.resolve(users);
+    this.read = function read(criteria) {
+      var deferred = $q.defer(),
+          found;
+
+      if (criteria) {
+        if (criteria.id) {
+          found = false;
+          users.forEach(function(user) {
+            if (user.id == criteria.id) {
+              found = true;
+              deferred.resolve(user);
+            }
+          });
+          if (!found) {
+            deferred.reject({
+              message: 'not found'
+            });
+          }
+        }
+      }
+      else {
+        deferred.resolve(users);
+      }
       return deferred.promise;
     };
 
-    this.remove = function remove() {
+    this.remove = function remove(user) {
 
     };
 
