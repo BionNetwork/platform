@@ -33,11 +33,31 @@
               <td><span ng-if="user.status=='active'" class="label label-success">Активный</span></td>
               <td>
                 <a href="/users/edit/11/"><i class="fa fa-edit text-blue"></i></a> &nbsp;
-                <a href="javascript:void(0)" onclick="removeUser('/users/delete/11/')"><i class="fa fa-remove text-danger"></i></a>
+                <button data-toggle="modal" data-target="#userRemoveModal" ng-click="prepareRemove(user)">
+                  <i class="fa fa-remove text-danger"></i>
+                </button>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modal -->
+<div class="modal fade" id="userRemoveModal" tabindex="-1" role="dialog" aria-labelledby="userRemoveModalLabel">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="userRemoveModalLabel">Удаление пользователя</h4>
+      </div>
+      <div class="modal-body">
+        Вы действительно хотите удалить пользователя {{currentUser.username}}?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal" ng-click="cancelRemove()">Close</button>
+        <button type="button" class="btn btn-primary" ng-click="confirmRemove()">Save changes</button>
       </div>
     </div>
   </div>
