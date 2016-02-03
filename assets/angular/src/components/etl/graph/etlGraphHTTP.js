@@ -7,9 +7,18 @@
   function etlGraphHTTP($http, $q) {
 
     this.requestContent = function(request) {
-      return $http.post(request.url, request.colsInfo, {
+      var request_ = JSON.parse(JSON.stringify(request.colsInfo));
+      return $http.post(request.url, request_, {
+        transformRequest: function(obj) {
+          var str = [];
+          for(var p in obj) {
+            str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
+          }
+          return str.join("&");
+        },
         headers: {
-          'X-CSRFToken': csrftoken       
+          'X-CSRFToken': csrftoken,
+          'Content-Type': 'application/x-www-form-urlencoded'
         }
       });
     }
