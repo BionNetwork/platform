@@ -305,6 +305,23 @@ class DataSourceService(object):
 
         return types_dict
 
+    @classmethod
+    def retitle_table_column(cls, source, table, column, title):
+        """
+        Переименовываем title колонки для схемы куба
+        """
+        table_info = json.loads(
+                RedisSourceService.get_table_full_info(source, table))
+
+        for col in table_info['columns']:
+            if col['name'] == column:
+                col['title'] = title
+                break
+
+        collection_name = RedisSourceService.get_collection_name(source, table)
+
+        r_server.set(collection_name, json.dumps(table_info))
+
     # fixme: не используется
     @classmethod
     def get_separator(cls, source):

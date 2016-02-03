@@ -452,6 +452,7 @@ class LoadDb(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
@@ -462,6 +463,7 @@ class LoadDb(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
 
 
@@ -471,6 +473,15 @@ class LoadDimensions(TaskProcessing):
     """
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
+
+    @staticmethod
+    def get_column_title(meta_info, table, column):
+        title = None
+        for col_info in meta_info[table]['columns']:
+            if col_info['name'] == column['name']:
+                title = col_info.get('title', None)
+                break
+        return title
 
     def get_actual_fields(self, meta_data):
         """
@@ -558,6 +569,9 @@ class LoadDimensions(TaskProcessing):
             fields(dict): данные о полях
             meta(DatasourceMeta): ссылка на метаданные хранилища
         """
+
+        meta_info = json.loads(self.context['meta_info'])
+
         level = dict()
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
@@ -580,9 +594,11 @@ class LoadDimensions(TaskProcessing):
             #     foreign_key=None
             # )
 
+            title = self.get_column_title(meta_info, table, field)
+
             Dimension.objects.get_or_create(
                 name=target_table_name,
-                title=target_table_name,
+                title=title if title is not None else target_table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
                 # data=json.dumps(data)
@@ -652,14 +668,20 @@ class LoadMeasures(LoadDimensions):
         """
         Сохранение информации о мерах
         """
+
+        meta_info = json.loads(self.context['meta_info'])
+
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
                 id=meta_tables[table])
             target_table_name = '{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name'])
+
+            title = self.get_column_title(meta_info, table, field)
+
             Measure.objects.get_or_create(
                 name=target_table_name,
-                title=target_table_name,
+                title=title if title is not None else target_table_name,
                 type=field['type'],
                 user_id=user_id,
                 datasources_meta=datasource_meta_id
@@ -1050,6 +1072,7 @@ class CreateTriggers(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
 
 

@@ -315,9 +315,18 @@
                             <div data-table="<%= row.tname %>" data-col="<%= col %>">
                                 <ul class="table-columns">
                                     <li class="dropdown messages-menu">
+                                        <a href="javascript:void(0)" onclick="renameColumn('for-col-<%= row.tname%>-<%= col %>')"
+                                                id="edit-for-col-<%= row.tname%>-<%= col %>">
+                                            <i class="fa fa-edit text-blue"></i></a>
+                                        <a href="javascript:void(0)" onclick="cancelRenameColumn('for-col-<%= row.tname%>-<%= col %>')"
+                                           style="display:none;" id="cancel-for-col-<%= row.tname%>-<%= col %>">
+                                            <i class="fa fa-remove text-danger"></i></a>
+                                        <input id="input-for-col-<%= row.tname%>-<%= col %>" type="text" style="display:none;" value="<%= col %>"
+                                                onkeydown="saveColumnName('for-col-<%= row.tname%>-<%= col %>', event, '{% url "etl:datasources.retitle_column"%}')">
                                         <a class="dropdown-toggle" style="font-weight:bold;"
                                             id="for-col-<%= row.tname%>-<%= col %>"
-                                            data-toggle="dropdown" href="javascript:void(0)">
+                                            data-toggle="dropdown" href="javascript:void(0)"
+                                            data-table="<%= row.tname %>" data-col="<%= col %>">
                                             <%= col %>
                                         </a>
                                         <ul class="dropdown-menu" style="margin:-40px 0 0; font-size:12px">
