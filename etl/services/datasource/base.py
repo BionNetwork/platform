@@ -369,9 +369,8 @@ class DataSourceService(object):
         :param source: Datasource
         :param columns: list список вида [{'table': 'name', 'col': 'name'}]
         """
-        tables_info_for_meta = RedisSourceService.tables_info_for_metasource(
+        return RedisSourceService.tables_info_for_metasource(
             source, tables)
-        return tables_info_for_meta
 
     @staticmethod
     def update_collections_stats(collections_names, last_key):

@@ -8,7 +8,7 @@ import os
 import sys
 import lxml.etree as etree
 import brukva
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import json
 from operator import itemgetter
 
@@ -470,7 +470,7 @@ class LoadDimensions(TaskProcessing):
     Создание рамерности, измерения олап куба
     """
     table_prefix = DIMENSIONS
-    actual_fields_type = ['text']
+    actual_fields_type = ['text', Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
 
     def get_actual_fields(self, meta_data):
         """
@@ -518,10 +518,24 @@ class LoadDimensions(TaskProcessing):
             value=self.key).values('meta__collection_name', 'meta__fields')
         self.actual_fields = self.get_actual_fields(meta_data)
 
+        date_col_names = []
+        for table, field in self.actual_fields:
+            if field['type'] == 'timestamp':
+                date_col_names.append("{0}{1}{2}".format(
+                    table, FIELD_NAME_SEP, field['name']))
+        if date_col_names:
+            date_fields = self.create_date_tables(date_col_names)
+
         col_names = []
         for table, field in self.actual_fields:
-            col_names.append('"{0}{1}{2}" {3}'.format(
-                table, FIELD_NAME_SEP, field['name'], field['type']))
+            field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
+            if field['type'] != 'timestamp':
+
+                col_names.append('"{0}" {1}'.format(
+                    field_name, field['type']))
+            else:
+                col_names.append('"{0}_id" integer REFERENCES {0}_{1} (id)'.format(
+                    field_name, self.key))
 
         create_query = TableCreateQuery(DataSourceService())
         create_query.set_query(
@@ -594,10 +608,19 @@ class LoadDimensions(TaskProcessing):
         Args:
             model: Модель к целевой таблице
         """
+
         column_names = []
+        date_fields_order = {}
+        index = 0
         for table, field in self.actual_fields:
-            column_names.append('{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name']))
+            field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
+            if field['type'] != 'timestamp':
+
+                column_names.append('{0}'.format(field_name))
+            else:
+                date_fields_order.update({index: '{0}_id'.format(field_name)})
+                column_names.append('{0}'.format(field_name))
+            index += 1
 
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -618,10 +641,10 @@ class LoadDimensions(TaskProcessing):
         rows_query = self.rows_query(column_names)
 
         connection = DataSourceService.get_local_instance().connection
+
         while True:
             # index_to = offset+step
             cursor = connection.cursor()
-
             cursor.execute(rows_query.format(step, offset))
             rows = cursor.fetchall()
             if not rows:
@@ -630,7 +653,12 @@ class LoadDimensions(TaskProcessing):
             for record in rows:
                 temp_dict = {}
                 for ind in xrange(len(column_names)):
-                    temp_dict.update({str(ind): record[ind]})
+                    if ind in date_fields_order.keys():
+                        # заменяем дату идентификатором из связой таблицы
+                        i = self.date_tables[date_fields_order[ind]][record[ind].date()]
+                        temp_dict.update({str(ind): i})
+                    else:
+                        temp_dict.update({str(ind): record[ind]})
                 rows_dict.append(temp_dict)
             insert_query.execute(data=rows_dict,
                                  binary_types_dict=binary_types_dict)
@@ -639,14 +667,80 @@ class LoadDimensions(TaskProcessing):
 
             self.queue_storage.update()
 
+    def create_date_tables(self, col_names):
+        import calendar
+        import math
+
+        self.date_tables = {}
+        for column in col_names:
+            self.date_tables.update({'%s_id' % column: {}})
+            connection = DataSourceService.get_local_instance().connection
+            create_query = TableCreateQuery(DataSourceService())
+            date_table_col_names = ['"{0}" {1}'.format(field, f_type)
+                                    for field, f_type in date_fields]
+            date_table_col_names.append('"id" integer PRIMARY KEY')
+            create_query.set_query(
+                table_name=get_table_name('%s' % column, self.key),
+                cols=date_table_col_names)
+            create_query.execute()
+
+            query = "SELECT MAX({0}), MIN({0}) FROM {1};".format(
+                column, get_table_name(STTM_DATASOURCE, self.key))
+            cursor = connection.cursor()
+            cursor.execute(query)
+            edges = cursor.fetchall()
+            start_day = edges[0][1].date()
+            end_day = edges[0][0].date()
+            delta = end_day - start_day
+            rows = []
+
+            insert_query = InsertQuery(DataSourceService())
+            insert_query.set_query(
+                table_name=get_table_name('%s' % column, self.key), cols_nums=9)
+
+            for ind, cur_day in enumerate(range(delta.days + 1)):
+                current_day = start_day + timedelta(days=cur_day)
+                current_day_str = current_day.isoformat()
+                month = current_day.month
+                temp_dict = {}
+                temp_dict.update(
+                    {
+                        '0': current_day_str,
+                        '1': calendar.day_name[current_day.weekday()],
+                        '2': current_day.year,
+                        '3': month,
+                        '4': current_day.strftime('%B'),
+                        '5': current_day.day,
+                        '6': current_day.isocalendar()[1],
+                        '7': int(math.ceil(month / 3)),
+                        '8': ind+1,
+                     }
+                )
+                rows.append(temp_dict)
+                self.date_tables['%s_id' % column].update({
+                    current_day: ind + 1,
+                })
+            insert_query.execute(data=rows)
+        return self.date_tables
+
+date_fields = [
+    ('current_date', 'timestamp'),
+    ('weekday', 'text'),
+    ('year', 'integer'),
+    ('month', 'integer'),
+    ('month_text', 'text'),
+    ('day', 'integer'),
+    ('week_of_year', 'integer'),
+    ('quarter', 'integer')
+]
+
 
 class LoadMeasures(LoadDimensions):
     """
     Создание мер
     """
     table_prefix = MEASURES
-    actual_fields_type = [
-        Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
+    actual_fields_type = [Measure.INTEGER]
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """

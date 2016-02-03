@@ -244,12 +244,14 @@ class BaseEtlView(BaseView):
     def get(self, request, *args, **kwargs):
         try:
             return self.request_method(request, *args, **kwargs)
+        # TODO: Надо убрать Exception
         except Exception as e:
             return self.json_response({'status': 'error', 'message': e.message})
 
     def post(self, request, *args, **kwargs):
         try:
             return self.request_method(request, *args, **kwargs)
+        # TODO: Надо убрать Exception
         except Exception as e:
             return self.json_response({'status': 'error', 'message': e.message})
 

@@ -3,10 +3,12 @@ import binascii
 from celery import group
 from django.conf import settings
 import brukva
+from django.db import transaction
 from pymongo import IndexModel
 from psycopg2 import Binary
 import pymongo
 from etl.constants import TYPES_MAP
+from etl.services.datasource.base import DataSourceService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
@@ -184,8 +186,8 @@ def get_single_task(task_params):
         return
     task_id, channel = TaskService(task_params[0]).add_task(
         arguments=task_params[2])
-    return task_params[1].apply_async((task_id, channel),), [channel]
-    # return task_params[1](task_id, channel), [channel]
+    # return task_params[1].apply_async((task_id, channel),), [channel]
+    return task_params[1](task_id, channel), [channel]
 
 
 def get_group_tasks(task_params):
@@ -401,11 +403,11 @@ class InsertQuery(TableCreateQuery):
         # передаем типы, чтобы вычислить бинарные данные
         binary_types_dict = kwargs.get('binary_types_dict', None)
 
-        if binary_types_dict is not None:
-            for dicti in kwargs['data']:
-                for k, v in dicti.iteritems():
+        if binary_types_dict:
+            for each in kwargs['data']:
+                for k, v in each.iteritems():
                     if binary_types_dict.get(k):  # if binary data
-                        dicti[k] = Binary(v)
+                        each[k] = Binary(v)
 
         # create new table
         self.cursor.executemany(self.query, kwargs['data'])
@@ -429,6 +431,33 @@ class DeleteQuery(TableCreateQuery):
         self.cursor.execute(self.query)
         self.connection.commit()
         return
+
+
+class LocalDbConnect(object):
+
+    def __init__(self):
+        self.db_instance = DataSourceService.get_local_instance()
+        self.connection = self.db_instance.connection
+
+    def execute(self, query, args=None, many=False):
+        with self.connection as cursor:
+            if not many:
+                cursor.execute(query, args)
+            else:
+                cursor.executemany(query, args)
+
+    def create_table(self, table_name, cols):
+        query = DataSourceService.get_table_create_query(
+            self.db_instance, table_name, ', '.join(cols)
+        )
+        self.execute(query)
+
+    def insert(self, table_name, cols_num):
+        insert_table_query = DataSourceService.get_table_insert_query(
+            self.db_instance, table_name)
+        query = insert_table_query.format(
+            '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(cols_num)]))
+        self.execute(query, many=True)
 
 
 class MongodbConnection(object):
