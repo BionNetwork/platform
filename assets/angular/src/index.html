@@ -702,5 +702,52 @@
         <% }); %>
     </script>
 
+    <script>
+function refreshData(url){
+
+    if(hasWithoutBinds()){
+        return;
+    }
+
+    var source = $('#databases>div'),
+        colsInfo = {
+            "host": source.data("host"),
+            "db": source.data("db")
+        },
+        cols = dataWorkspace.find('.data-table-column-header'),
+        array = cols.map(function(){
+            var el = $(this);
+            return {
+                "table": el.data("table"),
+                "col": el.data("col")
+            }
+        }).get();
+
+    if(array.length) {
+        colsInfo['cols'] = JSON.stringify(array);
+
+        // удаляем все ячейки с данными
+        dataWorkspace.find("table tr").not(":first").remove();
+
+        loader.show();
+        dataWorkspace.parent('div').css('background-color', '#ddd');
+
+        window.refreshData_request = {
+          url: url,
+          colsInfo: colsInfo
+        };
+        $.post(url, colsInfo, function(res){
+            if(res.status == 'error') {
+                confirmAlert(res.message)
+            } else {
+                var tableData = dataWorkspace.find("table > tbody");
+                tableData.append(selectedRow({data: res.data}));
+            }
+            loader.hide();
+            dataWorkspace.parent('div').css('background-color', 'white');
+        });
+    }
+}
+    </script>
 </body>
 </html>
