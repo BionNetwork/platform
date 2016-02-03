@@ -19,6 +19,7 @@ from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.olap.base import send_xml
+from etl.services.pymondrian.schema import Schema, PhysicalSchema
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
     DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
@@ -1073,7 +1074,13 @@ class CreateCube(TaskProcessing):
             pass
         # <Schema>
         cube_key = "cube_{key}".format(key=key)
-        schema = etree.Element('Schema', name=cube_key, metamodelVersion='4.0')
+
+        schema = Schema(name=cube_key,
+                        description='Cube schema')
+
+        physical_schema = PhysicalSchema()
+        schema.add_physical_schema(physical_schema)
+
 
         # <Physical schema>
         physical_schema = etree.Element('PhysicalSchema')
