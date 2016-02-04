@@ -5,24 +5,7 @@
     .service('$etlHTTP', ['$http', '$q', etlHTTP]);
 
   function etlHTTP($http, $q) {
-    var etls = [
-        {
-          id: 1,
-          db: 'biplatform',
-          login: 'biplatform',
-          password: 'biplatform',
-          host: 'localhost',
-          port: '5432'
-        },
-        {
-          id: 2,
-          db: 'slrm',
-          login: 'slrm',
-          password: 'slrm',
-          host: 'localhost',
-          port: '5432'
-        }
-      ];
+    var etls = [];
 
     this.add = function add(etl) {
       var deferred = $q.defer();
@@ -89,7 +72,12 @@
         }
       }
       else {
-        deferred.resolve(JSON.parse(JSON.stringify(etls)));
+        // deferred.resolve(JSON.parse(JSON.stringify(etls)));
+        return $http.get('/etl/api/datasources/')
+          .then(function(response) {
+            etls = response.data.data;
+            return etls;
+          });
       }
       return deferred.promise;
     };

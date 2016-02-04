@@ -5,8 +5,11 @@
     .controller('etlGraphController', ['$scope', '$state', '$etlGraphHTTP', etlGraphController]);
 
   function etlGraphController($scope, $state, $etlGraphHTTP) {
-    var data = JSON.parse($state.params.data),
-        columns = JSON.parse(data.colsInfo.cols);
+    var columns_ = JSON.parse($state.params.data),
+        columns = JSON.parse(columns_.colsInfo.cols),
+        graph = [],
+        data_;
+    
     $scope.columns = columns;
     function renderGraph() {
       var margin = {top: 20, right: 20, bottom: 30, left: 50},
@@ -39,8 +42,8 @@
       rangeObj.deleteContents();
 
       var line = d3.svg.line()
-          .x(function(d) { return x(d.date); })
-          .y(function(d) { return y(d.close); });
+          .x(function(d) { return x(d[$scope.selectedRow]); })
+          .y(function(d) { return y(d[$scope.selectedColumn]); });
 
       var svg = d3.select("#area57").append("svg")
           .attr("width", width + margin.left + margin.right)
@@ -48,11 +51,11 @@
         .append("g")
           .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-      d3.tsv("/assets/data.tsv", type, function(error, data) {
-        if (error) throw error;
+      //d3.tsv("/assets/angular/dist/data.tsv", type, function(error, data) {
+      //  if (error) throw error;
 
-        x.domain(d3.extent(data, function(d) { return d.date; }));
-        y.domain(d3.extent(data, function(d) { return d.close; }));
+        x.domain(d3.extent(data_, function(d) { return d[$scope.selectedRow]; }));
+        y.domain(d3.extent(data_, function(d) { return d[$scope.selectedColumn]; }));
 
         svg.append("g")
             .attr("class", "x axis")
@@ -70,20 +73,20 @@
             .text("Price ($)");
 
         svg.append("path")
-            .datum(data)
+            .datum(data_)
             .attr("class", "line")
             .attr("d", line);
-      });
+      //});
 
-      function type(d) {
-        d.date = formatDate.parse(d.date);
-        d.close = +d.close;
-        return d;
-      }
+      //function type(d) {
+      //  d.date = formatDate.parse(d.date);
+      //  d.close = +d.close;
+      //  return d;
+      //}
     }
 
     function successRead(response) {
-      // console.log(response);
+      data_ = response.data.data;
     }
 
     function errorRead(reason) {
@@ -91,7 +94,7 @@
     }
 
     $etlGraphHTTP
-      .requestContent(data)
+      .requestContent(columns_)
       .then(successRead, errorRead);
 
     $scope.doRender = function doRender() {
