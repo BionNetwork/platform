@@ -19,7 +19,9 @@ from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.olap.base import send_xml
-from etl.services.pymondrian.schema import Schema, PhysicalSchema
+from etl.services.pymondrian.schema import (
+    Schema, PhysicalSchema, Table, Cube as CubeSchema, CubeDimension,
+    Dimension as DimensionSchema)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
     DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
@@ -1068,7 +1070,9 @@ class CreateCube(TaskProcessing):
             'meta_id', flat=True)
 
         dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+        dimensions_table_name = get_table_name(DIMENSIONS, key)
         measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+        measures_table_name = get_table_name(MEASURES, key)
 
         if not dimensions.exists() and not measures.exists():
             pass
@@ -1079,9 +1083,53 @@ class CreateCube(TaskProcessing):
                         description='Cube schema')
 
         physical_schema = PhysicalSchema()
+
+        dimension_table, measure_table = (
+            Table(dimensions_table_name), Table(measures_table_name))
+        physical_schema.add_tables([dimension_table, measure_table])
+
+        cube = CubeSchema(name=cube_key, caption=cube_key,
+                          visible=True, cache=False, enabled=True)
+
+        for dim in dimensions:
+
+            dim_type = dim.get_dimension_type()
+            visible = 'true' if dim.visible else 'false'
+            name = dim.name
+            title = dim.title
+
+            dimension = DimensionSchema(
+                name=name, table=dimensions_table_name, type=dim_type,
+                visible=visible, hight_cardinality=True, caption=title)
+            cube.add_dimension(dimension)
+
+
+
+                        # <Attributes>
+            attributes = etree.SubElement(dimension, 'Attributes')
+            attr_info = {
+                'name': title,
+                'keyColumn': name,
+                'hasHierarchy': 'false',
+            }
+            etree.SubElement(attributes, 'Attribute', **attr_info)
+
+            # <Attributes>
+            hierarchies = etree.SubElement(dimension, 'Hierarchies')
+            hierarchy = etree.SubElement(hierarchies, 'Hierarchy', **{'name': title})
+
+            level_info = {
+                'attribute': title,
+                'name': '%s level' % title,
+                'visible': visible,
+                'caption': title,
+            }
+            etree.SubElement(hierarchy, 'Level', **level_info)
+
+
+
         schema.add_physical_schema(physical_schema)
-
-
+        schema.add_cube(cube)
         # <Physical schema>
         physical_schema = etree.Element('PhysicalSchema')
         etree.SubElement(
