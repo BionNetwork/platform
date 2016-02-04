@@ -25,4 +25,7 @@ urlpatterns = [
         name='datasources.load_data'),
     url(r'^datasources/user_tasks/$', views.GetUserTasksView.as_view(),
         name='datasources.user_tasks'),
+
+    url(r'^api/datasources/$', views.GetDatasources.as_view(),
+        name='api_datasources')
 ]
