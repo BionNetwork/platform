@@ -448,7 +448,7 @@ class RedisKeysTest(TestCase):
             self.assertTrue(r_server.exists(k), 'Ключ {0} не создался!'.format(k))
 
         collections = json.loads(r_server.get('user_datasources:11:1:active_collections'))
-        self.assertEqual(collections, [{"name": "test_table", "order": 1}, ],
+        self.assertEqual(collections, [{"name": "test_table", "id": 1}, ],
                          'Активные коллекции сохранены неправильно!')
 
         self.assertEqual(r_server.get('user_datasources:11:1:counter'), '1',
