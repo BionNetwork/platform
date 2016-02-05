@@ -516,14 +516,15 @@ class TaskService(object):
         new_channel = settings.SOCKET_CHANNEL.format(
             arguments['user_id'], task_id)
 
-        # добавляем канал подписки в редис
-        channels = RedisSourceService.get_user_subscribers(arguments['user_id'])
-        channels.append({
+        channel_data = {
             "channel": new_channel,
             "queue_id": task_id,
             "namespace": self.name,
             "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        }
+        # добавляем канал подписки в редис
+        RedisSourceService.set_user_subscribers(
+            arguments['user_id'], channel_data)
 
         return task_id, new_channel
 

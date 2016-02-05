@@ -768,19 +768,33 @@ class RedisSourceService(object):
         :return:
         """
         subs_str = RedisCacheKeys.get_user_subscribers(user_id)
-        channels = RedisList(key=subs_str, redis=r_server, pickler=json)
-        return channels
+        if not r_server.exists(subs_str):
+            r_server.set(subs_str, '[]')
+
+        return r_server.get(subs_str)
+
+    @classmethod
+    def set_user_subscribers(cls, user_id, channel):
+        """
+        добавляем канал юзера для сокетов
+        """
+        subs_str = RedisCacheKeys.get_user_subscribers(user_id)
+        channels = json.loads(cls.get_user_subscribers(user_id))
+        channels.append(channel)
+        r_server.set(subs_str, json.dumps(channels))
 
     @classmethod
     def delete_user_subscriber(cls, user_id, task_id):
         """
         удаляет канал из каналов для сокетов
         """
-        subscribers = cls.get_user_subscribers(user_id)
+        subs_str = RedisCacheKeys.get_user_subscribers(user_id)
+        subscribers = json.loads(cls.get_user_subscribers(user_id))
         for sub in subscribers:
             if sub['queue_id'] == task_id:
                 subscribers.remove(sub)
                 break
+        r_server.set(subs_str, json.dumps(subscribers))
 
     @staticmethod
     def get_queue_dict(task_id):
