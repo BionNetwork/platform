@@ -438,20 +438,17 @@ class RedisKeysTest(TestCase):
         tables = ['test_table', ]
         DataSourceService.get_columns_info(self.source, tables)
 
-        keys = ['user_datasources:11:1:active_collections',
-                'user_datasources:11:1:counter',
-                'user_datasources:11:1:ddl:1',
-                'user_datasources:11:1:collection:1',
+        keys = ['user_datasources:11:3:counter',
+                'user_datasources:11:3:ddl:1',
+                'user_datasources:11:3:collection:1',
                 ]
 
         for k in keys:
             self.assertTrue(r_server.exists(k), 'Ключ {0} не создался!'.format(k))
 
-        collections = json.loads(r_server.get('user_datasources:11:1:active_collections'))
-        self.assertEqual(collections, [{"name": "test_table", "id": 1}, ],
-                         'Активные коллекции сохранены неправильно!')
-
-        self.assertEqual(r_server.get('user_datasources:11:1:counter'), '1',
+        self.assertEqual(json.loads(r_server.get('user_datasources:11:3:counter')),
+                         {"next_sequence_id": 2,
+                          "data": [{"name": "test_table", "id": 1}]},
                          'Счетчик коллекций сохранен неправильно!')
 
         expected_col1 = {"foreigns": [], "stats": None,
@@ -469,7 +466,7 @@ class RedisKeysTest(TestCase):
                              {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
                              {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]}
 
-        collection1 = json.loads(r_server.get('user_datasources:11:1:collection:1'))
+        collection1 = json.loads(r_server.get('user_datasources:11:3:collection:1'))
         self.assertEqual(collection1, expected_col1,
                          'Collection сохранен неправильно!')
         expected_ddl1 = {u'foreigns': [], u'stats': None,
@@ -489,7 +486,7 @@ class RedisKeysTest(TestCase):
                                       {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
                                       {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]
                          }
-        ddl1 = json.loads(r_server.get('user_datasources:11:1:ddl:1'))
+        ddl1 = json.loads(r_server.get('user_datasources:11:3:ddl:1'))
         self.assertEqual(ddl1, expected_ddl1, 'DDL сохранен неправильно!')
 
         self.database.connection.close()
