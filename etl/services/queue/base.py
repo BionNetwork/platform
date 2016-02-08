@@ -10,6 +10,7 @@ from etl.constants import TYPES_MAP
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
+from core.exceptions import TaskError
 import json
 import datetime
 from itertools import izip
@@ -184,6 +185,7 @@ def get_single_task(task_params):
     task_id, channel = TaskService(task_params[0]).add_task(
         arguments=task_params[2])
     return task_params[1].apply_async((task_id, channel),), [channel]
+    # return task_params[1](task_id, channel), [channel]
 
 
 def get_group_tasks(task_params):
@@ -496,9 +498,13 @@ class TaskService(object):
             task_id(int): id задачи
             new_channel(str): Название канала для сокетов
         """
+        try:
+            queue = Queue.objects.get(name=self.name)
+        except Queue.DoesNotExist:
+            raise TaskError("Очередь с именем %s не существует" % self.name)
 
         task = QueueList.objects.create(
-            queue=Queue.objects.get(name=self.name),
+            queue=queue,
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
             app='etl',
