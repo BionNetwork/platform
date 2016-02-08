@@ -360,7 +360,7 @@ class LoadDb(TaskProcessing):
             source, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"cdc_key" text UNIQUE']
+        col_names = ['"cdc_key" text PRIMARY KEY']
         clear_col_names = ['cdc_key']
         for obj in cols:
             t = obj['table']
@@ -518,7 +518,7 @@ class LoadDimensions(TaskProcessing):
             value=self.key).values('meta__collection_name', 'meta__fields')
         self.actual_fields = self.get_actual_fields(meta_data)
 
-        col_names = ['"cdc_key" text']
+        col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in self.actual_fields:
             col_names.append('"{0}{1}{2}" {3}'.format(
                 table, FIELD_NAME_SEP, field['name'], field['type']))
