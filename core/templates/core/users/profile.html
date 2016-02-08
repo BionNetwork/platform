@@ -37,22 +37,22 @@
                                             <div class="upload_div">
                                                 <div class="img_bl" id="img_div" data-url="{% url "users.temp_image" user.id %}">
                                                     <img id="profile_img" class="profile-user-img img-responsive img-circle"
-                                                         {% if form.big_image.value %}
-                                                            src="{{ MEDIA_URL }}{{form.big_image.value}}"
+                                                         {% if form.avatar.value %}
+                                                            src="{{ MEDIA_URL }}{{form.avatar.value}}"
                                                          {% else %}
                                                             src="/assets/system/dist/img/anonymous-160x160.gif"
                                                          {% endif %}
                                                          alt="User profile picture" width="140" height="140">
                                                     <div class="upload_btn img-circle">
                                                         <button id="add-btn" hidden="true" class="btn btn-success fileinput-button plus_centr"
-                                                                {% if form.big_image.value %}
+                                                                {% if form.avatar.value %}
                                                                     style="display: none"
                                                                 {% endif %}>
                                                             <i class="glyphicon glyphicon-plus"></i>
                                                             <input id="fileupload" type="file" name="file" multiple>
                                                         </button>
                                                         <span id="clear-btn" class="btn btn-danger fileinput-button plus_centr"
-                                                             {% if not form.big_image.value %}
+                                                             {% if not form.avatar.value %}
                                                                  style="display: none"
                                                              {% endif %}>
                                                             <i class="glyphicon glyphicon-remove" onclick="clearImage()"></i>
@@ -66,8 +66,8 @@
                                         </div>
                                     </div>
                                     <input type="hidden" id="temp_file" name="temp_file"
-                                            {% if form.big_image.value %}
-                                                value="{{ MEDIA_URL }}{{form.big_image.value}}"
+                                            {% if form.avatar.value %}
+                                                value="{{ MEDIA_URL }}{{form.avatar.value}}"
                                             {% else %}
                                                 value=""
                                             {% endif %}>

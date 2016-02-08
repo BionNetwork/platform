@@ -362,8 +362,8 @@ class UserProfileView(BaseTemplateView):
         user = form.save(commit=False)
         user.is_active = True
 
-        old_big_file = user.big_image
-        old_small_file = user.small_image
+        old_big_file = user.avatar
+        old_small_file = user.avatar_small
 
         # work with photos
         temp_file = post.get('temp_file')
@@ -373,24 +373,24 @@ class UserProfileView(BaseTemplateView):
                 file_name = temp_file.rsplit(os.sep, 1)[-1]
                 temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
 
-                big_img = Image.open(temp_dir)
-                small_img = Image.open(temp_dir)
+                avatar_img = Image.open(temp_dir)
+                avatar_small_img = Image.open(temp_dir)
 
                 big_img_io = StringIO.StringIO()
                 small_img_io = StringIO.StringIO()
 
-                big_img.save(big_img_io, format='JPEG')
-                small_img.save(small_img_io, format='JPEG')
+                avatar_img.save(big_img_io, format='JPEG')
+                avatar_small_img.save(small_img_io, format='JPEG')
 
-                big_image_file = InMemoryUploadedFile(
+                avatar = InMemoryUploadedFile(
                     big_img_io, None, file_name, 'image/jpeg', big_img_io.len, None)
 
-                small_image_file = InMemoryUploadedFile(
+                avatar_small = InMemoryUploadedFile(
                     small_img_io, None, 'sm-{0}'.format(file_name),
                     'image/jpeg', small_img_io.len, None)
 
-                user.big_image.save(file_name, big_image_file)
-                user.small_image.save('sm-{0}'.format(file_name), small_image_file)
+                user.avatar.save(file_name, avatar)
+                user.avatar_small.save('sm-{0}'.format(file_name), avatar_small)
 
                 # удаляем временный файл
                 self.save_file_remove(temp_dir)
@@ -405,24 +405,24 @@ class UserProfileView(BaseTemplateView):
                     old_big_file_path = old_big_file.path
                     old_small_file_path = old_small_file.path
 
-                    big_img = Image.open(temp_dir)
-                    small_img = Image.open(temp_dir)
+                    avatar_img = Image.open(temp_dir)
+                    avatar_small_img = Image.open(temp_dir)
 
                     big_img_io = StringIO.StringIO()
                     small_img_io = StringIO.StringIO()
 
-                    big_img.save(big_img_io, format='JPEG')
-                    small_img.save(small_img_io, format='JPEG')
+                    avatar_img.save(big_img_io, format='JPEG')
+                    avatar_small_img.save(small_img_io, format='JPEG')
 
-                    big_image_file = InMemoryUploadedFile(
+                    avatar = InMemoryUploadedFile(
                         big_img_io, None, file_name, 'image/jpeg', big_img_io.len, None)
 
-                    small_image_file = InMemoryUploadedFile(
+                    avatar_small = InMemoryUploadedFile(
                         small_img_io, None, 'sm-{0}'.format(file_name),
                         'image/jpeg', small_img_io.len, None)
 
-                    user.big_image.save(file_name, big_image_file)
-                    user.small_image.save('sm-{0}'.format(file_name), small_image_file)
+                    user.avatar.save(file_name, avatar)
+                    user.avatar_small.save('sm-{0}'.format(file_name), avatar_small)
 
                     # удаляем временный файл
                     self.save_file_remove(temp_dir)
@@ -433,9 +433,9 @@ class UserProfileView(BaseTemplateView):
                     # os.remove(old_small_file.path)
                     self.save_file_remove(old_small_file_path)
             else:
-                user.big_image = None
+                user.avatar = None
                 self.save_file_remove(old_big_file.path)
-                user.small_image = None
+                user.avatar_small = None
                 self.save_file_remove(old_small_file.path)
 
         user.save()

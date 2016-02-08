@@ -136,10 +136,10 @@ class User(AbstractUser):
     middle_name = models.CharField(max_length=50, blank=True, verbose_name='Отчество', default='')
     birth_date = models.DateField(verbose_name='Дата рождения', null=True, blank=True)
     verify_email_uuid = models.CharField(max_length=50, null=True, blank=True)
-    big_image = models.ImageField(
-        verbose_name='Аватарка', upload_to='users', null=True, blank=True)
-    small_image = models.ImageField(
-        verbose_name='Аватарка', upload_to='users', null=True, blank=True)
+    avatar_small = models.ImageField(
+        verbose_name='Аватар preview', upload_to='users', null=True, blank=True, max_length=500)
+    avatar = models.ImageField(
+        verbose_name='Аватар', upload_to='users', null=True, blank=True, max_length=500)
 
     # objects = models.Manager.from_queryset(RetryQueryset)()
 
@@ -181,7 +181,7 @@ class Dimension(models.Model):
         db_table = "dimensions"
         verbose_name = 'Размерность'
         verbose_name_plural = 'Размерности'
-        
+
 
 class Measure(models.Model):
     """Меры для кубов"""
