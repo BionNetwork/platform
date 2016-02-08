@@ -1,26 +1,34 @@
 # coding: utf-8
+
+from __future__ import unicode_literals
+
 import logging
 
 import os
 import sys
+import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
+from operator import itemgetter
 
-from pymongo import ASCENDING
+# from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
+from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
+from etl.services.olap.base import send_xml
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, AKTSE, DTSE
+    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
+    process_binary_data, get_binary_types_dict
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
 
 from djcelery import celery
@@ -37,6 +45,8 @@ client.connect()
 
 logger = logging.getLogger(__name__)
 
+ASCENDING = 1
+
 
 class TaskProcessing(object):
     """
@@ -45,6 +55,7 @@ class TaskProcessing(object):
     Attributes:
         task_id(int): id задачи
         channel(str): Канал передачи на клиент
+        last_task(bool): Флаг последней задачи
         user_id(str): id пользователя
         context(dict): контекстные данные для задачи
         was_error(bool): Факт наличия ошибки
@@ -52,9 +63,10 @@ class TaskProcessing(object):
         publisher(`RPublish`): Посыльный к клиенту о текущем статусе задачи
         queue_storage(`QueueStorage`): Посыльный к redis о текущем статусе задачи
         key(str): Ключ
+        next_task_params(tuple): Набор данных для след. задачи
     """
 
-    def __init__(self, task_id, channel):
+    def __init__(self, task_id, channel, last_task=False):
         """
         Args:
             task_id(int): id задачи
@@ -62,6 +74,7 @@ class TaskProcessing(object):
         """
         self.task_id = task_id
         self.channel = channel
+        self.last_task=last_task
         self.user_id = None
         self.context = None
         self.was_error = False
@@ -93,20 +106,47 @@ class TaskProcessing(object):
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
-            TaskService.update_task_status(self.task_id, TaskStatusEnum.ERROR)
+            TaskService.update_task_status(
+                self.task_id, TaskStatusEnum.ERROR,
+                error_code=TaskErrorCodeEnum.DEFAULT_CODE,
+                error_msg=e.message)
             self.publisher.publish(TLSE.ERROR, msg=e.message)
             RedisSourceService.delete_queue(self.task_id)
             RedisSourceService.delete_user_subscriber(
                 self.user_id, self.task_id)
+            logger.exception(self.err_msg)
             raise
         self.exit()
-        return self.next_task_params
+        if self.next_task_params:
+            get_single_task(self.next_task_params)
 
     def processing(self):
         """
         Непосредственное выполнение задачи
         """
         raise NotImplementedError
+
+    def error_handling(self, err_msg, err_code=None):
+        """
+        Обработка ошибки
+
+        Args:
+            err_msg(str): Текст ошибки
+            err_code(str): Код ошибки
+        """
+        self.was_error = True
+        # fixme перезаписывается при каждой ошибке
+        self.err_msg = err_msg
+        TaskService.update_task_status(
+            self.task_id, TaskStatusEnum.ERROR,
+            error_code=err_code or TaskErrorCodeEnum.DEFAULT_CODE,
+            error_msg=self.err_msg)
+
+        self.queue_storage['status'] = TaskStatusEnum.ERROR
+
+        # сообщаем об ошибке
+        self.publisher.publish(TLSE.ERROR, self.err_msg)
+        logger.exception(self.err_msg)
 
     def exit(self):
         """
@@ -130,6 +170,11 @@ class TaskProcessing(object):
         RedisSourceService.delete_queue(self.task_id)
         # удаляем канал из списка каналов юзера
         RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
+
+
+@celery.task(name=CREATE_DATASET)
+def create_dataset(task_id, channel):
+    return CreateDataset(task_id, channel).load_data()
 
 
 @celery.task(name=MONGODB_DATA_LOAD)
@@ -172,6 +217,33 @@ def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
 
 
+@celery.task(name=CREATE_CUBE)
+def create_cube(task_id, channel):
+    return CreateCube(task_id, channel).load_data()
+
+
+class CreateDataset(TaskProcessing):
+    """
+    Создание Dataset
+    """
+
+    def processing(self):
+
+        dataset, created = Dataset.objects.get_or_create(key=self.key)
+        self.context['dataset_id'] = dataset.id
+
+        is_meta_stats = self.context['is_meta_stats']
+
+        if not is_meta_stats:
+            self.next_task_params = (
+                MONGODB_DATA_LOAD, load_mongo_db, self.context)
+        else:
+            self.context['db_update'] = True
+
+            self.next_task_params = (
+                MONGODB_DELTA_LOAD, update_mongo_db, self.context)
+
+
 class LoadMongodb(TaskProcessing):
     """
     Первичная загрузка данных в Mongodb
@@ -179,6 +251,7 @@ class LoadMongodb(TaskProcessing):
 
     def processing(self):
         cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
@@ -195,6 +268,9 @@ class LoadMongodb(TaskProcessing):
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+
+        # находим бинарные данные для 1) создания ключей 2) инсерта в монго
+        binary_types_list = get_binary_types_list(cols, col_types)
 
         # создаем коллекцию и индексы в Mongodb
         mc = MongodbConnection()
@@ -234,10 +310,15 @@ class LoadMongodb(TaskProcessing):
 
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                        record, tables_key_creator, (page-1)*limit + ind)
+                        record, tables_key_creator, (page-1)*limit + ind,
+                        binary_types_list)
+
+                # бинарные данные оборачиваем в Binary(), если они имеются
+                new_record = process_binary_data(record, binary_types_list)
+
                 record_normalized = (
                     [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
-                    [EtlEncoder.encode(rec_field) for rec_field in record])
+                    [EtlEncoder.encode(rec_field) for rec_field in new_record])
                 data_to_insert.append(dict(izip(col_names, record_normalized)))
                 data_to_current_insert.append(dict(_id=row_key))
             try:
@@ -245,14 +326,7 @@ class LoadMongodb(TaskProcessing):
                 current_collection.insert_many(data_to_current_insert, ordered=False)
                 print 'inserted %d rows to mongodb' % len(data_to_insert)
             except Exception as e:
-                self.was_error = True
-                # fixme перезаписывается при каждой ошибке
-                self.err_msg = e.message
-                print "Unexpected error:", type(e), e
-                self.queue_storage['status'] = TaskStatusEnum.ERROR
-
-                # сообщаем об ошибке
-                self.publisher.publish(TLSE.ERROR, self.err_msg)
+                self.error_handling(e.message)
 
             # обновляем информацию о работе таска
             self.queue_storage.update()
@@ -263,7 +337,7 @@ class LoadMongodb(TaskProcessing):
 
             page += 1
 
-        self.next_task_params = self.context
+        self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
 class LoadDb(TaskProcessing):
@@ -292,8 +366,15 @@ class LoadDb(TaskProcessing):
             t = obj['table']
             c = obj['col']
             col_names.append('"{0}{1}{2}" {3}'.format(
-                t, FIELD_NAME_SEP, c, col_types['{0}.{1}'.format(t, c)]))
+                t, FIELD_NAME_SEP, c,
+                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)])))
             clear_col_names.append('{0}{1}{2}'.format(t, FIELD_NAME_SEP, c))
+
+        # инфа о бинарных данных для инсерта в постгрес
+        binary_types_dict = get_binary_types_dict(cols, col_types)
+
+        # инфа для колонки cdc_key, о том, что она не binary
+        binary_types_dict['0'] = False
 
         source_collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
@@ -312,7 +393,6 @@ class LoadDb(TaskProcessing):
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         offset = 0
         last_row = None
-
         # Пишем данные в базу
         while True:
             try:
@@ -329,28 +409,20 @@ class LoadDb(TaskProcessing):
                     rows_dict.append(temp_dict)
                 if not rows_dict:
                     break
-                insert_query.execute(data=rows_dict)
+                insert_query.execute(data=rows_dict,
+                                     binary_types_dict=binary_types_dict)
+                print 'load in db %s records' % len(rows_dict)
                 offset += limit
             except Exception as e:
                 print 'Exception'
+                insert_query.connection.rollback()
                 self.was_error = True
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
 
-                self.err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
-                self.err_msg += e.message
-
-                # меняем статус задачи на 'Ошибка'
-                TaskService.update_task_status(
-                    self.task_id, TaskStatusEnum.ERROR,
-                    error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,
-                    error_msg=self.err_msg)
-                logger.exception(self.err_msg)
-                self.queue_storage.update(TaskStatusEnum.ERROR)
-
-                # сообщаем об ошибке
-                self.publisher.publish(TLSE.ERROR, self.err_msg)
-                break
+                err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+                err_msg += e.message
+                self.error_handling(err_msg, pg_code)
             else:
                 last_row = rows_dict[-1]  # получаем последнюю запись
                 # обновляем информацию о работе таска
@@ -366,33 +438,37 @@ class LoadDb(TaskProcessing):
         # работа с datasource_meta
         DataSourceService.update_datasource_meta(
             self.key, source, cols, json.loads(
-                self.context['meta_info']), last_row)
+                self.context['meta_info']), last_row, self.context['dataset_id'])
         if last_row:
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
 
-        if not self.context['triggers']:
-            self.next_task_params = {
+        if self.context['cdc_type'] != DatasourceSettings.TRIGGERS:
+            self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
+                'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'source_id': source.id
-            }
+                'source_id': source.id,
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
+            })
         else:
-            self.next_task_params = {
+            self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
                 'checksum': self.key,
                 'user_id': self.user_id,
-                'tables_info': self.context['table_info'],
-                'db_instance': self.context['db_instance'],
-                'source_id': source.id
-            }
+                'tables_info': self.context['tables_info'],
+                'source_id': source.id,
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
+            })
 
 
 class LoadDimensions(TaskProcessing):
     """
     Создание рамерности, измерения олап куба
     """
-    app_name = 'sttm'
-    module = 'biplatform.etl.models'
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
@@ -460,19 +536,17 @@ class LoadDimensions(TaskProcessing):
 
             err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
             err_msg += e.message
-
-            # меняем статус задачи на 'Ошибка'
-            TaskService.update_task_status(
-                self.task_id, TaskStatusEnum.ERROR, error_msg=err_msg,
-                error_code=pg_code or TaskErrorCodeEnum.DEFAULT_CODE,)
-            logger.exception(err_msg)
-            self.queue_storage.update(TaskStatusEnum.ERROR)
+            self.error_handling(err_msg)
 
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
+        if not self.last_task:
+            self.set_next_task_params()
 
-        self.next_task_params = self.context
+    def set_next_task_params(self):
+        self.next_task_params = (
+            GENERATE_MEASURES, load_measures, self.context)
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
@@ -525,6 +599,15 @@ class LoadDimensions(TaskProcessing):
             column_names.append('{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name']))
 
+        cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
+
+        # инфа о бинарных данных для инсерта в постгрес
+        binary_types_dict = get_binary_types_dict(cols, col_types)
+
+        # инфа для колонки cdc_key, о том, что она не binary
+        binary_types_dict['0'] = False
+
         insert_query = InsertQuery(DataSourceService())
         insert_query.set_query(
             table_name=get_table_name(self.table_prefix, self.key),
@@ -533,12 +616,13 @@ class LoadDimensions(TaskProcessing):
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
         rows_query = self.rows_query(column_names)
+
         connection = DataSourceService.get_local_instance().connection
         while True:
-            index_to = offset+step
+            # index_to = offset+step
             cursor = connection.cursor()
 
-            cursor.execute(rows_query.format(index_to, offset))
+            cursor.execute(rows_query.format(step, offset))
             rows = cursor.fetchall()
             if not rows:
                 break
@@ -548,8 +632,10 @@ class LoadDimensions(TaskProcessing):
                 for ind in xrange(len(column_names)):
                     temp_dict.update({str(ind): record[ind]})
                 rows_dict.append(temp_dict)
-            insert_query.execute(data=rows_dict)
-            offset = index_to
+            insert_query.execute(data=rows_dict,
+                                 binary_types_dict=binary_types_dict)
+            print 'load in db %s records' % len(rows_dict)
+            offset += step
 
             self.queue_storage.update()
 
@@ -579,6 +665,10 @@ class LoadMeasures(LoadDimensions):
                 datasources_meta=datasource_meta_id
             )
 
+    def set_next_task_params(self):
+        self.next_task_params = (
+            CREATE_CUBE, create_cube, self.context)
+
 
 class UpdateMongodb(TaskProcessing):
 
@@ -591,6 +681,7 @@ class UpdateMongodb(TaskProcessing):
         """
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
+        col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
@@ -604,6 +695,9 @@ class UpdateMongodb(TaskProcessing):
         for t_name, col_group in groupby(cols, lambda x: x["table"]):
             for x in col_group:
                 col_names.append(x["table"] + FIELD_NAME_SEP + x["col"])
+
+        # находим бинарные данные для 1) создания ключей 2) инсерта в монго
+        binary_types_list = get_binary_types_list(cols, col_types)
 
         collection = MongodbConnection().get_collection(
             'etl', get_table_name(STTM_DATASOURCE, self.key))
@@ -647,18 +741,25 @@ class UpdateMongodb(TaskProcessing):
             data_to_current_insert = []
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                    record, tables_key_creator, (page-1)*limit + ind)
+                    record, tables_key_creator, (page-1)*limit + ind,
+                    binary_types_list)
+
+                # бинарные данные оборачиваем в Binary(), если они имеются
+                new_record = process_binary_data(record, binary_types_list)
+
                 if not collection.find({'_id': row_key}).count():
                     delta_rows = (
                         [row_key, DTSE.NEW, EtlEncoder.encode(datetime.now())] +
-                        [EtlEncoder.encode(rec_field) for rec_field in record])
+                        [EtlEncoder.encode(rec_field) for rec_field in new_record])
                     data_to_insert.append(dict(izip(col_names, delta_rows)))
 
                 data_to_current_insert.append(dict(_id=row_key))
-
-            if data_to_insert:
-                delta_collection.insert_many(data_to_insert, ordered=False)
-            current_collection.insert_many(data_to_current_insert, ordered=False)
+            try:
+                if data_to_insert:
+                    delta_collection.insert_many(data_to_insert, ordered=False)
+                current_collection.insert_many(data_to_current_insert, ordered=False)
+            except Exception as e:
+                self.error_handling(e.message)
             page += 1
 
         # Обновляем основную коллекцию новыми данными
@@ -673,14 +774,18 @@ class UpdateMongodb(TaskProcessing):
                 to_ins.append(record)
             if not to_ins:
                 break
-            collection.insert_many(to_ins, ordered=False)
+            try:
+                collection.insert_many(to_ins, ordered=False)
+            except Exception as e:
+                self.error_handling(e.message)
+
             page += 1
 
         # Обновляем статусы дельты-коллекции
         delta_collection.update_many(
             {'_state': DTSE.NEW}, {'$set': {'_state': DTSE.SYNCED}})
 
-        self.next_task_params = self.context
+        self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
 class DetectRedundant(TaskProcessing):
@@ -721,19 +826,22 @@ class DetectRedundant(TaskProcessing):
                 row_key = record['_id']
                 if not current_collection.find({'_id': row_key}).count():
                     to_delete.append(row_key)
+            try:
+                all_keys_collection.update_many(
+                    {'_id': {'$in': to_delete}},
+                    {'$set': {'_deleted': True}})
 
-            all_keys_collection.update_many(
-                {'_id': {'$in': to_delete}},
-                {'$set': {'_deleted': True}})
-
-            source_collection.delete_many({'_id': {'$in': to_delete}})
+                source_collection.delete_many({'_id': {'$in': to_delete}})
+            except Exception as e:
+                self.error_handling(e.message)
 
             page += 1
 
         all_keys_collection.update_many(
             {'_state': AKTSE.NEW}, {'$set': {'_state': AKTSE.SYNCED}})
 
-        self.next_task_params = self.context
+        self.next_task_params = (
+            DB_DELETE_REDUNDANT, delete_redundant, self.context)
 
 
 class DeleteRedundant(TaskProcessing):
@@ -757,10 +865,15 @@ class DeleteRedundant(TaskProcessing):
             l = [record['_id'] for record in delete_delta]
             if not l:
                 break
-            delete_query.execute(keys=l)
+            try:
+                delete_query.execute(keys=l)
+            except Exception as e:
+                self.error_handling(e.message)
             page += 1
 
-        self.next_task_params = self.context
+        if not self.context['is_meta_stats']:
+            self.next_task_params = (
+                        GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
@@ -770,7 +883,10 @@ class CreateTriggers(TaskProcessing):
         Создание триггеров в БД пользователя
         """
         tables_info = self.context['tables_info']
-        db_instance = self.context['db_instance']
+
+        source = Datasource.objects.get(id=self.context['source_id'])
+
+        db_instance = DatabaseService.get_source_instance(source)
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
@@ -781,6 +897,19 @@ class CreateTriggers(TaskProcessing):
         for table, columns in tables_info.iteritems():
 
             table_name = '_etl_datasource_cdc_{0}'.format(table)
+            tables_str = "('{0}')".format(table_name)
+
+            cdc_cols_query = db_instance.db_map.cdc_cols_query.format(
+                tables_str, source.db, 'public')
+
+            cursor.execute(cdc_cols_query)
+            fetched_cols = cursor.fetchall()
+
+            existing_cols = {k: v for (k, v) in fetched_cols}
+
+            required_indexes = {k.format(table_name): v
+                                for k, v in REQUIRED_INDEXES.iteritems()}
+
             cols_str = ''
             new = ''
             old = ''
@@ -795,12 +924,110 @@ class CreateTriggers(TaskProcessing):
                     sep=sep, name=name, typ=col['type']
                 )
 
-            # multi queries of mysql, delimiter $$
-            for query in remote_table_create_query.format(
-                    table_name, cols_str).split('$$'):
-                cursor.execute(query)
+            # если таблица существует
+            if existing_cols:
+                # удаление primary key, если он есть
+                primary_query = db_instance.get_primary_key(table_name, source.db)
+                cursor.execute(primary_query)
+                primary = cursor.fetchall()
 
-            connection.commit()
+                if primary:
+                    primary_name = primary[0][0]
+                    del_pr_query = db_instance.delete_primary_query(
+                        table_name, primary_name)
+                    cursor.execute(del_pr_query)
+
+                # добавление недостающих колонок, не учитывая cdc-колонки
+                new_came_cols = [(x['name'], x["type"]) for x in columns]
+
+                diff_cols = [x for x in new_came_cols if x[0] not in existing_cols]
+
+                if diff_cols:
+                    add_cols_str = """
+                        alter table {0} {1}
+                    """.format(table_name, ', '.join(
+                        ['add column {0} {1}'.format(x[0], x[1]) for x in diff_cols]))
+
+                    cursor.execute(add_cols_str)
+                    connection.commit()
+
+                # проверка cdc-колонок на существование и типы
+                cdc_required_types = db_instance.db_map.cdc_required_types
+
+                add_col_q = db_instance.db_map.add_column_query
+                del_col_q = db_instance.db_map.del_column_query
+
+                for cdc_k, v in cdc_required_types.iteritems():
+                    if not cdc_k in existing_cols:
+                        cursor.execute(add_col_q.format(
+                            table_name, cdc_k, v["type"], v["nullable"]))
+                    else:
+                        # если типы не совпадают
+                        if not existing_cols[cdc_k].startswith(v["type"]):
+                            cursor.execute(del_col_q.format(table_name, cdc_k))
+                            cursor.execute(add_col_q.format(
+                                table_name, cdc_k, v["type"], v["nullable"]))
+
+                connection.commit()
+
+                # проверяем индексы на колонки и существование,
+                # лишние индексы удаляем
+
+                indexes_query = db_instance.db_map.indexes_query.format(
+                    tables_str, source.db)
+                cursor.execute(indexes_query)
+                exist_indexes = cursor.fetchall()
+
+                index_cols_i, index_name_i = 1, 2
+
+                create_index_q = db_instance.db_map.create_index_query
+                drop_index_q = db_instance.db_map.drop_index_query
+
+                allright_index_names = []
+
+                for index in exist_indexes:
+                    index_name = index[index_name_i]
+
+                    if index_name not in required_indexes:
+                        cursor.execute(drop_index_q.format(index_name, table_name))
+                    else:
+                        index_cols = sorted(index_name[index_cols_i].split(','))
+                        if index_cols != required_indexes[index_name]:
+
+                            cursor.execute(drop_index_q.format(index_name, table_name))
+                            cursor.execute(create_index_q.format(
+                                index_name, table_name,
+                                ','.join(required_indexes[index_name]),
+                                source.db))
+
+                        allright_index_names.append(index_name)
+
+                diff_indexes_names = [
+                    x for x in required_indexes if x not in allright_index_names]
+
+                for d_index in diff_indexes_names:
+                    cursor.execute(
+                        create_index_q.format(
+                            d_index, table_name,
+                            ','.join(required_indexes[d_index])))
+
+                connection.commit()
+
+            # если таблица не существует
+            else:
+                # создание таблицы у юзера
+                cursor.execute(remote_table_create_query.format(
+                        table_name, cols_str))
+
+                # создание индексов
+                create_index_q = db_instance.db_map.create_index_query
+
+                for index_name, index_cols in required_indexes.iteritems():
+                    cursor.execute(create_index_q.format(
+                        index_name, table_name,
+                        ','.join(index_cols), source.db))
+
+                connection.commit()
 
             trigger_commands = remote_triggers_create_query.format(
                 orig_table=table, new_table=table_name, new=new, old=old,
@@ -812,10 +1039,140 @@ class CreateTriggers(TaskProcessing):
 
             connection.commit()
 
-        self.next_task_params = {
-            'checksum': self.key,
-            'user_id': self.user_id,
-            'source_id': self.context['source_id']
+        cursor.close()
+        connection.close()
+
+        self.next_task_params = (
+            GENERATE_DIMENSIONS, load_dimensions, {
+                'checksum': self.key,
+                'user_id': self.user_id,
+                'source_id': self.context['source_id'],
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
+            })
+
+
+class CreateCube(TaskProcessing):
+
+    def processing(self):
+
+        print 'Start cube creation'
+
+        dataset_id = self.context['dataset_id']
+        dataset = Dataset.objects.get(id=dataset_id)
+        key = dataset.key
+
+        meta_ids = DatasetToMeta.objects.filter(dataset_id=dataset_id).values_list(
+            'meta_id', flat=True)
+
+        dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+        measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+
+        if not dimensions.exists() and not measures.exists():
+            pass
+        # <Schema>
+        cube_key = "cube_{key}".format(key=key)
+        schema = etree.Element('Schema', name=cube_key, metamodelVersion='4.0')
+
+        # <Physical schema>
+        physical_schema = etree.Element('PhysicalSchema')
+        etree.SubElement(
+            physical_schema, 'Table', name=get_table_name(MEASURES, key))
+        etree.SubElement(
+            physical_schema, 'Table', name=get_table_name(DIMENSIONS, key))
+
+        cube_info = {
+            'name': cube_key,
+            'caption': cube_key,
+            'visible': "true",
+            'cache': "false",
+            'enabled': "true",
         }
+
+        # <Cube>
+        cube = etree.Element('Cube', **cube_info)
+
+        dimensions_tag = etree.SubElement(cube, 'Dimensions')
+
+        # <Dimensions>
+        for dim in dimensions:
+
+            dim_type = dim.get_dimension_type()
+            visible = 'true' if dim.visible else 'false'
+            name = dim.name
+            title = dim.title
+
+            dim_info = {
+                'table': get_table_name(DIMENSIONS, key),
+                'type': dim_type,
+                'visible': visible,
+                'highCardinality': 'true' if dim.high_cardinality else 'false',
+                'name': name,
+                'caption': title,
+            }
+            dimension = etree.SubElement(dimensions_tag, 'Dimension', **dim_info)
+
+            # <Attributes>
+            attributes = etree.SubElement(dimension, 'Attributes')
+            attr_info = {
+                'name': title,
+                'keyColumn': name,
+                'hasHierarchy': 'false',
+            }
+            etree.SubElement(attributes, 'Attribute', **attr_info)
+
+            # <Attributes>
+            hierarchies = etree.SubElement(dimension, 'Hierarchies')
+            hierarchy = etree.SubElement(hierarchies, 'Hierarchy', **{'name': title})
+
+            level_info = {
+                'attribute': title,
+                'name': '%s level' % title,
+                'visible': visible,
+                'caption': title,
+            }
+            etree.SubElement(hierarchy, 'Level', **level_info)
+
+        measure_groups = etree.SubElement(cube, 'MeasureGroups')
+
+        measure_group_info = {
+            'name': get_table_name(MEASURES, key),
+            'table': get_table_name(MEASURES, key)
+        }
+
+        measure_group = etree.SubElement(
+            measure_groups, 'MeasureGroup', **measure_group_info)
+        measures_tag = etree.SubElement(measure_group, 'Measures')
+
+        for measure in measures:
+            measure_info = {
+                'name': measure.name,
+                'column': measure.name,
+                'caption': measure.title,
+                'visible': 'true' if measure.visible else 'false',
+                'aggregator': 'sum',
+            }
+            etree.SubElement(measures_tag, 'Measure', **measure_info)
+
+        dimension_links = etree.SubElement(measure_group, 'DimensionLinks')
+
+        for dim in dimensions:
+
+            etree.SubElement(dimension_links, 'NoLink', dimension=dim.name)
+            # etree.SubElement(dimension_links, 'ForeignKeyLink', dimension=dim.name, foreignKeyColumn='dimension_id')
+
+        schema.extend([physical_schema, cube])
+
+        cube_string = etree.tostring(schema, pretty_print=True)
+
+        cube = Cube.objects.create(
+            name=cube_key,
+            data=cube_string,
+            user_id=self.context['user_id'],
+            # user_id=11,
+        )
+
+        send_xml(key, cube.id, cube_string)
 
 # write in console: python manage.py celery -A etl.tasks worker

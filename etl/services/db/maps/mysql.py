@@ -23,13 +23,9 @@ texts = [
     'char',
     'varchar',
     'text',
-    'blob',
     'tinytext',
-    'tinyblob',
     'mediumtext',
-    'mediumblob',
     'longtext',
-    'longblob',
     'enum',
 ]
 dates = [
@@ -38,6 +34,15 @@ dates = [
     'timestamp',
     'time',
     'year',
+]
+
+blobs = [
+    'blob',
+    'tinyblob',
+    'mediumblob',
+    'longblob',
+    'varbinary',
+    'binary',
 ]
 
 for i in ints:
@@ -52,6 +57,10 @@ for i in texts:
 for i in dates:
     DB_TYPES[i] = 'timestamp'
 
+for i in blobs:
+    DB_TYPES[i] = 'binary'
+
+
 table_query = """
     SELECT table_name FROM information_schema.tables
             where table_schema='{0}' order by table_name;
@@ -62,6 +71,27 @@ cols_query = """
     case extra when 'auto_increment' then extra else null end
     FROM information_schema.columns
             where table_name in {0} and table_schema = '{1}' order by table_name;
+"""
+
+cdc_cols_query = """
+    SELECT column_name, column_type FROM information_schema.columns
+            where table_name in {0} and table_schema = '{1}' order by table_name;
+"""
+
+add_column_query = """
+    alter table {0} add {1} {2} {3};
+"""
+
+del_column_query = """
+    alter table {0} drop column {1};
+"""
+
+create_index_query = """
+    CREATE INDEX {0} ON {1} ({2});
+"""
+
+drop_index_query = """
+    drop index {0} on {1};
 """
 
 indexes_query = """
@@ -97,14 +127,14 @@ remote_table_query = """
         `cdc_delta_flag` smallint NOT NULL,
         `cdc_synced` smallint NOT NULL
     );
-    $$
-    CREATE INDEX {0}_together_index_bi ON `{0}` (`cdc_updated_at`, `cdc_synced`);
-    $$
-    CREATE INDEX {0}_cdc_created_at_index_bi ON `{0}` (`cdc_created_at`);
-    $$
-    CREATE INDEX {0}_cdc_synced_index_bi ON `{0}` (`cdc_synced`);
-
 """
+
+cdc_required_types = {
+    "cdc_created_at": {"type": "timestamp", "nullable": "NOT NULL"},
+    "cdc_updated_at": {"type": "timestamp", "nullable": ""},
+    "cdc_delta_flag": {"type": "smallint", "nullable": "NOT NULL"},
+    "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
+}
 
 remote_triggers_query = """
     DROP TRIGGER IF EXISTS `cdc_{orig_table}_insert` $$
@@ -134,3 +164,18 @@ remote_triggers_query = """
 row_query = """
     SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
 """
+
+
+pr_key_query = """
+    select a.constraint_name
+    from information_schema.TABLE_CONSTRAINTS as a
+    inner join information_schema.KEY_COLUMN_USAGE as b on a.CONSTRAINT_NAME=b.CONSTRAINT_NAME
+    WHERE a.constraint_type='PRIMARY KEY' and a.TABLE_NAME = b.TABLE_NAME
+    and a.TABLE_NAME in {0} and a.TABLE_SCHEMA = '{1}';
+"""
+
+delete_primary_key = """
+    ALTER TABLE {0} drop primary key
+"""
+
+drop_index = """drop index {0} on {1}"""

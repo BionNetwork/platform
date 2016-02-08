@@ -6,7 +6,7 @@ from etl.constants import *
 # Список всех актуальных имен очередей
 queue_names = [MONGODB_DATA_LOAD, DB_DATA_LOAD, MONGODB_DELTA_LOAD,
                DB_DETECT_REDUNDANT, DB_DELETE_REDUNDANT, GENERATE_DIMENSIONS,
-               GENERATE_MEASURES, CREATE_TRIGGERS]
+               GENERATE_MEASURES, CREATE_TRIGGERS, CREATE_DATASET, CREATE_CUBE]
 
 
 class Command(BaseCommand):
