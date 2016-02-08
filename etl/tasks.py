@@ -21,7 +21,8 @@ from etl.services.middleware.base import (
 from etl.services.olap.base import send_xml
 from etl.services.pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema, CubeDimension,
-    Dimension as DimensionSchema)
+    Dimension as DimensionSchema, DimensionAttribute, Hierarchies, Level,
+    Hierarchy, MeasureGroup, Measure as MeasureSchema, DimensionLinks, NoLink)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
     DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
@@ -1059,6 +1060,7 @@ class CreateTriggers(TaskProcessing):
 class CreateCube(TaskProcessing):
 
     def processing(self):
+        from etl.services.pymondrian.generator import generate
 
         print 'Start cube creation'
 
@@ -1101,133 +1103,48 @@ class CreateCube(TaskProcessing):
             dimension = DimensionSchema(
                 name=name, table=dimensions_table_name, type=dim_type,
                 visible=visible, hight_cardinality=True, caption=title)
+
+            dim_attribute = DimensionAttribute(
+                name=title, key_column=name, has_hierarchy=False)
+
+            level = Level(name='%s level' % title, visible=True, caption=title)
+            hierarchies_set = Hierarchies()
+            hierarchy = Hierarchy(name=title)
+            hierarchies_set.add_hierarchy(hierarchy)
+            hierarchies_set.add_level_to_hierarchy(
+                hierarchy=hierarchy, level=level)
+
+            dimension.add_attribute(dim_attribute)
+            dimension.add_hierarchies_set(hierarchies_set)
             cube.add_dimension(dimension)
 
+        measure_group_name = get_table_name(MEASURES, key)
+        measure_group = MeasureGroup(
+            name=measure_group_name, table=measure_group_name)
 
-
-                        # <Attributes>
-            attributes = etree.SubElement(dimension, 'Attributes')
-            attr_info = {
-                'name': title,
-                'keyColumn': name,
-                'hasHierarchy': 'false',
-            }
-            etree.SubElement(attributes, 'Attribute', **attr_info)
-
-            # <Attributes>
-            hierarchies = etree.SubElement(dimension, 'Hierarchies')
-            hierarchy = etree.SubElement(hierarchies, 'Hierarchy', **{'name': title})
-
-            level_info = {
-                'attribute': title,
-                'name': '%s level' % title,
-                'visible': visible,
-                'caption': title,
-            }
-            etree.SubElement(hierarchy, 'Level', **level_info)
-
-
-
-        schema.add_physical_schema(physical_schema)
-        schema.add_cube(cube)
-        # <Physical schema>
-        physical_schema = etree.Element('PhysicalSchema')
-        etree.SubElement(
-            physical_schema, 'Table', name=get_table_name(MEASURES, key))
-        etree.SubElement(
-            physical_schema, 'Table', name=get_table_name(DIMENSIONS, key))
-
-        cube_info = {
-            'name': cube_key,
-            'caption': cube_key,
-            'visible': "true",
-            'cache': "false",
-            'enabled': "true",
-        }
-
-        # <Cube>
-        cube = etree.Element('Cube', **cube_info)
-
-        dimensions_tag = etree.SubElement(cube, 'Dimensions')
-
-        # <Dimensions>
-        for dim in dimensions:
-
-            dim_type = dim.get_dimension_type()
-            visible = 'true' if dim.visible else 'false'
-            name = dim.name
-            title = dim.title
-
-            dim_info = {
-                'table': get_table_name(DIMENSIONS, key),
-                'type': dim_type,
-                'visible': visible,
-                'highCardinality': 'true' if dim.high_cardinality else 'false',
-                'name': name,
-                'caption': title,
-            }
-            dimension = etree.SubElement(dimensions_tag, 'Dimension', **dim_info)
-
-            # <Attributes>
-            attributes = etree.SubElement(dimension, 'Attributes')
-            attr_info = {
-                'name': title,
-                'keyColumn': name,
-                'hasHierarchy': 'false',
-            }
-            etree.SubElement(attributes, 'Attribute', **attr_info)
-
-            # <Attributes>
-            hierarchies = etree.SubElement(dimension, 'Hierarchies')
-            hierarchy = etree.SubElement(hierarchies, 'Hierarchy', **{'name': title})
-
-            level_info = {
-                'attribute': title,
-                'name': '%s level' % title,
-                'visible': visible,
-                'caption': title,
-            }
-            etree.SubElement(hierarchy, 'Level', **level_info)
-
-        measure_groups = etree.SubElement(cube, 'MeasureGroups')
-
-        measure_group_info = {
-            'name': get_table_name(MEASURES, key),
-            'table': get_table_name(MEASURES, key)
-        }
-
-        measure_group = etree.SubElement(
-            measure_groups, 'MeasureGroup', **measure_group_info)
-        measures_tag = etree.SubElement(measure_group, 'Measures')
+        cube.measure_groups.add_measure_group(measure_group)
 
         for measure in measures:
-            measure_info = {
-                'name': measure.name,
-                'column': measure.name,
-                'caption': measure.title,
-                'visible': 'true' if measure.visible else 'false',
-                'aggregator': 'sum',
-            }
-            etree.SubElement(measures_tag, 'Measure', **measure_info)
-
-        dimension_links = etree.SubElement(measure_group, 'DimensionLinks')
+            measure_schema = MeasureSchema(
+                name=measure.name, column=measure.name, caption=measure.title,
+                visible=True if measure.visible else False, aggregator='sum')
+            measure_group.measures_tag.add_measures(measure_schema)
 
         for dim in dimensions:
+            measure_group.dimension_links.add_dimension_link(
+                NoLink(dimension=dim.name))
 
-            etree.SubElement(dimension_links, 'NoLink', dimension=dim.name)
-            # etree.SubElement(dimension_links, 'ForeignKeyLink', dimension=dim.name, foreignKeyColumn='dimension_id')
+        schema.add_cube(cube)
 
-        schema.extend([physical_schema, cube])
-
-        cube_string = etree.tostring(schema, pretty_print=True)
+        xml = schema.to_xml()
 
         cube = Cube.objects.create(
             name=cube_key,
-            data=cube_string,
+            data=xml,
             user_id=self.context['user_id'],
             # user_id=11,
         )
 
-        send_xml(key, cube.id, cube_string)
+        send_xml(key, cube.id, xml)
 
 # write in console: python manage.py celery -A etl.tasks worker
