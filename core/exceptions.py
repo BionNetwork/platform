@@ -14,6 +14,7 @@ class ExceptionCode(object):
     ERR_TASK_ALREADY_IN_QUEUE = 'Task is already in queue list'
     ERR_CDC_TYPE_IS_NOT_SET = 'CDC type is not set'
     ERR_VALIDATION_ERROR = 'Validation error'
+    ERR_TASK_START_FAILED = 'Failed to start task'
 
 
 class ExceptionWithCodes(Exception):
@@ -22,6 +23,7 @@ class ExceptionWithCodes(Exception):
         ExceptionCode.ERR_TASK_ALREADY_IN_QUEUE: 1026,
         ExceptionCode.ERR_CDC_TYPE_IS_NOT_SET: 1027,
         ExceptionCode.ERR_SYSTEM: 1028,
+        ExceptionCode.ERR_TASK_START_FAILED: 1029,
         ExceptionCode.ERR_VALIDATION_ERROR: 2000
     }
 
@@ -49,3 +51,9 @@ class ValidationError(ExceptionWithCodes):
     """Validation exceptions"""
     def __init__(self, message, code=ExceptionCode.ERR_VALIDATION_ERROR):
         super(ValidationError, self).__init__(message, code)
+
+
+class TaskError(ExceptionWithCodes):
+    """Task exceptions"""
+    def __init__(self, message, code=ExceptionCode.ERR_TASK_START_FAILED):
+        super(TaskError, self).__init__(message, code)
