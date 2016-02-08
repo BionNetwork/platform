@@ -64,6 +64,12 @@ class HomeView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
         return render(request, "core/home.html")
 
+class AngularView(BaseTemplateView):
+    """Главная страница dashboard"""
+    def get(self, request, *args, **kwargs):
+        return render(request, "core/angular.html")
+
+
 
 class LoginView(BaseTemplateView):
     """
