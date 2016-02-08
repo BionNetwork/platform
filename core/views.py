@@ -76,7 +76,11 @@ class LoginView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated():
             return self.redirect_to_url("/")
-        return self.render_to_response({'regUrl': '/registration'})
+        if "next" in request.GET:
+            next_url = request.GET['next']
+        else:
+            next_url = None
+        return self.render_to_response({'regUrl': '/registration', 'next': next_url})
 
     def post(self, request, *args, **kwargs):
         post = request.POST
@@ -84,6 +88,11 @@ class LoginView(BaseTemplateView):
         username = post['username']
         password = post['password']
         user = None
+
+        if "next" in request.POST:
+            next_url = request.POST['next']
+        else:
+            next_url = None
 
         # if email (костылим):
         if '@' in username:
@@ -104,7 +113,10 @@ class LoginView(BaseTemplateView):
         if user is not None:
             if user.is_active:
                 login(request, user)
-                return self.redirect("core:home")
+                if next_url:
+                    return self.redirect_to_url(next_url)
+                else:
+                    return self.redirect("core:home")
             else:
                 if not user.email:
                     return self.render_to_response({
@@ -126,7 +138,8 @@ class LoginView(BaseTemplateView):
                 })
 
         return self.render_to_response({
-            'error': 'Неправильный логин или пароль!'
+            'error': 'Неправильный логин или пароль!',
+            'next': next_url
         })
 
 
