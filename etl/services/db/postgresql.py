@@ -146,3 +146,10 @@ class Postgresql(Database):
     @staticmethod
     def delete_primary_query(table, primary):
         return pgsql_map.delete_primary_key.format(table, primary)
+
+    @staticmethod
+    def reload_datasource_trigger_query():
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+        """
+        return pgsql_map.dimension_measure_triggers_query
