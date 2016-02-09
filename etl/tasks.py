@@ -650,7 +650,7 @@ class LoadDimensions(TaskProcessing):
 
     def create_reload_triggers(self):
         """
-        Создание триггеров для размерностей и мер
+        Создание триггеров для размерностей и мер, обеспечивающих синхронизацию данных для источника
         """
         local_instance = DataSourceService.get_local_instance()
         connection = local_instance.connection
@@ -663,9 +663,9 @@ class LoadDimensions(TaskProcessing):
         for col in column_names:
             insert_cols.append('NEW.{0}'.format(col))
 
-        dim_meas_triggers_query = local_instance.dim_meas_triggers_create_query()
+        reload_trigger_query = local_instance.reload_datasource_trigger_query()
 
-        cursor.execute(dim_meas_triggers_query.format(
+        cursor.execute(reload_trigger_query.format(
             new_table=get_table_name(self.table_prefix, self.key),
             orig_table=get_table_name(STTM_DATASOURCE, self.key),
             del_condition="cdc_key=OLD.cdc_key",

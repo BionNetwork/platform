@@ -139,7 +139,7 @@ class Postgresql(Database):
         return pgsql_map.delete_primary_key.format(table, primary)
 
     @staticmethod
-    def dim_meas_triggers_create_query():
+    def reload_datasource_trigger_query():
         """
         запрос на создание триггеров в БД локально для размерностей и мер
         """
