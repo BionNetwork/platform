@@ -6,7 +6,8 @@
     <div class="user-panel">
         <div class="pull-left image">
             {% if user.avatar_small %}
-                <img src="{{ MEDIA_URL }}{{user.avatar_small}}" class="img-circle" alt="User Image">
+                <img src="{{ MEDIA_URL }}{{user.avatar_small}}" class="img-circle" alt="User Image"
+                     style="height:45px;width:45px;">
             {%else%}
                 <img src="{% static "system/dist/img/anonymous-160x160.gif" %}" class="img-circle" alt="User Image">
             {% endif %}
