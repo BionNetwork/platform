@@ -7,18 +7,10 @@ from django.db import models, migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0023_auto_20160120_1533'),
+        ('core', '0022_datasourcesettings'),
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='user',
-            name='big_image',
-        ),
-        migrations.RemoveField(
-            model_name='user',
-            name='small_image',
-        ),
         migrations.AddField(
             model_name='user',
             name='avatar',

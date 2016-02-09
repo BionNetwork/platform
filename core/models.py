@@ -10,7 +10,7 @@ from django.utils import timezone
 from djchoices import ChoiceItem, DjangoChoices
 
 from .db.services import RetryQueryset
-from .helpers import get_utf8_string
+from .helpers import get_utf8_string, users_avatar_upload
 
 """
 Базовые модели приложения
@@ -137,9 +137,11 @@ class User(AbstractUser):
     birth_date = models.DateField(verbose_name='Дата рождения', null=True, blank=True)
     verify_email_uuid = models.CharField(max_length=50, null=True, blank=True)
     avatar_small = models.ImageField(
-        verbose_name='Аватар preview', upload_to='users', null=True, blank=True, max_length=500)
+        verbose_name='Аватар preview', upload_to=users_avatar_upload,
+        null=True, blank=True, max_length=500)
     avatar = models.ImageField(
-        verbose_name='Аватар', upload_to='users', null=True, blank=True, max_length=500)
+        verbose_name='Аватар', upload_to=users_avatar_upload, null=True,
+        blank=True, max_length=500)
 
     # objects = models.Manager.from_queryset(RetryQueryset)()
 

@@ -10,6 +10,7 @@
 
 {% block css %}
     <link href="{% static 'system/plugins/datepicker/datepicker3.css' %}" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/users.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -22,11 +23,37 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-                <form role="form" method="post">{% csrf_token %}
+                <form role="form" method="post" enctype="multipart/form-data">{% csrf_token %}
                     {% for field in form %}
                         <div class="form-group">
                             <label>{{field.label}}</label>
-                            {% if field.name == 'email'%}
+                            {% if field.name == 'avatar'%}
+                                <div class="box-body box-profile">
+                                    <div class="col-md-2">
+                                        <div class="img_bl">
+                                            <img id="profile_img" class="profile-user-img img-responsive img-circle"
+                                                 {% if form.avatar.value %}
+                                                    src="{{ MEDIA_URL }}{{form.avatar.value}}"
+                                                 {% else %}
+                                                    src="/assets/system/dist/img/anonymous-160x160.gif"
+                                                 {% endif %}
+                                                 alt="User profile picture" width="140" height="140">
+                                            <div class="opacity_btn img-circle">
+                                                <div id="add-btn" class="fileUpload btn btn-success icon_centr"
+                                                     {% if form.avatar.value %}style="display: none"{% endif %}>
+                                                    <i class="glyphicon glyphicon-plus"></i>
+                                                    <input id="fileupload" type="file" name="file" class="upload"/>
+                                                    <input id="fileupload_changed" type="hidden" value="{{form.avatar.value}}" name="hidden_fileupload">
+                                                </div>
+                                                <span id="clear-btn" class="btn btn-danger fileinput-button icon_centr"
+                                                     {% if not form.avatar.value %}style="display: none"{% endif %}>
+                                                    <i class="glyphicon glyphicon-remove" onclick="clearImage()"></i>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% elif field.name == 'email'%}
                                 <div class="input-group">
                                     <div class="input-group-addon">
                                         <i class="fa fa-envelope"></i>
@@ -66,7 +93,7 @@
                             {% endif %}
                         </div>
                     {% endfor %}
-                    <button type="submit">Сохранить</button>
+                    <button type="submit" class="btn btn-success">Сохранить</button>
                 </form>
             </div>
             <!-- /.box-body -->

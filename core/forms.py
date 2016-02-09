@@ -31,7 +31,7 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = User
         fields = (
-            'username', 'first_name', 'last_name', 'middle_name', 'email',
+            'avatar', 'username', 'first_name', 'last_name', 'middle_name', 'email',
             'birth_date', 'is_active', 'phone', 'skype', 'site', 'city',
         )
 
@@ -57,12 +57,3 @@ class NewUserForm(UserForm):
 
         if password != confirm:
             raise ValidationError('Пароли не совпадают')
-
-
-class UserProfileForm(UserForm):
-
-    class Meta(UserForm.Meta):
-        fields = (
-            'username', 'first_name', 'last_name', 'middle_name',
-            'email', 'birth_date', 'phone', 'skype', 'site', 'city', 'avatar',
-        )

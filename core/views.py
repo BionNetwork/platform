@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 import uuid
 import json
 import logging
-import os
 from PIL import Image
 import StringIO
 
@@ -13,7 +12,7 @@ from django.core.files import File
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import render, get_object_or_404
 from django.views.generic import TemplateView, View
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
@@ -291,7 +290,6 @@ class NewUserView(BaseTemplateView):
         form = core_forms.NewUserForm(post)
 
         if not form.is_valid():
-            print form.errors
             return self.render_to_response({'form': form})
 
         user = form.save(commit=False)
@@ -327,7 +325,40 @@ class EditUserView(BaseTemplateView):
         if not form.is_valid():
             return self.render_to_response({'form': form})
 
-        form.save()
+        profile = form.save(commit=False)
+
+        image = request.FILES.get('file', None)
+
+        # добавили аву
+        if image:
+            filename = image.name
+            sm_filename = 'small_'+filename
+
+            avatar_img = Image.open(image)
+            avatar_img.thumbnail((140, 140), Image.ANTIALIAS)
+            big_img_io = StringIO.StringIO()
+            avatar_img.save(big_img_io, format='JPEG')
+            avatar = InMemoryUploadedFile(big_img_io, None, filename,
+                                          'image/jpeg', big_img_io.len, None)
+            user.avatar.delete()
+            user.avatar.save(filename, avatar)
+
+            small_avatar_img = Image.open(image)
+            small_avatar_img.thumbnail((40, 40), Image.ANTIALIAS)
+            small_img_io = StringIO.StringIO()
+            small_avatar_img.save(small_img_io, format='JPEG')
+            small_avatar = InMemoryUploadedFile(
+                small_img_io, None, sm_filename,
+                'image/jpeg', small_img_io.len, None)
+            user.avatar_small.delete()
+            user.avatar_small.save(sm_filename, small_avatar)
+
+        # ничего не меняли
+        elif not post.get('fileupload_changed'):
+            user.avatar.delete()
+            user.avatar_small.delete()
+
+        profile.save()
 
         return self.redirect('core:users')
 
@@ -341,125 +372,9 @@ class UserProfileView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
         user = get_object_or_404(User, pk=kwargs.get('id'))
 
-        form = core_forms.UserProfileForm(instance=user)
-        return render(request, self.template_name, {'form': form, })
-
-    @staticmethod
-    def save_file_remove(fpath):
-        if os.path.exists(fpath):
-            os.remove(fpath)
-
-    def post(self, request, *args, **kwargs):
-
-        post = request.POST
-        user_id = kwargs.get('id')
-        user = get_object_or_404(User, pk=user_id)
-        form = core_forms.UserProfileForm(post, instance=user)
-
-        if not form.is_valid():
-            return self.render_to_response({'form': form})
-
-        user = form.save(commit=False)
-        user.is_active = True
-
-        old_big_file = user.avatar
-        old_small_file = user.avatar_small
-
-        # work with photos
-        temp_file = post.get('temp_file')
-
-        if not old_big_file:
-            if temp_file:
-                file_name = temp_file.rsplit(os.sep, 1)[-1]
-                temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
-
-                avatar_img = Image.open(temp_dir)
-                avatar_small_img = Image.open(temp_dir)
-
-                big_img_io = StringIO.StringIO()
-                small_img_io = StringIO.StringIO()
-
-                avatar_img.save(big_img_io, format='JPEG')
-                avatar_small_img.save(small_img_io, format='JPEG')
-
-                avatar = InMemoryUploadedFile(
-                    big_img_io, None, file_name, 'image/jpeg', big_img_io.len, None)
-
-                avatar_small = InMemoryUploadedFile(
-                    small_img_io, None, 'sm-{0}'.format(file_name),
-                    'image/jpeg', small_img_io.len, None)
-
-                user.avatar.save(file_name, avatar)
-                user.avatar_small.save('sm-{0}'.format(file_name), avatar_small)
-
-                # удаляем временный файл
-                self.save_file_remove(temp_dir)
-        else:
-            if temp_file:
-                file_name = temp_file.rsplit(os.sep, 1)[-1]
-                old_file_name = old_big_file.name.rsplit(os.sep, 1)[-1]
-                temp_dir = '{0}{1}'.format(settings.BASE_DIR, temp_file)
-
-                if file_name != old_file_name:
-
-                    old_big_file_path = old_big_file.path
-                    old_small_file_path = old_small_file.path
-
-                    avatar_img = Image.open(temp_dir)
-                    avatar_small_img = Image.open(temp_dir)
-
-                    big_img_io = StringIO.StringIO()
-                    small_img_io = StringIO.StringIO()
-
-                    avatar_img.save(big_img_io, format='JPEG')
-                    avatar_small_img.save(small_img_io, format='JPEG')
-
-                    avatar = InMemoryUploadedFile(
-                        big_img_io, None, file_name, 'image/jpeg', big_img_io.len, None)
-
-                    avatar_small = InMemoryUploadedFile(
-                        small_img_io, None, 'sm-{0}'.format(file_name),
-                        'image/jpeg', small_img_io.len, None)
-
-                    user.avatar.save(file_name, avatar)
-                    user.avatar_small.save('sm-{0}'.format(file_name), avatar_small)
-
-                    # удаляем временный файл
-                    self.save_file_remove(temp_dir)
-                    # удаляем старое большое фото
-                    # os.remove(old_file.path)
-                    self.save_file_remove(old_big_file_path)
-                    # удаляем старое мини фото
-                    # os.remove(old_small_file.path)
-                    self.save_file_remove(old_small_file_path)
-            else:
-                user.avatar = None
-                self.save_file_remove(old_big_file.path)
-                user.avatar_small = None
-                self.save_file_remove(old_small_file.path)
-
-        user.save()
-
-        return redirect(reverse('users.profile', kwargs={'id': user_id}))
-
-
-class TempImageView(BaseView):
-
-    def post(self, request, *args, **kwargs):
-        file_ = request.FILES['file']
-        format_ = file_.name.rsplit('.', 1)[-1]
-        name = '{0}.{1}'.format(str(uuid.uuid4()), format_)
-
-        temp_dir = os.path.join(settings.MEDIA_ROOT, 'temporary')
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
-
-        file_dir = os.path.join(temp_dir, name)
-
-        with open(file_dir, 'wb+') as f:
-            for chunk in file_.chunks():
-                f.write(chunk)
-
-        return self.json_response({
-            'img_url': os.path.join(os.sep, 'media', 'temporary', name)
+        return self.render_to_response({
+            'user': user
         })
+
+    def post(self, request, *args, **kwargs):
+        pass
