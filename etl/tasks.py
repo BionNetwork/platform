@@ -10,20 +10,14 @@ import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
-from operator import itemgetter
 
-# from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.olap.base import send_xml
-from etl.services.queue.base import (
-    TLSE,  STSE, RPublish, RowKeysCreator,
-    calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection,
-    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,
-    process_binary_data, get_binary_types_dict, WhetherTableExistsQuery)
+from etl.services.queue.base import *
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)

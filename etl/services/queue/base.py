@@ -1,8 +1,6 @@
 # coding: utf-8
 import binascii
 from celery import group
-from django.conf import settings
-import brukva
 from pymongo import IndexModel
 from psycopg2 import Binary
 import pymongo
@@ -17,11 +15,14 @@ from itertools import izip
 from bson import binary
 
 from etl.services.middleware.base import datetime_now_str
+from . import client, settings
 
-client = brukva.Client(host=settings.REDIS_HOST,
-                       port=int(settings.REDIS_PORT),
-                       selected_db=settings.REDIS_DB)
-client.connect()
+__all__ = [
+    'TLSE',  'STSE', 'RPublish', 'RowKeysCreator',
+    'calc_key_for_row', 'TableCreateQuery', 'InsertQuery', 'MongodbConnection',
+    'DeleteQuery', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
+    'process_binary_data', 'get_binary_types_dict', 'WhetherTableExistsQuery'
+]
 
 
 class QueueStorage(object):
