@@ -524,7 +524,10 @@ class LoadDimensions(TaskProcessing):
         table_key_name = get_table_name(self.table_prefix, self.key)
 
         table_exists_query = WhetherTableExistsQuery(source_service)
-        table_exists_query.set_query(table_name=table_key_name, db=source.db)
+
+        local_db = DatabaseService.get_local_connection_dict()['db']
+
+        table_exists_query.set_query(table_name=table_key_name, db=local_db)
         exists = table_exists_query.execute()
 
         exists = exists[0][0]
