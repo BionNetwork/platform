@@ -84,6 +84,20 @@ class DatabaseService(object):
         return instance.get_statistic(source, tables)
 
     @classmethod
+    def get_date_intervals(cls, source, cols_info):
+        """
+        Получение данных из
+        Args:
+
+
+        Returns:
+
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_intervals(source, cols_info)
+
+
+    @classmethod
     def get_rows_query(cls, source, cols, structure):
         """
         Получение запроса выбранных колонок из указанных таблиц выбранного источника

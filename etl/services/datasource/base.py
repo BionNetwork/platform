@@ -76,6 +76,7 @@ class DataSourceService(object):
             DatabaseService.get_columns_info(source, tables))
 
         stat_records = DatabaseService.get_stats_info(source, tables)
+        intervals = DatabaseService.get_date_intervals(source, col_records)
 
         cols, indexes, foreigns = DatabaseService.processing_records(
             source, col_records, index_records, const_records)
@@ -84,7 +85,7 @@ class DataSourceService(object):
             return []
 
         RedisSourceService.insert_columns_info(
-            source, tables, cols, indexes, foreigns, stat_records)
+            source, tables, cols, indexes, foreigns, stat_records, intervals)
 
         # выбранные ранее таблицы в редисе
         active_tables = RedisSourceService.get_active_list(
@@ -431,6 +432,7 @@ class DataSourceService(object):
                 fields = {'columns': [], }
 
                 table_info = tables_info_for_meta[table]
+                stats['date_intervals'] = table_info['date_intervals']
 
                 stats['tables_stat'] = table_info['stats']
                 t_cols = table_info['columns']

@@ -340,6 +340,38 @@ class Database(object):
         stat_records = self.get_query_result(stats_query)
         return self.processing_statistic(stat_records)
 
+    def get_interval_query(self, source, cols_info):
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    def get_intervals(self, source, cols_info):
+        """
+        Возращается список интервалов для полей типа Дата
+
+        Args:
+            source('Datasource'): Источник
+            cols_info(list): Информация о колонках
+
+        Returns:
+
+        """
+        res = {}
+        interval_queries = self.get_interval_query(source, cols_info)
+        for table, col, query in interval_queries:
+            start_date, end_date = self.get_query_result(query)[0]
+            if res.get(table, None):
+                res[table].append({
+                    'name': col,
+                    'startDate': start_date,
+                    'endDate': end_date,
+                })
+            else:
+                res[table] = [{
+                    'name': col,
+                    'startDate': start_date,
+                    'endDate': end_date,
+                }]
+        return res
+
     @staticmethod
     def processing_statistic(records):
         """

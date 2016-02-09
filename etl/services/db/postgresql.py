@@ -91,6 +91,24 @@ class Postgresql(Database):
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
         return cls.db_map.stat_query.format(tables_str)
 
+    @classmethod
+    def get_interval_query(cls, source, cols_info):
+        """
+
+        Args:
+
+
+        Returns:
+
+        """
+        intervals_query = []
+        for table, col_name, col_type, _, _ in cols_info:
+            if 'timestamp' in col_type:
+                query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
+                        col_name, table)
+                intervals_query.append([table, col_name, query])
+        return intervals_query
+
     @staticmethod
     def local_table_create_query(key_str, cols_str):
         """
