@@ -35,6 +35,10 @@ dates = [
     'year',
 ]
 
+booleans = [
+    'boolean',
+]
+
 for i in ints:
     DB_TYPES[i] = 'integer'
 
@@ -46,6 +50,9 @@ for i in texts:
 
 for i in dates:
     DB_TYPES[i] = 'timestamp'
+
+for i in booleans:
+    DB_TYPES[i] = 'boolean'
 
 table_query = """SELECT table_name FROM user_tables"""
 

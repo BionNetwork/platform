@@ -599,6 +599,18 @@ class LoadDimensions(TaskProcessing):
         return map(lambda (table, field): '{0}{1}{2}'.format(
                     table, FIELD_NAME_SEP, field['name']), self.actual_fields)
 
+    def filter_columns(self, cols):
+        """
+        Достаем инфу только тех колонок, которые используются
+        в мерах и размерностях
+        """
+        dim_meas_cols_info = []
+        for (act_table, col_info) in self.actual_fields:
+            for c in cols:
+                if c['table'] == act_table and c['col'] == col_info['name']:
+                    dim_meas_cols_info.append(c)
+        return dim_meas_cols_info
+
     def save_fields(self):
         """Заполняем таблицу данными
 
@@ -611,8 +623,10 @@ class LoadDimensions(TaskProcessing):
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
 
+        dim_meas_cols = self.filter_columns(cols)
+
         # инфа о бинарных данных для инсерта в постгрес
-        binary_types_dict = get_binary_types_dict(cols, col_types)
+        binary_types_dict = get_binary_types_dict(dim_meas_cols, col_types)
 
         # инфа для колонки cdc_key, о том, что она не binary
         binary_types_dict['0'] = False

@@ -275,7 +275,8 @@ def process_binary_data(record, binary_types_list):
     new_record = list()
 
     for (rec, is_binary) in izip(record, binary_types_list):
-        new_record.append(binary.Binary(rec) if is_binary else rec)
+        new_record.append(binary.Binary(rec)
+                          if is_binary and rec is not None else rec)
 
     new_record = tuple(new_record)
     return new_record
@@ -288,7 +289,7 @@ def process_binaries_for_row(row, binary_types_list):
     """
     new_row = []
     for i, r in enumerate(row):
-        if binary_types_list[i]:
+        if binary_types_list[i] and r is not None:
             r = binascii.b2a_base64(r)
         new_row.append(r)
     return tuple(new_row)

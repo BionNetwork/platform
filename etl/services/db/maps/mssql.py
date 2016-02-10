@@ -39,6 +39,9 @@ dates = [
     'datetime2',
     'datetimeoffset',
 ]
+booleans = [
+    'bit',
+]
 
 for i in ints:
     MSSQL_TYPES[i] = 'integer'
@@ -51,6 +54,9 @@ for i in texts:
 
 for i in dates:
     MSSQL_TYPES[i] = 'timestamp'
+
+for i in booleans:
+    MSSQL_TYPES[i] = 'boolean'
 
 cols_query = """
     SELECT table_name, column_name, data_type FROM information_schema.columns
