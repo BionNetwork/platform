@@ -6,14 +6,12 @@ import logging
 
 import os
 import sys
-import lxml.etree as etree
 import brukva
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 import json
 import calendar
 import math
 
-# from pymongo import ASCENDING
 
 from psycopg2 import errorcodes
 from etl.constants import *
@@ -22,14 +20,15 @@ from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.olap.base import send_xml
 from etl.services.pymondrian.schema import (
-    Schema, PhysicalSchema, Table, Cube as CubeSchema, CubeDimension,
-    Dimension as DimensionSchema, Attribute, Hierarchies, Level,
-    Hierarchy, MeasureGroup, Measure as MeasureSchema, DimensionLinks, NoLink,
+    Schema, PhysicalSchema, Table, Cube as CubeSchema,
+    Dimension as DimensionSchema, Attribute, Level,
+    Hierarchy, MeasureGroup, Measure as MeasureSchema, NoLink,
     Key, Name)
-from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
-    calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
-    process_binary_data, get_binary_types_dict
+from etl.services.queue.base import (
+    TLSE,  STSE, RPublish, RowKeysCreator, calc_key_for_row,
+    TableCreateQuery, InsertQuery, DeleteQuery, MongodbConnection,
+    AKTSE, DTSE, get_single_task, get_binary_types_list,
+    process_binary_data, get_binary_types_dict, DTCN)
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
@@ -66,9 +65,10 @@ class TaskProcessing(object):
         user_id(str): id пользователя
         context(dict): контекстные данные для задачи
         was_error(bool): Факт наличия ошибки
-        err_msg(str): Текст ошибки, если случилась
+        err_msg(unicode): Текст ошибки, если случилась
         publisher(`RPublish`): Посыльный к клиенту о текущем статусе задачи
-        queue_storage(`QueueStorage`): Посыльный к redis о текущем статусе задачи
+        queue_storage(`etl.services.queue.base.QueueStorage`):
+            Посыльный к redis о текущем статусе задачи
         key(str): Ключ
         next_task_params(tuple): Набор данных для след. задачи
     """
@@ -138,8 +138,8 @@ class TaskProcessing(object):
         Обработка ошибки
 
         Args:
-            err_msg(str): Текст ошибки
-            err_code(str): Код ошибки
+            err_msg(unicode): Текст ошибки
+            err_code(unicode): Код ошибки
         """
         self.was_error = True
         # fixme перезаписывается при каждой ошибке
@@ -531,12 +531,7 @@ class LoadDimensions(TaskProcessing):
             date_intervals_info.append(
                 (t['meta__collection_name'], json.loads(t['meta__stats'])['date_intervals']))
 
-        # date_col_names = []
-        # for table, field in self.actual_fields:
-        #     if field['type'] == 'timestamp':
-        #         date_col_names.append("{0}{1}{2}".format(
-        #             table, FIELD_NAME_SEP, field['name']))
-        if date_intervals_info:
+        if date_intervals_info and self.table_prefix == DIMENSIONS:
             self.create_date_tables(date_intervals_info)
 
         col_names = ['"cdc_key" text PRIMARY KEY']
@@ -547,7 +542,7 @@ class LoadDimensions(TaskProcessing):
                 col_names.append('"{0}" {1}'.format(
                     field_name, field['type']))
             else:
-                col_names.append('"{0}_id" integer REFERENCES time_{0}_{1} (id)'.format(
+                col_names.append('"{0}_id" integer REFERENCES time_{0}_{1} (time_id)'.format(
                     field_name, self.key))
 
         create_query = TableCreateQuery(DataSourceService())
@@ -718,18 +713,38 @@ class LoadDimensions(TaskProcessing):
         connection.commit()
 
     def create_date_tables(self, date_intervals_info):
+        """
+        Создание таблиц дат
+
+        Args:
+            date_intervals_info(list):
+                Список данных об интервалах дат в таблицах
+            ::
+                [
+                    (
+                        <table_name1>,
+                        [
+                            {'startDate': <start_date1>, 'endDate': <end_date1>,
+                            'name': <col_name1>},
+                            ...
+                        ]
+                    )
+                    ...
+                ]
+        """
 
         self.date_tables = {}
         for table, columns in date_intervals_info:
             for column in columns:
                 self.date_tables.update({'%s__%s_id' % (table, column['name']): {}})
-                connection = DataSourceService.get_local_instance().connection
                 create_query = TableCreateQuery(DataSourceService())
-                date_table_col_names = ['"{0}" {1}'.format(field, f_type)
-                                        for field, f_type in date_fields]
-                date_table_col_names.append('"id" integer PRIMARY KEY')
+                date_table_col_names = ['"time_id" integer PRIMARY KEY']
+                date_table_col_names.extend([
+                    '"{0}" {1}'.format(field, f_type) for field, f_type
+                    in DTCN.types])
                 create_query.set_query(
-                    table_name=get_table_name('time_%s__%s' % (table, column['name']), self.key),
+                    table_name=get_table_name(
+                        u'time_%s__%s' % (table, column['name']), self.key),
                     cols=date_table_col_names)
                 create_query.execute()
 
@@ -740,7 +755,7 @@ class LoadDimensions(TaskProcessing):
 
                 insert_query = InsertQuery(DataSourceService())
                 insert_query.set_query(
-                    table_name=get_table_name('time_%s__%s' % (
+                    table_name=get_table_name(u'time_%s__%s' % (
                         table, column['name']), self.key), cols_nums=9)
 
                 for ind, cur_day in enumerate(range(delta.days + 1)):
@@ -750,15 +765,16 @@ class LoadDimensions(TaskProcessing):
                     temp_dict = {}
                     temp_dict.update(
                         {
-                            '0': current_day_str,
-                            '1': calendar.day_name[current_day.weekday()],
-                            '2': current_day.year,
-                            '3': month,
-                            '4': current_day.strftime('%B'),
-                            '5': current_day.day,
-                            '6': current_day.isocalendar()[1],
-                            '7': int(math.ceil(month / 3)),
-                            '8': ind+1,
+                            '0': ind+1,
+                            '1': current_day_str,
+                            '2': calendar.day_name[current_day.weekday()],
+                            '3': current_day.year,
+                            '4': month,
+                            '5': current_day.strftime('%B'),
+                            '6': current_day.day,
+                            '7': current_day.isocalendar()[1],
+                            '8': int(math.ceil(month / 3)),
+
                          }
                     )
                     rows.append(temp_dict)
@@ -767,17 +783,6 @@ class LoadDimensions(TaskProcessing):
                     })
                 insert_query.execute(data=rows)
         return self.date_tables
-
-date_fields = [
-    ('current_date', 'timestamp'),
-    ('weekday', 'text'),
-    ('year', 'integer'),
-    ('month', 'integer'),
-    ('month_text', 'text'),
-    ('day', 'integer'),
-    ('week_of_year', 'integer'),
-    ('quarter', 'integer')
-]
 
 
 class LoadMeasures(LoadDimensions):
@@ -1239,7 +1244,7 @@ class CreateCube(TaskProcessing):
                 name=name, table=dimensions_table_name, type=dim_type,
                 visible=visible, hight_cardinality=True, caption=title)
 
-            if not dimension.type == 'TimeDimension':
+            if not dimension.type == 'TIME':
                 dim_attribute = Attribute(name=title, key_column=name)
                 dimension.add_attribute(dim_attribute)
 
@@ -1252,38 +1257,38 @@ class CreateCube(TaskProcessing):
 
             else:
                 year = Attribute(
-                    name='Year', key_column='the_year', level_type='TimeYears'
+                    name='Year', key_column=DTCN.YEAR, level_type='TimeYears'
                 )
                 quarter = Attribute(
                     name='Quarter', level_type='TimeQuarters',
-                    attr_key=Key(columns=['the_year', 'quarter']),
+                    attr_key=Key(columns=[DTCN.YEAR, DTCN.QUARTER]),
                     attr_name=Name(columns=['quarter'])
                 )
                 month = Attribute(
                     name='Month', level_type='TimeMonth',
-                    attr_key=Key(columns=['the_year', 'month_the_year']),
-                    attr_name=Name(columns=['month_of_year'])
+                    attr_key=Key(columns=[DTCN.YEAR, DTCN.MONTH]),
+                    attr_name=Name(columns=[DTCN.MONTH])
                 )
                 week = Attribute(
                     name='Week', level_type='TimeWeek',
-                    attr_key=Key(columns=['the_year', 'week_of_year']),
-                    attr_name=Name(columns=['week_of_year'])
+                    attr_key=Key(columns=[DTCN.YEAR, DTCN.WEEK_OF_YEAR]),
+                    attr_name=Name(columns=[DTCN.WEEK_OF_YEAR])
                 )
                 day = Attribute(
                     name='Day', level_type='TimeDays',
-                    attr_key=Key(columns=['time_id']),
-                    attr_name=Name(columns=['day_of_month'])
+                    attr_key=Key(columns=[DTCN.TIME_ID]),
+                    attr_name=Name(columns=[DTCN.DAY])
                 )
                 month_name = Attribute(
                     name='Month Name',
-                    attr_key=Key(columns=['the_year', 'month_of_year']),
-                    attr_name=Name(columns=['the_month'])
+                    attr_key=Key(columns=[DTCN.YEAR, DTCN.MONTH]),
+                    attr_name=Name(columns=[DTCN.MONTH_TEXT])
                 )
                 date = Attribute(
-                    name='Date', key_column='the_date'
+                    name='Date', key_column=DTCN.RAW_DATE
                 )
                 time_id = Attribute(
-                    name='Time Id', key_column='time_id',
+                    name='Time Id', key_column=DTCN.TIME_ID
                 )
                 dimension.add_attributes([
                     year, quarter, month, week, day, month_name, date, time_id])
@@ -1323,7 +1328,6 @@ class CreateCube(TaskProcessing):
             name=cube_key,
             data=xml,
             user_id=self.context['user_id'],
-            # user_id=11,
         )
 
         send_xml(key, cube.id, xml)

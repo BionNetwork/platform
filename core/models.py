@@ -154,8 +154,8 @@ class Dimension(models.Model):
     STANDART_DIMENSION = 'SD'
     TIME_DIMENSION = 'TD'
     DIMENSION_TYPE = (
-        (STANDART_DIMENSION, 'StandardDimension'),
-        (STANDART_DIMENSION, 'TimeDimension'),
+        (STANDART_DIMENSION, 'OTHER'),
+        (TIME_DIMENSION, 'TIME'),
     )
     name = models.CharField(
         verbose_name="название измерения", max_length=255, db_index=True)

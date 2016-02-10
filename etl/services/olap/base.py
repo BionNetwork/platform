@@ -45,7 +45,7 @@ def send_xml(key, cube_id, xml):
     Отправка файлов в mondrian-server
 
     Args:
-        key(str): ключ
+        key(unicode): ключ
         cube_id(int): id куба
         xml(str): содержимое схемы
     """

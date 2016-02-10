@@ -325,6 +325,20 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
+    @staticmethod
+    def remote_table_create_query():
+        """
+        запрос на создание новой таблицы в БД клиента
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def remote_triggers_create_query():
+        """
+        запрос на создание триггеров в БД клиента
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
     def get_statistic(self, source, tables):
         """
         возвращает статистику таблиц

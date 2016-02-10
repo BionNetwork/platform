@@ -599,11 +599,11 @@ class TaskStatusEnum(BaseEnum):
     IDLE, PROCESSING, ERROR, DONE, DELETED = ('idle', 'processing', 'error',
                                               'done', 'deleted', )
     values = {
-        IDLE: " В ожидании",
-        PROCESSING: "В обработке",
-        ERROR: "Ошибка",
-        DONE: "Выполнено",
-        DELETED: "Удалено",
+        IDLE: u"В ожидании",
+        PROCESSING: u"В обработке",
+        ERROR: u"Ошибка",
+        DONE: u"Выполнено",
+        DELETED: u"Удалено",
     }
 
 
@@ -613,10 +613,10 @@ class TaskLoadingStatusEnum(BaseEnum):
     """
     START, PROCESSING, FINISH, ERROR = ('start', 'processing', 'finish', 'error')
     values = {
-        START: "Старт",
-        PROCESSING: "В обработке",
-        FINISH: "Выполнено",
-        ERROR: "Ошибка",
+        START: u"Старт",
+        PROCESSING: u"В обработке",
+        FINISH: u"Выполнено",
+        ERROR: u"Ошибка",
     }
 
 TLSE = TaskLoadingStatusEnum
@@ -630,8 +630,8 @@ class SourceTableStatusEnum(BaseEnum):
     IDLE, LOADED = ('idle', 'loaded')
 
     values = {
-        IDLE: "Выполнено",
-        LOADED: "Загружено"
+        IDLE: u"Выполнено",
+        LOADED: u"Загружено"
     }
 
 STSE = SourceTableStatusEnum
@@ -645,8 +645,8 @@ class DeltaTableStatusEnum(BaseEnum):
     NEW, SYNCED = ('new', 'synced')
 
     values = {
-        NEW: "Новое",
-        SYNCED: "Синхронизировано",
+        NEW: u"Новое",
+        SYNCED: u"Синхронизировано",
     }
 
 DTSE = DeltaTableStatusEnum
@@ -660,10 +660,55 @@ class AllKeysTableStatusEnum(BaseEnum):
     NEW, DELETED, SYNCED = ('new', 'deleted', 'synced')
 
     values = {
-        NEW: "Новое",
-        DELETED: "Удалено",
-        SYNCED: "Синхронизировано",
+        NEW: u"Новое",
+        DELETED: u"Удалено",
+        SYNCED: u"Синхронизировано",
     }
 
 AKTSE = AllKeysTableStatusEnum
+
+date_fields = [
+    ('raw_date', 'timestamp'),
+    ('weekday', 'text'),
+    ('year', 'integer'),
+    ('month', 'integer'),
+    ('month_text', 'text'),
+    ('day', 'integer'),
+    ('week_of_year', 'integer'),
+    ('quarter', 'integer')
+]
+
+
+class DateTableColumnsName(BaseEnum):
+    """
+        Статусы тасков
+    """
+    TIME_ID, RAW_DATE, WEEKDAY, YEAR, MONTH, MONTH_TEXT, DAY, WEEK_OF_YEAR, QUARTER = (
+        'time_id', 'raw_date', 'weekday', 'year', 'month', 'month_text',
+        'day', 'week_of_year', 'quarter')
+
+    values = {
+        TIME_ID: u'id',
+        RAW_DATE: u'Дата',
+        WEEKDAY: u'День недели',
+        YEAR: u'Год',
+        MONTH: u'Месяц',
+        MONTH_TEXT: u'Месяц текст',
+        DAY: u'День',
+        WEEK_OF_YEAR: u'Неделя года',
+        QUARTER: u'Квартал',
+    }
+
+    types = [
+        (RAW_DATE, 'timestamp'),
+        (WEEKDAY, 'text'),
+        (YEAR, 'integer'),
+        (MONTH, 'integer'),
+        (MONTH_TEXT, 'text'),
+        (DAY, 'integer'),
+        (WEEK_OF_YEAR, 'integer'),
+        (QUARTER, 'integer'),
+    ]
+
+DTCN = DateTableColumnsName
 

@@ -54,8 +54,8 @@ def get_table_name(prefix, key):
     название новой таблицы
 
     Args:
-        prefix(str): префикс перед ключем
-        key(str): ключ
+        prefix(unicode): префикс перед ключем
+        key(unicode): ключ
     Returns:
         str: Название новой наблицы
     """
