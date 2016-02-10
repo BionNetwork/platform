@@ -21,8 +21,9 @@ from etl.services.middleware.base import (
 from etl.services.olap.base import send_xml
 from etl.services.pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema, CubeDimension,
-    Dimension as DimensionSchema, DimensionAttribute, Hierarchies, Level,
-    Hierarchy, MeasureGroup, Measure as MeasureSchema, DimensionLinks, NoLink)
+    Dimension as DimensionSchema, Attribute, Hierarchies, Level,
+    Hierarchy, MeasureGroup, Measure as MeasureSchema, DimensionLinks, NoLink,
+    Key, Name)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
     DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
@@ -1104,18 +1105,64 @@ class CreateCube(TaskProcessing):
                 name=name, table=dimensions_table_name, type=dim_type,
                 visible=visible, hight_cardinality=True, caption=title)
 
-            dim_attribute = DimensionAttribute(
-                name=title, key_column=name, has_hierarchy=False)
+            if not dimension.type == 'TimeDimension':
+                dim_attribute = Attribute(name=title, key_column=name)
+                dimension.add_attribute(dim_attribute)
 
-            level = Level(name='%s level' % title, visible=True, caption=title)
-            hierarchies_set = Hierarchies()
-            hierarchy = Hierarchy(name=title)
-            hierarchies_set.add_hierarchy(hierarchy)
-            hierarchies_set.add_level_to_hierarchy(
-                hierarchy=hierarchy, level=level)
+                level = Level(
+                    attribute=title, visible=True, caption=title)
+                hierarchy = Hierarchy(name=title)
+                dimension.add_hierarchies([hierarchy])
+                dimension._hierarchies_set.add_level_to_hierarchy(
+                    hierarchy=hierarchy, level=level)
 
-            dimension.add_attribute(dim_attribute)
-            dimension.add_hierarchies_set(hierarchies_set)
+            else:
+                year = Attribute(
+                    name='Year', key_column='the_year', level_type='TimeYears'
+                )
+                quarter = Attribute(
+                    name='Quarter', level_type='TimeQuarters',
+                    attr_key=Key(columns=['the_year', 'quarter']),
+                    attr_name=Name(columns=['quarter'])
+                )
+                month = Attribute(
+                    name='Month', level_type='TimeMonth',
+                    attr_key=Key(columns=['the_year', 'month_the_year']),
+                    attr_name=Name(columns=['month_of_year'])
+                )
+                week = Attribute(
+                    name='Week', level_type='TimeWeek',
+                    attr_key=Key(columns=['the_year', 'week_of_year']),
+                    attr_name=Name(columns=['week_of_year'])
+                )
+                day = Attribute(
+                    name='Day', level_type='TimeDays',
+                    attr_key=Key(columns=['time_id']),
+                    attr_name=Name(columns=['day_of_month'])
+                )
+                month_name = Attribute(
+                    name='Month Name',
+                    attr_key=Key(columns=['the_year', 'month_of_year']),
+                    attr_name=Name(columns=['the_month'])
+                )
+                date = Attribute(
+                    name='Date', key_column='the_date'
+                )
+                time_id = Attribute(
+                    name='Time Id', key_column='time_id',
+                )
+                dimension.add_attributes([
+                    year, quarter, month, week, day, month_name, date, time_id])
+
+                time_hierarchy_1 = Hierarchy(name='Time', has_all=False)
+                for level_name in ['Year', 'Quarter', 'Month']:
+                    time_hierarchy_1.add_level(Level(attribute=level_name))
+                time_hierarchy_2 = Hierarchy(name='Weekly', has_all=True)
+                for level_name in ['Year', 'Week', 'Day']:
+                    time_hierarchy_2.add_level(Level(attribute=level_name))
+
+                dimension.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
+
             cube.add_dimension(dimension)
 
         measure_group_name = get_table_name(MEASURES, key)
@@ -1136,7 +1183,7 @@ class CreateCube(TaskProcessing):
 
         schema.add_cube(cube)
 
-        xml = schema.to_xml()
+        xml = generate(schema, output=1)
 
         cube = Cube.objects.create(
             name=cube_key,
