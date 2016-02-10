@@ -3,36 +3,39 @@ from collections import defaultdict
 DB_TYPES = defaultdict(lambda: 0)
 
 ints = [
-    'int',
-    'tinyint',
-    'smallint',
-    'mediumint',
-    'bigint',
+    'integer',
+    'shortinteger',
+    'longinteger',
 ]
+
 floats = [
-    'float',
-    'double',
+    'number',
     'decimal',
+    'shortdecimal',
+    'binary_float',
+    'binary_decimal',
 ]
+
 texts = [
     'char',
     'varchar',
-    'text',
-    'blob',
-    'tinytext',
-    'tinyblob',
-    'mediumtext',
-    'mediumblob',
-    'longtext',
-    'longblob',
-    'enum',
+    'varchar2',
+    'nchar',
+    'nvarchar2',
+    'clob',
+    'nclob',
+    'long',
 ]
+
 dates = [
     'date',
-    'datetime',
     'timestamp',
-    'time',
-    'year',
+]
+
+blobs = [
+    'blob',
+    'binary',
+    'varbinary',
 ]
 
 booleans = [
@@ -50,14 +53,20 @@ for i in texts:
 
 for i in dates:
     DB_TYPES[i] = 'timestamp'
-
+    
+for i in blobs:
+    DB_TYPES[i] = 'binary'
+    
 for i in booleans:
     DB_TYPES[i] = 'boolean'
 
 table_query = """SELECT table_name FROM user_tables"""
 
-columns_query = """SELECT table_name, column_name, data_type FROM user_tab_columns
-          WHERE table_name IN {0}"""
+columns_query = """SELECT table_name, column_name, data_type,
+                    CASE WHEN nullable='N' THEN 'NO'
+                    ELSE 'YES' END as is_nullable,
+                    null as extra
+ FROM user_tab_columns WHERE table_name IN {0}"""
 
 
 constraints_query = """

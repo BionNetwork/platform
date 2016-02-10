@@ -109,7 +109,7 @@ class Oracle(Database):
 
         for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
             for ig in igroup:
-                indexes[ikey].append({
+                indexes[ikey.lower()].append({
                     "name": ig[index_name],
                     "columns": ig[icol_names].split(','),
                     "is_primary": ig[primary] == 't',
@@ -122,7 +122,7 @@ class Oracle(Database):
 
         for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
             for ig in igroup:
-                constraints[ikey].append({
+                constraints[ikey.lower()].append({
                     "c_col_name": ig[c_col_name],
                     "c_name": ig[c_name],
                     "c_type": ig[c_type],
@@ -135,12 +135,12 @@ class Oracle(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type = xrange(3)
+        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
-            t_indexes = indexes[key]
-            t_consts = constraints[key]
+            t_indexes = indexes[key.lower()]
+            t_consts = constraints[key.lower()]
 
             for x in group:
                 is_index = is_unique = is_primary = False
@@ -159,18 +159,22 @@ class Oracle(Database):
                                     is_unique = True
                                     is_primary = True
 
-                columns[key].append({"name": col,
+                columns[key.lower()].append({"name": col,
                                      "type": (cls.db_map.DB_TYPES[
                                                   cls.lose_brackets(x[col_type])]
                                               or x[col_type]),
                                      "is_index": is_index,
                                      "is_unique": is_unique,
-                                     "is_primary": is_primary})
+                                     "is_primary": is_primary,
+                                     "origin_type": x[col_type],
+                                     "is_nullable": x[is_nullable],
+                                     "extra": x[extra_],
+                                     })
 
             # находим внешние ключи
             for c in t_consts:
                 if c['c_type'] == 'R':
-                    foreigns[key].append({
+                    foreigns[key.lower()].append({
                         "name": c['c_name'],
                         "source": {"table": key, "column": c["c_col_name"]},
                         "destination":
@@ -205,3 +209,18 @@ class Oracle(Database):
             ', '.join(alias_list), cols_str, query_join,
             '{1}', '{0}')
 
+    def get_structure_rows_number(self, structure, cols):
+        """
+        возвращает примерное кол-во строк в запросе для планирования
+        :param structure:
+        :param cols:
+        :return:
+        """
+        # fixme стоит заглушка! не совсем понятно как доставать explain данные!
+        # sql1 = 'explain plan for SELECT * FROM REGIONS'
+        # sql2 = 'SELECT PLAN_TABLE_OUTPUT FROM table(dbms_xplan.display)'
+        # cursor.execute(sql1)
+        # cursor.execute(sql2)
+        # cursor.fetchall() и дальше структура неприятная приходит
+
+        return 0
