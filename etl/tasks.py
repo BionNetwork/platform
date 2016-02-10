@@ -365,7 +365,7 @@ class LoadDb(TaskProcessing):
             source, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"cdc_key" text UNIQUE']
+        col_names = ['"cdc_key" text PRIMARY KEY']
         clear_col_names = ['cdc_key']
         for obj in cols:
             t = obj['table']
@@ -477,7 +477,8 @@ class LoadDimensions(TaskProcessing):
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
-    def get_actual_fields(self, meta_data):
+    @classmethod
+    def get_actual_fields(cls, meta_data):
         """
         Фильтруем поля по необходимому нам типу
 
@@ -488,7 +489,7 @@ class LoadDimensions(TaskProcessing):
         for record in meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                if field['type'] in self.actual_fields_type:
+                if field['type'] in cls.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
@@ -523,7 +524,7 @@ class LoadDimensions(TaskProcessing):
             value=self.key).values('meta__collection_name', 'meta__fields')
         self.actual_fields = self.get_actual_fields(meta_data)
 
-        col_names = []
+        col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in self.actual_fields:
             col_names.append('"{0}{1}{2}" {3}'.format(
                 table, FIELD_NAME_SEP, field['name'], field['type']))
@@ -546,6 +547,9 @@ class LoadDimensions(TaskProcessing):
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
+
+        self.create_reload_triggers()
+
         if not self.last_task:
             self.set_next_task_params()
 
@@ -593,16 +597,21 @@ class LoadDimensions(TaskProcessing):
                 # data=json.dumps(data)
             )
 
+    def get_splitted_table_column_names(self):
+        """
+        Возвращает имена колонки вида 'table__column'
+        """
+        return map(lambda (table, field): '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name']), self.actual_fields)
+
     def save_fields(self):
         """Заполняем таблицу данными
 
         Args:
             model: Модель к целевой таблице
         """
-        column_names = []
-        for table, field in self.actual_fields:
-            column_names.append('{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name']))
+        column_names = ['cdc_key']
+        column_names += self.get_splitted_table_column_names()
 
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -643,6 +652,33 @@ class LoadDimensions(TaskProcessing):
             offset += step
 
             self.queue_storage.update()
+
+    def create_reload_triggers(self):
+        """
+        Создание триггеров для размерностей и мер, обеспечивающих синхронизацию данных для источника
+        """
+        local_instance = DataSourceService.get_local_instance()
+        connection = local_instance.connection
+        cursor = connection.cursor()
+
+        column_names = ['cdc_key']
+        column_names += self.get_splitted_table_column_names()
+
+        insert_cols = []
+        for col in column_names:
+            insert_cols.append('NEW.{0}'.format(col))
+
+        reload_trigger_query = local_instance.reload_datasource_trigger_query()
+
+        cursor.execute(reload_trigger_query.format(
+            new_table=get_table_name(self.table_prefix, self.key),
+            orig_table=get_table_name(STTM_DATASOURCE, self.key),
+            del_condition="cdc_key=OLD.cdc_key",
+            insert_cols=','.join(insert_cols),
+            cols="({0})".format(','.join(column_names)),
+        ))
+
+        connection.commit()
 
 
 class LoadMeasures(LoadDimensions):

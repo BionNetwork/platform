@@ -27,12 +27,15 @@
     <!-- /.search form -->
 
     <!-- Sidebar Menu -->
-    <ul class="sidebar-menu">
+    <ul id="left-sidebar-menu" class="sidebar-menu">
         <li class="header">HEADER</li>
         <!-- Optionally, you can add icons to the links -->
-        <li class="active"><a href="{% url "home" %}"><i class="fa fa-link"></i><span>Home</span></a></li>
-        <li><a href="{% url "core:users" %}"><i class="fa fa-users"></i><span>Пользователи</span></a></li>
-        <li><a href="{% url "etl:datasources.index" %}"><i class="fa fa-circle"></i><span>Источники данных</span></a></li>
+        <li id="home-li-id" class="{% if request.path == '/' %}active{% endif %}">
+            <a href="{% url "home" %}"><i class="fa fa-link"></i><span>Home</span></a></li>
+        <li id="users-li-id" class="{% if '/users/' in request.path %}active{% endif %}">
+            <a href="{% url "core:users" %}"><i class="fa fa-users"></i><span>Пользователи</span></a></li>
+        <li id="sources-li-id" class="{% if '/etl/datasources/' in request.path %}active{% endif %}">
+            <a href="{% url "etl:datasources.index" %}"><i class="fa fa-circle"></i><span>Источники данных</span></a></li>
         <li class="treeview">
             <a href="#"><i class="fa fa-link"></i> <span>Multilevel</span> <i
                     class="fa fa-angle-left pull-right"></i></a>

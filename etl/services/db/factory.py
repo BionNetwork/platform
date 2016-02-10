@@ -12,8 +12,12 @@ class DatabaseService(object):
     def factory(**connection):
         """
         фабрика для инстанса бд
-        :param connection: **dict
-        :return: instance :raise ValueError:
+
+        Args:
+            **connection(dict): словарь с информацией о подключении
+
+        Returns:
+            etl.services.db.interfaces.Database
         """
         conn_type = int(connection.get('conn_type', ''))
         del connection['conn_type']
@@ -35,8 +39,13 @@ class DatabaseService(object):
     def get_source_instance(cls, source):
         """
         инстанс бд соурса
-        :param source: Datasource
-        :return: instance
+
+        Args:
+            source(core.models.Datasource): источник
+
+        Returns:
+            etl.services.db.interfaces.Database
+
         """
         data = cls.get_source_data(source)
         instance = cls.factory(**data)
@@ -45,8 +54,12 @@ class DatabaseService(object):
     @classmethod
     def get_tables(cls, source):
         """
-        возвращает таблицы соурса
-        :type source: Datasource
+        Возвращает таблицы источника
+        Args:
+            source(core.models.Datasource): источник
+
+        Returns:
+            list: список таблиц
         """
         instance = cls.get_source_instance(source)
         return instance.get_tables(source)
@@ -55,8 +68,11 @@ class DatabaseService(object):
     def get_source_data(cls, source):
         """
         Возвращает список модели источника данных
-        :type source: Datasource
-        :return list
+        Args:
+            source(core.models.Datasource): источник
+
+        Returns:
+            dict: словарь с информацией подключения
         """
         return dict({'db': source.db, 'host': source.host, 'port': source.port, 'login': source.login,
                      'password': source.password, 'conn_type': source.conn_type})
@@ -64,10 +80,13 @@ class DatabaseService(object):
     @classmethod
     def get_columns_info(cls, source, tables):
         """
-        Получение списка колонок
-        :param source: Datasource
-        :param tables:
-        :return:
+            Получение списка колонок
+        Args:
+            source(core.models.Datasource): источник
+            tables(list): список таблиц
+
+        Returns:
+            list: список колонок таблицы
         """
         instance = cls.get_source_instance(source)
         return instance.get_columns(source, tables)

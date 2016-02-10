@@ -212,3 +212,25 @@ delete_primary_key = """
 """
 
 drop_index = """drop index {0}"""
+
+
+dimension_measure_triggers_query = """
+    CREATE OR REPLACE FUNCTION reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
+    BEGIN
+        IF (TG_OP = 'DELETE') THEN
+            DELETE FROM "{new_table}" WHERE {del_condition};
+            RETURN OLD;
+        ELSIF (TG_OP = 'INSERT') THEN
+            INSERT INTO "{new_table}" {cols} SELECT {insert_cols};
+            RETURN NEW;
+        END IF;
+        RETURN NULL;
+    END;
+$dim_meas_recs$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "for_{new_table}" on "{orig_table}";
+
+CREATE TRIGGER "for_{new_table}"
+AFTER INSERT OR DELETE ON "{orig_table}"
+    FOR EACH ROW EXECUTE PROCEDURE reload_{new_table}_records();
+"""
