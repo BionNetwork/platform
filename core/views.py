@@ -363,6 +363,14 @@ class EditUserView(BaseTemplateView):
         return self.redirect('core:users')
 
 
+class RedirectToProfileView(EditUserView):
+
+    def post(self, request, *args, **kwargs):
+        super(RedirectToProfileView, self).post(request, *args, **kwargs)
+
+        return self.redirect('users.profile', (request.user.id, ))
+
+
 class UserProfileView(BaseTemplateView):
     """
     Страница профиля пользователя

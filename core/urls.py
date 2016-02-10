@@ -16,6 +16,7 @@ urlpatterns = [
     url(r'^users/$', views.UserListView.as_view(), name='users'),
     url(r'^users/delete/(?P<id>\d+)/$', views.RemoveUserView.as_view(), name='users.delete'),
     url(r'^users/edit/(?P<id>\d+)/$', views.EditUserView.as_view(), name='users.edit'),
+    url(r'^users/edit2/(?P<id>\d+)/$', views.RedirectToProfileView.as_view(), name='users.edit2'),
     url(r'^users/add$', views.NewUserView.as_view(), name='users.add'),
     url(r'^users/profile/(?P<id>\d+)/$', views.UserProfileView.as_view(), name='users.profile'),
 ]
