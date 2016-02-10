@@ -21,6 +21,11 @@ from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
 from etl.services.olap.base import send_xml
+from etl.services.pymondrian.schema import (
+    Schema, PhysicalSchema, Table, Cube as CubeSchema, CubeDimension,
+    Dimension as DimensionSchema, Attribute, Hierarchies, Level,
+    Hierarchy, MeasureGroup, Measure as MeasureSchema, DimensionLinks, NoLink,
+    Key, Name)
 from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
     calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
     DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
@@ -362,7 +367,7 @@ class LoadDb(TaskProcessing):
             source, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"cdc_key" text UNIQUE']
+        col_names = ['"cdc_key" text PRIMARY KEY']
         clear_col_names = ['cdc_key']
         for obj in cols:
             t = obj['table']
@@ -474,7 +479,8 @@ class LoadDimensions(TaskProcessing):
     table_prefix = DIMENSIONS
     actual_fields_type = ['text', Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
 
-    def get_actual_fields(self, meta_data):
+    @classmethod
+    def get_actual_fields(cls, meta_data):
         """
         Фильтруем поля по необходимому нам типу
 
@@ -485,7 +491,7 @@ class LoadDimensions(TaskProcessing):
         for record in meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                if field['type'] in self.actual_fields_type:
+                if field['type'] in cls.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
@@ -533,7 +539,7 @@ class LoadDimensions(TaskProcessing):
         if date_intervals_info:
             self.create_date_tables(date_intervals_info)
 
-        col_names = []
+        col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in self.actual_fields:
             field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
             if field['type'] != 'timestamp':
@@ -562,6 +568,9 @@ class LoadDimensions(TaskProcessing):
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
+
+        self.create_reload_triggers()
+
         if not self.last_task:
             self.set_next_task_params()
 
@@ -609,6 +618,13 @@ class LoadDimensions(TaskProcessing):
                 # data=json.dumps(data)
             )
 
+    def get_splitted_table_column_names(self):
+        """
+        Возвращает имена колонки вида 'table__column'
+        """
+        return map(lambda (table, field): '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name']), self.actual_fields)
+
     def save_fields(self):
         """Заполняем таблицу данными
 
@@ -616,7 +632,7 @@ class LoadDimensions(TaskProcessing):
             model: Модель к целевой таблице
         """
 
-        column_names = []
+        column_names = ['cdc_key']
         date_fields_order = {}
         index = 0
         for table, field in self.actual_fields:
@@ -673,6 +689,33 @@ class LoadDimensions(TaskProcessing):
             offset += step
 
             self.queue_storage.update()
+
+    def create_reload_triggers(self):
+        """
+        Создание триггеров для размерностей и мер, обеспечивающих синхронизацию данных для источника
+        """
+        local_instance = DataSourceService.get_local_instance()
+        connection = local_instance.connection
+        cursor = connection.cursor()
+
+        column_names = ['cdc_key']
+        column_names += self.get_splitted_table_column_names()
+
+        insert_cols = []
+        for col in column_names:
+            insert_cols.append('NEW.{0}'.format(col))
+
+        reload_trigger_query = local_instance.reload_datasource_trigger_query()
+
+        cursor.execute(reload_trigger_query.format(
+            new_table=get_table_name(self.table_prefix, self.key),
+            orig_table=get_table_name(STTM_DATASOURCE, self.key),
+            del_condition="cdc_key=OLD.cdc_key",
+            insert_cols=','.join(insert_cols),
+            cols="({0})".format(','.join(column_names)),
+        ))
+
+        connection.commit()
 
     def create_date_tables(self, date_intervals_info):
 
@@ -1152,6 +1195,7 @@ class CreateTriggers(TaskProcessing):
 class CreateCube(TaskProcessing):
 
     def processing(self):
+        from etl.services.pymondrian.generator import generate
 
         print 'Start cube creation'
 
@@ -1163,35 +1207,27 @@ class CreateCube(TaskProcessing):
             'meta_id', flat=True)
 
         dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+        dimensions_table_name = get_table_name(DIMENSIONS, key)
         measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+        measures_table_name = get_table_name(MEASURES, key)
 
         if not dimensions.exists() and not measures.exists():
             pass
         # <Schema>
         cube_key = "cube_{key}".format(key=key)
-        schema = etree.Element('Schema', name=cube_key, metamodelVersion='4.0')
 
-        # <Physical schema>
-        physical_schema = etree.Element('PhysicalSchema')
-        etree.SubElement(
-            physical_schema, 'Table', name=get_table_name(MEASURES, key))
-        etree.SubElement(
-            physical_schema, 'Table', name=get_table_name(DIMENSIONS, key))
+        schema = Schema(name=cube_key,
+                        description='Cube schema')
 
-        cube_info = {
-            'name': cube_key,
-            'caption': cube_key,
-            'visible': "true",
-            'cache': "false",
-            'enabled': "true",
-        }
+        physical_schema = PhysicalSchema()
 
-        # <Cube>
-        cube = etree.Element('Cube', **cube_info)
+        dimension_table, measure_table = (
+            Table(dimensions_table_name), Table(measures_table_name))
+        physical_schema.add_tables([dimension_table, measure_table])
 
-        dimensions_tag = etree.SubElement(cube, 'Dimensions')
+        cube = CubeSchema(name=cube_key, caption=cube_key,
+                          visible=True, cache=False, enabled=True)
 
-        # <Dimensions>
         for dim in dimensions:
 
             dim_type = dim.get_dimension_type()
@@ -1199,76 +1235,97 @@ class CreateCube(TaskProcessing):
             name = dim.name
             title = dim.title
 
-            dim_info = {
-                'table': get_table_name(DIMENSIONS, key),
-                'type': dim_type,
-                'visible': visible,
-                'highCardinality': 'true' if dim.high_cardinality else 'false',
-                'name': name,
-                'caption': title,
-            }
-            dimension = etree.SubElement(dimensions_tag, 'Dimension', **dim_info)
+            dimension = DimensionSchema(
+                name=name, table=dimensions_table_name, type=dim_type,
+                visible=visible, hight_cardinality=True, caption=title)
 
-            # <Attributes>
-            attributes = etree.SubElement(dimension, 'Attributes')
-            attr_info = {
-                'name': title,
-                'keyColumn': name,
-                'hasHierarchy': 'false',
-            }
-            etree.SubElement(attributes, 'Attribute', **attr_info)
+            if not dimension.type == 'TimeDimension':
+                dim_attribute = Attribute(name=title, key_column=name)
+                dimension.add_attribute(dim_attribute)
 
-            # <Attributes>
-            hierarchies = etree.SubElement(dimension, 'Hierarchies')
-            hierarchy = etree.SubElement(hierarchies, 'Hierarchy', **{'name': title})
+                level = Level(
+                    attribute=title, visible=True, caption=title)
+                hierarchy = Hierarchy(name=title)
+                dimension.add_hierarchies([hierarchy])
+                dimension._hierarchies_set.add_level_to_hierarchy(
+                    hierarchy=hierarchy, level=level)
 
-            level_info = {
-                'attribute': title,
-                'name': '%s level' % title,
-                'visible': visible,
-                'caption': title,
-            }
-            etree.SubElement(hierarchy, 'Level', **level_info)
+            else:
+                year = Attribute(
+                    name='Year', key_column='the_year', level_type='TimeYears'
+                )
+                quarter = Attribute(
+                    name='Quarter', level_type='TimeQuarters',
+                    attr_key=Key(columns=['the_year', 'quarter']),
+                    attr_name=Name(columns=['quarter'])
+                )
+                month = Attribute(
+                    name='Month', level_type='TimeMonth',
+                    attr_key=Key(columns=['the_year', 'month_the_year']),
+                    attr_name=Name(columns=['month_of_year'])
+                )
+                week = Attribute(
+                    name='Week', level_type='TimeWeek',
+                    attr_key=Key(columns=['the_year', 'week_of_year']),
+                    attr_name=Name(columns=['week_of_year'])
+                )
+                day = Attribute(
+                    name='Day', level_type='TimeDays',
+                    attr_key=Key(columns=['time_id']),
+                    attr_name=Name(columns=['day_of_month'])
+                )
+                month_name = Attribute(
+                    name='Month Name',
+                    attr_key=Key(columns=['the_year', 'month_of_year']),
+                    attr_name=Name(columns=['the_month'])
+                )
+                date = Attribute(
+                    name='Date', key_column='the_date'
+                )
+                time_id = Attribute(
+                    name='Time Id', key_column='time_id',
+                )
+                dimension.add_attributes([
+                    year, quarter, month, week, day, month_name, date, time_id])
 
-        measure_groups = etree.SubElement(cube, 'MeasureGroups')
+                time_hierarchy_1 = Hierarchy(name='Time', has_all=False)
+                for level_name in ['Year', 'Quarter', 'Month']:
+                    time_hierarchy_1.add_level(Level(attribute=level_name))
+                time_hierarchy_2 = Hierarchy(name='Weekly', has_all=True)
+                for level_name in ['Year', 'Week', 'Day']:
+                    time_hierarchy_2.add_level(Level(attribute=level_name))
 
-        measure_group_info = {
-            'name': get_table_name(MEASURES, key),
-            'table': get_table_name(MEASURES, key)
-        }
+                dimension.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
 
-        measure_group = etree.SubElement(
-            measure_groups, 'MeasureGroup', **measure_group_info)
-        measures_tag = etree.SubElement(measure_group, 'Measures')
+            cube.add_dimension(dimension)
+
+        measure_group_name = get_table_name(MEASURES, key)
+        measure_group = MeasureGroup(
+            name=measure_group_name, table=measure_group_name)
+
+        cube.measure_groups.add_measure_group(measure_group)
 
         for measure in measures:
-            measure_info = {
-                'name': measure.name,
-                'column': measure.name,
-                'caption': measure.title,
-                'visible': 'true' if measure.visible else 'false',
-                'aggregator': 'sum',
-            }
-            etree.SubElement(measures_tag, 'Measure', **measure_info)
-
-        dimension_links = etree.SubElement(measure_group, 'DimensionLinks')
+            measure_schema = MeasureSchema(
+                name=measure.name, column=measure.name, caption=measure.title,
+                visible=True if measure.visible else False, aggregator='sum')
+            measure_group.measures_tag.add_measures(measure_schema)
 
         for dim in dimensions:
+            measure_group.dimension_links.add_dimension_link(
+                NoLink(dimension=dim.name))
 
-            etree.SubElement(dimension_links, 'NoLink', dimension=dim.name)
-            # etree.SubElement(dimension_links, 'ForeignKeyLink', dimension=dim.name, foreignKeyColumn='dimension_id')
+        schema.add_cube(cube)
 
-        schema.extend([physical_schema, cube])
-
-        cube_string = etree.tostring(schema, pretty_print=True)
+        xml = generate(schema, output=1)
 
         cube = Cube.objects.create(
             name=cube_key,
-            data=cube_string,
+            data=xml,
             user_id=self.context['user_id'],
             # user_id=11,
         )
 
-        send_xml(key, cube.id, cube_string)
+        send_xml(key, cube.id, xml)
 
 # write in console: python manage.py celery -A etl.tasks worker
