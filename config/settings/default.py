@@ -240,6 +240,10 @@ DEADLOCK_WAIT_TIMEOUT = 500
 DATABASE_WAIT_TIMEOUT = 10000
 REDIS_LOCK_TIMEOUT = 500
 
+# User photo sizes (width, height)
+AVATAR_SIZES = (160, 160)
+SMALL_AVATAR_SIZES = (40, 40)
+
 try:
     from .local import *
 except ImportError:

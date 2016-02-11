@@ -91,4 +91,4 @@ def users_avatar_upload(user, filename):
     Путь сохранения аватарок полбзователя
     """
     return os.path.join(
-        'users', 'photos', 'user_id_{0}'.format(str(user.id)), filename)
+        'users', 'photos', 'user', str(user.id), filename)

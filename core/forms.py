@@ -31,7 +31,7 @@ class UserForm(forms.ModelForm):
     class Meta:
         model = User
         fields = (
-            'avatar', 'username', 'first_name', 'last_name', 'middle_name', 'email',
+            'avatar', 'username', 'email', 'first_name', 'last_name', 'middle_name',
             'birth_date', 'is_active', 'phone', 'skype', 'site', 'city',
         )
 

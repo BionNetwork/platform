@@ -24,9 +24,6 @@
                              alt="User profile picture">
                     {% endif %}
                     </div>
-                    <div style="float: right">
-                        <a href="{% url "core:users.edit2" user.id %}"><i class="fa fa-edit"></i></a>
-                    </div>
                     <h3 class="profile-username text-center">{{ user.first_name }} {{ user.last_name }}</h3>
 
                     <p class="text-muted text-center">Software Engineer</p>
@@ -34,6 +31,9 @@
                     <ul class="list-group list-group-unbordered">
                         <li class="list-group-item">
                             <b>Group</b> <a class="pull-right">{% if user.is_superuser %}Администратор{% else %}Пользователь{% endif %}</a>
+                        </li>
+                        <li class="list-group-item">
+                            <a href="{% url "core:users.edit" user.id %}?next={{request.path}}" class="btn btn-warning"><i class="fa fa-edit"></i></a>
                         </li>
                     </ul>
                 </div>

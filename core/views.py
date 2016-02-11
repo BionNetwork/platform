@@ -8,7 +8,6 @@ from PIL import Image
 import StringIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
-from django.core.files import File
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
@@ -313,7 +312,9 @@ class EditUserView(BaseTemplateView):
 
         form = core_forms.UserForm(instance=user)
         return self.render_to_response({
-            'form': form
+            'form': form,
+            'first_tab': ['avatar', 'username', 'email', ],
+            'full_path': request.get_full_path(),
         })
 
     def post(self, request, *args, **kwargs):
@@ -323,7 +324,11 @@ class EditUserView(BaseTemplateView):
         form = core_forms.UserForm(post, instance=user)
 
         if not form.is_valid():
-            return self.render_to_response({'form': form})
+            return self.render_to_response({
+                'form': form,
+                'first_tab': ['avatar', 'username', 'email', ],
+                'full_path': request.get_full_path(),
+            })
 
         profile = form.save(commit=False)
 
@@ -335,7 +340,7 @@ class EditUserView(BaseTemplateView):
             sm_filename = 'small_'+filename
 
             avatar_img = Image.open(image)
-            avatar_img.thumbnail((140, 140), Image.ANTIALIAS)
+            avatar_img.thumbnail(settings.AVATAR_SIZES, Image.ANTIALIAS)
             big_img_io = StringIO.StringIO()
             avatar_img.save(big_img_io, format='JPEG')
             avatar = InMemoryUploadedFile(big_img_io, None, filename,
@@ -344,7 +349,7 @@ class EditUserView(BaseTemplateView):
             user.avatar.save(filename, avatar)
 
             small_avatar_img = Image.open(image)
-            small_avatar_img.thumbnail((40, 40), Image.ANTIALIAS)
+            small_avatar_img.thumbnail(settings.SMALL_AVATAR_SIZES, Image.ANTIALIAS)
             small_img_io = StringIO.StringIO()
             small_avatar_img.save(small_img_io, format='JPEG')
             small_avatar = InMemoryUploadedFile(
@@ -360,7 +365,11 @@ class EditUserView(BaseTemplateView):
 
         profile.save()
 
-        return self.redirect('core:users')
+        next_url = post.get('full_path', None)
+        if next_url and '?next=' in next_url:
+            return HttpResponseRedirect(next_url.split('?next=')[1])
+        else:
+            return self.redirect('core:users')
 
 
 class RedirectToProfileView(EditUserView):
