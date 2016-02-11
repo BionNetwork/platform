@@ -51,7 +51,7 @@ function checkConnection(){
         contentType: false,
         type: 'POST',
         success: function(result){
-            if(result.status === 'error'){
+            if(result.status == 'error'){
                 $.confirm({
                     text: result.message || "Подключение не удалось!",
                     title:"Внимание",
@@ -60,7 +60,7 @@ function checkConnection(){
                     confirmButton: "Ок"
                 });
             }
-            else if(result.status === 'success'){
+            else if(result.status == 'success'){
                 $.confirm({
                     width: '100px',
                     text: result.message || "Подключение удалось!",
@@ -126,7 +126,7 @@ function saveNewSource(save_url)
         success: function(result){
             $('#settings-window').modal('hide');
 
-            if (result.status === 'error'){
+            if (result.status=='error'){
                 confirmAlert(result.message);
             } else {
                 window.location = result.redirect_url;
@@ -150,7 +150,7 @@ $('#modal-data').on('hidden.bs.modal', function(e){
     // если окно закрылось при нажатии кнопки, то удалять ddl не надо
     info['delete_ddl'] = !dataWindow.data('load');
     $.get(closeUrl, info, function(res){
-        if (res.status === 'error'){
+        if (res.status == 'error'){
             confirmAlert(res.message);
         }
     });
@@ -192,7 +192,7 @@ function getConnectionData(dataUrl, closingUrl){
             $('#button-toLeft').addClass('disabled');
             $('#button-allToLeft').addClass('disabled');
 
-            if(res.status === 'error'){
+            if(res.status == 'error'){
                 confirmAlert(res.message);
             }
         }
@@ -263,7 +263,7 @@ function drawTables(data){
 function getColumns(url, dict) {
     $.get(url, dict,
         function (res) {
-            if (res.status === 'error') {
+            if (res.status == 'error') {
                 confirmAlert(res.message);
             } else {
                 drawTables(res.data);
@@ -383,7 +383,7 @@ function delCol(id){
 
         $(workspaceRows).each(function(trIndex, tRow){
             $(tRow).find("td").eq(index).remove();
-            if ($(tRow).length === 0) {
+            if ($(tRow).length == 0) {
                 $(tRow).remove();
             }
         });
@@ -452,7 +452,7 @@ function tableToLeft(url){
     info['tables'] = JSON.stringify(tablesToDelete);
 
     $.get(url, info, function(res){
-        if (res.status === 'error') {
+        if (res.status == 'error') {
             confirmAlert(res.message);
         }
     });
@@ -476,7 +476,7 @@ function tablesToLeft(url){
     info['delete_ddl'] = true;
 
     $.get(url, info, function(res){
-        if (res.status === 'error') {
+        if (res.status == 'error') {
             confirmAlert(res.message);
         }
         else{
@@ -518,7 +518,7 @@ function refreshData(url){
         dataWorkspace.parent('div').css('background-color', '#ddd');
 
         $.post(url, colsInfo, function(res){
-            if(res.status === 'error') {
+            if(res.status == 'error') {
                 confirmAlert(res.message)
             } else {
                 var tableData = dataWorkspace.find("table > tbody");
@@ -578,7 +578,7 @@ function showJoinWindow(url, parent, child, isWithoutBind){
     info['has_warning'] = warn.length ? true : false;
 
     $.get(url, info, function(res){
-        if (res.status === 'error') {
+        if (res.status == 'error') {
             confirmAlert(res.message);
         }
         else{
@@ -663,7 +663,7 @@ function saveJoins(url){
         joinsSet.add(row[0]+row[2]);
     });
 
-    if(joinsArray.length !== joinsSet.size){
+    if(joinsArray.length != joinsSet.size){
         confirmAlert('Имеются дубли среди связей, пожалуйста удалите лишнее!');
         return;
     }
@@ -677,7 +677,7 @@ function saveJoins(url){
     info['joinType'] = $('[name="joinradio"]:checked').val();
 
     $.get(url, info, function(res){
-        if(res.status === 'error') {
+        if(res.status == 'error') {
                 confirmAlert(res.message)
         } else {
             joinWin.modal('hide');
@@ -687,7 +687,7 @@ function saveJoins(url){
                    warn = $('<span class="without_bind" style="color:red;">!!!</span>');
 
             // если новые джойны неверны, добавляем красное, если еще не было
-            if(res.data.has_error_joins === true){
+            if(res.data.has_error_joins == true){
                 if(!rel.find('.without_bind').length){
                     rel.append(warn);
                 }
@@ -743,7 +743,7 @@ function startLoading(userId, loadUrl){
     info['tables'] = JSON.stringify(tablesArray);
 
     $.post(loadUrl, info, function(response){
-        if(response.status === 'error') {
+        if(response.status == 'error') {
                 confirmAlert(response.message);
         } else {
             // признак того, что окно закрылось при нажатии кнопки
@@ -764,4 +764,3 @@ function startLoading(userId, loadUrl){
         }
     });
 }
-
