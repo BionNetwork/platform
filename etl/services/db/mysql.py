@@ -118,17 +118,19 @@ class Mysql(Database):
         return mysql_map.remote_table_query
 
     @staticmethod
-    def remote_table_indexes():
-        """
-        запрос на создание индексов новой таблицы в БД клиента
-        """
-        return (mysql_map.updated_synced_index,
-                mysql_map.created_index,
-                mysql_map.synced_index, )
-
-    @staticmethod
     def remote_triggers_create_query():
         """
         запрос на создание триггеров в БД клиента
         """
         return mysql_map.remote_triggers_query
+
+    @staticmethod
+    def get_primary_key(table, db):
+        """
+        запрос на получение Primary Key
+        """
+        return mysql_map.pr_key_query.format("('{0}')".format(table), db)
+
+    @staticmethod
+    def delete_primary_query(table, primary):
+        return mysql_map.delete_primary_key.format(table, primary)

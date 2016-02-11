@@ -103,6 +103,15 @@ class Postgresql(Database):
 
         return create_query
 
+    @classmethod
+    def check_table_exists_query(cls, table, db):
+        """
+        Проверка на существование таблицы
+        """
+        table_exists_query = cls.db_map.check_table_exists.format(table, db)
+
+        return table_exists_query
+
     @staticmethod
     def local_table_insert_query(key_str):
         """
@@ -135,3 +144,21 @@ class Postgresql(Database):
         запрос на создание триггеров в БД клиента
         """
         return pgsql_map.remote_triggers_query
+
+    @staticmethod
+    def get_primary_key(table, db):
+        """
+        запрос на получение Primary Key
+        """
+        return pgsql_map.pr_key_query.format("('{0}')".format(table), db)
+
+    @staticmethod
+    def delete_primary_query(table, primary):
+        return pgsql_map.delete_primary_key.format(table, primary)
+
+    @staticmethod
+    def reload_datasource_trigger_query():
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+        """
+        return pgsql_map.dimension_measure_triggers_query

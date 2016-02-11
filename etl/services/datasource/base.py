@@ -316,6 +316,11 @@ class DataSourceService(object):
             local_instance, key_str, cols_str)
 
     @classmethod
+    def check_table_exists_query(cls, local_instance, table_name, db):
+        return DatabaseService.check_table_exists_query(
+            local_instance, table_name, db)
+
+    @classmethod
     def get_table_insert_query(cls, local_instance, source_table_name):
         return DatabaseService.get_table_insert_query(
             local_instance, source_table_name)
@@ -379,15 +384,17 @@ class DataSourceService(object):
             pipe = r_server.pipeline()
 
             for collection in collections_names:
-                table_info = json.loads(r_server.get(collection))
-                if table_info['stats']:
-                    table_info['stats'].update({
-                        'last_row': {
-                            'cdc_key': last_key,
-                        }
-                    })
+                info_str = r_server.get(collection)
+                if info_str:
+                    table_info = json.loads(info_str)
+                    if table_info['stats']:
+                        table_info['stats'].update({
+                            'last_row': {
+                                'cdc_key': last_key,
+                            }
+                        })
 
-                pipe.set(collection, json.dumps(table_info))
+                    pipe.set(collection, json.dumps(table_info))
             pipe.execute()
 
     @staticmethod
@@ -440,9 +447,9 @@ class DataSourceService(object):
                         if sel_col['col'] == col['name']:
                             fields['columns'].append(col)
 
-                        # primary keys
-                        if col['is_primary']:
-                            stats['row_key'].append(col['name'])
+                            # primary keys
+                            if col['is_primary']:
+                                stats['row_key'].append(col['name'])
 
                 if last_row and stats['row_key']:
                     # корневая таблица

@@ -181,8 +181,8 @@ class Dimension(models.Model):
         verbose_name_plural = 'Размерности'
 
     def get_dimension_type(self):
-        return ('StandardDimension' if self.type == self.STANDART_DIMENSION
-            else 'TimeDimension')
+        return ('OTHER' if self.type == self.STANDART_DIMENSION
+            else 'TIME')
 
 
 class Measure(models.Model):

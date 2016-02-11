@@ -9,6 +9,7 @@ __author__ = 'miholeus'
 
 urlpatterns = [
     url(r'^$', views.HomeView.as_view(), name='home'),
+    url(r'^angular/$', views.AngularView.as_view(), name='angular'),
     url(r'^login/$', views.LoginView.as_view(), name='login'),
     url(r'^logout/$', views.LogoutView.as_view(), name='logout'),
     url(r'^registration/$', views.RegistrationView.as_view(), name='registration'),

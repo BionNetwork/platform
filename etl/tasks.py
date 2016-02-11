@@ -11,22 +11,19 @@ import brukva
 from datetime import datetime
 import json
 
-# from pymongo import ASCENDING
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
-from etl.services.queue.base import TLSE,  STSE, RPublish, RowKeysCreator, \
-    calc_key_for_row, TableCreateQuery, InsertQuery, MongodbConnection, \
-    DeleteQuery, AKTSE, DTSE, get_single_task, get_binary_types_list,\
-    process_binary_data, get_binary_types_dict
+from etl.services.olap.base import send_xml
+from etl.services.queue.base import *
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
 
 from djcelery import celery
@@ -215,6 +212,11 @@ def create_triggers(task_id, channel):
     return CreateTriggers(task_id, channel).load_data()
 
 
+@celery.task(name=CREATE_CUBE)
+def create_cube(task_id, channel):
+    return CreateCube(task_id, channel).load_data()
+
+
 class CreateDataset(TaskProcessing):
     """
     Создание Dataset
@@ -353,7 +355,7 @@ class LoadDb(TaskProcessing):
             source, structure,  cols)
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"cdc_key" text UNIQUE']
+        col_names = ['"cdc_key" text PRIMARY KEY']
         clear_col_names = ['cdc_key']
         for obj in cols:
             t = obj['table']
@@ -404,9 +406,11 @@ class LoadDb(TaskProcessing):
                     break
                 insert_query.execute(data=rows_dict,
                                      binary_types_dict=binary_types_dict)
+                print 'load in db %s records' % len(rows_dict)
                 offset += limit
             except Exception as e:
                 print 'Exception'
+                insert_query.connection.rollback()
                 self.was_error = True
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
@@ -463,7 +467,8 @@ class LoadDimensions(TaskProcessing):
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
-    def get_actual_fields(self, meta_data):
+    @classmethod
+    def get_actual_fields(cls, meta_data):
         """
         Фильтруем поля по необходимому нам типу
 
@@ -474,7 +479,7 @@ class LoadDimensions(TaskProcessing):
         for record in meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                if field['type'] in self.actual_fields_type:
+                if field['type'] in cls.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
@@ -509,29 +514,46 @@ class LoadDimensions(TaskProcessing):
             value=self.key).values('meta__collection_name', 'meta__fields')
         self.actual_fields = self.get_actual_fields(meta_data)
 
-        col_names = []
+        col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in self.actual_fields:
             col_names.append('"{0}{1}{2}" {3}'.format(
                 table, FIELD_NAME_SEP, field['name'], field['type']))
 
-        create_query = TableCreateQuery(DataSourceService())
-        create_query.set_query(
-            table_name=get_table_name(self.table_prefix, self.key), cols=col_names)
-        create_query.execute()
+        source_service = DataSourceService()
 
-        try:
-            self.save_fields()
-        except Exception as e:
-            # код и сообщение ошибки
-            pg_code = getattr(e, 'pgcode', None)
+        table_key_name = get_table_name(self.table_prefix, self.key)
 
-            err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
-            err_msg += e.message
-            self.error_handling(err_msg)
+        table_exists_query = WhetherTableExistsQuery(source_service)
+
+        local_db = DatabaseService.get_local_connection_dict()['db']
+
+        table_exists_query.set_query(table_name=table_key_name, db=local_db)
+        exists = table_exists_query.execute()
+
+        exists = exists[0][0]
+
+        if not exists:
+            create_query = TableCreateQuery(source_service)
+            create_query.set_query(
+                table_name=get_table_name(self.table_prefix, self.key), cols=col_names)
+            create_query.execute()
+
+            try:
+                self.save_fields()
+            except Exception as e:
+                # код и сообщение ошибки
+                pg_code = getattr(e, 'pgcode', None)
+
+                err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+                err_msg += e.message
+                self.error_handling(err_msg)
 
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
+
+        self.create_reload_triggers()
+
         if not self.last_task:
             self.set_next_task_params()
 
@@ -579,16 +601,21 @@ class LoadDimensions(TaskProcessing):
                 # data=json.dumps(data)
             )
 
+    def get_splitted_table_column_names(self):
+        """
+        Возвращает имена колонки вида 'table__column'
+        """
+        return map(lambda (table, field): '{0}{1}{2}'.format(
+                    table, FIELD_NAME_SEP, field['name']), self.actual_fields)
+
     def save_fields(self):
         """Заполняем таблицу данными
 
         Args:
             model: Модель к целевой таблице
         """
-        column_names = []
-        for table, field in self.actual_fields:
-            column_names.append('{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name']))
+        column_names = ['cdc_key']
+        column_names += self.get_splitted_table_column_names()
 
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -610,10 +637,10 @@ class LoadDimensions(TaskProcessing):
 
         connection = DataSourceService.get_local_instance().connection
         while True:
-            index_to = offset+step
+            # index_to = offset+step
             cursor = connection.cursor()
 
-            cursor.execute(rows_query.format(index_to, offset))
+            cursor.execute(rows_query.format(step, offset))
             rows = cursor.fetchall()
             if not rows:
                 break
@@ -625,9 +652,37 @@ class LoadDimensions(TaskProcessing):
                 rows_dict.append(temp_dict)
             insert_query.execute(data=rows_dict,
                                  binary_types_dict=binary_types_dict)
-            offset = index_to
+            print 'load in db %s records' % len(rows_dict)
+            offset += step
 
             self.queue_storage.update()
+
+    def create_reload_triggers(self):
+        """
+        Создание триггеров для размерностей и мер, обеспечивающих синхронизацию данных для источника
+        """
+        local_instance = DataSourceService.get_local_instance()
+        connection = local_instance.connection
+        cursor = connection.cursor()
+
+        column_names = ['cdc_key']
+        column_names += self.get_splitted_table_column_names()
+
+        insert_cols = []
+        for col in column_names:
+            insert_cols.append('NEW.{0}'.format(col))
+
+        reload_trigger_query = local_instance.reload_datasource_trigger_query()
+
+        cursor.execute(reload_trigger_query.format(
+            new_table=get_table_name(self.table_prefix, self.key),
+            orig_table=get_table_name(STTM_DATASOURCE, self.key),
+            del_condition="cdc_key=OLD.cdc_key",
+            insert_cols=','.join(insert_cols),
+            cols="({0})".format(','.join(column_names)),
+        ))
+
+        connection.commit()
 
 
 class LoadMeasures(LoadDimensions):
@@ -656,7 +711,8 @@ class LoadMeasures(LoadDimensions):
             )
 
     def set_next_task_params(self):
-        self.next_task_params = None
+        self.next_task_params = (
+            CREATE_CUBE, create_cube, self.context)
 
 
 class UpdateMongodb(TaskProcessing):
@@ -878,7 +934,6 @@ class CreateTriggers(TaskProcessing):
         db_instance = DatabaseService.get_source_instance(source)
         sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
-        remote_table_indexes = db_instance.remote_table_indexes()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
 
         connection = db_instance.connection
@@ -887,6 +942,19 @@ class CreateTriggers(TaskProcessing):
         for table, columns in tables_info.iteritems():
 
             table_name = '_etl_datasource_cdc_{0}'.format(table)
+            tables_str = "('{0}')".format(table_name)
+
+            cdc_cols_query = db_instance.db_map.cdc_cols_query.format(
+                tables_str, source.db, 'public')
+
+            cursor.execute(cdc_cols_query)
+            fetched_cols = cursor.fetchall()
+
+            existing_cols = {k: v for (k, v) in fetched_cols}
+
+            required_indexes = {k.format(table_name): v
+                                for k, v in REQUIRED_INDEXES.iteritems()}
+
             cols_str = ''
             new = ''
             old = ''
@@ -901,15 +969,110 @@ class CreateTriggers(TaskProcessing):
                     sep=sep, name=name, typ=col['type']
                 )
 
-            # создание таблицы у юзера
-            cursor.execute(remote_table_create_query.format(
-                    table_name, cols_str))
+            # если таблица существует
+            if existing_cols:
+                # удаление primary key, если он есть
+                primary_query = db_instance.get_primary_key(table_name, source.db)
+                cursor.execute(primary_query)
+                primary = cursor.fetchall()
 
-            for index_query in remote_table_indexes:
-                for command in index_query.format(table_name, source.db).split('$$'):
-                    cursor.execute(command)
+                if primary:
+                    primary_name = primary[0][0]
+                    del_pr_query = db_instance.delete_primary_query(
+                        table_name, primary_name)
+                    cursor.execute(del_pr_query)
 
-            connection.commit()
+                # добавление недостающих колонок, не учитывая cdc-колонки
+                new_came_cols = [(x['name'], x["type"]) for x in columns]
+
+                diff_cols = [x for x in new_came_cols if x[0] not in existing_cols]
+
+                if diff_cols:
+                    add_cols_str = """
+                        alter table {0} {1}
+                    """.format(table_name, ', '.join(
+                        ['add column {0} {1}'.format(x[0], x[1]) for x in diff_cols]))
+
+                    cursor.execute(add_cols_str)
+                    connection.commit()
+
+                # проверка cdc-колонок на существование и типы
+                cdc_required_types = db_instance.db_map.cdc_required_types
+
+                add_col_q = db_instance.db_map.add_column_query
+                del_col_q = db_instance.db_map.del_column_query
+
+                for cdc_k, v in cdc_required_types.iteritems():
+                    if not cdc_k in existing_cols:
+                        cursor.execute(add_col_q.format(
+                            table_name, cdc_k, v["type"], v["nullable"]))
+                    else:
+                        # если типы не совпадают
+                        if not existing_cols[cdc_k].startswith(v["type"]):
+                            cursor.execute(del_col_q.format(table_name, cdc_k))
+                            cursor.execute(add_col_q.format(
+                                table_name, cdc_k, v["type"], v["nullable"]))
+
+                connection.commit()
+
+                # проверяем индексы на колонки и существование,
+                # лишние индексы удаляем
+
+                indexes_query = db_instance.db_map.indexes_query.format(
+                    tables_str, source.db)
+                cursor.execute(indexes_query)
+                exist_indexes = cursor.fetchall()
+
+                index_cols_i, index_name_i = 1, 2
+
+                create_index_q = db_instance.db_map.create_index_query
+                drop_index_q = db_instance.db_map.drop_index_query
+
+                allright_index_names = []
+
+                for index in exist_indexes:
+                    index_name = index[index_name_i]
+
+                    if index_name not in required_indexes:
+                        cursor.execute(drop_index_q.format(index_name, table_name))
+                    else:
+                        index_cols = sorted(index_name[index_cols_i].split(','))
+                        if index_cols != required_indexes[index_name]:
+
+                            cursor.execute(drop_index_q.format(index_name, table_name))
+                            cursor.execute(create_index_q.format(
+                                index_name, table_name,
+                                ','.join(required_indexes[index_name]),
+                                source.db))
+
+                        allright_index_names.append(index_name)
+
+                diff_indexes_names = [
+                    x for x in required_indexes if x not in allright_index_names]
+
+                for d_index in diff_indexes_names:
+                    cursor.execute(
+                        create_index_q.format(
+                            d_index, table_name,
+                            ','.join(required_indexes[d_index])))
+
+                connection.commit()
+
+            # если таблица не существует
+            else:
+                # создание таблицы у юзера
+                cursor.execute(remote_table_create_query.format(
+                        table_name, cols_str))
+
+                # создание индексов
+                create_index_q = db_instance.db_map.create_index_query
+
+                for index_name, index_cols in required_indexes.iteritems():
+                    cursor.execute(create_index_q.format(
+                        index_name, table_name,
+                        ','.join(index_cols), source.db))
+
+                connection.commit()
 
             trigger_commands = remote_triggers_create_query.format(
                 orig_table=table, new_table=table_name, new=new, old=old,
@@ -920,6 +1083,9 @@ class CreateTriggers(TaskProcessing):
                 cursor.execute(query)
 
             connection.commit()
+
+        cursor.close()
+        connection.close()
 
         self.next_task_params = (
             GENERATE_DIMENSIONS, load_dimensions, {
@@ -932,15 +1098,13 @@ class CreateTriggers(TaskProcessing):
             })
 
 
-class CreateCube(object):
+class CreateCube(TaskProcessing):
 
-    @staticmethod
-    def processing():
+    def processing(self):
 
         print 'Start cube creation'
 
-        # dataset_id = self.context['dataset_id']
-        dataset_id = 1
+        dataset_id = self.context['dataset_id']
         dataset = Dataset.objects.get(id=dataset_id)
         key = dataset.key
 
@@ -954,7 +1118,7 @@ class CreateCube(object):
             pass
         # <Schema>
         cube_key = "cube_{key}".format(key=key)
-        schema = etree.Element('Schema', name=cube_key)
+        schema = etree.Element('Schema', name=cube_key, metamodelVersion='4.0')
 
         # <Physical schema>
         physical_schema = etree.Element('PhysicalSchema')
@@ -1036,77 +1200,24 @@ class CreateCube(object):
             }
             etree.SubElement(measures_tag, 'Measure', **measure_info)
 
+        dimension_links = etree.SubElement(measure_group, 'DimensionLinks')
+
+        for dim in dimensions:
+
+            etree.SubElement(dimension_links, 'NoLink', dimension=dim.name)
+            # etree.SubElement(dimension_links, 'ForeignKeyLink', dimension=dim.name, foreignKeyColumn='dimension_id')
+
         schema.extend([physical_schema, cube])
 
         cube_string = etree.tostring(schema, pretty_print=True)
 
-        # Cube.objects.create(
-        #     name=cube_key,
-        #     data=cube_string,
-        #     user_id=self.context['user_id'],
-        # )
-
-        send_xml(cube_key, cube_string)
-
-        a = 3
-# write in console: python manage.py celery -A etl.tasks worker
-
-
-from olap.xmla import xmla
-import easywebdav
-
-def send_xml(f_name, xml):
-
-    with open(os.path.join(
-            settings.BASE_DIR, 'data/resources/cubes/1', '{0}.xml'.format(
-                f_name)), 'w') as schema_file:
-        schema_file.write(xml)
-
-    oc = OlapClient(1)
-    try:
-        oc.file_delete('schema.xml')
-    except easywebdav.OperationFailed as e:
-        pass
-    oc.file_upload('schema.xml')
-    oc.connect.getDatasources()
-
-XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
-    host='localhost', port=8080)
-REPOSITORY_PATH = 'saiku/repository/default'
-
-
-class OlapClient(object):
-    """
-    Клиент Saiku
-    """
-
-    def __init__(self, cude_id):
-        """
-        Args:
-            cube_id(int): id куба
-        """
-        self.cube_id = cude_id
-        self.connect = xmla.XMLAProvider().connect(location=XMLA_URL)
-        self.webdav = easywebdav.connect(
-            host='localhost',
-            port='8080',
-            path=REPOSITORY_PATH,
-            username='admin',
-            password='admin'
+        cube = Cube.objects.create(
+            name=cube_key,
+            data=cube_string,
+            user_id=self.context['user_id'],
+            # user_id=11,
         )
 
-    def file_upload(self, file_name):
-        self.webdav.upload(
-            os.path.join(
-                settings.BASE_DIR, 'data/resources/cubes/', '{0}/{1}'.format(
-                    self.cube_id, file_name)),
-            remote_path='datasources/{0}'.format(file_name))
-
-    def file_delete(self, file_name):
-        self.webdav.delete('datasources/{0}'.format(file_name))
-
-    def execute(self, mdx=None):
-        return self.connect.Execute(mdx, Catalog='cube_848272420')
-
+        send_xml(key, cube.id, cube_string)
 
 # write in console: python manage.py celery -A etl.tasks worker
