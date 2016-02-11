@@ -270,16 +270,16 @@ class LoadMongodb(TaskProcessing):
         # создаем коллекцию и индексы в Mongodb
         mc = MongodbConnection()
         collection = mc.get_collection(
-            'etl', get_table_name(STTM_DATASOURCE, self.key))
+            MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE, self.key))
         mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
                         ('_date', ASCENDING)])
 
         # Коллекция с текущими данными
         current_collection_name = get_table_name(STTM_DATASOURCE_KEYS, self.key)
-        MongodbConnection.drop('etl', current_collection_name)
+        MongodbConnection.drop(MONGODB_DB_NAME, current_collection_name)
         current_mc = MongodbConnection()
         current_collection = current_mc.get_collection(
-            'etl', current_collection_name)
+            MONGODB_DB_NAME, current_collection_name)
         current_mc.set_indexes([('_id', ASCENDING)])
 
         query = DataSourceService.get_rows_query_for_loading_task(
@@ -372,7 +372,7 @@ class LoadDb(TaskProcessing):
         binary_types_dict['0'] = False
 
         source_collection = MongodbConnection().get_collection(
-            'etl', get_table_name(STTM_DATASOURCE, self.key))
+            MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE, self.key))
 
         source_table_name = get_table_name(STTM_DATASOURCE, self.key)
         if not db_update:
@@ -567,9 +567,9 @@ class LoadDimensions(TaskProcessing):
 0
         Args:
             user_id(int): id пользователя
-            table_name(str): Название создаваемой таблицы
+            key(str): Ключ для таблицы
             fields(dict): данные о полях
-            meta(DatasourceMeta): ссылка на метаданные хранилища
+            meta_tables(DatasourceMeta): ссылка на метаданные хранилища
         """
         level = dict()
         for table, field in fields:
@@ -584,21 +584,21 @@ class LoadDimensions(TaskProcessing):
                 )
             )
 
-            # data = dict(
-            #     name=target_table_name,
-            #     has_all=True,
-            #     table_name=target_table_name,
-            #     level=level,
-            #     primary_key='id',
-            #     foreign_key=None
-            # )
+            data = dict(
+                name=target_table_name,
+                has_all=True,
+                table_name=target_table_name,
+                level=level,
+                primary_key='id',
+                foreign_key=None
+            )
 
             Dimension.objects.get_or_create(
                 name=target_table_name,
                 title=target_table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
-                # data=json.dumps(data)
+                data=json.dumps(data)
             )
 
     def get_splitted_table_column_names(self):
@@ -696,6 +696,12 @@ class LoadMeasures(LoadDimensions):
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
         Сохранение информации о мерах
+
+        Args:
+            user_id(int): id пользователя
+            key(str): Ключ для таблицы
+            fields(dict): данные о полях
+            meta_tables(DatasourceMeta): ссылка на метаданные хранилища
         """
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
@@ -745,20 +751,20 @@ class UpdateMongodb(TaskProcessing):
         binary_types_list = get_binary_types_list(cols, col_types)
 
         collection = MongodbConnection().get_collection(
-            'etl', get_table_name(STTM_DATASOURCE, self.key))
+            MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE, self.key))
 
         # Коллекция с текущими данными
         current_collection_name = get_table_name(STTM_DATASOURCE_KEYS, self.key)
-        MongodbConnection.drop('etl', current_collection_name)
+        MongodbConnection.drop(MONGODB_DB_NAME, current_collection_name)
         current_mc = MongodbConnection()
         current_collection = current_mc.get_collection(
-            'etl', current_collection_name)
+            MONGODB_DB_NAME, current_collection_name)
         current_mc.set_indexes([('_id', ASCENDING)])
 
         # Дельта-коллекция
         delta_mc = MongodbConnection()
         delta_collection = delta_mc.get_collection(
-            'etl', get_table_name(STTM_DATASOURCE_DELTA, self.key))
+            MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE_DELTA, self.key))
         delta_mc.set_indexes([
             ('_id', ASCENDING), ('_state', ASCENDING), ('_date', ASCENDING)])
 
@@ -841,15 +847,15 @@ class DetectRedundant(TaskProcessing):
         """
         self.key = self.context['checksum']
         source_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name(STTM_DATASOURCE, self.key))
+            MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE, self.key))
         current_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name(STTM_DATASOURCE_KEYS, self.key))
+            MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE_KEYS, self.key))
 
         # Обновляем коллекцию всех ключей
         all_keys_collection_name = get_table_name(STTM_DATASOURCE_KEYSALL, self.key)
         ak_collection = MongodbConnection()
         all_keys_collection = ak_collection.get_collection(
-            'etl', all_keys_collection_name)
+            MONGODB_DB_NAME, all_keys_collection_name)
         ak_collection.set_indexes(
             [('_state', ASCENDING), ('_deleted', ASCENDING)])
 
@@ -894,7 +900,7 @@ class DeleteRedundant(TaskProcessing):
     def processing(self):
         self.key = self.context['checksum']
         del_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
+            MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
 
         source_table_name = get_table_name(STTM_DATASOURCE, self.key)
         delete_query = DeleteQuery(DataSourceService())

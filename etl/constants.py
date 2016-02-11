@@ -40,3 +40,4 @@ STTM_DATASOURCE_KEYS = 'sttm_datasource_keys'  # Текущее состояни
 STTM_DATASOURCE_KEYSALL = 'sttm_datasource_keysall'  # Таблица всех ключей
 DIMENSIONS = 'dimensions'  # Таблица размерностей
 MEASURES = 'measures'  # Таблица мер
+MONGODB_DB_NAME = 'etl' # база данных в монго
