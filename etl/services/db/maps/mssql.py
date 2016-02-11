@@ -56,7 +56,7 @@ for i in dates:
     MSSQL_TYPES[i] = 'timestamp'
 
 for i in booleans:
-    MSSQL_TYPES[i] = 'boolean'
+    MSSQL_TYPES[i] = 'bool'
 
 cols_query = """
     SELECT table_name, column_name, data_type FROM information_schema.columns

@@ -670,21 +670,25 @@ class LoadDimensions(TaskProcessing):
         connection = local_instance.connection
         cursor = connection.cursor()
 
+        sep = local_instance.get_separator()
+
         column_names = ['cdc_key']
         column_names += self.get_splitted_table_column_names()
 
         insert_cols = []
+        select_cols = []
         for col in column_names:
-            insert_cols.append('NEW.{0}'.format(col))
+            insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
+            select_cols.append('{1}{0}{1}'.format(col, sep))
 
         reload_trigger_query = local_instance.reload_datasource_trigger_query()
 
         cursor.execute(reload_trigger_query.format(
             new_table=get_table_name(self.table_prefix, self.key),
             orig_table=get_table_name(STTM_DATASOURCE, self.key),
-            del_condition="cdc_key=OLD.cdc_key",
+            del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
             insert_cols=','.join(insert_cols),
-            cols="({0})".format(','.join(column_names)),
+            cols='({0})'.format(','.join(select_cols)),
         ))
 
         connection.commit()
@@ -696,7 +700,9 @@ class LoadMeasures(LoadDimensions):
     """
     table_prefix = MEASURES
     actual_fields_type = [
-        Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
+        Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP,
+        Measure.BOOLEAN,
+    ]
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
