@@ -15,7 +15,7 @@ Queue = (server, port, path) ->
 # @type {{notes: Array, get: Function, add: Function}}
 ###
 
-Notes = 
+Notes =
   notes: []
   get: (topic) ->
     if @notes[topic] then @notes[topic] else null
@@ -33,7 +33,7 @@ Notes =
 # @type {{channels: Array, get: Function, set: Function}}
 ###
 
-Channels = 
+Channels =
   channels: []
   get: (topic) ->
     if @channels[topic] then @channels[topic] else null
@@ -85,7 +85,6 @@ Queue::subscribe = (channel, callback) ->
 
 Queue::unsubscribe = (channel) ->
   self = this
-  url = undefined
   url = '/channel/unsubscribe/' + channel
   if self.connection
     $.post url, { id: channel }, ((response) ->
@@ -122,7 +121,7 @@ Queue::etlload = (topic, data) ->
     else
       $.stickyUpdate note.id, data.message + ' ' + data.percent + '%'
   # при завершении отписываемся от канала
-  if data.event == 'finish' and data.close != undefined
+  if data.event == 'finish' and data.close?
     Channels.get(topic).unsubscribe topic
     if note
       $.stickyClose note.id, 300
@@ -130,12 +129,12 @@ Queue::etlload = (topic, data) ->
     # notification window
     Notification.requestPermission (permission) ->
       message = null
-      notification = undefined
+      notification = null
       if data.event == 'start'
         notification = new Notification('Задача поставлена в очередь',
           body: 'Обработка началась'
           tag: topic)
-      if data.event == 'finish' and data.close != undefined
+      if data.event == 'finish' and data.close?
         notification = new Notification('Обработка завершилась',
           body: 'Обработка задачи №' + data.id + ' завершилась'
           tag: topic)
@@ -145,7 +144,7 @@ Queue::etlload = (topic, data) ->
           body: data.message
           tag: topic)
         message = 'Ошибка в обработке\n' + data.message
-      if undefined != notification
+      if null != notification
         setTimeout (->
           notification.close()
           #closes the notification
