@@ -1,14 +1,14 @@
-chosenTables =
-colsTemplate =
-colsHeaders =
-joinWinRow =
-joinWin =
-selectedRow =
-dataWorkspace =
-loader =
-initDataTable =
-closeUrl =
-dataWindow = null
+chosenTables = undefined
+colsTemplate = undefined
+colsHeaders = undefined
+joinWinRow = undefined
+joinWin = undefined
+selectedRow = undefined
+dataWorkspace = undefined
+loader = undefined
+initDataTable = undefined
+closeUrl = undefined
+dataWindow = undefined
 # событие на закрытие модального окна
 
 confirmAlert = (message) ->
@@ -232,7 +232,7 @@ tablesToRight = (url) ->
   if hasWithoutBinds()
     return
   divs = $('.checkbox-table:checked').closest('div')
-  dict =
+  dict = 
     csrfmiddlewaretoken: csrftoken
     host: divs.attr('data-host')
     db: divs.attr('data-db')
@@ -358,7 +358,7 @@ refreshData = (url) ->
   if hasWithoutBinds()
     return
   source = $('#databases>div')
-  colsInfo =
+  colsInfo = 
     'host': source.data('host')
     'db': source.data('db')
   cols = dataWorkspace.find('.data-table-column-header')

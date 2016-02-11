@@ -1,5 +1,5 @@
-activePage =
-usersUrl = null
+activePage = undefined
+usersUrl = undefined
 
 removeUser = (url) ->
   $.confirm
