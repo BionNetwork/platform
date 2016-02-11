@@ -484,7 +484,8 @@ class LoadDimensions(TaskProcessing):
         for record in meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                if field['type'] in cls.actual_fields_type:
+                f_type = TYPES_MAP.get(field['type'])
+                if f_type in cls.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
