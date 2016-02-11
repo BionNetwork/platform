@@ -3,3 +3,4 @@
 *.pyc
 config/settings/local.py
 .crossbar/node.pid
+/media
