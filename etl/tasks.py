@@ -1196,20 +1196,20 @@ class CreateTriggers(TaskProcessing):
             })
 
 
-class CreateCube(object):
+class CreateCube(TaskProcessing):
     """
     Создание схемы
     """
 
-    @staticmethod
-    def processing():
+    # @staticmethod
+    def processing(self):
 
         from etl.services.pymondrian.generator import generate
 
         print 'Start cube creation'
 
-        # dataset_id = self.context['dataset_id']
-        dataset_id = 19
+        dataset_id = self.context['dataset_id']
+        # dataset_id = 19
         dataset = Dataset.objects.get(id=dataset_id)
         key = dataset.key
 
