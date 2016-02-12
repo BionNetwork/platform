@@ -23,7 +23,7 @@ from etl.services.pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema,
     Dimension as DimensionSchema, Attribute, Level,
     Hierarchy, MeasureGroup, Measure as MeasureSchema, NoLink,
-    Key, Name)
+    Key, Name, ForeignKeyLink, ReferenceLink)
 from etl.services.queue.base import (
     TLSE,  STSE, RPublish, RowKeysCreator, calc_key_for_row,
     TableCreateQuery, InsertQuery, DeleteQuery, MongodbConnection,
@@ -564,7 +564,7 @@ class LoadDimensions(TaskProcessing):
         self.save_meta_data(
             self.user_id, self.key, self.actual_fields, meta_tables)
 
-        self.create_reload_triggers()
+        # self.create_reload_triggers()
 
         if not self.last_task:
             self.set_next_task_params()
@@ -610,6 +610,8 @@ class LoadDimensions(TaskProcessing):
                 title=target_table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
+                type=Dimension.TIME_DIMENSION if field['type'] == 'timestamp'
+                    else Dimension.STANDART_DIMENSION
                 # data=json.dumps(data)
             )
 
@@ -629,15 +631,12 @@ class LoadDimensions(TaskProcessing):
 
         column_names = ['cdc_key']
         date_fields_order = {}
-        index = 0
+        index = 1
         for table, field in self.actual_fields:
             field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
-            if field['type'] != 'timestamp':
-
-                column_names.append('{0}'.format(field_name))
-            else:
+            if field['type'] == 'timestamp':
                 date_fields_order.update({index: '{0}_id'.format(field_name)})
-                column_names.append('{0}'.format(field_name))
+            column_names.append('{0}'.format(field_name))
             index += 1
 
         cols = json.loads(self.context['cols'])
@@ -1197,14 +1196,20 @@ class CreateTriggers(TaskProcessing):
             })
 
 
-class CreateCube(TaskProcessing):
+class CreateCube(object):
+    """
+    Создание схемы
+    """
 
-    def processing(self):
+    @staticmethod
+    def processing():
+
         from etl.services.pymondrian.generator import generate
 
         print 'Start cube creation'
 
-        dataset_id = self.context['dataset_id']
+        # dataset_id = self.context['dataset_id']
+        dataset_id = 19
         dataset = Dataset.objects.get(id=dataset_id)
         key = dataset.key
 
@@ -1233,29 +1238,41 @@ class CreateCube(TaskProcessing):
         cube = CubeSchema(name=cube_key, caption=cube_key,
                           visible=True, cache=False, enabled=True)
 
-        for dim in dimensions:
+        dimension = DimensionSchema(
+                name='Dim Table', table=dimensions_table_name, key="Cdc Key")
+        dimension.add_attribute(Attribute(name="Cdc Key", key_column="cdc_key"))
 
-            dim_type = dim.get_dimension_type()
-            visible = 'true' if dim.visible else 'false'
+
+        measure_group_name = get_table_name(MEASURES, key)
+        measure_group = MeasureGroup(
+            name=measure_group_name, table=measure_group_name)
+
+        for dim in dimensions:
+            # Если не размерность времени, то создаем атрибуты внутри уже
+            #  созданной размености, иначе создаем новые размерости под каждое
+            # временое поле
             name = dim.name
             title = dim.title
 
-            dimension = DimensionSchema(
-                name=name, table=dimensions_table_name, type=dim_type,
-                visible=visible, hight_cardinality=True, caption=title)
-
-            if not dimension.type == 'TIME':
+            if not dim.type == 'TD':
                 dim_attribute = Attribute(name=title, key_column=name)
                 dimension.add_attribute(dim_attribute)
 
                 level = Level(
-                    attribute=title, visible=True, caption=title)
-                hierarchy = Hierarchy(name=title)
+                    attribute=title, visible=True)
+                hierarchy = Hierarchy(name='Hierarchy %s' % title)
                 dimension.add_hierarchies([hierarchy])
                 dimension._hierarchies_set.add_level_to_hierarchy(
                     hierarchy=hierarchy, level=level)
-
             else:
+                dim_attribute = Attribute(name=title, key_column='%s_id' % name)
+                dimension.add_attribute(dim_attribute)
+
+                table_name = u'time_%s_%s' % (dim.name, key)
+                time_dim = DimensionSchema(
+                    name=dim.name, table=table_name,
+                        key="Key_%s" % table_name, type='TIME')
+
                 year = Attribute(
                     name='Year', key_column=DTCN.YEAR, level_type='TimeYears'
                 )
@@ -1288,9 +1305,9 @@ class CreateCube(TaskProcessing):
                     name='Date', key_column=DTCN.RAW_DATE
                 )
                 time_id = Attribute(
-                    name='Time Id', key_column=DTCN.TIME_ID
+                    name="Key_%s" % table_name, key_column=DTCN.TIME_ID
                 )
-                dimension.add_attributes([
+                time_dim.add_attributes([
                     year, quarter, month, week, day, month_name, date, time_id])
 
                 time_hierarchy_1 = Hierarchy(name='Time', has_all=False)
@@ -1300,15 +1317,21 @@ class CreateCube(TaskProcessing):
                 for level_name in ['Year', 'Week', 'Day']:
                     time_hierarchy_2.add_level(Level(attribute=level_name))
 
-                dimension.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
+                time_dim.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
 
-            cube.add_dimension(dimension)
+                cube.add_dimension(time_dim)
 
-        measure_group_name = get_table_name(MEASURES, key)
-        measure_group = MeasureGroup(
-            name=measure_group_name, table=measure_group_name)
+                measure_group.dimension_links.add_dimension_link(
+                    ReferenceLink(
+                        dimension=dim.name, via_dimension='Dim Table',
+                        via_attribute=title, attribute='Date'))
+
+                physical_schema.add_table(Table(table_name))
 
         cube.measure_groups.add_measure_group(measure_group)
+
+        measure_group.dimension_links.add_dimension_link(
+                ForeignKeyLink(dimension='Dim Table', foreign_key_column='cdc_key'))
 
         for measure in measures:
             measure_schema = MeasureSchema(
@@ -1316,10 +1339,8 @@ class CreateCube(TaskProcessing):
                 visible=True if measure.visible else False, aggregator='sum')
             measure_group.measures_tag.add_measures(measure_schema)
 
-        for dim in dimensions:
-            measure_group.dimension_links.add_dimension_link(
-                NoLink(dimension=dim.name))
-
+        cube.add_dimension(dimension)
+        schema.add_physical_schema(physical_schema)
         schema.add_cube(cube)
 
         xml = generate(schema, output=1)
@@ -1327,7 +1348,8 @@ class CreateCube(TaskProcessing):
         cube = Cube.objects.create(
             name=cube_key,
             data=xml,
-            user_id=self.context['user_id'],
+            # user_id=self.context['user_id'],
+            user_id=11,
         )
 
         send_xml(key, cube.id, xml)
