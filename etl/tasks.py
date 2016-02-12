@@ -16,7 +16,7 @@ from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
-from etl.services.olap.base import send_xml
+from etl.services.olap.base import send_xml, TomcatConnectionErrorException
 from etl.services.queue.base import *
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
@@ -1224,6 +1224,11 @@ class CreateCube(TaskProcessing):
             # user_id=11,
         )
 
-        send_xml(key, cube.id, cube_string)
+        try:
+            send_xml(key, cube.id, cube_string)
+
+        except TomcatConnectionErrorException as te:
+            logger.error("CAN'T CONNECT TO TOMCAT SERVER!!! ")
+            logger.error(te.message)
 
 # write in console: python manage.py celery -A etl.tasks worker
