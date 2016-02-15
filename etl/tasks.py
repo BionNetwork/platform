@@ -223,7 +223,7 @@ class CreateDataset(TaskProcessing):
     """
 
     def processing(self):
-
+        print 'CreateDataset'
         dataset, created = Dataset.objects.get_or_create(key=self.key)
         self.context['dataset_id'] = dataset.id
 
@@ -245,6 +245,7 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
+        print 'LoadMongodb'
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
@@ -341,6 +342,7 @@ class LoadDb(TaskProcessing):
         """
         Загрузка данных из Mongodb в базу данных
         """
+        print 'LoadDb'
         self.key = self.context['checksum']
         self.user_id = self.context['user_id']
         cols = json.loads(self.context['cols'])
@@ -503,6 +505,7 @@ class LoadDimensions(TaskProcessing):
             fields_str, source_table_name, '{0}', '{1}')
 
     def processing(self):
+        print 'LoadDimensions or LoadMeasures'
         self.key = self.context['checksum']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -730,6 +733,7 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
+        print 'UpdateMongodb'
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -845,6 +849,7 @@ class DetectRedundant(TaskProcessing):
         """
         Выявление записей на удаление
         """
+        print 'DetectRedundant'
         self.key = self.context['checksum']
         source_collection = MongodbConnection().get_collection(
             MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE, self.key))
@@ -898,6 +903,7 @@ class DetectRedundant(TaskProcessing):
 class DeleteRedundant(TaskProcessing):
 
     def processing(self):
+        print 'DeleteRedundant'
         self.key = self.context['checksum']
         del_collection = MongodbConnection().get_collection(
             MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
@@ -933,6 +939,7 @@ class CreateTriggers(TaskProcessing):
         """
         Создание триггеров в БД пользователя
         """
+        print 'CreateTriggers'
         tables_info = self.context['tables_info']
 
         source = Datasource.objects.get(id=self.context['source_id'])

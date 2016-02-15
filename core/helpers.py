@@ -86,3 +86,13 @@ def check_redis_lock(func):
                         continue
     return wrap
 
+
+class HashEncoder(object):
+    """
+    Базовый класс для хэширования данных
+    """
+
+    @staticmethod
+    def encode(data):
+        # хэшированиe binascii.crc32
+        return hash(data)

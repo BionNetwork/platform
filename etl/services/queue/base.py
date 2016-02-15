@@ -9,6 +9,7 @@ from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
 from core.exceptions import TaskError
+from core.helpers import HashEncoder
 import json
 import datetime
 from itertools import izip
@@ -245,11 +246,11 @@ class RowKeysCreator(object):
         """
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         if self.primary_keys:
-            l.append(binascii.crc32(''.join(
-                [str(row[index]) for index in self.primary_keys_indexes])))
+            l.append(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes]))
         else:
             l.append(row_num)
-        return binascii.crc32(
+        return HashEncoder.encode(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
     def set_primary_key(self, data):
@@ -314,7 +315,7 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
     if len(tables_key_creators) > 1:
         row_values_for_calc = [
             str(each.calc_key(row, row_num)) for each in tables_key_creators]
-        return binascii.crc32(''.join(row_values_for_calc))
+        return HashEncoder.encode(''.join(row_values_for_calc))
     else:
         return tables_key_creators[0].calc_key(row, row_num)
 

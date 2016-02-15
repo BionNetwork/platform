@@ -166,6 +166,10 @@ class RegistrationView(BaseView):
     """
     Регистрация нового пользователя в системе
     """
+    # у предка dispatch перекрыт login_required
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
+
     def post(self, request, *args, **kwargs):
 
         post = request.POST
