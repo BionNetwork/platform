@@ -219,7 +219,7 @@ class RowKeysCreator(object):
     Расчет ключа для таблицы
     """
 
-    def __init__(self, table, cols, primary_keys=None):
+    def __init__(self, table, cols, meta_data=None, primary_keys=None):
         """
         Args:
             table(str): Название таблицы
@@ -231,6 +231,8 @@ class RowKeysCreator(object):
         self.primary_keys = primary_keys
         # primary_keys_indexes(list): Порядковые номера первичных ключей
         self.primary_keys_indexes = list()
+        if meta_data:
+            self.set_primary_key(meta_data)
 
     def calc_key(self, row, row_num):
         """
@@ -321,7 +323,16 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
 
 
 def get_binary_types_list(cols, col_types):
-    # инфа о бинарниках для генерации ключа
+    """
+    Информация о бинарниках для генерации ключа
+    Args:
+        cols(list): Данные о колонках
+        col_types(): Данные о типах
+
+    Returns:
+        list: Список флагов о бинарности поля
+
+    """
     binary_types_list = []
 
     for i, obj in enumerate(cols, start=1):
@@ -333,7 +344,15 @@ def get_binary_types_list(cols, col_types):
 
 
 def get_binary_types_dict(cols, col_types):
-    # инфа о бинарниках для инсерта в бд
+    """
+    Информация о бинарниках для инсерта в бд
+    Args:
+        cols(list): Данные о колонках
+        col_types(): Данные о типах
+
+    Returns:
+        dict: Пронумированный словарь с флагами о бинарности поля
+    """
     binary_types_dict = {}
 
     for i, obj in enumerate(cols, start=1):
@@ -349,10 +368,11 @@ class Query(object):
     Класс формирования и совершения запроса
     """
 
-    def __init__(self, source_service, cursor=None, query=None):
-        self.source_service = source_service
+    def __init__(self, cursor=None, query=None, **kwargs):
+        self.source_service = DataSourceService()
         self.cursor = cursor
         self.query = query
+        self.context = kwargs
 
     def set_query(self, **kwargs):
         raise NotImplemented
@@ -368,10 +388,7 @@ class TableCreateQuery(Query):
         self.connection = local_instance.connection
 
     def set_query(self, **kwargs):
-        local_instance = self.source_service.get_local_instance()
-
         self.query = self.source_service.get_table_create_query(
-            local_instance,
             kwargs['table_name'],
             ', '.join(kwargs['cols'])
         )
@@ -388,20 +405,30 @@ class TableCreateQuery(Query):
 
 class InsertQuery(TableCreateQuery):
 
+    def __init__(self, cursor=None, query=None, **kwargs):
+        super(InsertQuery, self).__init__(cursor, query, **kwargs)
+
+    @property
+    def binary_data(self):
+        if self.context.get('cols', None) and self.context.get('col_types', None):
+            # инфа о бинарных данных для инсерта в постгрес
+            binary_types_dict = get_binary_types_dict(
+                self.context['cols'], self.context['col_types'])
+
+            # инфа для колонки cdc_key, о том, что она не binary
+            binary_types_dict['0'] = False
+            return binary_types_dict
+        else:
+            return None
+
     def set_query(self, **kwargs):
-        local_instance = self.source_service.get_local_instance()
-        insert_table_query = self.source_service.get_table_insert_query(
-            local_instance, kwargs['table_name'])
-        self.query = insert_table_query.format(
-            '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(
-                kwargs['cols_nums'])]))
+        self.query = self.source_service.get_table_insert_query(
+            kwargs['table_name'], kwargs['cols_nums'])
         self.set_connection()
 
     def execute(self, **kwargs):
         self.cursor = self.connection.cursor()
-
-        # передаем типы, чтобы вычислить бинарные данные
-        binary_types_dict = kwargs.get('binary_types_dict', None)
+        binary_types_dict = self.binary_data
 
         if binary_types_dict:
             for each in kwargs['data']:
@@ -432,40 +459,108 @@ class DeleteQuery(TableCreateQuery):
         self.connection.commit()
         return
 
+local_connection = DataSourceService.get_local_instance().connection
+
 
 class LocalDbConnect(object):
 
-    def __init__(self):
-        self.db_instance = DataSourceService.get_local_instance()
-        self.connection = self.db_instance.connection
+    connection = local_connection
 
-    def execute(self, query, args=None, many=False):
+    def __init__(self, query, execute=True):
+
+        self.query = query
+        if execute:
+            self.execute()
+
+    def execute(self, args=None, many=False):
         with self.connection as cursor:
             if not many:
-                cursor.execute(query, args)
+                cursor.execute(self.query, args)
             else:
-                cursor.executemany(query, args)
+                cursor.executemany(self.query, args)
 
-    def create_table(self, table_name, cols):
-        query = DataSourceService.get_table_create_query(
-            self.db_instance, table_name, ', '.join(cols)
-        )
-        self.execute(query)
+    def fetchall(self, args=None):
+        with self.connection as cursor:
+            cursor.execute(self.query, args)
+            return cursor.fetchall()
 
-    def insert(self, table_name, cols_num):
-        insert_table_query = DataSourceService.get_table_insert_query(
-            self.db_instance, table_name)
-        query = insert_table_query.format(
-            '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(cols_num)]))
-        self.execute(query, many=True)
+
+class SourceDbConnect(LocalDbConnect):
+
+    connection = None
+
+    def __init__(self, query, source, execute=True):
+        self.connection = DataSourceService.get_source_connection(source)
+        super(SourceDbConnect, self).__init__(query, execute)
+
+
+class QueryString(object):
+
+    def __init__(self, params):
+        """
+        Args:
+            params(dict): Параметры необходимые для запроса
+        """
+        self.params = params
+
+    @property
+    def query(self):
+        """
+        Формирование строки запроса
+
+        Returns:
+            str: Строка запроса
+        """
+        raise NotImplementedError
+
+
+class SelectQuery(QueryString):
+    """
+    Запрос на получение данных из локального хранилища
+    C пагинацией
+    """
+
+    @property
+    def query(self):
+        """
+        Returns:
+            str: Строка запроса вида
+            ::
+                "SELECT <cols> FROM <table> LIMIT {0} OFFSET {1};"
+        """
+
+        return DataSourceService.get_page_select_query(
+            self.params['table_name'], self.params['fields'])
+
+
+class TableCreateQueryString(QueryString):
+
+    @property
+    def query(self):
+        cols = []
+        for obj in self.params['cols']:
+            t = obj['table']
+            c = obj['col']
+            cols.append('"{0}__{2}" {3}'.format(
+                t, c, TYPES_MAP.get(
+                    self.params['col_types']['{0}.{1}'.format(t, c)])))
+        return DataSourceService.get_table_create_query(
+            self.params['table_name'],
+            ', '.join(cols))
+
 
 
 class MongodbConnection(object):
 
-    def __init__(self):
-        self.collection = None
+    def __init__(self, name, db_name='etl', indexes=None):
+        connection = pymongo.MongoClient(
+            settings.MONGO_HOST, settings.MONGO_PORT)
+        # database name
+        db = connection[db_name]
+        self.collection = db[name]
+        self.set_indexes(indexes)
 
-    def get_collection(self, db_name, collection_name):
+    def get_collection(self, collection_name, db_name='etl'):
         """
         Получение коллекции с указанным названием
 
@@ -481,7 +576,7 @@ class MongodbConnection(object):
         return self.collection
 
     @staticmethod
-    def drop(db_name, collection_name):
+    def drop(collection_name, db_name='etl'):
         connection = pymongo.MongoClient(
             settings.MONGO_HOST, settings.MONGO_PORT)
         # database name

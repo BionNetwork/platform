@@ -312,14 +312,26 @@ class DataSourceService(object):
         return DatabaseService.get_separator(source)
 
     @classmethod
-    def get_table_create_query(cls, local_instance, key_str, cols_str):
+    def get_table_create_query(cls, table_name, cols_str):
         return DatabaseService.get_table_create_query(
-            local_instance, key_str, cols_str)
+            table_name, cols_str)
 
     @classmethod
-    def get_table_insert_query(cls, local_instance, source_table_name):
+    def get_page_select_query(cls, table_name, cols):
+        """
+        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
+
+        Args:
+            table_name(unicode): Название таблицы
+            cols(list): Список получаемых колонок
+        """
+
+        return DatabaseService.get_page_select_query(table_name, cols)
+
+    @classmethod
+    def get_table_insert_query(cls, source_table_name, cols_num):
         return DatabaseService.get_table_insert_query(
-            local_instance, source_table_name)
+            source_table_name, cols_num)
 
     @classmethod
     def get_rows_query_for_loading_task(cls, source, structure, cols):
@@ -498,3 +510,47 @@ class DataSourceService(object):
         возвращает запрос на создание триггеров в БД клиента
         """
         return DatabaseService.get_remote_triggers_create_query(source)
+
+    @staticmethod
+    def reload_datasource_trigger_query(params):
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+
+        Args:
+            params(dict): Параметры, необходимые для запроса
+
+        Returns:
+            str: Строка запроса
+        """
+
+        return DatabaseService.reload_datasource_trigger_query(params)
+
+    @staticmethod
+    def get_date_table_names():
+        """
+        Получение запроса на создание колонок таблицы дат
+
+        Returns:
+            list: Список строк с названием и типом колонок для таблицы дат
+        """
+        return DatabaseService.get_date_table_names()
+
+    @staticmethod
+    def get_dim_measure_table_names(fields, ref_key):
+        """
+        Список строк запроса для создания колонок таблицы мер и размерности
+
+        Args:
+            fields(): Информация о колонках таблицы
+            ref_key(str): идентификатор для создания внешнего ключа
+
+        Returns:
+            list: Список строк с названием и типом колонок
+            для таблицы мер и размерности
+        """
+
+        return DatabaseService.get_dim_table_names(fields, ref_key)
+
+
+
+

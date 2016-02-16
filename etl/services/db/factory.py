@@ -139,28 +139,42 @@ class DatabaseService(object):
         return instance.get_rows(cols, structure)
 
     @classmethod
-    def get_table_create_query(cls, local_instance, key_str, cols_str):
+    def get_table_create_query(cls, table_name, cols_str):
         """
         Получение запроса на создание новой таблицы
         для локального хранилища данных
-        :param local_instance: Database
-        :param key_str: str
+        :param table_name: str
         :param cols_str: str
         :return: str
         """
-        return local_instance.local_table_create_query(key_str, cols_str)
+        local_instance = cls.get_local_instance()
+        return local_instance.local_table_create_query(table_name, cols_str)
 
     @classmethod
-    def get_table_insert_query(cls, local_instance, key_str):
+    def get_page_select_query(cls, table_name, cols):
         """
-        Получение запроса на заполнение таблицы
-        для локального хранилища данных
-        :param local_instance: Database
-        :param key_str: str
-        :return: str
+        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
+
+        Args:
+            table_name(unicode): Название таблицы
+            cols(list): Список получаемых колонок
         """
-        insert_query = local_instance.local_table_insert_query(key_str)
-        return insert_query
+        local_instance = cls.get_local_instance()
+        return local_instance.get_page_select_query(table_name, cols)
+
+    @classmethod
+    def get_table_insert_query(cls, table_name, cols_num):
+        """
+        Запрос на добавление в новую таблицу локал хранилища
+
+        Args:
+            table_name(str): Название таблиц
+            cols_num(int): Число столбцов
+        Returns:
+            str: Строка на выполнение
+        """
+        local_instance = cls.get_local_instance()
+        return local_instance.local_table_insert_query(table_name, cols_num)
 
     @classmethod
     def get_generated_joins(cls, source, structure):
@@ -271,3 +285,22 @@ class DatabaseService(object):
         """
         instance = cls.get_source_instance(source)
         return instance.remote_triggers_create_query()
+
+    @classmethod
+    def reload_datasource_trigger_query(cls, params):
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+        """
+
+        cls.get_local_instance().reload_datasource_trigger_query(params)
+
+    @classmethod
+    def get_date_table_names(cls):
+        """
+        Получене запроса на создание таблицы даты
+        """
+        return cls.get_local_instance().get_date_table_names()
+
+    @classmethod
+    def get_dim_table_names(cls, fields, ref_key):
+        return cls.get_local_instance().get_dim_table_names(fields, ref_key)

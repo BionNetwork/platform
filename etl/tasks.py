@@ -12,7 +12,6 @@ import json
 import calendar
 import math
 
-
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
@@ -25,10 +24,11 @@ from etl.services.pymondrian.schema import (
     Hierarchy, MeasureGroup, Measure as MeasureSchema, NoLink,
     Key, Name, ForeignKeyLink, ReferenceLink)
 from etl.services.queue.base import (
-    TLSE,  STSE, RPublish, RowKeysCreator, calc_key_for_row,
+    TLSE, STSE, RPublish, RowKeysCreator, calc_key_for_row,
     TableCreateQuery, InsertQuery, DeleteQuery, MongodbConnection,
     AKTSE, DTSE, get_single_task, get_binary_types_list,
-    process_binary_data, get_binary_types_dict, DTCN)
+    process_binary_data, get_binary_types_dict, DTCN, LocalDbConnect,
+    SourceDbConnect)
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
                       TaskErrorCodeEnum)
@@ -90,6 +90,17 @@ class TaskProcessing(object):
         self.queue_storage = None
         self.key = None
         self.next_task_params = None
+
+    def gtm(self, prefix):
+        """
+        Формирование название таблицы из префикса и ключа
+        Args:
+            prefix(unicode): Префикс
+
+        Returns:
+            unicode: Название таблицы
+        """
+        return get_table_name(prefix, self.key)
 
     def prepare(self):
         """
@@ -262,6 +273,7 @@ class LoadMongodb(TaskProcessing):
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
+        meta_info = json.loads(self.context['meta_info'])
 
         page = 1
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
@@ -280,42 +292,32 @@ class LoadMongodb(TaskProcessing):
         binary_types_list = get_binary_types_list(cols, col_types)
 
         # создаем коллекцию и индексы в Mongodb
-        mc = MongodbConnection()
-        collection = mc.get_collection(
-            'etl', get_table_name(STTM_DATASOURCE, self.key))
-        mc.set_indexes([('_id', ASCENDING), ('_state', ASCENDING),
-                        ('_date', ASCENDING)])
+        collection = MongodbConnection(
+            self.gtm(STTM_DATASOURCE), indexes=[
+                ('_id', ASCENDING), ('_state', ASCENDING), ('_date', ASCENDING)]).collection
 
         # Коллекция с текущими данными
-        current_collection_name = get_table_name(STTM_DATASOURCE_KEYS, self.key)
-        MongodbConnection.drop('etl', current_collection_name)
-        current_mc = MongodbConnection()
-        current_collection = current_mc.get_collection(
-            'etl', current_collection_name)
-        current_mc.set_indexes([('_id', ASCENDING)])
+        current_collection_name = self.gtm(STTM_DATASOURCE_KEYS)
+        MongodbConnection.drop(current_collection_name)
+        current_collection = MongodbConnection(
+            current_collection_name, indexes=[('_id', ASCENDING)]).collection
 
         query = DataSourceService.get_rows_query_for_loading_task(
             source_model, structure, cols)
+        source_db_connect = SourceDbConnect(query, source_model)
 
-        source_connection = DataSourceService.get_source_connection(source_model)
-
-        tables_key_creator = []
-        for table, value in json.loads(self.context['meta_info']).iteritems():
-            rkc = RowKeysCreator(table=table, cols=cols)
-            rkc.set_primary_key(value)
-            tables_key_creator.append(rkc)
+        tables_key_creator = [
+            RowKeysCreator(table=table, cols=cols, meta_data=value)
+            for table, value in meta_info.iteritems()]
 
         while True:
-            cursor = source_connection.cursor()
-            cursor.execute(query.format(limit, (page-1)*limit))
-            result = cursor.fetchall()
+            rows = source_db_connect.fetchall((limit, (page-1)*limit))
+            if not rows:
+                break
 
             data_to_insert = []
             data_to_current_insert = []
-            if not result:
-                break
-
-            for ind, record in enumerate(result):
+            for ind, record in enumerate(rows):
                 row_key = calc_key_for_row(
                         record, tables_key_creator, (page-1)*limit + ind,
                         binary_types_list)
@@ -377,28 +379,18 @@ class LoadDb(TaskProcessing):
                 TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)])))
             clear_col_names.append('{0}{1}{2}'.format(t, FIELD_NAME_SEP, c))
 
-        # инфа о бинарных данных для инсерта в постгрес
-        binary_types_dict = get_binary_types_dict(cols, col_types)
+        source_collection = MongodbConnection(self.gtm(STTM_DATASOURCE)).collection
 
-        # инфа для колонки cdc_key, о том, что она не binary
-        binary_types_dict['0'] = False
-
-        source_collection = MongodbConnection().get_collection(
-            'etl', get_table_name(STTM_DATASOURCE, self.key))
-
-        source_table_name = get_table_name(STTM_DATASOURCE, self.key)
+        source_table_name = self.gtm(STTM_DATASOURCE)
         if not db_update:
-            table_create_query = TableCreateQuery(DataSourceService())
-            table_create_query.set_query(
-                table_name=source_table_name, cols=col_names)
-            table_create_query.execute()
+            LocalDbConnect(DataSourceService.get_table_create_query(
+                source_table_name, ', '.join(col_names)))
 
-        insert_query = InsertQuery(DataSourceService())
+        insert_query = InsertQuery(cols=cols, col_types=col_types)
         insert_query.set_query(
             table_name=source_table_name, cols_nums=len(clear_col_names))
 
-        limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-        offset = 0
+        limit, offset = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT, 0
         last_row = None
         # Пишем данные в базу
         while True:
@@ -416,8 +408,7 @@ class LoadDb(TaskProcessing):
                     rows_dict.append(temp_dict)
                 if not rows_dict:
                     break
-                insert_query.execute(data=rows_dict,
-                                     binary_types_dict=binary_types_dict)
+                insert_query.execute(data=rows_dict)
                 print 'load in db %s records' % len(rows_dict)
                 offset += limit
             except Exception as e:
@@ -497,23 +488,6 @@ class LoadDimensions(TaskProcessing):
 
         return actual_fields
 
-    def rows_query(self, fields):
-        """
-        Формируюм строку запроса
-
-        Args:
-            fields(list): Список именно необходимых имен
-
-        Returns:
-            str: Строка запроса
-        """
-        fields_str = '"'+'", "'.join(fields)+'"'
-        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
-        source_table_name = get_table_name(
-            STTM_DATASOURCE, self.key)
-        return query.format(
-            fields_str, source_table_name, '{0}', '{1}')
-
     def processing(self):
         self.key = self.context['checksum']
         # Наполняем контекст
@@ -534,21 +508,10 @@ class LoadDimensions(TaskProcessing):
         if date_intervals_info and self.table_prefix == DIMENSIONS:
             self.create_date_tables(date_intervals_info)
 
-        col_names = ['"cdc_key" text PRIMARY KEY']
-        for table, field in self.actual_fields:
-            field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
-            if field['type'] != 'timestamp':
-
-                col_names.append('"{0}" {1}'.format(
-                    field_name, field['type']))
-            else:
-                col_names.append('"{0}_id" integer REFERENCES time_{0}_{1} (time_id)'.format(
-                    field_name, self.key))
-
-        create_query = TableCreateQuery(DataSourceService())
-        create_query.set_query(
-            table_name=get_table_name(self.table_prefix, self.key), cols=col_names)
-        create_query.execute()
+        create_col_names = DataSourceService.get_dim_measure_table_names(
+            self.actual_fields, self.key)
+        LocalDbConnect(DataSourceService.get_table_create_query(
+            self.gtm(self.table_prefix), create_col_names))
 
         try:
             self.save_fields()
@@ -580,7 +543,7 @@ class LoadDimensions(TaskProcessing):
         Args:
             user_id(int): id пользователя
             table_name(str): Название создаваемой таблицы
-            fields(dict): данные о полях
+            fields(list): данные о полях
             meta(DatasourceMeta): ссылка на метаданные хранилища
         """
         level = dict()
@@ -596,23 +559,13 @@ class LoadDimensions(TaskProcessing):
                 )
             )
 
-            # data = dict(
-            #     name=target_table_name,
-            #     has_all=True,
-            #     table_name=target_table_name,
-            #     level=level,
-            #     primary_key='id',
-            #     foreign_key=None
-            # )
-
             Dimension.objects.get_or_create(
                 name=target_table_name,
                 title=target_table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
                 type=Dimension.TIME_DIMENSION if field['type'] == 'timestamp'
-                    else Dimension.STANDART_DIMENSION
-                # data=json.dumps(data)
+                     else Dimension.STANDART_DIMENSION
             )
 
     def get_splitted_table_column_names(self):
@@ -623,10 +576,8 @@ class LoadDimensions(TaskProcessing):
                     table, FIELD_NAME_SEP, field['name']), self.actual_fields)
 
     def save_fields(self):
-        """Заполняем таблицу данными
-
-        Args:
-            model: Модель к целевой таблице
+        """
+        Заполняем таблицу данными
         """
 
         column_names = ['cdc_key']
@@ -636,40 +587,32 @@ class LoadDimensions(TaskProcessing):
             field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
             if field['type'] == 'timestamp':
                 date_fields_order.update({index: '{0}_id'.format(field_name)})
-            column_names.append('{0}'.format(field_name))
+            column_names.append(field_name)
             index += 1
+        col_nums = len(column_names)
 
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
 
-        # инфа о бинарных данных для инсерта в постгрес
-        binary_types_dict = get_binary_types_dict(cols, col_types)
-
-        # инфа для колонки cdc_key, о том, что она не binary
-        binary_types_dict['0'] = False
-
-        insert_query = InsertQuery(DataSourceService())
+        insert_query = InsertQuery(cols=cols, col_types=col_types)
         insert_query.set_query(
-            table_name=get_table_name(self.table_prefix, self.key),
-            cols_nums=len(column_names))
+            table_name=self.gtm(self.table_prefix),
+            cols_nums=col_nums)
         offset = 0
         step = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         print 'load dim or measure'
-        rows_query = self.rows_query(column_names)
-
-        connection = DataSourceService.get_local_instance().connection
+        source_query = DataSourceService.get_page_select_query(
+            self.gtm(STTM_DATASOURCE), column_names)
+        source = LocalDbConnect(query=source_query, execute=False)
 
         while True:
-            # index_to = offset+step
-            cursor = connection.cursor()
-            cursor.execute(rows_query.format(step, offset))
-            rows = cursor.fetchall()
+            rows = source.fetchall((step, offset,))
             if not rows:
                 break
             rows_dict = []
             for record in rows:
                 temp_dict = {}
-                for ind in xrange(len(column_names)):
+                for ind in xrange(col_nums):
                     if ind in date_fields_order.keys():
                         # заменяем дату идентификатором из связой таблицы
                         i = self.date_tables[date_fields_order[ind]][record[ind].date()]
@@ -677,8 +620,7 @@ class LoadDimensions(TaskProcessing):
                     else:
                         temp_dict.update({str(ind): record[ind]})
                 rows_dict.append(temp_dict)
-            insert_query.execute(data=rows_dict,
-                                 binary_types_dict=binary_types_dict)
+            insert_query.execute(data=rows_dict)
             print 'load in db %s records' % len(rows_dict)
             offset += step
 
@@ -688,28 +630,22 @@ class LoadDimensions(TaskProcessing):
         """
         Создание триггеров для размерностей и мер, обеспечивающих синхронизацию данных для источника
         """
-        local_instance = DataSourceService.get_local_instance()
-        connection = local_instance.connection
-        cursor = connection.cursor()
 
-        column_names = ['cdc_key']
-        column_names += self.get_splitted_table_column_names()
+        column_names = ['cdc_key'] + self.get_splitted_table_column_names()
+        insert_cols = ['NEW.{0}'.format(col) for col in column_names]
 
-        insert_cols = []
-        for col in column_names:
-            insert_cols.append('NEW.{0}'.format(col))
-
-        reload_trigger_query = local_instance.reload_datasource_trigger_query()
-
-        cursor.execute(reload_trigger_query.format(
-            new_table=get_table_name(self.table_prefix, self.key),
-            orig_table=get_table_name(STTM_DATASOURCE, self.key),
+        query_params = dict(
+            new_table=self.gtm(self.table_prefix),
+            orig_table=self.gtm(STTM_DATASOURCE),
             del_condition="cdc_key=OLD.cdc_key",
             insert_cols=','.join(insert_cols),
             cols="({0})".format(','.join(column_names)),
-        ))
+        )
 
-        connection.commit()
+        reload_trigger_query = (
+            DataSourceService.reload_datasource_trigger_query(query_params))
+
+        LocalDbConnect(reload_trigger_query).execute()
 
     def create_date_tables(self, date_intervals_info):
         """
@@ -736,27 +672,20 @@ class LoadDimensions(TaskProcessing):
         for table, columns in date_intervals_info:
             for column in columns:
                 self.date_tables.update({'%s__%s_id' % (table, column['name']): {}})
-                create_query = TableCreateQuery(DataSourceService())
-                date_table_col_names = ['"time_id" integer PRIMARY KEY']
-                date_table_col_names.extend([
-                    '"{0}" {1}'.format(field, f_type) for field, f_type
-                    in DTCN.types])
-                create_query.set_query(
-                    table_name=get_table_name(
-                        u'time_%s__%s' % (table, column['name']), self.key),
-                    cols=date_table_col_names)
-                create_query.execute()
+
+                LocalDbConnect(DataSourceService.get_table_create_query(
+                    self.gtm(u'time_%s__%s' % (table, column['name'])),
+                    DataSourceService.get_date_table_names()))
 
                 start_day = datetime.strptime(column['startDate'], "%d.%m.%Y").date()
                 end_day = datetime.strptime(column['endDate'], "%d.%m.%Y").date()
                 delta = end_day - start_day
+
+                insert_query = DataSourceService.get_table_insert_query(
+                    self.gtm(u'time_%s__%s' % (table, column['name'])), 9)
+                insert_db_connect = LocalDbConnect(insert_query)
+
                 rows = []
-
-                insert_query = InsertQuery(DataSourceService())
-                insert_query.set_query(
-                    table_name=get_table_name(u'time_%s__%s' % (
-                        table, column['name']), self.key), cols_nums=9)
-
                 for ind, cur_day in enumerate(range(delta.days + 1)):
                     current_day = start_day + timedelta(days=cur_day)
                     current_day_str = current_day.isoformat()
@@ -780,8 +709,7 @@ class LoadDimensions(TaskProcessing):
                     self.date_tables['%s__%s_id' % (table, column['name'])].update({
                         current_day: ind + 1,
                     })
-                insert_query.execute(data=rows)
-        return self.date_tables
+                insert_db_connect.execute(rows, many=True)
 
 
 class LoadMeasures(LoadDimensions):
@@ -828,6 +756,7 @@ class UpdateMongodb(TaskProcessing):
         structure = self.context['tree']
         source_model = Datasource()
         source_model.set_from_dict(**self.context['source'])
+        meta_info = json.loads(self.context['meta_info'])
 
         # общее количество строк в запросе
         self.publisher.rows_count = DataSourceService.get_structure_rows_number(
@@ -842,47 +771,43 @@ class UpdateMongodb(TaskProcessing):
         # находим бинарные данные для 1) создания ключей 2) инсерта в монго
         binary_types_list = get_binary_types_list(cols, col_types)
 
-        collection = MongodbConnection().get_collection(
-            'etl', get_table_name(STTM_DATASOURCE, self.key))
+        collection = MongodbConnection(self.gtm(STTM_DATASOURCE)).collection
 
         # Коллекция с текущими данными
-        current_collection_name = get_table_name(STTM_DATASOURCE_KEYS, self.key)
-        MongodbConnection.drop('etl', current_collection_name)
-        current_mc = MongodbConnection()
-        current_collection = current_mc.get_collection(
-            'etl', current_collection_name)
-        current_mc.set_indexes([('_id', ASCENDING)])
+        current_collection_name = self.gtm(STTM_DATASOURCE_KEYS)
+        MongodbConnection.drop(current_collection_name)
+        current_collection = MongodbConnection(
+            current_collection_name, indexes=[('_id', ASCENDING)]).collection
 
         # Дельта-коллекция
-        delta_mc = MongodbConnection()
-        delta_collection = delta_mc.get_collection(
-            'etl', get_table_name(STTM_DATASOURCE_DELTA, self.key))
-        delta_mc.set_indexes([
-            ('_id', ASCENDING), ('_state', ASCENDING), ('_date', ASCENDING)])
+        delta_collection = MongodbConnection(
+            self.gtm(STTM_DATASOURCE_DELTA), indexes=[
+                ('_id', ASCENDING), ('_state', ASCENDING),
+                ('_date', ASCENDING)]).collection
 
-        query = DataSourceService.get_rows_query_for_loading_task(
+        source_query = DataSourceService.get_rows_query_for_loading_task(
             source_model, structure, cols)
 
-        source_connection = DataSourceService.get_source_connection(source_model)
+        # source_connection = DataSourceService.get_source_connection(source_model)
+        source_db_connect = SourceDbConnect(source_query, source_model)
 
-        tables_key_creator = []
-        for table, value in json.loads(self.context['meta_info']).iteritems():
-            rkc = RowKeysCreator(table=table, cols=cols)
-            rkc.set_primary_key(value)
-            tables_key_creator.append(rkc)
+        tables_key_creator = [
+            RowKeysCreator(table=table, cols=cols, meta_data=value)
+            for table, value in meta_info.iteritems()]
 
         #  Выявляем новые записи в базе и записываем их в дельта-коллекцию
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         page = 1
         while True:
-            cursor = source_connection.cursor()
-            cursor.execute(query.format(limit, (page-1)*limit))
-            result = cursor.fetchall()
-            if not result:
+            rows = source_db_connect.fetchall((limit, (page-1)*limit,))
+            # cursor = source_connection.cursor()
+            # cursor.execute(source_query.format(limit, (page-1)*limit))
+            # result = cursor.fetchall()
+            if not rows:
                 break
             data_to_insert = []
             data_to_current_insert = []
-            for ind, record in enumerate(result):
+            for ind, record in enumerate(rows):
                 row_key = calc_key_for_row(
                     record, tables_key_creator, (page-1)*limit + ind,
                     binary_types_list)
@@ -937,19 +862,16 @@ class DetectRedundant(TaskProcessing):
         """
         Выявление записей на удаление
         """
-        self.key = self.context['checksum']
-        source_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name(STTM_DATASOURCE, self.key))
-        current_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name(STTM_DATASOURCE_KEYS, self.key))
+        source_collection = MongodbConnection(
+            self.gtm(STTM_DATASOURCE_KEYSALL)).collection
+        current_collection = MongodbConnection(
+            self.gtm(STTM_DATASOURCE_KEYSALL)).collection
 
         # Обновляем коллекцию всех ключей
-        all_keys_collection_name = get_table_name(STTM_DATASOURCE_KEYSALL, self.key)
-        ak_collection = MongodbConnection()
-        all_keys_collection = ak_collection.get_collection(
-            'etl', all_keys_collection_name)
-        ak_collection.set_indexes(
-            [('_state', ASCENDING), ('_deleted', ASCENDING)])
+        all_keys_collection_name = self.gtm(STTM_DATASOURCE_KEYSALL)
+        all_keys_collection = MongodbConnection(
+            all_keys_collection_name,
+            indexes=[('_state', ASCENDING), ('_deleted', ASCENDING)]).collection
 
         source_collection.aggregate(
             [{"$match": {"_state": STSE.LOADED}},
@@ -991,13 +913,11 @@ class DeleteRedundant(TaskProcessing):
 
     def processing(self):
         self.key = self.context['checksum']
-        del_collection = MongodbConnection().get_collection(
-                    'etl', get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
+        del_collection = MongodbConnection(
+            self.gtm(STTM_DATASOURCE_KEYSALL)).collection
 
-        source_table_name = get_table_name(STTM_DATASOURCE, self.key)
-        delete_query = DeleteQuery(DataSourceService())
-        delete_query.set_query(
-            table_name=source_table_name)
+        delete_query = DeleteQuery()
+        delete_query.set_query(table_name=self.gtm(STTM_DATASOURCE))
 
         limit = 100
         page = 1
@@ -1205,11 +1125,9 @@ class CreateCube(TaskProcessing):
     def processing(self):
 
         from etl.services.pymondrian.generator import generate
-
         print 'Start cube creation'
 
         dataset_id = self.context['dataset_id']
-        # dataset_id = 19
         dataset = Dataset.objects.get(id=dataset_id)
         key = dataset.key
 
@@ -1217,9 +1135,7 @@ class CreateCube(TaskProcessing):
             'meta_id', flat=True)
 
         dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
-        dimensions_table_name = get_table_name(DIMENSIONS, key)
         measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
-        measures_table_name = get_table_name(MEASURES, key)
 
         if not dimensions.exists() and not measures.exists():
             pass
@@ -1232,20 +1148,18 @@ class CreateCube(TaskProcessing):
         physical_schema = PhysicalSchema()
 
         dimension_table, measure_table = (
-            Table(dimensions_table_name), Table(measures_table_name))
+            Table(self.gtm(DIMENSIONS)), Table(self.gtm(MEASURES)))
         physical_schema.add_tables([dimension_table, measure_table])
 
         cube = CubeSchema(name=cube_key, caption=cube_key,
                           visible=True, cache=False, enabled=True)
 
         dimension = DimensionSchema(
-                name='Dim Table', table=dimensions_table_name, key="Cdc Key")
+                name='Dim Table', table=self.gtm(DIMENSIONS), key="Cdc Key")
         dimension.add_attribute(Attribute(name="Cdc Key", key_column="cdc_key"))
 
-
-        measure_group_name = get_table_name(MEASURES, key)
         measure_group = MeasureGroup(
-            name=measure_group_name, table=measure_group_name)
+            name=self.gtm(MEASURES), table=self.gtm(MEASURES))
 
         for dim in dimensions:
             # Если не размерность времени, то создаем атрибуты внутри уже
@@ -1348,8 +1262,8 @@ class CreateCube(TaskProcessing):
         cube = Cube.objects.create(
             name=cube_key,
             data=xml,
-            # user_id=self.context['user_id'],
-            user_id=11,
+            user_id=self.context['user_id'],
+            # user_id=11,
         )
 
         send_xml(key, cube.id, xml)

@@ -4,6 +4,9 @@ from collections import defaultdict
 from itertools import groupby
 from django.conf import settings
 
+from etl.constants import FIELD_NAME_SEP
+from etl.services.queue.base import DTCN
+
 
 class BaseEnum(object):
     """
@@ -339,6 +342,21 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
+
+    @staticmethod
+    def reload_datasource_trigger_query(params):
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+
+        Args:
+            params(dict): Параметры, необходимые для запроса
+
+        Returns:
+            str: Строка запроса
+        """
+
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
     def get_statistic(self, source, tables):
         """
         возвращает статистику таблиц
@@ -453,12 +471,26 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
-    @staticmethod
-    def local_table_insert_query(key_str):
+
+    @classmethod
+    def get_page_select_query(cls, table_name, cols):
         """
-        запрос инсерта в таблицу локал хранилища
-        :param key_str: str
-        :raise NotImplementedError:
+        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
+
+        Args:
+            table_name(unicode): Название таблицы
+            cols(list): Список получаемых колонок
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def local_table_insert_query(table_name, cols_num):
+        """
+        Запрос на добавление в новую таблицу локал хранилища
+
+        Args:
+            table_name(str): Название таблиц
+            cols_num(int): Число столбцов
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
@@ -479,3 +511,31 @@ class Database(object):
             str: Запрос на выборку
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def get_date_table_names():
+        """
+        Получене запроса на создание таблицы даты
+        Returns:
+            list: Список строк с названием и типом колонок для таблицы дат
+        """
+        date_table_col_names = ['"time_id" integer PRIMARY KEY']
+        date_table_col_names.extend([
+            '"{0}" {1}'.format(field, f_type) for field, f_type
+            in DTCN.types])
+        return date_table_col_names
+
+    @staticmethod
+    def get_dim_table_names(fields, ref_key):
+        col_names = ['"cdc_key" text PRIMARY KEY']
+        for table, field in fields:
+            field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
+            if field['type'] != 'timestamp':
+
+                col_names.append('"{0}" {1}'.format(
+                    field_name, field['type']))
+            else:
+                col_names.append('"{0}_id" integer REFERENCES time_{0}_{1} (time_id)'.format(
+                    field_name, ref_key))
+
+        return col_names
