@@ -51,6 +51,7 @@ class QueueStorage(object):
     def __setitem__(self, key, val):
         if key not in self.allowed_keys:
             raise KeyError('Неверный ключ для словаря информации задачи!')
+        self.queue[key] = val
 
     def set_init_params(self):
         """
