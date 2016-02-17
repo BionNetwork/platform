@@ -224,3 +224,10 @@ class Oracle(Database):
         # cursor.fetchall() и дальше структура неприятная приходит
 
         return 0
+
+
+def reform_binary_data(data):
+    # проблемы с Oracle
+    if isinstance(data, cx_Oracle.LOB):
+        return data.read()
+    return data
