@@ -1,14 +1,13 @@
 # coding: utf-8
-from core.models import DatasourceMeta, DatasourceMetaKeys
+from core.models import DatasourceMeta, DatasourceMetaKeys, DatasetToMeta
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService
-from etl.services.datasource.repository.storage import RedisSourceService, \
-    RedisCacheKeys
+from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
 from django.conf import settings
 from itertools import groupby
-
+from django.db import transaction
 import json
 
 
@@ -317,6 +316,11 @@ class DataSourceService(object):
             local_instance, key_str, cols_str)
 
     @classmethod
+    def check_table_exists_query(cls, local_instance, table_name, db):
+        return DatabaseService.check_table_exists_query(
+            local_instance, table_name, db)
+
+    @classmethod
     def get_table_insert_query(cls, local_instance, source_table_name):
         return DatabaseService.get_table_insert_query(
             local_instance, source_table_name)
@@ -380,24 +384,28 @@ class DataSourceService(object):
             pipe = r_server.pipeline()
 
             for collection in collections_names:
-                table_info = json.loads(r_server.get(collection))
-                if table_info['stats']:
-                    table_info['stats'].update({
-                        'last_row': {
-                            'cdc_key': last_key,
-                        }
-                    })
+                info_str = r_server.get(collection)
+                if info_str:
+                    table_info = json.loads(info_str)
+                    if table_info['stats']:
+                        table_info['stats'].update({
+                            'last_row': {
+                                'cdc_key': last_key,
+                            }
+                        })
 
-                pipe.set(collection, json.dumps(table_info))
+                    pipe.set(collection, json.dumps(table_info))
             pipe.execute()
 
     @staticmethod
+    # @transaction.atomic()
     def update_datasource_meta(key, source, cols,
-                               tables_info_for_meta, last_row):
+                               tables_info_for_meta, last_row, dataset_id):
         """
         Создание DatasourceMeta для Datasource
 
         Args:
+            dataset_id(int): data set identifier
             key(str): Ключ
             source(Datasource): Источник данных
             cols(list): Список колонок
@@ -410,57 +418,63 @@ class DataSourceService(object):
         """
         res = dict()
         for table, col_group in groupby(cols, lambda x: x['table']):
-            try:
-                source_meta = DatasourceMeta.objects.get(
-                    datasource_id=source.id,
-                    collection_name=table,
+            with transaction.atomic():
+                try:
+                    source_meta = DatasourceMeta.objects.get(
+                        datasource_id=source.id,
+                        collection_name=table,
+                    )
+                except DatasourceMeta.DoesNotExist:
+                    source_meta = DatasourceMeta(
+                        datasource_id=source.id,
+                        collection_name=table,
+                    )
+                stats = {
+                    'tables_stat': {},
+                    'row_key': [],
+                    'row_key_value': []
+                }
+                fields = {'columns': [], }
+
+                table_info = tables_info_for_meta[table]
+
+                stats['tables_stat'] = table_info['stats']
+                t_cols = table_info['columns']
+
+                for sel_col in col_group:
+                    for col in t_cols:
+                        # cols info
+                        if sel_col['col'] == col['name']:
+                            fields['columns'].append(col)
+
+                            # primary keys
+                            if col['is_primary']:
+                                stats['row_key'].append(col['name'])
+
+                if last_row and stats['row_key']:
+                    # корневая таблица
+                    mapped = filter(
+                        lambda x: x[0]['table'] == table, zip(cols, last_row))
+
+                    for (k, v) in mapped:
+                        if k['col'] in stats['row_key']:
+                            stats['row_key_value'].append({k['col']: v})
+
+                source_meta.fields = json.dumps(fields)
+                source_meta.stats = json.dumps(stats)
+                source_meta.save()
+                DatasourceMetaKeys.objects.get_or_create(
+                    meta=source_meta,
+                    value=key,
                 )
-            except DatasourceMeta.DoesNotExist:
-                source_meta = DatasourceMeta(
-                    datasource_id=source.id,
-                    collection_name=table,
+                # связываем Dataset и мета информацию
+                DatasetToMeta.objects.get_or_create(
+                    meta_id=source_meta.id,
+                    dataset_id=dataset_id,
                 )
-            stats = {
-                'tables_stat': {},
-                'row_key': [],
-                'row_key_value': []
-            }
-            fields = {'columns': [], }
-
-            table_info = tables_info_for_meta[table]
-
-            stats['tables_stat'] = table_info['stats']
-            t_cols = table_info['columns']
-
-            for sel_col in col_group:
-                for col in t_cols:
-                    # cols info
-                    if sel_col['col'] == col['name']:
-                        fields['columns'].append(col)
-
-                    # primary keys
-                    if col['is_primary']:
-                        stats['row_key'].append(col['name'])
-
-            if last_row and stats['row_key']:
-                # корневая таблица
-                mapped = filter(
-                    lambda x: x[0]['table'] == table, zip(cols, last_row))
-
-                for (k, v) in mapped:
-                    if k['col'] in stats['row_key']:
-                        stats['row_key_value'].append({k['col']: v})
-
-            source_meta.fields = json.dumps(fields)
-            source_meta.stats = json.dumps(stats)
-            source_meta.save()
-            DatasourceMetaKeys.objects.get_or_create(
-                meta=source_meta,
-                value=key,
-            )
-            res.update({
-                table: source_meta.id
-            })
+                res.update({
+                    table: source_meta.id
+                })
         return res
 
     @classmethod

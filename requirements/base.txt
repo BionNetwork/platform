@@ -10,4 +10,8 @@ git+https://github.com/evilkost/brukva.git
 pymongo
 crossbar==0.11.1
 txredisapi==1.2
+mock
+easywebdav == 1.2.0
+xmla == 0.7.2
+kombu==3.0.30
 Pillow

@@ -69,6 +69,12 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
+    def get_structure_rows_number(self, structure, cols):
+        """
+        Получение предполагаемые кол-во строк
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
     @staticmethod
     def lose_brackets(str_):
         """
@@ -120,11 +126,11 @@ class Database(object):
 
         for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
             for ig in igroup:
-                indexes[ikey].append({
+                indexes[ikey.lower()].append({
                     "name": ig[index_name],
                     "columns": ig[icol_names].split(','),
-                    "is_primary": ig[primary] == 't',
-                    "is_unique": ig[unique] == 't',
+                    "is_primary": ig[primary] == True,
+                    "is_unique": ig[unique] == True,
                 })
 
         constraints = defaultdict(list)
@@ -133,7 +139,7 @@ class Database(object):
 
         for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
             for ig in igroup:
-                constraints[ikey].append({
+                constraints[ikey.lower()].append({
                     "c_col_name": ig[c_col_name],
                     "c_name": ig[c_name],
                     "c_type": ig[c_type],
@@ -150,8 +156,8 @@ class Database(object):
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
-            t_indexes = indexes[key]
-            t_consts = constraints[key]
+            t_indexes = indexes[key.lower()]
+            t_consts = constraints[key.lower()]
 
             for x in group:
                 is_index = is_unique = is_primary = False
@@ -169,7 +175,7 @@ class Database(object):
                                     is_unique = True
                                     is_primary = True
 
-                columns[key].append({"name": col,
+                columns[key.lower()].append({"name": col,
                                      "type": (
                                          cls.db_map.DB_TYPES[
                                              cls.lose_brackets(x[col_type])] or
@@ -185,7 +191,7 @@ class Database(object):
             # находим внешние ключи
             for c in t_consts:
                 if c['c_type'] == 'FOREIGN KEY':
-                    foreigns[key].append({
+                    foreigns[key.lower()].append({
                         "name": c['c_name'],
                         "source": {"table": key, "column": c["c_col_name"]},
                         "destination":
@@ -365,8 +371,8 @@ class Database(object):
                      ...
                 }
         """
-        return {x[0]: ({'count': int(x[1]), 'size': x[2]}
-                       if (x[1] and x[2]) else None) for x in records}
+        return {x[0].lower(): ({'count': int(x[1]), 'size': x[2]}
+                if (x[1] and x[2]) else None) for x in records}
 
     def get_columns(self, source, tables):
         """
@@ -431,5 +437,48 @@ class Database(object):
 
         Returns:
             str: Запрос на выборку
+        """
+        return "SELECT {0} FROM {1}"
+
+    @staticmethod
+    def remote_table_create_query():
+        """
+        запрос на создание новой таблицы в БД клиента
+
+        Returns:
+            str: строка запроса
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def remote_triggers_create_query():
+        """
+        запрос на создание триггеров в БД клиента
+
+        Returns:
+            str: строка запроса
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def get_primary_key(table, db):
+        """
+        Запрос на получение первичного ключа
+        Args:
+            table(str): название таблицы
+            db(str): название базы данных
+
+        Returns:
+            str: запрос на получение первичного ключа
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def delete_primary_query(table, primary):
+        """
+        Запрос на удаление первичного ключа
+        Args:
+            table(str): название таблицы
+            primary(str): название первичного ключа
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)

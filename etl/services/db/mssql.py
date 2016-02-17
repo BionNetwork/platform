@@ -2,12 +2,15 @@
 
 __author__ = 'damir(GDR)'
 
+from django.conf import settings
+
 from .interfaces import Database
 import pymssql
 
 from collections import defaultdict
 from itertools import groupby
-from etl.services.db.maps import mysql as mssql_map
+from operator import itemgetter
+from etl.services.db.maps import mssql as mssql_map
 
 
 class MsSql(Database):
@@ -37,7 +40,7 @@ class MsSql(Database):
         """
             Возвращает ковычки(") для запроса
         """
-        return '`'
+        return '\"'
 
     def get_tables(self, source):
         """
@@ -47,12 +50,47 @@ class MsSql(Database):
         """
         query = """
             SELECT table_name FROM information_schema.tables
-            where table_schema='{0}' order by table_name;
+            where table_catalog='{0}' and
+            table_type='base table'order by table_name;
         """.format(source.db)
 
         records = self.get_query_result(query)
         records = map(lambda x: {'name': x[0], }, records)
 
+        return records
+
+    def get_rows(self, cols, structure):
+        """
+        достает строки из соурса для превью
+        :param cols: list
+        :param structure: dict
+        :return: list
+        """
+        query_join = self.generate_join(structure,)
+
+        separator = self.get_separator()
+
+        sel_col1 = '{sep}{0}{sep}.{sep}{1}{sep} {sep}{0}.{1}{sep}'.format(
+            '{table}', '{col}', sep=separator)
+        sel_cols_str1 = ', '.join(
+            [sel_col1.format(**x) for x in cols])
+
+        group_cols = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
+            '{table}', '{col}', sep=separator)
+        group_cols_str = ', '.join(
+            [group_cols.format(**x) for x in cols])
+
+        sel_col2 = '{sep}Results_CTE{sep}.{sep}{0}.{1}{sep}'.format(
+            '{table}', '{col}', sep=separator)
+        sel_cols_str2 = ', '.join(
+            [sel_col2.format(**x) for x in cols])
+
+        query = self.get_rows_query().format(
+            sel_cols_str1, query_join,
+            settings.ETL_COLLECTION_PREVIEW_LIMIT, 0,
+            group_cols_str, sel_cols_str2)
+
+        records = self.get_query_result(query)
         return records
 
     @staticmethod
@@ -78,8 +116,8 @@ class MsSql(Database):
             source, tables)
 
         col_records = self.get_query_result(columns_query)
-        index_records = []  # self.get_query_result(indexes_query)
-        const_records = []  # self.get_query_result(consts_query)
+        index_records = self.get_query_result(indexes_query)
+        const_records = self.get_query_result(consts_query)
 
         return col_records, index_records, const_records
 
@@ -93,16 +131,20 @@ class MsSql(Database):
         :return: tuple
         """
         indexes = defaultdict(list)
-        itable_name, icol_names, index_name, primary, unique = xrange(5)
+        itable_name, index_name, primary, unique, icol_name, = xrange(5)
+        grouper = itemgetter(itable_name, index_name, primary, unique)
 
-        for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
+        for key, igroup in groupby(index_records, grouper):
+            ind_info = {
+                "name": key[index_name],
+                "is_primary": key[primary] == 't',
+                "is_unique": key[unique] == 't',
+            }
+            cols = []
             for ig in igroup:
-                indexes[ikey].append({
-                    "name": ig[index_name],
-                    "columns": ig[icol_names].split(','),
-                    "is_primary": ig[primary] == 't',
-                    "is_unique": ig[unique] == 't',
-                })
+                cols.append(ig[icol_name])
+            ind_info["columns"] = cols
+            indexes[key[itable_name]].append(ind_info)
 
         constraints = defaultdict(list)
         (c_table_name, c_col_name, c_name, c_type,
@@ -147,7 +189,7 @@ class MsSql(Database):
                                     is_primary = True
 
                 columns[key].append({"name": col,
-                                     "type": (mssql_map.MYSQL_TYPES[cls.lose_brackets(x[col_type])]
+                                     "type": (mssql_map.MSSQL_TYPES[cls.lose_brackets(x[col_type])]
                                               or x[col_type]),
                                      "is_index": is_index,
                                      "is_unique": is_unique, "is_primary": is_primary})
@@ -171,17 +213,7 @@ class MsSql(Database):
         возвращает селект запрос c лимитом, оффсетом
         :return: str
         """
-        query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
-        return query
-
-    @staticmethod
-    def get_select_query():
-        """
-        возвращает селект запрос
-        :return: str
-        """
-        query = "SELECT {0} FROM {1};"
-        return query
+        return mssql_map.rows_query
 
     @staticmethod
     def get_statistic_query(source, tables):

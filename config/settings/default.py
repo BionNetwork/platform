@@ -108,6 +108,13 @@ EMAIL_PORT = 25
 EMAIL_HOST_USER = ''
 EMAIL_HOST_PASSWORD = ''
 
+OLAP_SERVER_HOST = 'localhost'
+OLAP_SERVER_PORT = '8080'
+OLAP_SERVER_USER = 'admin'
+OLAP_SERVER_PASS = 'admin'
+OLAP_XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
+    host=OLAP_SERVER_HOST, port=OLAP_SERVER_PORT)
+OLAP_REPOSITORY_PATH = 'saiku/repository/default'
 
 import djcelery
 djcelery.setup_loader()
