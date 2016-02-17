@@ -84,15 +84,15 @@ def send_xml(key, cube_id, xml):
     except easywebdav.OperationFailed as e:
         pass
     except ConnectionError as ce:
-        raise TomcatConnectionErrorException(ce.message)
+        raise OlapServerConnectionErrorException(ce.message)
 
     client.file_upload(datasource_file_name)
     client.file_upload(schema_name)
     # oc.connect.getDatasources()
 
 
-class TomcatConnectionErrorException(Exception):
+class OlapServerConnectionErrorException(Exception):
     """
-    Исключение при ошибке коннекта к томкату
+    Исключение при ошибке коннекта к olap серверу
     """
     pass
