@@ -779,7 +779,11 @@ class RedisSourceService(object):
         добавляем канал юзера для сокетов
         """
         subs_str = RedisCacheKeys.get_user_subscribers(user_id)
-        channels = json.loads(cls.get_user_subscribers(user_id))
+        subscribes = cls.get_user_subscribers(user_id)
+        if subscribes:
+            channels = json.loads(cls.get_user_subscribers(user_id))
+        else:
+            channels = []
         channels.append(channel)
         r_server.set(subs_str, json.dumps(channels))
 
@@ -789,7 +793,11 @@ class RedisSourceService(object):
         удаляет канал из каналов для сокетов
         """
         subs_str = RedisCacheKeys.get_user_subscribers(user_id)
-        subscribers = json.loads(cls.get_user_subscribers(user_id))
+        subscribes = cls.get_user_subscribers(user_id)
+        if subscribes:
+            subscribers = json.loads(subscribes)
+        else:
+            subscribers = []
         for sub in subscribers:
             if sub['queue_id'] == task_id:
                 subscribers.remove(sub)
