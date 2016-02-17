@@ -1236,6 +1236,7 @@ class CreateCube(TaskProcessing):
             send_xml(key, cube.id, cube_string)
 
         except OlapServerConnectionErrorException as te:
+            self.error_handling(te.message)
             logger.error("Can't connect to Olap Server!")
             logger.error(te.message)
             raise te  # пробрасываем ошибку дальше
