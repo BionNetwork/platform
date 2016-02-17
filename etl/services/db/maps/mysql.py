@@ -45,10 +45,7 @@ blobs = [
     'binary',
 ]
 
-booleans = [
-    'bool',
-    'boolean',
-]
+booleans = []
 
 for i in ints:
     DB_TYPES[i] = 'integer'
