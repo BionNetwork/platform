@@ -334,7 +334,7 @@ class DataSourceService(object):
             source_table_name, cols_num)
 
     @classmethod
-    def get_rows_query_for_loading_task(cls, source, structure, cols):
+    def get_source_rows_query(cls, source, structure, cols):
         """
         Получение предзапроса данных указанных
         колонок и таблиц для селери задачи
@@ -526,14 +526,17 @@ class DataSourceService(object):
         return DatabaseService.reload_datasource_trigger_query(params)
 
     @staticmethod
-    def get_date_table_names():
+    def get_date_table_names(col_type):
         """
         Получение запроса на создание колонок таблицы дат
+
+        Args:
+            col_type(dict): Соответсвие название поля и типа
 
         Returns:
             list: Список строк с названием и типом колонок для таблицы дат
         """
-        return DatabaseService.get_date_table_names()
+        return DatabaseService.get_date_table_names(col_type)
 
     @staticmethod
     def get_dim_measure_table_names(fields, ref_key):
@@ -550,6 +553,10 @@ class DataSourceService(object):
         """
 
         return DatabaseService.get_dim_table_names(fields, ref_key)
+
+    @staticmethod
+    def cdc_key_delete_query(table_name):
+        return DatabaseService.cdc_key_delete_query(table_name)
 
 
 

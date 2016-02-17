@@ -110,6 +110,10 @@ class PhysicalSchema(SchemaElement):
 
 
 class Cube(SchemaElement):
+    """
+    Tag <Cube>
+    """
+
     def __init__(self, name, description=None, caption=None, cache=True,
                  enabled=True, visible=True, default_measure=None):
         SchemaElement.__init__(self, name)
@@ -119,7 +123,6 @@ class Cube(SchemaElement):
         self._enabled = Property('enabled', enabled)
         self._visible = Property('visible', visible)
         self._default_measure = Property('defaultMeasure', default_measure)
-        self._afact = None
 
         self.dimensions_tag = Dimensions()
         self.measure_groups = MeasureGroups()
@@ -175,6 +178,13 @@ class Cube(SchemaElement):
         self._default_measure = default_measure
 
     def add_dimension(self, dimension):
+        """
+        Добавление размерностей в куб
+        Размерность добавляется во вложенный тег Dimensions
+
+        Args:
+            dimension(Dimension): Добавляемая размерность
+        """
         for dim in self.dimensions_tag._dimensions:
             if dim.name == dimension.name:
                 raise Exception('''Dimension "{0}" already exists in cube
@@ -518,6 +528,9 @@ class Hierarchy(SchemaElement):
         return self._levels
 
     def add_level(self, level, level_position=None):
+        """
+        Добавление уровня в Иерархию
+        """
         for lvl in self._levels:
             if lvl._attribute == level._attribute:
                 raise Exception('''Level "{0}" already exists in hierarchy

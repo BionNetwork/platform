@@ -35,8 +35,13 @@ CREATE_CUBE = 'etl:database:generate_cube'
 
 # Префиксы названий таблиц
 STTM_DATASOURCE = 'sttm_datasource'  # Временная загружаемая таблица
-STTM_DATASOURCE_DELTA = 'sttm_datasource_delta'  # таблица для докачки новых данных
-STTM_DATASOURCE_KEYS = 'sttm_datasource_keys'  # Текущее состояния пользовательских таблиц
+STTM_DATASOURCE_DELTA = 'sttm_datasource_delta'  # таблица для докачки
+STTM_DATASOURCE_KEYS = 'sttm_datasource_keys'  # Текущее состояния польз. таблиц
 STTM_DATASOURCE_KEYSALL = 'sttm_datasource_keysall'  # Таблица всех ключей
 DIMENSIONS = 'dimensions'  # Таблица размерностей
 MEASURES = 'measures'  # Таблица мер
+TIME_TABLE = 'time_{0}__{1}'  # Таблица дат (time_{table_name}__{col})
+
+# Строки формирования названия колонок
+STANDART_COLUMN_NAME = '{0}__{1}'
+TIME_COLUMN_NAME = '{0}__{1}_id'

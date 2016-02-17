@@ -1,29 +1,173 @@
 # coding: utf-8
 import binascii
-from celery import group
-from django.conf import settings
+import logging
 import brukva
-from django.db import transaction
-from pymongo import IndexModel
-from psycopg2 import Binary
+import json
+import datetime
+from itertools import izip
+from bson import binary, Binary
 import pymongo
+from pymongo import IndexModel
+
+from django.conf import settings
 from etl.constants import TYPES_MAP
 from etl.services.datasource.base import DataSourceService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
 from core.exceptions import TaskError
-import json
-import datetime
-from itertools import izip
-from bson import binary
-
-from etl.services.middleware.base import datetime_now_str
+from etl.services.middleware.base import datetime_now_str, get_table_name
 
 client = brukva.Client(host=settings.REDIS_HOST,
                        port=int(settings.REDIS_PORT),
                        selected_db=settings.REDIS_DB)
 client.connect()
+
+logger = logging.getLogger(__name__)
+
+
+class TaskProcessing(object):
+    """
+    Базовый класс, отвечающий за про процесс выполнения celery-задач
+
+    Attributes:
+        task_id(int): id задачи
+        channel(str): Канал передачи на клиент
+        last_task(bool): Флаг последней задачи
+        user_id(str): id пользователя
+        context(dict): контекстные данные для задачи
+        was_error(bool): Факт наличия ошибки
+        err_msg(unicode): Текст ошибки, если случилась
+        publisher(`RPublish`): Посыльный к клиенту о текущем статусе задачи
+        queue_storage(`etl.services.queue.base.QueueStorage`):
+            Посыльный к redis о текущем статусе задачи
+        key(str): Ключ
+        next_task_params(tuple): Набор данных для след. задачи
+    """
+
+    def __init__(self, task_id, channel, last_task=False):
+        """
+        Args:
+            task_id(int): id задачи
+            channel(str): Канал передачи на клиент
+        """
+        self.task_id = task_id
+        self.channel = channel
+        self.last_task = last_task
+        self.user_id = None
+        self.context = None
+        self.was_error = False
+        self.err_msg = ''
+        self.publisher = RPublish(self.channel, self.task_id)
+        self.queue_storage = None
+        self.key = None
+        self.next_task_params = None
+
+    def gtm(self, prefix):
+        """
+        Формирование название таблицы из префикса и ключа
+        Args:
+            prefix(unicode): Префикс
+
+        Returns:
+            unicode: Название таблицы
+        """
+        return get_table_name(prefix, self.key)
+
+    @staticmethod
+    def binary_wrap(data, rules):
+        for each in data:
+            for k, v in each.iteritems():
+                if rules.get(k):  # if binary data
+                    each[k] = Binary(v)
+        return data
+
+    def prepare(self):
+        """
+        Подготовка к задаче:
+            1. Получение контекста выполнения
+            2. Инициализация служб, следящие за процессов выполения
+        """
+        task = QueueList.objects.get(id=self.task_id)
+        self.context = json.loads(task.arguments)
+        self.key = task.checksum
+        self.user_id = self.context['user_id']
+        self.queue_storage = TaskService.get_queue(self.task_id, self.user_id)
+        TaskService.update_task_status(self.task_id, TaskStatusEnum.PROCESSING)
+
+    def load_data(self):
+        """
+        Точка входа
+        """
+        self.prepare()
+        try:
+            self.processing()
+        except Exception as e:
+            # В любой непонятной ситуации меняй статус задачи на ERROR
+            TaskService.update_task_status(
+                self.task_id, TaskStatusEnum.ERROR,
+                error_code=TaskErrorCodeEnum.DEFAULT_CODE,
+                error_msg=e.message)
+            self.publisher.publish(TLSE.ERROR, msg=e.message)
+            RedisSourceService.delete_queue(self.task_id)
+            RedisSourceService.delete_user_subscriber(
+                self.user_id, self.task_id)
+            logger.exception(self.err_msg)
+            raise
+        self.exit()
+        if self.next_task_params:
+            get_single_task(*self.next_task_params)
+
+    def processing(self):
+        """
+        Непосредственное выполнение задачи
+        """
+        raise NotImplementedError
+
+    def error_handling(self, err_msg, err_code=None):
+        """
+        Обработка ошибки
+
+        Args:
+            err_msg(unicode): Текст ошибки
+            err_code(unicode): Код ошибки
+        """
+        self.was_error = True
+        # fixme перезаписывается при каждой ошибке
+        self.err_msg = err_msg
+        TaskService.update_task_status(
+            self.task_id, TaskStatusEnum.ERROR,
+            error_code=err_code or TaskErrorCodeEnum.DEFAULT_CODE,
+            error_msg=self.err_msg)
+
+        self.queue_storage['status'] = TaskStatusEnum.ERROR
+
+        # сообщаем об ошибке
+        self.publisher.publish(TLSE.ERROR, self.err_msg)
+        logger.exception(self.err_msg)
+
+    def exit(self):
+        """
+        Корректное завершение вспомогательных служб
+        """
+        if self.was_error:
+            # меняем статус задачи на 'Ошибка'
+            TaskService.update_task_status(
+                self.task_id, TaskStatusEnum.ERROR,
+                error_code=TaskErrorCodeEnum.DEFAULT_CODE,
+                error_msg=self.err_msg)
+            if not self.publisher.is_complete:
+                self.publisher.publish(TLSE.FINISH)
+
+        else:
+            # меняем статус задачи на 'Выполнено'
+            TaskService.update_task_status(self.task_id, TaskStatusEnum.DONE, )
+            self.queue_storage.update(TaskStatusEnum.DONE)
+
+        # удаляем инфу о работе таска
+        RedisSourceService.delete_queue(self.task_id)
+        # удаляем канал из списка каналов юзера
+        RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
 
 
 class QueueStorage(object):
@@ -65,7 +209,7 @@ class QueueStorage(object):
         self.queue['percent'] = 0
 
     def update(self, status=None):
-        self.queue['date_created'] = datetime_now_str()
+        self.queue['date_updated'] = datetime_now_str()
         if status:
             self.queue['status'] = status
 
@@ -106,7 +250,7 @@ class RPublish(object):
 
         Args:
             status(str): Статус задачи
-            msg(str): Дополнительное сообщение (при ошибке)
+            msg(unicode): Дополнительное сообщение (при ошибке)
         """
         percent = self.percent
         if status == TLSE.FINISH or percent >= 100:
@@ -137,81 +281,23 @@ class RPublish(object):
             ))
 
 
-def get_tasks_chain(tasks_sets):
-    """
-    Получение последовательности задач для выполнения
-
-    Args:
-        tasks_sets(list): Параметры для задач. В виде списка для группы задач
-        для параллельного выполнения
-        Пример::
-            [
-                (<task_name1>, <task_def1>, <params_for_task1>),
-                (<task_name2>, <task_def2>, <params_for_task2>),
-                [
-                    (<task_name3>, <task_def3>, <params_for_task3>),
-                    ...
-                ]
-                ...
-        ]
-    """
-    tasks = []
-    channels = []
-    for task_info in tasks_sets:
-        # # Синхронный вариант
-        # task_id, channel = TaskService(task_info[0]).add_task(
-        #     arguments=task_info[2])
-        # task_info[1](task_id, channel)
-        if type(task_info) == tuple:
-            task, channel = get_single_task(task_info)
-        else:
-            task, channel = get_group_tasks(task_info)
-        tasks.append(task)
-        channels.append(channel)
-    return tasks, channels
-
-
-def get_single_task(task_params):
+def get_single_task(task_name, task_def, params):
     """
     Args:
-        task_params(tuple): Данные для запуска задачи
-        ::
-            (<task_name>, <task_def>, <params_for_task>)
+        task_name(str): Название задачи
+        task_def(func): Исполняемая функция
+        params(dict): Контекст выполнения
 
     Returns:
         `Signature`: Celery-задача к выполнению
         list: Список каналов для сокетов
     """
-    if not task_params:
+    if not task_name:
         return
-    task_id, channel = TaskService(task_params[0]).add_task(
-        arguments=task_params[2])
-    # return task_params[1].apply_async((task_id, channel),), [channel]
-    return task_params[1](task_id, channel), [channel]
-
-
-def get_group_tasks(task_params):
-    """
-    Args:
-        task_params(list): Данные для запуска задачи
-        ::
-            [
-                (<task_name>, <task_def>, <params_for_task>)
-                ...
-            ]
-
-    Returns:
-        `group`: группа Celery-задач к параллельному выполнению
-        list: Список каналов для сокетов
-    """
-    group_tasks = []
-    channels = []
-    for each in task_params:
-        task_id, channel = TaskService(each[0]).add_task(
-            arguments=each[2])
-        group_tasks.append(each[1].si(task_id, channel))
-        channels.append(channel)
-    return group(group_tasks), channels
+    task_id, channel = TaskService(task_name).add_task(
+        arguments=params)
+    # return task_def.apply_async((task_id, channel),), [channel]
+    return task_def(task_id, channel), [channel]
 
 
 class RowKeysCreator(object):
@@ -363,108 +449,9 @@ def get_binary_types_dict(cols, col_types):
     return binary_types_dict
 
 
-class Query(object):
-    """
-    Класс формирования и совершения запроса
-    """
-
-    def __init__(self, cursor=None, query=None, **kwargs):
-        self.source_service = DataSourceService()
-        self.cursor = cursor
-        self.query = query
-        self.context = kwargs
-
-    def set_query(self, **kwargs):
-        raise NotImplemented
-
-    def execute(self, **kwargs):
-        raise NotImplemented
-
-
-class TableCreateQuery(Query):
-
-    def set_connection(self):
-        local_instance = self.source_service.get_local_instance()
-        self.connection = local_instance.connection
-
-    def set_query(self, **kwargs):
-        self.query = self.source_service.get_table_create_query(
-            kwargs['table_name'],
-            ', '.join(kwargs['cols'])
-        )
-        self.set_connection()
-
-    def execute(self):
-        self.cursor = self.connection.cursor()
-
-        # create new table
-        self.cursor.execute(self.query)
-        self.connection.commit()
-        return
-
-
-class InsertQuery(TableCreateQuery):
-
-    def __init__(self, cursor=None, query=None, **kwargs):
-        super(InsertQuery, self).__init__(cursor, query, **kwargs)
-
-    @property
-    def binary_data(self):
-        if self.context.get('cols', None) and self.context.get('col_types', None):
-            # инфа о бинарных данных для инсерта в постгрес
-            binary_types_dict = get_binary_types_dict(
-                self.context['cols'], self.context['col_types'])
-
-            # инфа для колонки cdc_key, о том, что она не binary
-            binary_types_dict['0'] = False
-            return binary_types_dict
-        else:
-            return None
-
-    def set_query(self, **kwargs):
-        self.query = self.source_service.get_table_insert_query(
-            kwargs['table_name'], kwargs['cols_nums'])
-        self.set_connection()
-
-    def execute(self, **kwargs):
-        self.cursor = self.connection.cursor()
-        binary_types_dict = self.binary_data
-
-        if binary_types_dict:
-            for each in kwargs['data']:
-                for k, v in each.iteritems():
-                    if binary_types_dict.get(k):  # if binary data
-                        each[k] = Binary(v)
-
-        # create new table
-        self.cursor.executemany(self.query, kwargs['data'])
-        self.connection.commit()
-        return
-
-
-class DeleteQuery(TableCreateQuery):
-
-    def set_query(self, **kwargs):
-        delete_table_query = "DELETE from {0} where cdc_key in ('{1}');"
-        self.query = delete_table_query.format(
-            kwargs['table_name'], '{0}')
-        self.set_connection()
-
-    def execute(self, **kwargs):
-        self.cursor = self.connection.cursor()
-        [str(a) for a in kwargs['keys']]
-        self.query = self.query.format(
-            "','".join([str(a) for a in kwargs['keys']]))
-        self.cursor.execute(self.query)
-        self.connection.commit()
-        return
-
-local_connection = DataSourceService.get_local_instance().connection
-
-
 class LocalDbConnect(object):
 
-    connection = local_connection
+    connection = DataSourceService.get_local_instance().connection
 
     def __init__(self, query, execute=True):
 
@@ -473,81 +460,27 @@ class LocalDbConnect(object):
             self.execute()
 
     def execute(self, args=None, many=False):
-        with self.connection as cursor:
-            if not many:
-                cursor.execute(self.query, args)
-            else:
-                cursor.executemany(self.query, args)
+        with self.connection:
+            with self.connection.cursor() as cursor:
+                if not many:
+                    cursor.execute(self.query, args)
+                else:
+                    cursor.executemany(self.query, args)
 
     def fetchall(self, args=None):
-        with self.connection as cursor:
-            cursor.execute(self.query, args)
-            return cursor.fetchall()
+        with self.connection:
+            with self.connection.cursor() as cursor:
+                cursor.execute(self.query, args)
+                return cursor.fetchall()
 
 
 class SourceDbConnect(LocalDbConnect):
 
     connection = None
 
-    def __init__(self, query, source, execute=True):
+    def __init__(self, query, source, execute=False):
         self.connection = DataSourceService.get_source_connection(source)
         super(SourceDbConnect, self).__init__(query, execute)
-
-
-class QueryString(object):
-
-    def __init__(self, params):
-        """
-        Args:
-            params(dict): Параметры необходимые для запроса
-        """
-        self.params = params
-
-    @property
-    def query(self):
-        """
-        Формирование строки запроса
-
-        Returns:
-            str: Строка запроса
-        """
-        raise NotImplementedError
-
-
-class SelectQuery(QueryString):
-    """
-    Запрос на получение данных из локального хранилища
-    C пагинацией
-    """
-
-    @property
-    def query(self):
-        """
-        Returns:
-            str: Строка запроса вида
-            ::
-                "SELECT <cols> FROM <table> LIMIT {0} OFFSET {1};"
-        """
-
-        return DataSourceService.get_page_select_query(
-            self.params['table_name'], self.params['fields'])
-
-
-class TableCreateQueryString(QueryString):
-
-    @property
-    def query(self):
-        cols = []
-        for obj in self.params['cols']:
-            t = obj['table']
-            c = obj['col']
-            cols.append('"{0}__{2}" {3}'.format(
-                t, c, TYPES_MAP.get(
-                    self.params['col_types']['{0}.{1}'.format(t, c)])))
-        return DataSourceService.get_table_create_query(
-            self.params['table_name'],
-            ', '.join(cols))
-
 
 
 class MongodbConnection(object):
@@ -558,7 +491,8 @@ class MongodbConnection(object):
         # database name
         db = connection[db_name]
         self.collection = db[name]
-        self.set_indexes(indexes)
+        if indexes:
+            self.set_indexes(indexes)
 
     def get_collection(self, collection_name, db_name='etl'):
         """
@@ -656,7 +590,9 @@ class TaskService(object):
     def get_queue(task_id, user_id):
         """
         Информация о ходе работы задач
-        :param task_id:
+
+        Returns:
+            QueueStorage: ...
         """
         queue_dict = RedisSourceService.get_queue_dict(task_id)
         return QueueStorage(queue_dict, task_id, user_id)

@@ -126,7 +126,7 @@ class Postgresql(Database):
     def get_page_select_query(cls, table_name, cols):
         fields_str = '"'+'", "'.join(cols)+'"'
         return cls.db_map.row_query.format(
-            fields_str, table_name, '{0}', '{1}')
+            fields_str, table_name, '%s', '%s')
 
     @staticmethod
     def local_table_insert_query(table_name, cols_num):

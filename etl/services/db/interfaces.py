@@ -5,7 +5,6 @@ from itertools import groupby
 from django.conf import settings
 
 from etl.constants import FIELD_NAME_SEP
-from etl.services.queue.base import DTCN
 
 
 class BaseEnum(object):
@@ -267,7 +266,7 @@ class Database(object):
 
         return self.db_map.row_query.format(
             cols_str, query_join,
-            '{0}', '{1}')
+            '%s', '%s')
 
     def get_rows(self, cols, structure):
         """
@@ -513,7 +512,7 @@ class Database(object):
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
-    def get_date_table_names():
+    def get_date_table_names(col_type):
         """
         Получене запроса на создание таблицы даты
         Returns:
@@ -522,7 +521,7 @@ class Database(object):
         date_table_col_names = ['"time_id" integer PRIMARY KEY']
         date_table_col_names.extend([
             '"{0}" {1}'.format(field, f_type) for field, f_type
-            in DTCN.types])
+            in col_type])
         return date_table_col_names
 
     @staticmethod
@@ -539,3 +538,8 @@ class Database(object):
                     field_name, ref_key))
 
         return col_names
+
+    @staticmethod
+    def cdc_key_delete_query(table_name):
+
+        return 'DELETE from {0} where where cdc_key = ANY(%s);'.format(table_name, '%s')

@@ -295,12 +295,16 @@ class DatabaseService(object):
         cls.get_local_instance().reload_datasource_trigger_query(params)
 
     @classmethod
-    def get_date_table_names(cls):
+    def get_date_table_names(cls, col_type):
         """
         Получене запроса на создание таблицы даты
         """
-        return cls.get_local_instance().get_date_table_names()
+        return cls.get_local_instance().get_date_table_names(col_type)
 
     @classmethod
     def get_dim_table_names(cls, fields, ref_key):
         return cls.get_local_instance().get_dim_table_names(fields, ref_key)
+
+    @classmethod
+    def cdc_key_delete_query(cls, table_name):
+        return cls.get_local_instance().cdc_key_delete_query(table_name)
