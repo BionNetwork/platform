@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import os
 import json
 import datetime
 import decimal
@@ -86,3 +87,10 @@ def check_redis_lock(func):
                         continue
     return wrap
 
+
+def users_avatar_upload(user, filename):
+    """
+    Путь сохранения аватарок полбзователя
+    """
+    return os.path.join(
+        'users', 'photos', 'user', str(user.id), filename)

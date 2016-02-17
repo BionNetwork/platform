@@ -10,6 +10,7 @@
 
 {% block css %}
     <link href="{% static 'system/plugins/datepicker/datepicker3.css' %}" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/users.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -22,51 +23,118 @@
             </div>
             <!-- /.box-header -->
             <div class="box-body">
-                <form role="form" method="post">{% csrf_token %}
-                    {% for field in form %}
-                        <div class="form-group">
-                            <label>{{field.label}}</label>
-                            {% if field.name == 'email'%}
-                                <div class="input-group">
-                                    <div class="input-group-addon">
-                                        <i class="fa fa-envelope"></i>
-                                    </div>
-                                        {{field}}
-                                </div>
-                            {% elif field.name == "phone" %}
-                                <div class="input-group">
-                                    <div class="input-group-addon">
-                                        <i class="fa fa-phone"></i>
-                                    </div>
-                                        {{field}}
-                                </div>
-                            {% elif field.name == "birth_date" %}
-                                <div class="input-group">
-                                    <div class="input-group-addon">
-                                        <i class="fa fa-calendar"></i>
-                                    </div>
-                                        {{field}}
-                                </div>
-                            {% elif field.name == "skype" %}
-                                <div class="input-group">
-                                    <div class="input-group-addon">
-                                        <i class="fa fa-skype"></i>
-                                    </div>
-                                        {{field}}
-                                </div>
-                            {%else%}
-                                <div>
-                                    {{field}}
-                                </div>
-                            {%endif%}
-                            {% if field.erros %}
-                                <div>
-                                    {{ field.errors }}
-                                </div>
-                            {% endif %}
+                <form role="form" method="post" enctype="multipart/form-data">{% csrf_token %}
+                    <input type="hidden" name="full_path" value="{{ full_path }}">
+                    <div class="nav-tabs-custom">
+                        <ul class="nav nav-tabs">
+                            <li class="active"><a href="#main" data-toggle="tab" aria-expanded="true">Главная</a></li>
+                            <li><a href="#optional" data-toggle="tab">Дополнительно</a></li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane active" id="main">
+                                {% for field in form %}
+                                    {% if field.name in first_tab %}
+                                        <div class="form-group {% if field.errors %}has-error{% endif %}">
+                                            <label>{{field.label}}</label>
+                                            {% if field.name == 'avatar'%}
+                                                <div class="box-body box-profile">
+                                                    <div class="col-md-2">
+                                                        <div class="img_bl">
+                                                            <img id="profile_img" class="profile-user-img img-responsive img-circle"
+                                                                 {% if form.avatar.value %}
+                                                                    src="{{ MEDIA_URL }}{{form.avatar.value}}"
+                                                                 {% else %}
+                                                                    src="/assets/system/dist/img/anonymous-160x160.gif"
+                                                                 {% endif %}
+                                                                 alt="User profile picture" width="140" height="140">
+                                                            <div class="opacity_btn img-circle">
+                                                                <div id="add-btn" class="fileUpload btn btn-success icon_centr"
+                                                                     {% if form.avatar.value %}style="display: none"{% endif %}>
+                                                                    <i class="glyphicon glyphicon-plus"></i>
+                                                                    <input id="fileupload" type="file" name="file" class="upload"/>
+                                                                    <input id="fileupload_avatar" type="hidden" value="{{form.avatar.value}}" name="fileupload_avatar">
+                                                                </div>
+                                                                <span id="clear-btn" class="btn btn-danger fileinput-button icon_centr"
+                                                                     {% if not form.avatar.value %}style="display: none"{% endif %}>
+                                                                    <i class="glyphicon glyphicon-remove" onclick="clearImage()"></i>
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {%else%}
+                                                <div>
+                                                    {{field}}
+                                                </div>
+                                            {% endif %}
+                                            {% if field.errors %}
+                                                <div>
+                                                    {{ field.errors }}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            <div class="tab-pane" id="optional">
+                                {% for field in form %}
+                                    {% if field.name not in first_tab %}
+                                        <div class="form-group {% if field.errors %}has-error{% endif %}">
+                                            <label>{{field.label}}</label>
+                                            {% if field.name == 'email'%}
+                                                <div class="input-group">
+                                                    <div class="input-group-addon">
+                                                        <i class="fa fa-envelope"></i>
+                                                    </div>
+                                                        {{field}}
+                                                </div>
+                                            {% elif field.name == "phone" %}
+                                                <div class="input-group">
+                                                    <div class="input-group-addon">
+                                                        <i class="fa fa-phone"></i>
+                                                    </div>
+                                                        {{field}}
+                                                </div>
+                                            {% elif field.name == "birth_date" %}
+                                                <div class="input-group">
+                                                    <div class="input-group-addon">
+                                                        <i class="fa fa-calendar"></i>
+                                                    </div>
+                                                        {{field}}
+                                                </div>
+                                            {% elif field.name == "skype" %}
+                                                <div class="input-group">
+                                                    <div class="input-group-addon">
+                                                        <i class="fa fa-skype"></i>
+                                                    </div>
+                                                        {{field}}
+                                                </div>
+                                            {%else%}
+                                                <div>
+                                                    {{field}}
+                                                </div>
+                                            {%endif%}
+                                            {% if field.errors %}
+                                                <div>
+                                                    {{ field.errors }}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
                         </div>
-                    {% endfor %}
-                    <button type="submit">Сохранить</button>
+                    </div>
+                    <div class="form-group form_bottom_btn">
+                        <div class="col-sm-2">
+                            <button type="submit" class="btn btn-success">Сохранить</button>
+                        </div>
+                        {% if form.errors %}
+                            <div class="has-error">
+                                <label class="control-label">На форме имеются некорректно заполненные поля!</label>
+                            </div>
+                        {% endif %}
+                    </div>
                 </form>
             </div>
             <!-- /.box-body -->
