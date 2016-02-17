@@ -6,10 +6,6 @@ import easywebdav
 from django.conf import settings
 from requests import ConnectionError
 
-XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
-    host=settings.OLAP_SERVER_HOST, port=settings.OLAP_SERVER_PORT)
-REPOSITORY_PATH = 'saiku/repository/default'
-
 
 class OlapClient(object):
     """
@@ -21,11 +17,11 @@ class OlapClient(object):
             cube_id(int): id куба
         """
         self.cube_id = cude_id
-        self.connect = xmla.XMLAProvider().connect(location=XMLA_URL)
+        self.connect = xmla.XMLAProvider().connect(location=settings.OLAP_XMLA_URL)
         self.webdav = easywebdav.connect(
             host=settings.OLAP_SERVER_HOST,
             port=settings.OLAP_SERVER_PORT,
-            path=REPOSITORY_PATH,
+            path=settings.OLAP_REPOSITORY_PATH,
             username=settings.OLAP_SERVER_USER,
             password=settings.OLAP_SERVER_PASS
         )
