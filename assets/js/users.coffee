@@ -1,4 +1,4 @@
-activePage =
+activePage = null
 usersUrl = null
 
 removeUser = (url) ->

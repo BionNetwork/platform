@@ -316,6 +316,11 @@ class DataSourceService(object):
             local_instance, key_str, cols_str)
 
     @classmethod
+    def check_table_exists_query(cls, local_instance, table_name, db):
+        return DatabaseService.check_table_exists_query(
+            local_instance, table_name, db)
+
+    @classmethod
     def get_table_insert_query(cls, local_instance, source_table_name):
         return DatabaseService.get_table_insert_query(
             local_instance, source_table_name)

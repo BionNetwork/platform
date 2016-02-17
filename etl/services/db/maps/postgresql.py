@@ -219,6 +219,13 @@ delete_primary_key = """
 
 drop_index = """drop index {0}"""
 
+check_table_exists = """
+    SELECT EXISTS (
+        SELECT * FROM   information_schema.tables
+        WHERE table_name = '{0}' AND table_catalog = '{1}'
+   );
+"""
+
 
 dimension_measure_triggers_query = """
     CREATE OR REPLACE FUNCTION reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
