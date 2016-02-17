@@ -769,7 +769,7 @@ class RedisSourceService(object):
         """
         subs_str = RedisCacheKeys.get_user_subscribers(user_id)
         if not r_server.exists(subs_str):
-            r_server.set(subs_str, '[]')
+            return []
 
         return r_server.get(subs_str)
 
