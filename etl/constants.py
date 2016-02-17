@@ -10,6 +10,7 @@ TYPES_MAP = {
     'text': 'text',
     'timestamp': 'timestamp',
     'binary': 'bytea',
+    'bool': 'boolean',
 }
 
 

@@ -1,22 +1,19 @@
 # coding: utf-8
 
 from __future__ import unicode_literals
-
 import logging
-
 import os
 import sys
 import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
-
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
-from etl.services.olap.base import send_xml
+from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from etl.services.queue.base import *
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
@@ -25,7 +22,6 @@ from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
-
 from djcelery import celery
 from itertools import groupby, izip
 
@@ -69,7 +65,7 @@ class TaskProcessing(object):
         """
         self.task_id = task_id
         self.channel = channel
-        self.last_task=last_task
+        self.last_task = last_task
         self.user_id = None
         self.context = None
         self.was_error = False
@@ -257,7 +253,7 @@ class LoadMongodb(TaskProcessing):
 
         # общее количество строк в запросе
         self.publisher.rows_count = DataSourceService.get_structure_rows_number(
-            source_model, structure,  cols)
+            source_model, structure, cols)
         self.publisher.publish(TLSE.START)
 
         col_names = ['_id', '_state', '_date']
@@ -296,7 +292,7 @@ class LoadMongodb(TaskProcessing):
 
         while True:
             cursor = source_connection.cursor()
-            cursor.execute(query.format(limit, (page-1)*limit))
+            cursor.execute(query.format(limit, (page - 1) * limit))
             result = cursor.fetchall()
 
             data_to_insert = []
@@ -306,8 +302,8 @@ class LoadMongodb(TaskProcessing):
 
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                        record, tables_key_creator, (page-1)*limit + ind,
-                        binary_types_list)
+                    record, tables_key_creator, (page - 1) * limit + ind,
+                    binary_types_list)
 
                 # бинарные данные оборачиваем в Binary(), если они имеются
                 new_record = process_binary_data(record, binary_types_list)
@@ -337,7 +333,6 @@ class LoadMongodb(TaskProcessing):
 
 
 class LoadDb(TaskProcessing):
-
     def processing(self):
         """
         Загрузка данных из Mongodb в базу данных
@@ -354,7 +349,7 @@ class LoadDb(TaskProcessing):
         source.set_from_dict(**self.context['source'])
         # общее количество строк в запросе
         self.publisher.rows_count = DataSourceService.get_structure_rows_number(
-            source, structure,  cols)
+            source, structure, cols)
         self.publisher.publish(TLSE.START)
 
         col_names = ['"cdc_key" text PRIMARY KEY']
@@ -364,7 +359,7 @@ class LoadDb(TaskProcessing):
             c = obj['col']
             col_names.append('"{0}{1}{2}" {3}'.format(
                 t, FIELD_NAME_SEP, c,
-                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)])))
+                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)].lower())))  # oracle types are uppercase
             clear_col_names.append('{0}{1}{2}'.format(t, FIELD_NAME_SEP, c))
 
         # инфа о бинарных данных для инсерта в постгрес
@@ -402,7 +397,7 @@ class LoadDb(TaskProcessing):
                     for ind, col_name in enumerate(clear_col_names):
                         temp_dict.update(
                             {str(ind): record['_id'] if col_name == 'cdc_key'
-                                else record[col_name]})
+                            else record[col_name]})
                     rows_dict.append(temp_dict)
                 if not rows_dict:
                     break
@@ -481,7 +476,8 @@ class LoadDimensions(TaskProcessing):
         for record in meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                if field['type'] in cls.actual_fields_type:
+                f_type = TYPES_MAP.get(field['type'])
+                if f_type in cls.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
@@ -497,7 +493,7 @@ class LoadDimensions(TaskProcessing):
         Returns:
             str: Строка запроса
         """
-        fields_str = '"'+'", "'.join(fields)+'"'
+        fields_str = '"' + '", "'.join(fields) + '"'
         query = "SELECT {0} FROM {1} LIMIT {2} OFFSET {3};"
         source_table_name = get_table_name(
             STTM_DATASOURCE, self.key)
@@ -579,12 +575,12 @@ class LoadDimensions(TaskProcessing):
             datasource_meta_id = DatasourceMeta.objects.get(
                 id=meta_tables[table])
             target_table_name = '{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name'])
+                table, FIELD_NAME_SEP, field['name'])
             level.update(dict(
                 type=field['type'], level_type='regular', visible=True,
                 column=target_table_name, unique_members=field['is_unique'],
                 caption=target_table_name,
-                )
+            )
             )
 
             data = dict(
@@ -609,7 +605,19 @@ class LoadDimensions(TaskProcessing):
         Возвращает имена колонки вида 'table__column'
         """
         return map(lambda (table, field): '{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name']), self.actual_fields)
+            table, FIELD_NAME_SEP, field['name']), self.actual_fields)
+
+    def filter_columns(self, cols):
+        """
+        Достаем инфу только тех колонок, которые используются
+        в мерах и размерностях
+        """
+        dim_meas_cols_info = []
+        for (act_table, col_info) in self.actual_fields:
+            for c in cols:
+                if c['table'] == act_table and c['col'] == col_info['name']:
+                    dim_meas_cols_info.append(c)
+        return dim_meas_cols_info
 
     def save_fields(self):
         """Заполняем таблицу данными
@@ -623,8 +631,10 @@ class LoadDimensions(TaskProcessing):
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
 
+        dim_meas_cols = self.filter_columns(cols)
+
         # инфа о бинарных данных для инсерта в постгрес
-        binary_types_dict = get_binary_types_dict(cols, col_types)
+        binary_types_dict = get_binary_types_dict(dim_meas_cols, col_types)
 
         # инфа для колонки cdc_key, о том, что она не binary
         binary_types_dict['0'] = False
@@ -668,21 +678,25 @@ class LoadDimensions(TaskProcessing):
         connection = local_instance.connection
         cursor = connection.cursor()
 
+        sep = local_instance.get_separator()
+
         column_names = ['cdc_key']
         column_names += self.get_splitted_table_column_names()
 
         insert_cols = []
+        select_cols = []
         for col in column_names:
-            insert_cols.append('NEW.{0}'.format(col))
+            insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
+            select_cols.append('{1}{0}{1}'.format(col, sep))
 
         reload_trigger_query = local_instance.reload_datasource_trigger_query()
 
         cursor.execute(reload_trigger_query.format(
             new_table=get_table_name(self.table_prefix, self.key),
             orig_table=get_table_name(STTM_DATASOURCE, self.key),
-            del_condition="cdc_key=OLD.cdc_key",
+            del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
             insert_cols=','.join(insert_cols),
-            cols="({0})".format(','.join(column_names)),
+            cols='({0})'.format(','.join(select_cols)),
         ))
 
         connection.commit()
@@ -694,7 +708,9 @@ class LoadMeasures(LoadDimensions):
     """
     table_prefix = MEASURES
     actual_fields_type = [
-        Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
+        Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP,
+        Measure.BOOLEAN,
+    ]
 
     def save_meta_data(self, user_id, key, fields, meta_tables):
         """
@@ -710,7 +726,7 @@ class LoadMeasures(LoadDimensions):
             datasource_meta_id = DatasourceMeta.objects.get(
                 id=meta_tables[table])
             target_table_name = '{0}{1}{2}'.format(
-                    table, FIELD_NAME_SEP, field['name'])
+                table, FIELD_NAME_SEP, field['name'])
             Measure.objects.get_or_create(
                 name=target_table_name,
                 title=target_table_name,
@@ -725,7 +741,6 @@ class LoadMeasures(LoadDimensions):
 
 
 class UpdateMongodb(TaskProcessing):
-
     def processing(self):
         """
         1. Процесс обновленения данных в коллекции `sttm_datasource_delta_{key}`
@@ -743,7 +758,7 @@ class UpdateMongodb(TaskProcessing):
 
         # общее количество строк в запросе
         self.publisher.rows_count = DataSourceService.get_structure_rows_number(
-            source_model, structure,  cols)
+            source_model, structure, cols)
         self.publisher.publish(TLSE.START)
 
         col_names = ['_id', '_state', '_date']
@@ -783,12 +798,12 @@ class UpdateMongodb(TaskProcessing):
             rkc.set_primary_key(value)
             tables_key_creator.append(rkc)
 
-        #  Выявляем новые записи в базе и записываем их в дельта-коллекцию
+        # Выявляем новые записи в базе и записываем их в дельта-коллекцию
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         page = 1
         while True:
             cursor = source_connection.cursor()
-            cursor.execute(query.format(limit, (page-1)*limit))
+            cursor.execute(query.format(limit, (page - 1) * limit))
             result = cursor.fetchall()
             if not result:
                 break
@@ -796,7 +811,7 @@ class UpdateMongodb(TaskProcessing):
             data_to_current_insert = []
             for ind, record in enumerate(result):
                 row_key = calc_key_for_row(
-                    record, tables_key_creator, (page-1)*limit + ind,
+                    record, tables_key_creator, (page - 1) * limit + ind,
                     binary_types_list)
 
                 # бинарные данные оборачиваем в Binary(), если они имеются
@@ -822,7 +837,7 @@ class UpdateMongodb(TaskProcessing):
         while True:
             delta_data = delta_collection.find(
                 {'_state': DTSE.NEW},
-                limit=limit, skip=(page-1)*limit).sort('_date', ASCENDING)
+                limit=limit, skip=(page - 1) * limit).sort('_date', ASCENDING)
             to_ins = []
             for record in delta_data:
                 record['_state'] = STSE.IDLE
@@ -844,7 +859,6 @@ class UpdateMongodb(TaskProcessing):
 
 
 class DetectRedundant(TaskProcessing):
-
     def processing(self):
         """
         Выявление записей на удаление
@@ -875,7 +889,7 @@ class DetectRedundant(TaskProcessing):
 
             to_delete = []
             records_for_del = list(all_keys_collection.find(
-                    {'_state': AKTSE.NEW}, limit=limit, skip=(page-1)*limit))
+                {'_state': AKTSE.NEW}, limit=limit, skip=(page - 1) * limit))
             if not len(records_for_del):
                 break
             for record in records_for_del:
@@ -901,7 +915,6 @@ class DetectRedundant(TaskProcessing):
 
 
 class DeleteRedundant(TaskProcessing):
-
     def processing(self):
         print 'DeleteRedundant'
         self.key = self.context['checksum']
@@ -918,7 +931,7 @@ class DeleteRedundant(TaskProcessing):
         while True:
             delete_delta = del_collection.find(
                 {'_deleted': True},
-                limit=limit, skip=(page-1)*limit)
+                limit=limit, skip=(page - 1) * limit)
             l = [record['_id'] for record in delete_delta]
             if not l:
                 break
@@ -930,11 +943,10 @@ class DeleteRedundant(TaskProcessing):
 
         if not self.context['is_meta_stats']:
             self.next_task_params = (
-                        GENERATE_DIMENSIONS, load_dimensions, self.context)
+                GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
-
     def processing(self):
         """
         Создание триггеров в БД пользователя
@@ -1051,7 +1063,6 @@ class CreateTriggers(TaskProcessing):
                     else:
                         index_cols = sorted(index_name[index_cols_i].split(','))
                         if index_cols != required_indexes[index_name]:
-
                             cursor.execute(drop_index_q.format(index_name, table_name))
                             cursor.execute(create_index_q.format(
                                 index_name, table_name,
@@ -1075,7 +1086,7 @@ class CreateTriggers(TaskProcessing):
             else:
                 # создание таблицы у юзера
                 cursor.execute(remote_table_create_query.format(
-                        table_name, cols_str))
+                    table_name, cols_str))
 
                 # создание индексов
                 create_index_q = db_instance.db_map.create_index_query
@@ -1112,7 +1123,6 @@ class CreateTriggers(TaskProcessing):
 
 
 class CreateCube(TaskProcessing):
-
     def processing(self):
 
         print 'Start cube creation'
@@ -1155,7 +1165,6 @@ class CreateCube(TaskProcessing):
 
         # <Dimensions>
         for dim in dimensions:
-
             dim_type = dim.get_dimension_type()
             visible = 'true' if dim.visible else 'false'
             name = dim.name
@@ -1216,7 +1225,6 @@ class CreateCube(TaskProcessing):
         dimension_links = etree.SubElement(measure_group, 'DimensionLinks')
 
         for dim in dimensions:
-
             etree.SubElement(dimension_links, 'NoLink', dimension=dim.name)
             # etree.SubElement(dimension_links, 'ForeignKeyLink', dimension=dim.name, foreignKeyColumn='dimension_id')
 
@@ -1231,6 +1239,13 @@ class CreateCube(TaskProcessing):
             # user_id=11,
         )
 
-        send_xml(key, cube.id, cube_string)
+        try:
+            send_xml(key, cube.id, cube_string)
+
+        except OlapServerConnectionErrorException as te:
+            self.error_handling(te.message)
+            logger.error("Can't connect to Olap Server!")
+            logger.error(te.message)
+            raise te  # пробрасываем ошибку дальше
 
 # write in console: python manage.py celery -A etl.tasks worker
