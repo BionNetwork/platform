@@ -4,6 +4,7 @@ from olap.xmla import xmla
 import easywebdav
 
 from django.conf import settings
+from requests import ConnectionError
 
 XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
     host=settings.OLAP_SERVER_HOST, port=settings.OLAP_SERVER_PORT)
@@ -82,6 +83,16 @@ def send_xml(key, cube_id, xml):
         client.file_delete(schema_name)
     except easywebdav.OperationFailed as e:
         pass
+    except ConnectionError as ce:
+        raise OlapServerConnectionErrorException(ce.message)
+
     client.file_upload(datasource_file_name)
     client.file_upload(schema_name)
     # oc.connect.getDatasources()
+
+
+class OlapServerConnectionErrorException(Exception):
+    """
+    Исключение при ошибке коннекта к olap серверу
+    """
+    pass
