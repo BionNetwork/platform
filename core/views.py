@@ -334,6 +334,7 @@ class EditUserView(BaseTemplateView):
 
         image = request.FILES.get('file', None)
 
+        print post
         # добавили аву
         if image:
             filename = image.name
@@ -359,7 +360,7 @@ class EditUserView(BaseTemplateView):
             user.avatar_small.save(sm_filename, small_avatar)
 
         # ничего не меняли
-        elif not post.get('fileupload_changed'):
+        elif not post.get('fileupload_avatar'):
             user.avatar.delete()
             user.avatar_small.delete()
 

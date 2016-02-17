@@ -45,7 +45,7 @@ function previewImage(event){
         reader.onload = function (e) {
             $('#profile_img').attr('src', e.target.result);
             // вспомогательная штука, чтоб узнать изменили ли авку
-            $('#fileupload_changed').val('changed');
+            $('#fileupload_avatar').val(e.target.result);
         }
         reader.readAsDataURL(input.files[0]);
 
@@ -57,7 +57,7 @@ function previewImage(event){
 function clearImage(){
     $('#profile_img').attr('src', "/assets/system/dist/img/anonymous-160x160.gif");
     $("#fileupload").val('');
-    $('#fileupload_changed').val('');
+    $('#fileupload_avatar').val('');
     $('#add-btn').show();
     $('#clear-btn').hide();
 }

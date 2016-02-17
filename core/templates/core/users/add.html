@@ -52,7 +52,7 @@
                                                                      {% if form.avatar.value %}style="display: none"{% endif %}>
                                                                     <i class="glyphicon glyphicon-plus"></i>
                                                                     <input id="fileupload" type="file" name="file" class="upload"/>
-                                                                    <input id="fileupload_changed" type="hidden" value="{{form.avatar.value}}" name="hidden_fileupload">
+                                                                    <input id="fileupload_avatar" type="hidden" value="{{form.avatar.value}}" name="fileupload_avatar">
                                                                 </div>
                                                                 <span id="clear-btn" class="btn btn-danger fileinput-button icon_centr"
                                                                      {% if not form.avatar.value %}style="display: none"{% endif %}>
@@ -66,7 +66,7 @@
                                                 <div>
                                                     {{field}}
                                                 </div>
-                                            {%endif%}
+                                            {% endif %}
                                             {% if field.errors %}
                                                 <div>
                                                     {{ field.errors }}
