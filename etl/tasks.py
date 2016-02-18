@@ -476,7 +476,7 @@ class LoadDimensions(TaskProcessing):
         return title
 
     @classmethod
-    def get_actual_fields(self, meta_data):
+    def get_actual_fields(cls, meta_data):
         """
         Фильтруем поля по необходимому нам типу
 
