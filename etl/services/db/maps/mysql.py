@@ -45,6 +45,8 @@ blobs = [
     'binary',
 ]
 
+booleans = []
+
 for i in ints:
     DB_TYPES[i] = 'integer'
 
@@ -60,6 +62,8 @@ for i in dates:
 for i in blobs:
     DB_TYPES[i] = 'binary'
 
+for i in booleans:
+    DB_TYPES[i] = 'bool'
 
 table_query = """
     SELECT table_name FROM information_schema.tables

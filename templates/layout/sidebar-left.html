@@ -5,10 +5,15 @@
     <!-- Sidebar user panel (optional) -->
     <div class="user-panel">
         <div class="pull-left image">
-            <img src="{% static "system/dist/img/anonymous-160x160.gif" %}" class="img-circle" alt="User Image">
+            {% if user.avatar_small %}
+                <img src="{{ MEDIA_URL }}{{user.avatar_small}}" class="img-circle" alt="User Image"
+                     style="height:45px;width:45px;">
+            {%else%}
+                <img src="{% static "system/dist/img/anonymous-160x160.gif" %}" class="img-circle" alt="User Image">
+            {% endif %}
         </div>
         <div class="pull-left info">
-            <p>Oleg Mikhailov</p>
+            <p>{{ user.last_name }} {{ user.first_name }}</p>
             <!-- Status -->
             <a href="#"><i class="fa fa-circle text-success"></i> Online</a>
         </div>
@@ -27,12 +32,15 @@
     <!-- /.search form -->
 
     <!-- Sidebar Menu -->
-    <ul class="sidebar-menu">
+    <ul id="left-sidebar-menu" class="sidebar-menu">
         <li class="header">HEADER</li>
         <!-- Optionally, you can add icons to the links -->
-        <li class="active"><a href="{% url "home" %}"><i class="fa fa-link"></i><span>Home</span></a></li>
-        <li><a href="{% url "core:users" %}"><i class="fa fa-users"></i><span>Пользователи</span></a></li>
-        <li><a href="{% url "etl:datasources.index" %}"><i class="fa fa-circle"></i><span>Источники данных</span></a></li>
+        <li id="home-li-id" class="{% if request.path == '/' %}active{% endif %}">
+            <a href="{% url "home" %}"><i class="fa fa-link"></i><span>Home</span></a></li>
+        <li id="users-li-id" class="{% if '/users/' in request.path %}active{% endif %}">
+            <a href="{% url "core:users" %}"><i class="fa fa-users"></i><span>Пользователи</span></a></li>
+        <li id="sources-li-id" class="{% if '/etl/datasources/' in request.path %}active{% endif %}">
+            <a href="{% url "etl:datasources.index" %}"><i class="fa fa-circle"></i><span>Источники данных</span></a></li>
         <li class="treeview">
             <a href="#"><i class="fa fa-link"></i> <span>Multilevel</span> <i
                     class="fa fa-angle-left pull-right"></i></a>
