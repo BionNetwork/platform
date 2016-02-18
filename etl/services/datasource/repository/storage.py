@@ -307,7 +307,11 @@ class RedisSourceService(object):
         coll_counter = json.loads(cls.get_collection_counter(
             source.user_id, source.id))
         # список коллекций
-        actives_names = [x['name'] for x in coll_counter['data']]
+        try:
+            assert isinstance(coll_counter, dict)
+            actives_names = [x['name'] for x in coll_counter['data']]
+        except AssertionError:
+            actives_names = []
         not_exists = [t for t in tables if t not in actives_names]
         return not_exists
 
@@ -372,7 +376,11 @@ class RedisSourceService(object):
                     user_id, source_id))
 
         # старый список коллекций
-        actives = coll_counter['data']
+        try:
+            assert isinstance(coll_counter, dict)
+            actives = coll_counter['data']
+        except AssertionError:
+            actives = []
 
         joins_in_redis = defaultdict(list)
 
@@ -385,7 +393,11 @@ class RedisSourceService(object):
             if order is None:
 
                 # порядковый номер cчетчика коллекций пользователя
-                sequence_id = coll_counter['next_sequence_id']
+                try:
+                    assert isinstance(coll_counter, dict)
+                    sequence_id = coll_counter['next_sequence_id']
+                except AssertionError:
+                    sequence_id = coll_counter
 
                 # достаем инфу либо по имени, либо по порядковому номеру
                 table_info = RedisSourceService.get_table_full_info(source, n_val)
@@ -409,6 +421,10 @@ class RedisSourceService(object):
 
                 # удаляем таблицы с именованными ключами
                 pipe.delete(str_table_by_name.format(n_val))
+                try:
+                    assert isinstance(coll_counter, dict)
+                except AssertionError:
+                    coll_counter = {'data': [], 'next_sequence_id': coll_counter}
                 # добавляем новую таблциу в карту активных таблиц
                 coll_counter['data'].append({'name': n_val, 'id': sequence_id})
 
@@ -877,7 +893,11 @@ class RedisSourceService(object):
         :return:
         """
         counter = json.loads(cls.get_collection_counter(user_id, source_id), )
-        return counter['data']
+        try:
+            assert isinstance(counter, dict)
+            return counter['data']
+        except AssertionError:
+            return []
 
     @classmethod
     def save_good_error_joins(cls, source, left_table, right_table,
