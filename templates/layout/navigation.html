@@ -111,18 +111,25 @@
                 <!-- Menu Toggle Button -->
                 <a href="#" class="dropdown-toggle" data-toggle="dropdown">
                     <!-- The user image in the navbar-->
-                    <img src="{% static "system/dist/img/anonymous-160x160.gif" %}" class="user-image" alt="User Image">
+                    {% if user.avatar_small %}
+                                            <img src="{{ MEDIA_URL }}{{user.avatar_small}}" alt="User Image" class="user-image">
+                                        {%else%}
+                                            <img src="{% static "system/dist/img/anonymous-160x160.gif" %}" class="user-image" alt="User Image">
+                                        {% endif %}
                     <!-- hidden-xs hides the username on small devices so only the image appears. -->
-                    <span class="hidden-xs">Oleg Mikhailov</span>
+                    <span class="hidden-xs">{{ user.last_name }} {{ user.first_name }}</span>
                 </a>
                 <ul class="dropdown-menu">
                     <!-- The user image in the menu -->
                     <li class="user-header">
-                        <img src="{% static "system/dist/img/anonymous-160x160.gif" %}" class="img-circle"
-                             alt="User Image">
-
+                        {% if user.avatar %}
+                            <img src="{{ MEDIA_URL }}{{user.avatar}}" class="img-circle" alt="User Image">
+                        {%else%}
+                            <img class="profile-user-img img-responsive img-circle" src="{% static "system/dist/img/anonymous-160x160.gif" %}"
+                                 alt="User profile picture">
+                        {% endif %}
                         <p>
-                            Oleg Mikhailov - Web Developer
+                            {{ user.last_name }} {{ user.first_name }} - Web Developer
                             <small>Member since Nov. 2012</small>
                         </p>
                     </li>

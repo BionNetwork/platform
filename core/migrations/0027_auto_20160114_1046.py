@@ -37,3 +37,10 @@ class Migration(migrations.Migration):
              """
         ),
     ]
+
+    def unapply(self, project_state, schema_editor, collect_sql=False):
+        migrations.RunSQL(
+            """
+            DROP TABLE datasets_to_meta
+            """
+        )

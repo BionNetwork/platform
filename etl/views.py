@@ -493,12 +493,17 @@ class GetUserTasksView(BaseView):
     """
     def get(self, request, *args, **kwargs):
         # берем 10 последних инфо каналов юзера
-        channels_info = helpers.RedisSourceService.get_user_subscribers(
-            request.user.id)[-10:]
+        subscribes = helpers.RedisSourceService.get_user_subscribers(
+            request.user.id)
+        if subscribes:
+            user_subscribes = json.loads(helpers.RedisSourceService.get_user_subscribers(
+                request.user.id))[-10:]
+        else:
+            user_subscribes = []
 
         # сами каналы
         channels = []
-        for ch in channels_info:
+        for ch in user_subscribes:
             channels.append(ch['channel'])
 
         return self.json_response({'channels': channels})

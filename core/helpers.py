@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import os
 import json
 import datetime
 import decimal
@@ -86,3 +87,33 @@ def check_redis_lock(func):
                         continue
     return wrap
 
+
+def users_avatar_upload_path(user, filename):
+    """
+    Путь сохранения аватарок полбзователя
+
+    Args:
+        filename(str): путь до файла загрузки
+        user(core.models.User): объект пользователь
+    """
+    return os.path.join(
+        'users', 'photos', 'user', str(user.id), filename)
+
+
+class HashEncoder(object):
+    """
+    Базовый класс для хэширования данных
+    """
+
+    @staticmethod
+    def encode(data):
+        """
+        Кодирование данных
+
+        Args:
+            data(object): list, dict, str данные для кодирования
+
+        Returns:
+            object(int): integer представление
+        """
+        return hash(data)
