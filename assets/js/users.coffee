@@ -1,4 +1,4 @@
-activePage =
+activePage = null
 usersUrl = null
 
 removeUser = (url) ->
@@ -39,6 +39,29 @@ search = ->
   document.location = usersUrl + '?search=' + search
   return
 
+clearImage = ->
+    $('#profile_img').attr('src', "/assets/system/dist/img/anonymous-160x160.gif")
+    $("#fileupload").val('')
+    $('#fileupload_avatar').val('')
+    $('#add-btn').show()
+    $('#clear-btn').hide()
+    return
+
+previewImage = (event) ->
+    input = event.target
+    if (input.files && input.files[0])
+        reader = new FileReader()
+        reader.onload = (e) ->
+            $('#profile_img').attr('src', e.target.result)
+            # вспомогательная штука, чтоб узнать изменили ли авку
+            $('#fileupload_avatar').val(e.target.result)
+            return
+
+        reader.readAsDataURL(input.files[0]);
+
+        $('#add-btn').hide();
+        $('#clear-btn').show();
+
 $(document).ready ->
   activePage = $('#active_num').val()
   usersUrl = $('#users_table').attr('data-url')
@@ -48,6 +71,8 @@ $(document).ready ->
     forseParse: false
     keyboardNavigation: false
   $('[name="phone"]').inputmask '99999999999'
+  if $('#fileupload')
+    $("#fileupload").on('change',previewImage);
   return
 
 # ---
