@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import shutil
 from olap.xmla import xmla
 import easywebdav
 
@@ -49,6 +50,9 @@ def send_xml(key, cube_id, xml):
 
     directory = os.path.join(
         settings.BASE_DIR, 'data/resources/cubes/{0}/'.format(cube_id))
+    if os.path.exists(directory):
+        shutil.rmtree(directory)
+
     os.makedirs(directory)
 
     datasource_file_name = 'datasource_{0}.sds'.format(key)
