@@ -133,7 +133,7 @@ class TaskProcessing(object):
             error_code=err_code or TaskErrorCodeEnum.DEFAULT_CODE,
             error_msg=self.err_msg)
 
-        self.queue_storage['status'] = TaskStatusEnum.ERROR
+        self.queue_storage.update(status=TaskStatusEnum.ERROR)
 
         # сообщаем об ошибке
         self.publisher.publish(TLSE.ERROR, self.err_msg)
@@ -155,7 +155,7 @@ class TaskProcessing(object):
         else:
             # меняем статус задачи на 'Выполнено'
             TaskService.update_task_status(self.task_id, TaskStatusEnum.DONE, )
-            self.queue_storage.update(TaskStatusEnum.DONE)
+            self.queue_storage.update(status=TaskStatusEnum.DONE)
 
         # удаляем инфу о работе таска
         RedisSourceService.delete_queue(self.task_id)
@@ -320,11 +320,11 @@ class LoadMongodb(TaskProcessing):
                 self.error_handling(e.message)
 
             # обновляем информацию о работе таска
-            self.queue_storage.update()
             self.publisher.loaded_count += limit
             self.publisher.publish(TLSE.PROCESSING)
-            self.queue_storage['percent'] = (
-                100 if self.publisher.is_complete else self.publisher.percent)
+            self.queue_storage.update(
+                percent=100 if self.publisher.is_complete
+                else self.publisher.percent)
 
             page += 1
 
@@ -416,11 +416,11 @@ class LoadDb(TaskProcessing):
             else:
                 last_row = rows_dict[-1]  # получаем последнюю запись
                 # обновляем информацию о работе таска
-                self.queue_storage.update()
                 self.publisher.loaded_count += limit
                 self.publisher.publish(TLSE.PROCESSING)
-                self.queue_storage['percent'] = (
-                    100 if self.publisher.is_complete else self.publisher.percent)
+                self.queue_storage.update(
+                    percent=100 if self.publisher.is_complete
+                    else self.publisher.percent)
 
         source_collection.update_many(
             {'_state': STSE.IDLE}, {'$set': {'_state': STSE.LOADED}})

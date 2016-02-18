@@ -64,10 +64,13 @@ class QueueStorage(object):
         self.queue['status'] = TaskStatusEnum.PROCESSING
         self.queue['percent'] = 0
 
-    def update(self, status=None):
-        self.queue['date_created'] = datetime_now_str()
-        if status:
-            self.queue['status'] = status
+    def update(self, **queue_info):
+        for k, v in queue_info.items():
+            if k not in self.allowed_keys:
+                raise KeyError('Неверный ключ для словаря информации задачи!')
+            self.queue[k] = v
+
+        self.queue['date_updated'] = datetime_now_str()
 
 
 class RPublish(object):
@@ -545,7 +548,6 @@ class TaskService(object):
         })
 
         return task_id, new_channel
-
 
     @staticmethod
     def get_queue(task_id, user_id):
