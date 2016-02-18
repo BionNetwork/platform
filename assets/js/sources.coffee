@@ -564,32 +564,32 @@ startLoading = (userId, loadUrl) ->
     return
   return
 
-renameColumn = (colId) ->
-    $('#'+colId).hide()
-    $('#input-'+colId).show()
-    $('#edit-'+colId).hide()
-    $('#cancel-'+colId).show()
+renameColumn = (headerId) ->
+    $('#text-' + headerId).hide()
+    $('#cancel-' + headerId).show()
+    $('#input-' + headerId).show()
     return
 
-cancelRenameColumn = (colId) ->
-    $('#'+colId).show();
-    $('#input-'+colId).hide()
-    $('#edit-'+colId).show()
-    $('#cancel-'+colId).hide()
+cancelRenameColumn = (headerId) ->
+    $('#text' + headerId).show();
+    $('#input-' + headerId).hide();
+    $('#cancel-' + headerId).hide();
     return
 
-saveColumnName = (colId, event, url) ->
+saveColumnName = (headerId, event, url) ->
     # on Enter press
     if event.keyCode == 13
-        col = $('#'+colId)
-        table = col.data('table')
-        realColumnName = col.data('col')
-        newColumnName = $('#input-'+colId).val()
-        col.text(newColumnName)
-        col.show()
-        $('#input-'+colId).hide()
-        $('#edit-'+colId).show()
-        $('#cancel-'+colId).hide()
+        head = $('#' + headerId)
+        text = $('#text-' + headerId)
+        input = $('#input-' + headerId)
+        cancel = $('#cancel-' + headerId)
+        table = head.data('table')
+        realColumnName = head.data('col')
+        newColumnName = input.val()
+        text.text(newColumnName)
+        text.show()
+        input.hide()
+        cancel.hide()
         info = getSourceInfo()
         info['table'] = table
         info['column'] = realColumnName

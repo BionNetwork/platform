@@ -646,32 +646,32 @@ startLoading = function(userId, loadUrl) {
   });
 };
 
-renameColumn = function(colId) {
-  $('#' + colId).hide();
-  $('#input-' + colId).show();
-  $('#edit-' + colId).hide();
-  $('#cancel-' + colId).show();
+renameColumn = function(headerId) {
+  $('#text-' + headerId).hide();
+  $('#cancel-' + headerId).show();
+  $('#input-' + headerId).show();
 };
 
-cancelRenameColumn = function(colId) {
-  $('#' + colId).show();
-  $('#input-' + colId).hide();
-  $('#edit-' + colId).show();
-  $('#cancel-' + colId).hide();
+cancelRenameColumn = function(headerId) {
+  $('#text-' + headerId).show();
+  $('#input-' + headerId).hide();
+  $('#cancel-' + headerId).hide();
 };
 
-saveColumnName = function(colId, event, url) {
-  var col, info, newColumnName, realColumnName, table;
+saveColumnName = function(headerId, event, url) {
+  var cancel, head, info, input, newColumnName, realColumnName, table, text;
   if (event.keyCode === 13) {
-    col = $('#' + colId);
-    table = col.data('table');
-    realColumnName = col.data('col');
-    newColumnName = $('#input-' + colId).val();
-    col.text(newColumnName);
-    col.show();
-    $('#input-' + colId).hide();
-    $('#edit-' + colId).show();
-    $('#cancel-' + colId).hide();
+    head = $('#' + headerId);
+    text = $('#text-' + headerId);
+    input = $('#input-' + headerId);
+    cancel = $('#cancel-' + headerId);
+    table = head.data('table');
+    realColumnName = head.data('col');
+    newColumnName = input.val();
+    text.text(newColumnName);
+    text.show();
+    input.hide();
+    cancel.hide();
     info = getSourceInfo();
     info['table'] = table;
     info['column'] = realColumnName;
