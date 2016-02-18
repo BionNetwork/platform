@@ -332,7 +332,7 @@ class LoadMongodb(TaskProcessing):
 
 
 class LoadDb(TaskProcessing):
-    
+
     def processing(self):
         """
         Загрузка данных из Mongodb в базу данных
