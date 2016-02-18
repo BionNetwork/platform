@@ -2,14 +2,13 @@
   'use strict';
   angular
   .module('BI-visualization')
-  .directive('cube', cube);
+  .directive('graphMark', graphMark);
 
-  function cube() {
+  function graphMark() {
     return {
       scope: { },
-      transclude: true,
       restrict: 'E',
-      templateUrl: 'components/cube/cubeTmpl.html'
+      templateUrl: 'components/graphMark/graphMarkTmpl.html'
     };
   }
 })();

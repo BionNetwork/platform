@@ -7,9 +7,7 @@
     "prestart": "npm install",
     "postinstall": "bower install",
     "start": "http-server -p 8888 dist/",
-    "devel": "gulp",
-    "pretest": "npm install",
-    "test": "jasmine"
+    "devel": "npm install && gulp"
   },
   "author": "Andres Rios <rios@etton.ru>",
   "license": "ISC",
@@ -18,6 +16,11 @@
     "gulp": "^3.9.1",
     "gulp-concat": "^2.6.0",
     "gulp-live-server": "0.0.29",
-    "http-server": "^0.8.5"
+    "http-server": "^0.8.5",
+    "jasmine": "^2.4.1",
+    "karma": "^0.13.19",
+    "karma-chrome-launcher": "^0.2.2",
+    "karma-jasmine": "^0.3.7",
+    "karma-apolog": "0.0.6"
   }
 }

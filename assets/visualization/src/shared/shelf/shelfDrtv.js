@@ -2,14 +2,14 @@
   'use strict';
   angular
   .module('BI-visualization')
-  .directive('cube', cube);
+  .directive('shelf', shelf);
 
-  function cube() {
+  function shelf() {
     return {
       scope: { },
-      transclude: true,
       restrict: 'E',
-      templateUrl: 'components/cube/cubeTmpl.html'
+      transclude: true,
+      templateUrl: 'shared/shelf/shelfTmpl.html'
     };
   }
 })();

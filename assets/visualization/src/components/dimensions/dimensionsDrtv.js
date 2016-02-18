@@ -2,14 +2,13 @@
   'use strict';
   angular
   .module('BI-visualization')
-  .directive('cube', cube);
+  .directive('dimensions', dimensions);
 
-  function cube() {
+  function dimensions() {
     return {
       scope: { },
-      transclude: true,
       restrict: 'E',
-      templateUrl: 'components/cube/cubeTmpl.html'
+      templateUrl: 'components/dimensions/dimensionsTmpl.html'
     };
   }
 })();

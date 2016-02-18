@@ -2,14 +2,13 @@
   'use strict';
   angular
   .module('BI-visualization')
-  .directive('cube', cube);
+  .directive('graphRow', graphRow);
 
-  function cube() {
+  function graphRow() {
     return {
       scope: { },
-      transclude: true,
       restrict: 'E',
-      templateUrl: 'components/cube/cubeTmpl.html'
+      templateUrl: 'components/graphRow/graphRowTmpl.html'
     };
   }
 })();
