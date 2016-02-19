@@ -16,28 +16,17 @@
 
   </head>
   <body>
+
     <cube>
       <shelf>
-        <ul>
-          <li><dimension></dimension></li>
-          <li><dimension></dimension></li>
-          <li><dimension></dimension></li>
-          <li><dimension></dimension></li>
-          <li><dimension></dimension></li>
-          <li><dimension></dimension></li>
-          <li><dimension></dimension></li>
-        </ul>
+        <div ng-controller="testController">
+          <dimensions setup-items="setupItems"></dimensions>
+          <button ng-click="doIt()">Do it</button>
+        </div>
       </shelf>
 
       <shelf>
-        <ul>
-          <li><measure></measure></li>
-          <li><measure></measure></li>
-          <li><measure></measure></li>
-          <li><measure></measure></li>
-          <li><measure></measure></li>
-          <li><measure></measure></li>
-        </ul>
+        <measures></measures>
       </shelf>
 
       <shelf>
@@ -52,4 +41,15 @@
   <script src="bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
   <script src="main.js"></script>
 
+  <script>
+angular
+  .module('BI-visualization')
+  .controller('testController', ['$scope', testController]);
+
+function testController($scope) {
+  $scope.doIt = function() {
+    console.log('jajajaja');
+  };
+}
+  </script>
 </html>

@@ -6,7 +6,9 @@
 
   function dimension() {
     return {
-      scope: { },
+      scope: {
+        name: '='
+      },
       restrict: 'E',
       templateUrl: 'components/dimensions/dimension/dimensionTmpl.html'
     };

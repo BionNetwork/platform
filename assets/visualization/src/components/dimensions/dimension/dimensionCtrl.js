@@ -5,7 +5,7 @@
   .controller('dimensionCtrl', ['$scope', dimensionCtrl]);
 
   function dimensionCtrl($scope) {
-
+    $scope.name = $scope.name || undefined;
   }
 
 })();
