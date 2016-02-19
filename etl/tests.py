@@ -23,7 +23,12 @@ from etl.tasks import LoadDimensions, LoadMeasures
 """
 
 
-class DatabaseTest(TestCase):
+class BaseCoreTest(TestCase):
+
+    fixtures = ['initial_data.json', 'queue_data.json', ]
+
+
+class DatabaseTest(BaseCoreTest):
 
     def setUp(self):
         connection = {'host': 'localhost', 'port': 5432, 'db': 'test', 'login': 'foo', 'password': 'bar'}
@@ -113,7 +118,7 @@ class DatabaseTest(TestCase):
                          "Результат статистики неверен!")
 
 
-class TablesTreeTest(TestCase):
+class TablesTreeTest(BaseCoreTest):
     """
         Тестирование всех методов TablesTree
     """
@@ -344,7 +349,7 @@ class TablesTreeTest(TestCase):
         self.assertEqual(structure, expected_structure, 'Структура дерева построена неправильно!')
 
 
-class DatasourceTest(TestCase):
+class DatasourceTest(BaseCoreTest):
 
     def setUp(self):
         self.source = Datasource()
@@ -378,7 +383,7 @@ class DatasourceTest(TestCase):
                 self.assertEqual(info, expected_info)
 
 
-class RedisKeysTest(TestCase):
+class RedisKeysTest(BaseCoreTest):
     def setUp(self):
 
         r_server.flushdb()
@@ -442,19 +447,14 @@ class RedisKeysTest(TestCase):
 
         source_id = self.source.id
 
-        active_str = 'user_datasources:11:{0}:active_collections'.format(source_id)
         counter_str = 'user_datasources:11:{0}:counter'.format(source_id)
         ddl_str = 'user_datasources:11:{0}:ddl:1'.format(source_id)
         collection_str = 'user_datasources:11:{0}:collection:1'.format(source_id)
 
-        keys = [active_str, counter_str, ddl_str, collection_str, ]
+        keys = [counter_str, ddl_str, collection_str, ]
 
         for k in keys:
             self.assertTrue(r_server.exists(k), 'Ключ {0} не создался!'.format(k))
-
-        collections = json.loads(r_server.get(active_str))
-        self.assertEqual(collections, [{"name": "test_table", "order": 1}, ],
-                         'Активные коллекции сохранены неправильно!')
 
         self.assertEqual(json.loads(r_server.get(counter_str)),
                          {"next_sequence_id": 2,
@@ -502,7 +502,7 @@ class RedisKeysTest(TestCase):
         self.database.connection.close()
 
 
-class DimCreateTest(TestCase):
+class DimCreateTest(BaseCoreTest):
     def setUp(self):
 
         db_conn = connections['default']
@@ -625,7 +625,7 @@ class DimCreateTest(TestCase):
         self.db.connection.close()
 
 
-class DatasourceMetaTest(TestCase):
+class DatasourceMetaTest(BaseCoreTest):
     def setUp(self):
 
         db_conn = connections['default']

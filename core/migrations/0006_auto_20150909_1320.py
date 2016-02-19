@@ -13,11 +13,10 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('core', '0005_auto_20150903_1941'),
-        ('core', '0023_auto_20160208_1458'),
     ]
 
     operations = [
-        migrations.RunPython(loadfixture)
+        # migrations.RunPython(loadfixture)
     ]
 
     def unapply(self, project_state, schema_editor, collect_sql=False):
