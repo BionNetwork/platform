@@ -90,7 +90,7 @@ class DataSourceService(object):
                 source, col_records, index_records, const_records)
 
             RedisSourceService.insert_columns_info(
-                source, new_tables, cols, indexes, foreigns, stat_records)
+                source, new_tables, cols, indexes, foreigns, stat_records, intervals)
 
         # существование дерева
         tree_exists = RedisSourceService.check_tree_exists(

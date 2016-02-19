@@ -15,7 +15,7 @@ from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import EtlEncoder
-from etl.services.olap.base import send_xml
+from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from etl.services.pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema,
     Dimension as DimensionSchema, Attribute, Level,
@@ -42,6 +42,8 @@ client = brukva.Client(host=settings.REDIS_HOST,
                        port=int(settings.REDIS_PORT),
                        selected_db=settings.REDIS_DB)
 client.connect()
+
+logger = logging.getLogger(__name__)
 
 ASC = 1
 
@@ -120,7 +122,6 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
-        print 'LoadMongodb'
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
@@ -131,8 +132,9 @@ class LoadMongodb(TaskProcessing):
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
         # общее количество строк в запросе
-        self.publisher.rows_count = DataSourceService.get_structure_rows_number(
-            source, structure,  cols)
+        rows_count, loaded_count = DataSourceService.get_structure_rows_number(
+            source, structure,  cols), 0
+        self.publisher.rows_count = rows_count
         self.publisher.publish(TLSE.START)
 
         col_names = ['_id', '_state', '_date']
@@ -187,7 +189,9 @@ class LoadMongodb(TaskProcessing):
                 collection.insert_many(data_to_insert, ordered=False)
                 current_collection.insert_many(
                     data_to_current_insert, ordered=False)
-                print 'inserted %d rows to mongodb' % len(data_to_insert)
+                loaded_count += len(data_to_insert)
+                print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                    len(data_to_insert), loaded_count, rows_count)
             except Exception as e:
                 self.error_handling(e.message)
 
@@ -200,6 +204,7 @@ class LoadMongodb(TaskProcessing):
 
             page += 1
 
+        self.context['rows_count'] = rows_count
         self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
@@ -208,19 +213,20 @@ class LoadDb(TaskProcessing):
         """
         Загрузка данных из Mongodb в базу данных
         """
-        print 'LoadDb'
         self.key = self.context['checksum']
         self.user_id = self.context['user_id']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
-        structure = self.context['tree']
+        # structure = self.context['tree']
         db_update = self.context['db_update']
+        rows_count, loaded_count = self.context['rows_count'], 0
 
         source = Datasource()
         source.set_from_dict(**self.context['source'])
         # общее количество строк в запросе
-        self.publisher.rows_count = DataSourceService.get_structure_rows_number(
-            source, structure, cols)
+        # self.publisher.rows_count = DataSourceService.get_structure_rows_number(
+        #     source, structure, cols)
+        self.publisher.rows_count = self.context['rows_count']
         self.publisher.publish(TLSE.START)
 
         col_names = ['"cdc_key" text PRIMARY KEY']
@@ -264,8 +270,10 @@ class LoadDb(TaskProcessing):
 
                 local_insert.execute(self.binary_wrap(
                     rows_dict, binary_types_dict), many=True)
-                print 'load in db %s records' % len(rows_dict)
                 offset += limit
+                loaded_count += len(rows_dict)
+                print 'inserted %d rows to database. Total inserted %s/%s.' % (
+                    len(rows_dict), loaded_count, rows_count)
             except Exception as e:
                 print 'Exception'
                 self.was_error = True
@@ -305,6 +313,7 @@ class LoadDb(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'rows_count': rows_count,
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
@@ -348,7 +357,6 @@ class LoadDimensions(TaskProcessing):
         return actual_fields
 
     def processing(self):
-        print 'LoadDimensions or LoadMeasures'
         self.key = self.context['checksum']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -365,20 +373,7 @@ class LoadDimensions(TaskProcessing):
             (t['meta__collection_name'],
              json.loads(t['meta__stats'])['date_intervals']) for t in meta_data]
 
-        # source_service = DataSourceService()
-        #
-        # table_key_name = get_table_name(self.table_prefix, self.key)
-        #
-        # table_exists_query = WhetherTableExistsQuery(source_service)
-        #
-        # local_db = DatabaseService.get_local_connection_dict()['db']
-        #
-        # table_exists_query.set_query(table_name=table_key_name, db=local_db)
-        # exists = table_exists_query.execute()
-        #
-        # exists = exists[0][0]
-
-        if not db_update:
+        if not self.context['db_update']:
             if date_intervals_info and self.table_prefix == DIMENSIONS:
                 self.create_date_tables(date_intervals_info)
 
@@ -386,7 +381,6 @@ class LoadDimensions(TaskProcessing):
                 self.actual_fields, self.key)
             LocalDbConnect(DataSourceService.get_table_create_query(
                 self.gtm(self.table_prefix), ', '.join(create_col_names)))
-
 
             try:
                 self.save_fields()
@@ -402,7 +396,7 @@ class LoadDimensions(TaskProcessing):
         self.save_meta_data(
             self.user_id, self.actual_fields, meta_tables)
 
-        self.create_reload_triggers()
+        # self.create_reload_triggers()
 
         if not self.last_task:
             self.set_next_task_params()
@@ -476,6 +470,7 @@ class LoadDimensions(TaskProcessing):
         """
 
         column_names = ['cdc_key']
+        rows_count, loaded_count = self.context['rows_count'], 0
         date_fields_order = {}
         index = 1
         for table, field in self.actual_fields:
@@ -499,7 +494,6 @@ class LoadDimensions(TaskProcessing):
             self.gtm(self.table_prefix), col_nums), execute=False)
 
         step, offset = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT, 0
-        print 'load dim or measure'
         source_connect = LocalDbConnect(DataSourceService.get_page_select_query(
             self.gtm(STTM_DATASOURCE), column_names), execute=False)
 
@@ -521,7 +515,10 @@ class LoadDimensions(TaskProcessing):
                 rows_dict.append(temp_dict)
             local_insert.execute(self.binary_wrap(
                 rows_dict, binary_types_dict), many=True)
-            print 'load in db %s records' % len(rows_dict)
+            loaded_count += len(rows_dict)
+            print ('inserted %d %s to database. '
+                   'Total inserted %s/%s.' % (
+                    len(rows_dict), self.table_prefix, loaded_count, rows_count))
             offset += step
 
             self.queue_storage.update()
