@@ -20,7 +20,7 @@
     <cube>
       <shelf>
         <div ng-controller="testController">
-          <dimensions setup-items="setupItems"></dimensions>
+          <dimensions items="items" setup-items="setupFn"></dimensions>
           <button ng-click="doIt()">Do it</button>
         </div>
       </shelf>
@@ -48,7 +48,11 @@ angular
 
 function testController($scope) {
   $scope.doIt = function() {
-    console.log('jajajaja');
+    var items = [
+      { name: 'my Name 1' },
+      { name: 'my Name 2' }
+    ];
+    $scope.setupFn(items);
   };
 }
   </script>

@@ -9,11 +9,9 @@
   ]);
 
   function dimensionsCtrl($scope, $dimensions) {
-    $scope.items = $scope.items || [];
-    $scope.setupItems = function _setupItems(items) {
+    $scope.setupItems = $scope.setupItems || function setupItems(items) {
       $dimensions.setupItems(items);
       $scope.items = $dimensions.getItems();
     };
   }
-
 })();

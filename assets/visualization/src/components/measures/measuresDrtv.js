@@ -2,17 +2,17 @@
   'use strict';
   angular
   .module('BI-visualization')
-  .directive('dimensions', dimensions);
+  .directive('measures', measures);
 
-  function dimensions() {
+  function measures() {
     return {
       scope: {
         items: '=',
         setupItems: '=?'
       },
       restrict: 'E',
-      templateUrl: 'components/dimensions/dimensionsTmpl.html',
-      controller: 'dimensionsCtrl'
+      controller: 'measuresCtrl',
+      templateUrl: 'components/measures/measuresTmpl.html'
     };
   }
 })();
