@@ -15,4 +15,4 @@ easywebdav == 1.2.0
 xmla == 0.7.2
 kombu==3.0.30
 Pillow
-git+ssh://git@gitlab.etton.ru/bi/pymondrian.git@master
+git+ssh://git@gitlab.etton.ru/bi/pymondrian.git@dev

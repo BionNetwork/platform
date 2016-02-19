@@ -464,11 +464,13 @@ def get_binary_types_dict(cols, col_types):
 
 class LocalDbConnect(object):
 
-    connection = DataSourceService.get_local_instance().connection
+    connection = None
 
     def __init__(self, query, execute=True):
 
         self.query = query
+        if not self.connection or self.connection.close:
+            self.connection = DataSourceService.get_local_instance().connection
         if execute:
             self.execute()
 

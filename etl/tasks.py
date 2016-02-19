@@ -21,6 +21,7 @@ from pymondrian.schema import (
     Dimension as DimensionSchema, Attribute, Level,
     Hierarchy, MeasureGroup, Measure as MeasureSchema,
     Key, Name, ForeignKeyLink, ReferenceLink)
+from pymondrian.generator import generate
 from etl.services.queue.base import (
     TaskProcessing, TLSE, STSE, RowKeysCreator, calc_key_for_row,
     MongodbConnection, AKTSE, DTSE, get_binary_types_list,
@@ -1035,7 +1036,6 @@ class CreateCube(TaskProcessing):
 
     def processing(self):
 
-        from etl.services.pymondrian.generator import generate
         print 'Start cube creation'
 
         dataset_id = self.context['dataset_id']
