@@ -1,24 +1,17 @@
 # coding: utf-8
 import binascii
-from celery import group
-from pymongo import IndexModel
-from psycopg2 import Binary
 import pymongo
 from pymongo import IndexModel
 import logging
 import brukva
-import json
-import datetime
-from itertools import izip
-from bson import binary, Binary
+from bson import Binary
 
-from django.conf import settings
 from etl.constants import TYPES_MAP
 from etl.services.datasource.base import DataSourceService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
-from etl.services.middleware.base import datetime_now_str, get_table_name
+from etl.services.middleware.base import get_table_name
 from core.exceptions import TaskError
 from core.helpers import HashEncoder
 import json

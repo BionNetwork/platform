@@ -16,7 +16,7 @@ from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import EtlEncoder
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
-from etl.services.pymondrian.schema import (
+from pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema,
     Dimension as DimensionSchema, Attribute, Level,
     Hierarchy, MeasureGroup, Measure as MeasureSchema,
