@@ -1,13 +1,16 @@
 # coding: utf-8
 import binascii
+from celery import group
+from pymongo import IndexModel
+from psycopg2 import Binary
+import pymongo
+from pymongo import IndexModel
 import logging
 import brukva
 import json
 import datetime
 from itertools import izip
 from bson import binary, Binary
-import pymongo
-from pymongo import IndexModel
 
 from django.conf import settings
 from etl.constants import TYPES_MAP
@@ -15,8 +18,24 @@ from etl.services.datasource.base import DataSourceService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
-from core.exceptions import TaskError
 from etl.services.middleware.base import datetime_now_str, get_table_name
+from core.exceptions import TaskError
+from core.helpers import HashEncoder
+import json
+import datetime
+from itertools import izip
+from bson import binary
+
+from etl.services.middleware.base import datetime_now_str
+from . import client, settings
+
+__all__ = [
+    'TLSE',  'STSE', 'RPublish', 'RowKeysCreator',
+    'calc_key_for_row', 'TableCreateQuery', 'InsertQuery', 'MongodbConnection',
+    'DeleteQuery', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
+    'process_binary_data', 'get_binary_types_dict', 'WhetherTableExistsQuery'
+]
+
 
 client = brukva.Client(host=settings.REDIS_HOST,
                        port=int(settings.REDIS_PORT),
@@ -334,11 +353,11 @@ class RowKeysCreator(object):
         """
         l = [y for (x, y) in zip(self.cols, row) if x['table'] == self.table]
         if self.primary_keys:
-            l.append(binascii.crc32(''.join(
-                [str(row[index]) for index in self.primary_keys_indexes])))
+            l.append(''.join(
+                [str(row[index]) for index in self.primary_keys_indexes]))
         else:
             l.append(row_num)
-        return binascii.crc32(
+        return HashEncoder.encode(
                 reduce(lambda res, x: '%s%s' % (res, x), l).encode("utf8"))
 
     def set_primary_key(self, data):
@@ -365,7 +384,8 @@ def process_binary_data(record, binary_types_list):
     new_record = list()
 
     for (rec, is_binary) in izip(record, binary_types_list):
-        new_record.append(binary.Binary(rec) if is_binary else rec)
+        new_record.append(binary.Binary(
+            rec) if is_binary and rec is not None else rec)
 
     new_record = tuple(new_record)
     return new_record
@@ -378,7 +398,7 @@ def process_binaries_for_row(row, binary_types_list):
     """
     new_row = []
     for i, r in enumerate(row):
-        if binary_types_list[i]:
+        if binary_types_list[i] and r is not None:
             r = binascii.b2a_base64(r)
         new_row.append(r)
     return tuple(new_row)
@@ -403,7 +423,7 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
     if len(tables_key_creators) > 1:
         row_values_for_calc = [
             str(each.calc_key(row, row_num)) for each in tables_key_creators]
-        return binascii.crc32(''.join(row_values_for_calc))
+        return HashEncoder.encode(''.join(row_values_for_calc))
     else:
         return tables_key_creators[0].calc_key(row, row_num)
 
@@ -574,14 +594,15 @@ class TaskService(object):
         new_channel = settings.SOCKET_CHANNEL.format(
             arguments['user_id'], task_id)
 
-        # добавляем канал подписки в редис
-        channels = RedisSourceService.get_user_subscribers(arguments['user_id'])
-        channels.append({
+        channel_data = {
             "channel": new_channel,
             "queue_id": task_id,
             "namespace": self.name,
             "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
+        }
+        # добавляем канал подписки в редис
+        RedisSourceService.set_user_subscribers(
+            arguments['user_id'], channel_data)
 
         return task_id, new_channel
 

@@ -72,27 +72,32 @@ class DataSourceService(object):
             list: Список словарей с информацией о дереве. Подробрый формат
             ответа см. `RedisSourceService.get_final_info`
         """
-        col_records, index_records, const_records = (
-            DatabaseService.get_columns_info(source, tables))
-
-        stat_records = DatabaseService.get_stats_info(source, tables)
-        intervals = DatabaseService.get_date_intervals(source, col_records)
-
-        cols, indexes, foreigns = DatabaseService.processing_records(
-            source, col_records, index_records, const_records)
 
         if not settings.USE_REDIS_CACHE:
-            return []
+                return []
 
-        RedisSourceService.insert_columns_info(
-            source, tables, cols, indexes, foreigns, stat_records, intervals)
+        new_tables = RedisSourceService.filter_exists_tables(source, tables)
 
-        # выбранные ранее таблицы в редисе
-        active_tables = RedisSourceService.get_active_list(
+        if new_tables:
+            col_records, index_records, const_records = (
+                DatabaseService.get_columns_info(source, new_tables))
+
+            stat_records = DatabaseService.get_stats_info(source, new_tables)
+
+            intervals = DatabaseService.get_date_intervals(source, col_records)
+
+            cols, indexes, foreigns = DatabaseService.processing_records(
+                source, col_records, index_records, const_records)
+
+            RedisSourceService.insert_columns_info(
+                source, new_tables, cols, indexes, foreigns, stat_records)
+
+        # существование дерева
+        tree_exists = RedisSourceService.check_tree_exists(
             source.user_id, source.id)
 
         # работа с деревьями
-        if not active_tables:
+        if not tree_exists:
             trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
             sel_tree = TablesTree.select_tree(trees)
 
@@ -315,6 +320,11 @@ class DataSourceService(object):
     def get_table_create_query(cls, table_name, cols_str):
         return DatabaseService.get_table_create_query(
             table_name, cols_str)
+
+    @classmethod
+    def check_table_exists_query(cls, local_instance, table_name, db):
+        return DatabaseService.check_table_exists_query(
+            local_instance, table_name, db)
 
     @classmethod
     def get_page_select_query(cls, table_name, cols):

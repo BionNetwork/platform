@@ -10,6 +10,7 @@ TYPES_MAP = {
     'text': 'text',
     'timestamp': 'timestamp',
     'binary': 'bytea',
+    'bool': 'boolean',
 }
 
 
@@ -45,3 +46,4 @@ TIME_TABLE = 'time_{0}__{1}'  # Таблица дат (time_{table_name}__{col})
 # Строки формирования названия колонок
 STANDART_COLUMN_NAME = '{0}__{1}'
 TIME_COLUMN_NAME = '{0}__{1}_id'
+MONGODB_DB_NAME = 'etl' # база данных в монго

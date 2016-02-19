@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+from decimal import Decimal
 from threading import Thread
 import time
 
@@ -12,7 +13,7 @@ from django.conf import settings
 
 from core.db.services import retry_query
 from core.models import User
-from core.helpers import convert_milliseconds_to_seconds
+from core.helpers import convert_milliseconds_to_seconds, HashEncoder
 
 
 class AuthenticationTest(TestCase):
@@ -141,3 +142,29 @@ class DatabaseErrorsCheckTestCase(TransactionTestCase):
         t2.start()
         t.join()
         t2.join()
+
+
+class HashTest(TestCase):
+    """
+    Тесты на хэш функции
+    """
+
+    def test_hash(self):
+        row_data = [
+            924L, 904L, 399L, 0L, 6L, Decimal('8.1000'), Decimal('2.7540'),
+            Decimal('3.0000'), 28320,
+        ]
+
+        row_data2 = [
+            970L, 945L, 6632L, 621L, 8L, Decimal('12.4400'), Decimal('5.7224'),
+            Decimal('4.0000'), 47845,
+        ]
+
+        def proccess_data(data):
+            # обработка данных
+            return reduce(lambda res, x: '%s%s' % (res, x), data).encode("utf8")
+
+        hash1 = HashEncoder.encode(proccess_data(row_data))
+        hash2 = HashEncoder.encode(proccess_data(row_data2))
+
+        self.assertNotEqual(hash1, hash2, "Коллизия! Хэш разных данных совпал!")

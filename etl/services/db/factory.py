@@ -151,6 +151,13 @@ class DatabaseService(object):
         return local_instance.local_table_create_query(table_name, cols_str)
 
     @classmethod
+    def check_table_exists_query(cls, local_instance, table, db):
+        """
+        Проверка на существование таблицы
+        """
+        return local_instance.check_table_exists_query(table, db)
+
+    @classmethod
     def get_page_select_query(cls, table_name, cols):
         """
         Формирование строки запроса на получение данных (с дальнейшей пагинацией)

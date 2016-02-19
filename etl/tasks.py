@@ -1,6 +1,7 @@
 # coding: utf-8
 
 from __future__ import unicode_literals
+import logging
 
 import os
 import sys
@@ -25,12 +26,11 @@ from etl.services.queue.base import (
     MongodbConnection, AKTSE, DTSE, get_binary_types_list,
     process_binary_data, get_binary_types_dict, DTCN, LocalDbConnect,
     SourceDbConnect)
-from .helpers import DataSourceService
+from etl.helpers import DataSourceService
 from core.models import (
     Datasource, Dimension, Measure, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
-
 from djcelery import celery
 from itertools import groupby, izip
 
@@ -102,7 +102,7 @@ class CreateDataset(TaskProcessing):
     """
 
     def processing(self):
-
+        print 'CreateDataset'
         dataset, created = Dataset.objects.get_or_create(key=self.key)
         self.context['dataset_id'] = dataset.id
 
@@ -120,6 +120,7 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
+        print 'LoadMongodb'
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
@@ -171,8 +172,8 @@ class LoadMongodb(TaskProcessing):
             data_to_current_insert = []
             for ind, record in enumerate(rows):
                 row_key = calc_key_for_row(
-                        record, tables_key_creator, (page-1)*limit + ind,
-                        binary_types_list)
+                    record, tables_key_creator, (page - 1) * limit + ind,
+                    binary_types_list)
 
                 # бинарные данные оборачиваем в Binary(), если они имеются
                 new_record = process_binary_data(record, binary_types_list)
@@ -203,11 +204,11 @@ class LoadMongodb(TaskProcessing):
 
 
 class LoadDb(TaskProcessing):
-
     def processing(self):
         """
         Загрузка данных из Mongodb в базу данных
         """
+        print 'LoadDb'
         self.key = self.context['checksum']
         self.user_id = self.context['user_id']
         cols = json.loads(self.context['cols'])
@@ -219,7 +220,7 @@ class LoadDb(TaskProcessing):
         source.set_from_dict(**self.context['source'])
         # общее количество строк в запросе
         self.publisher.rows_count = DataSourceService.get_structure_rows_number(
-            source, structure,  cols)
+            source, structure, cols)
         self.publisher.publish(TLSE.START)
 
         col_names = ['"cdc_key" text PRIMARY KEY']
@@ -229,7 +230,7 @@ class LoadDb(TaskProcessing):
             c = obj['col']
             col_names.append('"{0}{1}{2}" {3}'.format(
                 t, FIELD_NAME_SEP, c,
-                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)])))
+                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)].lower())))
             clear_col_names.append(STANDART_COLUMN_NAME.format(t, c))
 
         source_table_name = self.gtm(STTM_DATASOURCE)
@@ -339,13 +340,15 @@ class LoadDimensions(TaskProcessing):
         for record in meta_data:
 
             for field in json.loads(record['meta__fields'])['columns']:
-                if field['type'] in cls.actual_fields_type:
+                f_type = TYPES_MAP.get(field['type'])
+                if f_type in cls.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
         return actual_fields
 
     def processing(self):
+        print 'LoadDimensions or LoadMeasures'
         self.key = self.context['checksum']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -362,29 +365,44 @@ class LoadDimensions(TaskProcessing):
             (t['meta__collection_name'],
              json.loads(t['meta__stats'])['date_intervals']) for t in meta_data]
 
-        if date_intervals_info and self.table_prefix == DIMENSIONS:
-            self.create_date_tables(date_intervals_info)
+        # source_service = DataSourceService()
+        #
+        # table_key_name = get_table_name(self.table_prefix, self.key)
+        #
+        # table_exists_query = WhetherTableExistsQuery(source_service)
+        #
+        # local_db = DatabaseService.get_local_connection_dict()['db']
+        #
+        # table_exists_query.set_query(table_name=table_key_name, db=local_db)
+        # exists = table_exists_query.execute()
+        #
+        # exists = exists[0][0]
 
-        create_col_names = DataSourceService.get_dim_measure_table_names(
-            self.actual_fields, self.key)
-        LocalDbConnect(DataSourceService.get_table_create_query(
-            self.gtm(self.table_prefix), ', '.join(create_col_names)))
+        if not db_update:
+            if date_intervals_info and self.table_prefix == DIMENSIONS:
+                self.create_date_tables(date_intervals_info)
 
-        try:
-            self.save_fields()
-        except Exception as e:
-            # код и сообщение ошибки
-            pg_code = getattr(e, 'pgcode', None)
+            create_col_names = DataSourceService.get_dim_measure_table_names(
+                self.actual_fields, self.key)
+            LocalDbConnect(DataSourceService.get_table_create_query(
+                self.gtm(self.table_prefix), ', '.join(create_col_names)))
 
-            err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
-            err_msg += e.message
-            self.error_handling(err_msg)
+
+            try:
+                self.save_fields()
+            except Exception as e:
+                # код и сообщение ошибки
+                pg_code = getattr(e, 'pgcode', None)
+
+                err_msg = '%s: ' % errorcodes.lookup(pg_code) if pg_code else ''
+                err_msg += e.message
+                self.error_handling(err_msg)
 
         # Сохраняем метаданные
         self.save_meta_data(
             self.user_id, self.actual_fields, meta_tables)
 
-        # self.create_reload_triggers()
+        self.create_reload_triggers()
 
         if not self.last_task:
             self.set_next_task_params()
@@ -414,11 +432,21 @@ class LoadDimensions(TaskProcessing):
                 )
             )
 
+            data = dict(
+                name=table_name,
+                has_all=True,
+                table_name=table_name,
+                level=level,
+                primary_key='id',
+                foreign_key=None
+            )
+
             Dimension.objects.get_or_create(
                 name=table_name,
                 title=table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
+                data=json.dumps(data),
                 type=Dimension.TIME_DIMENSION if field['type'] == 'timestamp'
                 else Dimension.STANDART_DIMENSION
             )
@@ -429,6 +457,18 @@ class LoadDimensions(TaskProcessing):
         """
         return map(lambda (table, field): STANDART_COLUMN_NAME.format(
                     table, field['name']), self.actual_fields)
+
+    def filter_columns(self, cols):
+        """
+        Достаем инфу только тех колонок, которые используются
+        в мерах и размерностях
+        """
+        dim_meas_cols_info = []
+        for (act_table, col_info) in self.actual_fields:
+            for c in cols:
+                if c['table'] == act_table and c['col'] == col_info['name']:
+                    dim_meas_cols_info.append(c)
+        return dim_meas_cols_info
 
     def save_fields(self):
         """
@@ -450,8 +490,10 @@ class LoadDimensions(TaskProcessing):
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
 
+        dim_meas_cols = self.filter_columns(cols)
+
         # инфа о бинарных данных для инсерта в постгрес
-        binary_types_dict = get_binary_types_dict(cols, col_types)
+        binary_types_dict = get_binary_types_dict(dim_meas_cols, col_types)
 
         local_insert = LocalDbConnect(DataSourceService.get_table_insert_query(
             self.gtm(self.table_prefix), col_nums), execute=False)
@@ -489,16 +531,22 @@ class LoadDimensions(TaskProcessing):
         Создание триггеров для размерностей и мер,
         обеспечивающих синхронизацию данных для источника
         """
+        local_instance = DataSourceService.get_local_instance()
+        sep = local_instance.get_separator()
 
         column_names = ['cdc_key'] + self.get_splitted_table_column_names()
-        insert_cols = ['NEW.{0}'.format(col) for col in column_names]
+        insert_cols = []
+        select_cols = []
+        for col in column_names:
+            insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
+            select_cols.append('{1}{0}{1}'.format(col, sep))
 
         query_params = dict(
             new_table=self.gtm(self.table_prefix),
             orig_table=self.gtm(STTM_DATASOURCE),
-            del_condition="cdc_key=OLD.cdc_key",
+            del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
             insert_cols=','.join(insert_cols),
-            cols="({0})".format(','.join(column_names)),
+            cols="({0})".format(','.join(select_cols)),
         )
 
         reload_trigger_query = (
@@ -576,7 +624,7 @@ class LoadMeasures(LoadDimensions):
     Создание мер
     """
     table_prefix = MEASURES
-    actual_fields_type = [Measure.INTEGER]
+    actual_fields_type = [Measure.INTEGER, Measure.BOOLEAN]
 
     def save_meta_data(self, user_id, fields, meta_tables):
         """
@@ -608,7 +656,6 @@ class LoadMeasures(LoadDimensions):
 
 
 class UpdateMongodb(TaskProcessing):
-
     def processing(self):
         """
         1. Процесс обновленения данных в коллекции `sttm_datasource_delta_{key}`
@@ -616,6 +663,7 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
+        print 'UpdateMongodb'
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -658,7 +706,7 @@ class UpdateMongodb(TaskProcessing):
             RowKeysCreator(table=table, cols=cols, meta_data=value)
             for table, value in meta_info.iteritems()]
 
-        #  Выявляем новые записи в базе и записываем их в дельта-коллекцию
+        # Выявляем новые записи в базе и записываем их в дельта-коллекцию
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
         page = 1
         while True:
@@ -669,7 +717,7 @@ class UpdateMongodb(TaskProcessing):
             data_to_current_insert = []
             for ind, record in enumerate(rows):
                 row_key = calc_key_for_row(
-                    record, tables_key_creator, (page-1)*limit + ind,
+                    record, tables_key_creator, (page - 1) * limit + ind,
                     binary_types_list)
 
                 # бинарные данные оборачиваем в Binary(), если они имеются
@@ -745,7 +793,7 @@ class DetectRedundant(TaskProcessing):
 
             to_delete = []
             records_for_del = list(all_keys_collection.find(
-                    {'_state': AKTSE.NEW}, limit=limit, skip=(page-1)*limit))
+                {'_state': AKTSE.NEW}, limit=limit, skip=(page - 1) * limit))
             if not len(records_for_del):
                 break
             for record in records_for_del:
@@ -804,7 +852,7 @@ class DeleteRedundant(TaskProcessing):
 
         if not self.context['db_update']:
             self.next_task_params = (
-                        GENERATE_DIMENSIONS, load_dimensions, self.context)
+                GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
@@ -924,7 +972,6 @@ class CreateTriggers(TaskProcessing):
                     else:
                         index_cols = sorted(index_name[index_cols_i].split(','))
                         if index_cols != required_indexes[index_name]:
-
                             cursor.execute(drop_index_q.format(index_name, table_name))
                             cursor.execute(create_index_q.format(
                                 index_name, table_name,
@@ -948,7 +995,7 @@ class CreateTriggers(TaskProcessing):
             else:
                 # создание таблицы у юзера
                 cursor.execute(remote_table_create_query.format(
-                        table_name, cols_str))
+                    table_name, cols_str))
 
                 # создание индексов
                 create_index_q = db_instance.db_map.create_index_query
@@ -1134,6 +1181,13 @@ class CreateCube(TaskProcessing):
             # user_id=11,
         )
 
-        send_xml(key, cube.id, xml)
+        try:
+            send_xml(key, cube.id, xml)
+
+        except OlapServerConnectionErrorException as te:
+            self.error_handling(te.message)
+            logger.error("Can't connect to Olap Server!")
+            logger.error(te.message)
+            raise te  # пробрасываем ошибку дальше
 
 # write in console: python manage.py celery -A etl.tasks worker

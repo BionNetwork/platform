@@ -44,6 +44,10 @@ blobs = [
     'bytea',
 ]
 
+booleans = [
+    'boolean',
+]
+
 for i in ints:
     DB_TYPES[i] = 'integer'
 
@@ -59,6 +63,8 @@ for i in dates:
 for i in blobs:
     DB_TYPES[i] = 'binary'
 
+for i in booleans:
+    DB_TYPES[i] = 'bool'
 
 table_query = """
             SELECT table_name FROM information_schema.tables
@@ -212,6 +218,13 @@ delete_primary_key = """
 """
 
 drop_index = """drop index {0}"""
+
+check_table_exists = """
+    SELECT EXISTS (
+        SELECT * FROM   information_schema.tables
+        WHERE table_name = '{0}' AND table_catalog = '{1}'
+   );
+"""
 
 
 dimension_measure_triggers_query = """

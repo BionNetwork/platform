@@ -72,14 +72,6 @@ class Postgresql(Database):
         indexes_query = pgsql_map.indexes_query.format(tables_str)
         return cols_query, constraints_query, indexes_query
 
-    @staticmethod
-    def get_select_query():
-        """
-        возвращает селект запрос
-        :return: str
-        """
-        return "SELECT {0} FROM {1};"
-
     @classmethod
     def get_statistic_query(cls, source, tables):
         """
@@ -121,6 +113,15 @@ class Postgresql(Database):
 
         return create_query
 
+    @classmethod
+    def check_table_exists_query(cls, table, db):
+        """
+        Проверка на существование таблицы
+        """
+        table_exists_query = cls.db_map.check_table_exists.format(table, db)
+
+        return table_exists_query
+
 
     @classmethod
     def get_page_select_query(cls, table_name, cols):
@@ -150,6 +151,15 @@ class Postgresql(Database):
         запрос на создание новой таблицы в БД клиента
         """
         return pgsql_map.remote_table_query
+
+    @staticmethod
+    def remote_table_indexes():
+        """
+        запрос на создание индексов новой таблицы в БД клиента
+        """
+        return (pgsql_map.updated_synced_index,
+                pgsql_map.created_index,
+                pgsql_map.synced_index, )
 
     @staticmethod
     def remote_triggers_create_query():
