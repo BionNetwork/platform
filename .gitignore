@@ -4,3 +4,4 @@
 config/settings/local.py
 .crossbar/node.pid
 /media
+data/resources

@@ -91,14 +91,6 @@ class Mysql(Database):
 
         return cols_query, constraints_query, indexes_query
 
-    @staticmethod
-    def get_select_query():
-        """
-        возвращает селект запрос
-        :return: str
-        """
-        return "SELECT {0} FROM {1};"
-
     @classmethod
     def get_statistic_query(cls, source, tables):
         """

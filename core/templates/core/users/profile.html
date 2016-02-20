@@ -15,10 +15,15 @@
 
             <!-- Profile Image -->
             <div class="box box-primary">
-                <div class="box-body box-profile">
-                    <img class="profile-user-img img-responsive img-circle" src="{% static "system/dist/img/anonymous-160x160.gif" %}"
-                         alt="User profile picture">
-
+                <div class="box-body box-profile" style="text-align: center;">
+                    <div>
+                    {% if user.avatar %}
+                        <img src="{{ MEDIA_URL }}{{user.avatar}}" class="img-circle" alt="User Image" style="height:100px;width:100px;">
+                    {%else%}
+                        <img class="profile-user-img img-responsive img-circle" src="{% static "system/dist/img/anonymous-160x160.gif" %}"
+                             alt="User profile picture">
+                    {% endif %}
+                    </div>
                     <h3 class="profile-username text-center">{{ user.first_name }} {{ user.last_name }}</h3>
 
                     <p class="text-muted text-center">Software Engineer</p>
@@ -26,6 +31,9 @@
                     <ul class="list-group list-group-unbordered">
                         <li class="list-group-item">
                             <b>Group</b> <a class="pull-right">{% if user.is_superuser %}Администратор{% else %}Пользователь{% endif %}</a>
+                        </li>
+                        <li class="list-group-item">
+                            <a href="{% url "core:users.edit" user.id %}?next={{request.path}}" class="btn btn-warning"><i class="fa fa-edit"></i></a>
                         </li>
                     </ul>
                 </div>

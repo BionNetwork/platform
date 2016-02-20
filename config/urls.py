@@ -26,5 +26,6 @@ urlpatterns = [
     url(r'', include(core_urls, namespace='core'), name="index"),
     url(r'^etl/', include('etl.urls', namespace='etl')),
     url(r'^api/v1/', include('api.urls', namespace='api.v1')),
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + (
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + \
+    static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) + (
     core_urls.urlpatterns)
