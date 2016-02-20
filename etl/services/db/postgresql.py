@@ -72,14 +72,6 @@ class Postgresql(Database):
         indexes_query = pgsql_map.indexes_query.format(tables_str)
         return cols_query, constraints_query, indexes_query
 
-    @staticmethod
-    def get_select_query():
-        """
-        возвращает селект запрос
-        :return: str
-        """
-        return "SELECT {0} FROM {1};"
-
     @classmethod
     def get_statistic_query(cls, source, tables):
         """
@@ -103,6 +95,15 @@ class Postgresql(Database):
 
         return create_query
 
+    @classmethod
+    def check_table_exists_query(cls, table, db):
+        """
+        Проверка на существование таблицы
+        """
+        table_exists_query = cls.db_map.check_table_exists.format(table, db)
+
+        return table_exists_query
+
     @staticmethod
     def local_table_insert_query(key_str):
         """
@@ -121,8 +122,35 @@ class Postgresql(Database):
         return pgsql_map.remote_table_query
 
     @staticmethod
+    def remote_table_indexes():
+        """
+        запрос на создание индексов новой таблицы в БД клиента
+        """
+        return (pgsql_map.updated_synced_index,
+                pgsql_map.created_index,
+                pgsql_map.synced_index, )
+
+    @staticmethod
     def remote_triggers_create_query():
         """
         запрос на создание триггеров в БД клиента
         """
         return pgsql_map.remote_triggers_query
+
+    @staticmethod
+    def get_primary_key(table, db):
+        """
+        запрос на получение Primary Key
+        """
+        return pgsql_map.pr_key_query.format("('{0}')".format(table), db)
+
+    @staticmethod
+    def delete_primary_query(table, primary):
+        return pgsql_map.delete_primary_key.format(table, primary)
+
+    @staticmethod
+    def reload_datasource_trigger_query():
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+        """
+        return pgsql_map.dimension_measure_triggers_query
