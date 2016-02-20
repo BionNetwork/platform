@@ -221,6 +221,10 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 
+# local domain address
+LOCAL_DOMAIN = ''  # http://localhost:8000
+
+
 # redis conf
 REDIS_HOST = 'localhost'
 REDIS_PORT = '6379'

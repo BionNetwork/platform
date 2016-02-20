@@ -8,6 +8,7 @@ import lxml.etree as etree
 import brukva
 from datetime import datetime
 import json
+import requests
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
@@ -20,8 +21,9 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
 from django.conf import settings
+from django.core.urlresolvers import reverse
 from djcelery import celery
 from itertools import groupby, izip
 
@@ -1232,15 +1234,16 @@ class CreateCube(TaskProcessing):
 
         cube_string = etree.tostring(schema, pretty_print=True)
 
-        cube = Cube.objects.create(
-            name=cube_key,
-            data=cube_string,
-            user_id=self.context['user_id'],
-            # user_id=11,
+        resp = requests.post('{0}{1}'.format(
+            settings.LOCAL_DOMAIN, reverse('api.v1:import_schema')),
+            data={'cube_key': cube_key, 'cube_string': cube_string,
+                  'user_id': self.context['user_id'], }
         )
 
+        cube_id = resp.json()['id']
+
         try:
-            send_xml(key, cube.id, cube_string)
+            send_xml(key, cube_id, cube_string)
 
         except OlapServerConnectionErrorException as te:
             self.error_handling(te.message)
