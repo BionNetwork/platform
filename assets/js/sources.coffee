@@ -250,9 +250,9 @@ tablesToRight = (url) ->
   return
 
 addCol = (tName, colName) ->
-  if !$('#col-' + tName + '-' + colName + ':visible').length
-    $('#for-col-' + tName + '-' + colName).css 'font-weight', 'bold'
-    col = $('#col-' + tName + '-' + colName)
+  if !$('#head-' + tName + '-' + colName + ':visible').length
+    $('#for-head-' + tName + '-' + colName).css 'font-weight', 'bold'
+    col = $('#head-' + tName + '-' + colName)
     ths = $('#data-table-headers').find('th')
     index = ths.index(col)
     workspaceRows = dataWorkspace.find('table tr').not(':first')

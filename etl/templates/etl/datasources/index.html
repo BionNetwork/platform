@@ -312,20 +312,20 @@
                     </a>
                     <div id="<%= row.tname %>Cols" class="panel-collapse collapse">
                         <% _.each(row.cols, function(col){ %>
-                            <div data-table="<%= row.tname %>" data-col="<%= col %>">
+                            <div data-table="<%= row.tname %>" data-col="<%= col.col_name %>">
                                 <ul class="table-columns">
                                     <li class="dropdown messages-menu">
                                         <a class="dropdown-toggle" style="font-weight:bold;"
-                                            id="for-col-<%= row.tname%>-<%= col %>"
+                                            id="for-head-<%= row.tname%>-<%= col.col_name %>"
                                             data-toggle="dropdown" href="javascript:void(0)">
-                                            <%= col %>
+                                            <%= col.col_name %>
                                         </a>
                                         <ul class="dropdown-menu" style="margin:-40px 0 0; font-size:12px">
                                             <li><a href="javascript:void(0)"
-                                                    onclick="addCol('<%= row.tname%>','<%= col %>')">
+                                                    onclick="addCol('<%= row.tname%>','<%= col.col_name %>')">
                                                 Включить в набор</a></li>
                                             <li><a href="javascript:void(0)"
-                                                    onclick="delCol('col-<%= row.tname%>-<%= col %>')">
+                                                    onclick="delCol('head-<%= row.tname%>-<%= col.col_name %>')">
                                                 Исключить из набора</a></li>
                                         </ul>
                                     </li>
@@ -346,21 +346,25 @@
         <% _.each(data, function(row, i) { %>
             <% _.each(row.cols, function(col) { %>
                 <th class="data-table-column-header"
-                     id="head-<%= row.tname %>-<%= col %>"
-                     data-col="<%= col %>" data-table="<%= row.tname %>">
+                     id="head-<%= row.tname %>-<%= col.col_name %>"
+                     data-col="<%= col.col_name %>" data-table="<%= row.tname %>">
                     <div style="display:inline-flex;cursor:pointer">
-                        <p id="text-head-<%= row.tname %>-<%= col %>"
-                                onclick="renameColumn('head-<%= row.tname%>-<%= col %>')">
-                            <%=row.tname%>
-                            <%=col%>
+                        <p id="text-head-<%= row.tname %>-<%= col.col_name %>"
+                                onclick="renameColumn('head-<%= row.tname%>-<%= col.col_name %>')">
+                            <% if(col.col_title){ %>
+                                <%=col.col_title%>
+                            <%  } else { %>
+                                <%=row.tname%>
+                                <%=col.col_name%>
+                            <% } %>
                         </p>
-                        <a href="javascript:void(0)" onclick="cancelRenameColumn('head-<%= row.tname%>-<%= col %>')"
-                                           style="display:none;" id="cancel-head-<%=row.tname%>-<%=col%>">
+                        <a href="javascript:void(0)" onclick="cancelRenameColumn('head-<%= row.tname%>-<%= col.col_name %>')"
+                                           style="display:none;" id="cancel-head-<%=row.tname%>-<%=col.col_name%>">
                                             <i class="fa fa-remove text-danger"></i></a>
                         <input type="text" style="display:none;"
-                            id="input-head-<%=row.tname%>-<%=col%>"
-                            value="<%=row.tname%> <%=col%>"
-                            onkeydown="saveColumnName('head-<%= row.tname%>-<%= col %>', event, '{% url "etl:datasources.retitle_column"%}')">
+                            id="input-head-<%=row.tname%>-<%=col.col_name%>"
+                            value="<% if(col.col_title){ %><%=col.col_title%><%  } else { %><%=row.tname%> <%=col.col_name%><% } %>"
+                               onkeydown="saveColumnName('head-<%= row.tname%>-<%= col.col_name %>', event, '{% url "etl:datasources.retitle_column"%}')">
                     </div>
                 </th>
 
