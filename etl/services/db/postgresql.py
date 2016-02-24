@@ -122,15 +122,6 @@ class Postgresql(Database):
         return pgsql_map.remote_table_query
 
     @staticmethod
-    def remote_table_indexes():
-        """
-        запрос на создание индексов новой таблицы в БД клиента
-        """
-        return (pgsql_map.updated_synced_index,
-                pgsql_map.created_index,
-                pgsql_map.synced_index, )
-
-    @staticmethod
     def remote_triggers_create_query():
         """
         запрос на создание триггеров в БД клиента
@@ -154,3 +145,9 @@ class Postgresql(Database):
         запрос на создание триггеров в БД локально для размерностей и мер
         """
         return pgsql_map.dimension_measure_triggers_query
+
+    @staticmethod
+    def get_remote_trigger_names(table_name):
+        return {
+            "trigger_name_0": "cdc_{0}_audit".format(table_name),
+        }

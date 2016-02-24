@@ -366,3 +366,18 @@ class DatasetToMeta(models.Model, MultiPrimaryKeyModel):
 
     class Meta:
         db_table = "datasets_to_meta"
+
+
+class DatasourcesTrigger(models.Model):
+    """
+    Таблица созданных триггеров
+    """
+    name = models.CharField(
+        verbose_name="Название", max_length=1024, db_index=True, null=False)
+    src = models.TextField(verbose_name='текст триггера')
+    collection_name = models.CharField(
+        verbose_name="Название коллекции", max_length=1024, db_index=True)
+    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+
+    class Meta:
+        db_table = "datasources_trigger"

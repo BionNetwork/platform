@@ -20,7 +20,8 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube,
+    DatasourcesTrigger)
 from django.conf import settings
 from djcelery import celery
 from itertools import groupby, izip
@@ -1098,12 +1099,29 @@ class CreateTriggers(TaskProcessing):
 
                 connection.commit()
 
+            trigger_names = db_instance.get_remote_trigger_names(table)
+            drop_trigger_query = db_instance.db_map.drop_remote_trigger
+
             trigger_commands = remote_triggers_create_query.format(
                 orig_table=table, new_table=table_name, new=new, old=old,
-                cols=cols)
+                cols=cols, **trigger_names)
 
             # multi queries of mysql, delimiter $$
-            for query in trigger_commands.split('$$'):
+            for i, query in enumerate(trigger_commands.split('$$')):
+
+                trigger_name = trigger_names.get("trigger_name_{0}".format(i))
+
+                # создаем запись о триггере
+                # DatasourcesTrigger.objects.get_or_create(
+                #
+                # )
+
+                # удаляем старый триггер
+                cursor.execute(drop_trigger_query.format(
+                    trigger_name=trigger_name, orig_table=table,
+                ))
+
+                # создаем новый триггер
                 cursor.execute(query)
 
             connection.commit()
