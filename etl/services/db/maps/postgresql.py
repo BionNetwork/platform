@@ -178,8 +178,8 @@ drop_remote_trigger = """
     DROP TRIGGER IF EXISTS "{trigger_name}" on "{orig_table}";
 """
 
-remote_triggers_query = """
-    CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
+remote_triggers_query = """CREATE OR REPLACE FUNCTION
+    process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
             INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
@@ -228,8 +228,8 @@ check_table_exists = """
 """
 
 
-dimension_measure_triggers_query = """
-    CREATE OR REPLACE FUNCTION reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
+dimension_measure_triggers_query = """CREATE OR REPLACE FUNCTION
+    reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
             DELETE FROM "{new_table}" WHERE {del_condition};

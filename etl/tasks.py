@@ -692,13 +692,27 @@ class LoadDimensions(TaskProcessing):
 
         reload_trigger_query = local_instance.reload_datasource_trigger_query()
 
-        cursor.execute(reload_trigger_query.format(
+        trigger_name = LOCAL_TRIGGER_NAME.format(self.table_prefix, self.key)
+        sttm_table = get_table_name(STTM_DATASOURCE, self.key)
+
+        trigger_create_query = reload_trigger_query.format(
+            trigger_name=trigger_name,
             new_table=get_table_name(self.table_prefix, self.key),
-            orig_table=get_table_name(STTM_DATASOURCE, self.key),
+            orig_table=sttm_table,
             del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
             insert_cols=','.join(insert_cols),
             cols='({0})'.format(','.join(select_cols)),
-        ))
+        )
+
+        cursor.execute(trigger_create_query)
+
+        # создаем запись о триггере
+        local_source_trigger, created = DatasourcesTrigger.objects.get_or_create(
+            name=trigger_name, collection_name=sttm_table,
+            datasource_id=self.context['source_id'],
+        )
+        local_source_trigger.src = trigger_create_query
+        local_source_trigger.save()
 
         connection.commit()
 
@@ -1112,10 +1126,11 @@ class CreateTriggers(TaskProcessing):
                 trigger_name = trigger_names.get("trigger_name_{0}".format(i))
 
                 # создаем запись о триггере
-                DatasourcesTrigger.objects.get_or_create(
-                    name=trigger_name, src=query,
-                    collection_name=table, datasource=source,
+                source_trigger, created = DatasourcesTrigger.objects.get_or_create(
+                    name=trigger_name, collection_name=table, datasource=source,
                 )
+                source_trigger.src = query
+                source_trigger.save()
 
                 # удаляем старый триггер
                 cursor.execute(drop_trigger_query.format(

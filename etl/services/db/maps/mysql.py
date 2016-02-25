@@ -144,22 +144,19 @@ drop_remote_trigger = """
     DROP TRIGGER IF EXISTS `{trigger_name}`;
 """
 
-remote_triggers_query = """
-    CREATE TRIGGER `{trigger_name_0}` AFTER INSERT ON `{orig_table}`
+remote_triggers_query = """CREATE TRIGGER `{trigger_name_0}` AFTER INSERT ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
     VALUES ({new} now(), null, 1, 0);
     END
-    $$
 
-    CREATE  TRIGGER `{trigger_name_1}` AFTER UPDATE ON `{orig_table}`
+    $$CREATE  TRIGGER `{trigger_name_1}` AFTER UPDATE ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
     VALUES ({new} now(), null, 2, 0);
     END
-    $$
 
-    CREATE  TRIGGER `{trigger_name_2}` AFTER DELETE ON `{orig_table}`
+    $$CREATE  TRIGGER `{trigger_name_2}` AFTER DELETE ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
     VALUES ({old} now(), null, 3, 0);
