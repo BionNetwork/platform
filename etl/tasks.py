@@ -20,7 +20,8 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube,
+    DatasourcesTrigger)
 from django.conf import settings
 from djcelery import celery
 from itertools import groupby, izip
@@ -707,13 +708,27 @@ class LoadDimensions(TaskProcessing):
 
         reload_trigger_query = local_instance.reload_datasource_trigger_query()
 
-        cursor.execute(reload_trigger_query.format(
+        trigger_name = LOCAL_TRIGGER_NAME.format(self.table_prefix, self.key)
+        sttm_table = get_table_name(STTM_DATASOURCE, self.key)
+
+        trigger_create_query = reload_trigger_query.format(
+            trigger_name=trigger_name,
             new_table=get_table_name(self.table_prefix, self.key),
-            orig_table=get_table_name(STTM_DATASOURCE, self.key),
+            orig_table=sttm_table,
             del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
             insert_cols=','.join(insert_cols),
             cols='({0})'.format(','.join(select_cols)),
-        ))
+        )
+
+        cursor.execute(trigger_create_query)
+
+        # создаем запись о триггере
+        local_source_trigger, created = DatasourcesTrigger.objects.get_or_create(
+            name=trigger_name, collection_name=sttm_table,
+            datasource_id=self.context['source_id'],
+        )
+        local_source_trigger.src = trigger_create_query
+        local_source_trigger.save()
 
         connection.commit()
 
@@ -1121,12 +1136,31 @@ class CreateTriggers(TaskProcessing):
 
                 connection.commit()
 
+            trigger_names = db_instance.get_remote_trigger_names(table)
+            drop_trigger_query = db_instance.db_map.drop_remote_trigger
+
             trigger_commands = remote_triggers_create_query.format(
                 orig_table=table, new_table=table_name, new=new, old=old,
-                cols=cols)
+                cols=cols, **trigger_names)
 
             # multi queries of mysql, delimiter $$
-            for query in trigger_commands.split('$$'):
+            for i, query in enumerate(trigger_commands.split('$$')):
+
+                trigger_name = trigger_names.get("trigger_name_{0}".format(i))
+
+                # создаем запись о триггере
+                source_trigger, created = DatasourcesTrigger.objects.get_or_create(
+                    name=trigger_name, collection_name=table, datasource=source,
+                )
+                source_trigger.src = query
+                source_trigger.save()
+
+                # удаляем старый триггер
+                cursor.execute(drop_trigger_query.format(
+                    trigger_name=trigger_name, orig_table=table,
+                ))
+
+                # создаем новый триггер
                 cursor.execute(query)
 
             connection.commit()
