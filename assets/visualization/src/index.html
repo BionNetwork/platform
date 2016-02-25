@@ -14,23 +14,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="//localhost:35729/livereload.js"></script>
 
+    <style>
+shelf {
+  display:inline-block;
+  border: 1px solid black;
+}
+    </style>
   </head>
   <body>
 
     <cube>
-      <div ng-controller="testController">
-        <button ng-click="doIt()">Do it</button>
-        <dimensions items=itemsDimension setup-items=setupFnDimensions></dimensions>
-        <measures items=itemsMeasure setup-items=setupFnMeasures></measures>
-
-        <shelf type="typeShelfGraphFilter"><shelf>
-        <shelf type="typeShelfGraphMark"><shelf>
-        <shelf type="typeShelfGraphColumn"><shelf>
-        <shelf type="typeShelfGraphRow"><shelf>
+      <div>
+        <div class="col-xs-3" ng-controller="testController">
+          <button ng-click="loadMetadata()">Load Metadata</button>
+          <dimensions items=itemsDimension setup-items=setupFnDimensions>
+          </dimensions>
+          <measures items=itemsMeasure setup-items=setupFnMeasures>
+          </measures>
+        </div>
+        <div class="col-xs-9">
+          <shelf class="col-xs-4" type="typeShelfGraphFilter">
+            Filter
+          </shelf>
+          <shelf class="col-xs-4" type="typeShelfGraphColumn">
+            Column
+          </shelf>
+          <shelf class="col-xs-4" type="typeShelfGraphRow">
+            Row
+          </shelf>
+        </div>
       </div>
     </cube>
 
+    <!--
+    <div class="myColumn" draggable="true">
+      Arrastrar 1
+      <div class="myOtherColumn" draggable="true">
+        Arrastrar 2
+      </div>
+    </div>
+    <hr>
+    <div class="receiverA">Pegar aqui!
+      <div class="receiverB">Pegar aca!
+      </div>
+    </div> -->
   </body>
+
+
+  <script>
+  </script>
 
   <script src="bower_components/angular/angular.js"></script>
   <script src="bower_components/jquery/dist/jquery.min.js"></script>
@@ -46,9 +78,8 @@ function testController($scope) {
   $scope.typeShelfGraphFilter = "graph-filter";
   $scope.typeShelfGraphRow = "graph-row";
   $scope.typeShelfGraphColumn = "graph-column";
-  $scope.typeShelfGraphMark = "graph-mark";
 
-  $scope.doIt = function() {
+  $scope.loadMetadata = function loadMetadata() {
     var itemsDimension = [
       { name: 'column1', role: 'dimension' },
       { name: 'column2', role: 'dimension' }
