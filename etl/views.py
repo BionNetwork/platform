@@ -78,6 +78,17 @@ class SourcesListView(BaseTemplateView):
         )
 
 
+class GetDatasources(BaseView):
+
+    def get(self, request, *args, **kwargs):
+        import pickle
+
+        ds = Datasource.objects.filter(user_id=request.user.id).values(
+            'db', 'port', 'conn_type', 'host', 'user_id', 'login', 'password', 'id')
+        return self.json_response({u'data': list(ds)})
+
+
+
 class NewSourceView(BaseTemplateView):
     template_name = 'etl/datasources/add.html'
 

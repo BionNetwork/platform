@@ -84,5 +84,8 @@ gulp.task('watch', function() {
   gulp.watch([paths.index], ['usemin']);
 });
 
-gulp.task('default', ['usemin', 'htmlShared', 'htmlMain', 'htmlComponents', 'scripts', 'watch']);
+gulp.task('build', ['usemin', 'htmlShared', 'htmlMain', 'htmlComponents', 'scripts']);
 
+gulp.task('devel', ['build', 'watch']);
+
+gulp.task('default', ['build']);

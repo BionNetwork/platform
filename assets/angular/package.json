@@ -7,7 +7,7 @@
     "postinstall": "bower install",
     "prestart": "npm install",
     "start": "gulp",
-    "test": "jasmine"
+    "devel": "gulp devel"
   },
   "author": "",
   "license": "ISC",
