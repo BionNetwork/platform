@@ -75,6 +75,7 @@ class TaskProcessing(object):
         self.queue_storage = None
         self.key = None
         self.next_task_params = None
+        self.name = self.__class__.__name__
 
     def prepare(self):
         """
@@ -95,6 +96,7 @@ class TaskProcessing(object):
         """
         self.prepare()
         try:
+            print 'Task <"{0}"> started'.format(self.name)
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
@@ -1150,8 +1152,6 @@ class CreateTriggers(TaskProcessing):
 class CreateCube(TaskProcessing):
 
     def processing(self):
-
-        print 'Start cube creation'
 
         dataset_id = self.context['dataset_id']
         dataset = Dataset.objects.get(id=dataset_id)
