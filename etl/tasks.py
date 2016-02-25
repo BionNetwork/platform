@@ -608,11 +608,11 @@ class LoadDimensions(TaskProcessing):
             dimension, created = Dimension.objects.get_or_create(
                 name=target_table_name,
                 user_id=user_id,
-                datasources_meta=datasource_meta_id,
-                data=json.dumps(data)
+                datasources_meta=datasource_meta_id
             )
             # ставим title размерности
             dimension.title = title if title is not None else target_table_name
+            dimension.data = json.dumps(data)
             dimension.save()
 
     def get_splitted_table_column_names(self):
