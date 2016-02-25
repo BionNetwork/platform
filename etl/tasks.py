@@ -605,13 +605,15 @@ class LoadDimensions(TaskProcessing):
 
             title = self.get_column_title(meta_info, table, field)
 
-            Dimension.objects.get_or_create(
+            dimension, created = Dimension.objects.get_or_create(
                 name=target_table_name,
-                title=title if title is not None else target_table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
                 data=json.dumps(data)
             )
+            # ставим title размерности
+            dimension.title = title if title is not None else target_table_name
+            dimension.save()
 
     def get_splitted_table_column_names(self):
         """
@@ -746,13 +748,15 @@ class LoadMeasures(LoadDimensions):
 
             title = self.get_column_title(meta_info, table, field)
 
-            Measure.objects.get_or_create(
+            measure, created = Measure.objects.get_or_create(
                 name=target_table_name,
-                title=title if title is not None else target_table_name,
                 type=field['type'],
                 user_id=user_id,
                 datasources_meta=datasource_meta_id
             )
+            # ставим title мере
+            measure.title = title if title is not None else target_table_name
+            measure.save()
 
     def set_next_task_params(self):
         self.next_task_params = (
