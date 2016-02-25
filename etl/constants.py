@@ -45,3 +45,6 @@ MONGODB_DB_NAME = 'etl' # база данных в монго
 
 # название локального триггера для мер, либо для размерностей
 LOCAL_TRIGGER_NAME = "for_{0}_{1}"
+
+# название удаленной таблицы триггера
+REMOTE_TRIGGER_TABLE_NAME = "_etl_datasource_cdc_{0}"

@@ -21,8 +21,9 @@ from .helpers import (RedisSourceService, DataSourceService,
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube,
-    DatasourcesTrigger)
+    DatasourcesTrigger, DatasourcesJournal)
 from django.conf import settings
+from django.db import transaction
 from djcelery import celery
 from itertools import groupby, izip
 
@@ -1004,7 +1005,7 @@ class CreateTriggers(TaskProcessing):
 
         for table, columns in tables_info.iteritems():
 
-            table_name = '_etl_datasource_cdc_{0}'.format(table)
+            table_name = REMOTE_TRIGGER_TABLE_NAME.format(table)
             tables_str = "('{0}')".format(table_name)
 
             cdc_cols_query = db_instance.db_map.cdc_cols_query.format(
@@ -1144,24 +1145,30 @@ class CreateTriggers(TaskProcessing):
                 cols=cols, **trigger_names)
 
             # multi queries of mysql, delimiter $$
-            for i, query in enumerate(trigger_commands.split('$$')):
+            for i, create_trigger_query in enumerate(trigger_commands.split('$$')):
 
                 trigger_name = trigger_names.get("trigger_name_{0}".format(i))
-
-                # создаем запись о триггере
-                source_trigger, created = DatasourcesTrigger.objects.get_or_create(
-                    name=trigger_name, collection_name=table, datasource=source,
-                )
-                source_trigger.src = query
-                source_trigger.save()
 
                 # удаляем старый триггер
                 cursor.execute(drop_trigger_query.format(
                     trigger_name=trigger_name, orig_table=table,
                 ))
-
                 # создаем новый триггер
-                cursor.execute(query)
+                cursor.execute(create_trigger_query)
+
+                with transaction.atomic():
+                    # создаем запись о триггере
+                    source_trigger, created = DatasourcesTrigger.objects.get_or_create(
+                        name=trigger_name, collection_name=table, datasource=source,
+                    )
+                    source_trigger.src = create_trigger_query
+                    source_trigger.save()
+
+                    # создаем запись об удаленной таблице триггера
+                    DatasourcesJournal.objects.get_or_create(
+                        name=table_name, collection_name=table,
+                        trigger=source_trigger,
+                    )
 
             connection.commit()
 
