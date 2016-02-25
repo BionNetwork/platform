@@ -78,6 +78,17 @@ class SourcesListView(BaseTemplateView):
         )
 
 
+class GetDatasources(BaseView):
+
+    def get(self, request, *args, **kwargs):
+        import pickle
+
+        ds = Datasource.objects.filter(user_id=request.user.id).values(
+            'db', 'port', 'conn_type', 'host', 'user_id', 'login', 'password', 'id')
+        return self.json_response({u'data': list(ds)})
+
+
+
 class NewSourceView(BaseTemplateView):
     template_name = 'etl/datasources/add.html'
 
@@ -300,6 +311,19 @@ class GetColumnsView(BaseEtlView):
         info = helpers.DataSourceService.get_columns_info(
             source, tables)
         return info
+
+
+class RetitleColumnView(BaseEtlView):
+
+    def start_post_action(self, request, source):
+        post = request.POST
+        table = post.get('table')
+        column = post.get('column')
+        title = post.get('title')
+
+        helpers.DataSourceService.retitle_table_column(
+            source, table, column, title)
+        return []
 
 
 class GetDataRowsView(BaseEtlView):

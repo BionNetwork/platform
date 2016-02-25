@@ -1,0 +1,47 @@
+<div class="row">
+  <div class="col-md-3" style="height:550px; overflow-y: auto;">
+    <h3>База данных</h3>
+    <div class="row">
+      <div class="">
+        <div class="panel-group" id="databases" role="tablist">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-1" style="height:550px;text-align: center">
+    <button class="btn fa fa-arrow-circle-o-right"
+      style="margin-bottom:10px;margin-top:100px"
+      onclick="tableToRight('/etl/datasources/get_columns/')" id="button-toRight"></button>
+    <button class="btn fa fa-arrow-circle-o-left"
+      style="margin-bottom:10px"
+      onclick="tableToLeft('/etl/datasources/remove_tables/')" id="button-toLeft"></button>
+    <button class="btn fa fa-angle-double-right"
+      style="margin-bottom:10px"
+      onclick="tablesToRight('/etl/datasources/get_columns/')" id="button-allToRight"></button>
+    <button class="btn fa fa-angle-double-left"
+      style="margin-bottom:10px"
+      onclick="tablesToLeft('/etl/datasources/remove_all_tables/')" id="button-allToLeft"></button>
+    <button class="fa fa-refresh" style="margin-top:140px"
+      onclick="refreshData('/etl/datasources/get_rows/')"></button>
+  </div>
+  <div class="col-md-8" style="height:550px">
+    <div style="height:200px;border: #ddd solid 1px; overflow-y:auto">
+      <div style="display:inline-flex;" id="chosenTables">
+      </div>
+    </div>
+    <div style="height:340px;overflow-x:scroll;border: #ddd solid 1px;">
+      <i id="loader" class="fa fa-spinner fa-spin loader"></i>
+      <div style="display:inline-flex;" id="data-workspace">
+
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row">
+ <div class="col-md-offset-3 col-md-1">
+   <button class="btn btn-success" ng-click="getRequest_RefreshData()">CHECK</button>
+ </div>
+ <div class="col-md-offset-11 col-md-1">
+    <button class="btn btn-success" onclick="startLoading(12,'/etl/datasources/load_data/')">START</button>
+  </div>
+</div>

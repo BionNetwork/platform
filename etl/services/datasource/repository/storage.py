@@ -664,14 +664,18 @@ class RedisSourceService(object):
                       }
             order = cls.get_order_from_actives(n_val, actives)
             table_info = json.loads(r_server.get(str_table.format(order)))
-            n_info['cols'] = [x['name'] for x in table_info['columns']]
+            n_info['cols'] = [{'col_name': x['name'],
+                               'col_title': x.get('title', None), }
+                              for x in table_info['columns']]
             result.append(n_info)
 
         if last:
             table_info = json.loads(r_server.get(str_table_by_name.format(last)))
             l_info = {'tname': last, 'db': db, 'host': host,
                       'dest': n_val, 'without_bind': True,
-                      'cols': [x['name'] for x in table_info['columns']]
+                      'cols': [{'col_name': x['name'],
+                                'col_title': x.get('title', None), }
+                               for x in table_info['columns']]
                       }
             result.append(l_info)
         return result

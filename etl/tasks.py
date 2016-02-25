@@ -220,7 +220,7 @@ class CreateDataset(TaskProcessing):
     """
 
     def processing(self):
-        print 'CreateDataset'
+
         dataset, created = Dataset.objects.get_or_create(key=self.key)
         self.context['dataset_id'] = dataset.id
 
@@ -242,7 +242,6 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
-        print 'LoadMongodb'
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
@@ -334,11 +333,11 @@ class LoadMongodb(TaskProcessing):
 
 
 class LoadDb(TaskProcessing):
+
     def processing(self):
         """
         Загрузка данных из Mongodb в базу данных
         """
-        print 'LoadDb'
         self.key = self.context['checksum']
         self.user_id = self.context['user_id']
         cols = json.loads(self.context['cols'])
@@ -445,9 +444,11 @@ class LoadDb(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
+                'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
                 'user_id': self.user_id,
                 'tables_info': self.context['tables_info'],
@@ -455,6 +456,7 @@ class LoadDb(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
 
 
@@ -465,8 +467,16 @@ class LoadDimensions(TaskProcessing):
     table_prefix = DIMENSIONS
     actual_fields_type = ['text']
 
-    @classmethod
-    def get_actual_fields(cls, meta_data):
+    @staticmethod
+    def get_column_title(meta_info, table, column):
+        title = None
+        for col_info in meta_info[table]['columns']:
+            if col_info['name'] == column['name']:
+                title = col_info.get('title', None)
+                break
+        return title
+
+    def get_actual_fields(self, meta_data):
         """
         Фильтруем поля по необходимому нам типу
 
@@ -478,7 +488,7 @@ class LoadDimensions(TaskProcessing):
 
             for field in json.loads(record['meta__fields'])['columns']:
                 f_type = TYPES_MAP.get(field['type'])
-                if f_type in cls.actual_fields_type:
+                if f_type in self.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
@@ -502,7 +512,6 @@ class LoadDimensions(TaskProcessing):
             fields_str, source_table_name, '{0}', '{1}')
 
     def processing(self):
-        print 'LoadDimensions or LoadMeasures'
         self.key = self.context['checksum']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -571,6 +580,9 @@ class LoadDimensions(TaskProcessing):
             fields(dict): данные о полях
             meta_tables(DatasourceMeta): ссылка на метаданные хранилища
         """
+
+        meta_info = json.loads(self.context['meta_info'])
+
         level = dict()
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
@@ -593,13 +605,17 @@ class LoadDimensions(TaskProcessing):
                 foreign_key=None
             )
 
-            Dimension.objects.get_or_create(
+            title = self.get_column_title(meta_info, table, field)
+
+            dimension, created = Dimension.objects.get_or_create(
                 name=target_table_name,
-                title=target_table_name,
                 user_id=user_id,
-                datasources_meta=datasource_meta_id,
-                data=json.dumps(data)
+                datasources_meta=datasource_meta_id
             )
+            # ставим title размерности
+            dimension.title = title if title is not None else target_table_name
+            dimension.data = json.dumps(data)
+            dimension.save()
 
     def get_splitted_table_column_names(self):
         """
@@ -723,18 +739,26 @@ class LoadMeasures(LoadDimensions):
             fields(dict): данные о полях
             meta_tables(DatasourceMeta): ссылка на метаданные хранилища
         """
+
+        meta_info = json.loads(self.context['meta_info'])
+
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
                 id=meta_tables[table])
             target_table_name = '{0}{1}{2}'.format(
                 table, FIELD_NAME_SEP, field['name'])
-            Measure.objects.get_or_create(
+
+            title = self.get_column_title(meta_info, table, field)
+
+            measure, created = Measure.objects.get_or_create(
                 name=target_table_name,
-                title=target_table_name,
                 type=field['type'],
                 user_id=user_id,
                 datasources_meta=datasource_meta_id
             )
+            # ставим title мере
+            measure.title = title if title is not None else target_table_name
+            measure.save()
 
     def set_next_task_params(self):
         self.next_task_params = (
@@ -742,6 +766,7 @@ class LoadMeasures(LoadDimensions):
 
 
 class UpdateMongodb(TaskProcessing):
+
     def processing(self):
         """
         1. Процесс обновленения данных в коллекции `sttm_datasource_delta_{key}`
@@ -749,7 +774,6 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
-        print 'UpdateMongodb'
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -860,11 +884,11 @@ class UpdateMongodb(TaskProcessing):
 
 
 class DetectRedundant(TaskProcessing):
+
     def processing(self):
         """
         Выявление записей на удаление
         """
-        print 'DetectRedundant'
         self.key = self.context['checksum']
         source_collection = MongodbConnection().get_collection(
             MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE, self.key))
@@ -916,8 +940,8 @@ class DetectRedundant(TaskProcessing):
 
 
 class DeleteRedundant(TaskProcessing):
+
     def processing(self):
-        print 'DeleteRedundant'
         self.key = self.context['checksum']
         del_collection = MongodbConnection().get_collection(
             MONGODB_DB_NAME, get_table_name(STTM_DATASOURCE_KEYSALL, self.key))
@@ -942,17 +966,16 @@ class DeleteRedundant(TaskProcessing):
                 self.error_handling(e.message)
             page += 1
 
-        if not self.context['is_meta_stats']:
-            self.next_task_params = (
-                GENERATE_DIMENSIONS, load_dimensions, self.context)
+        self.next_task_params = (
+            GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
+
     def processing(self):
         """
         Создание триггеров в БД пользователя
         """
-        print 'CreateTriggers'
         tables_info = self.context['tables_info']
 
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -1120,10 +1143,12 @@ class CreateTriggers(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
 
 
 class CreateCube(TaskProcessing):
+
     def processing(self):
 
         print 'Start cube creation'
