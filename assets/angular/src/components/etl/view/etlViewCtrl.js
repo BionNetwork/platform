@@ -5,29 +5,29 @@
     .controller('etlViewController', ['$scope', '$etlHTTP', etlViewController]);
 
   function etlViewController($scope, $etlHTTP) {
-    $scope.etl = [];
-    $scope.currentUser = undefined;
+    $scope.etls = [];
+    $scope.currentEtl = undefined;
 
-    function successRead(etl) {
-      $scope.etl = etl;
+    function successRead(etls) {
+      $scope.etls = etls;
     }
 
-    function successRemove(user) {
-      var etl = $scope.etl,
-          l = etl.length,
+    function successRemove(etl) {
+      var etls = $scope.etls,
+          l = etls.length,
           found = false,
           i;
 
       for (i = 0; i < l; i++) {
-        if (etl[i].id == user.id) {
+        if (etls[i].id == etl.id) {
           found = true;
-          etl.splice(i, 1);
+          etls.splice(i, 1);
           break;
         }
       }
 
       if (found) {
-        $('#userRemoveModal').modal('hide');
+        $('#etlRemoveModal').modal('hide');
       }
       else {
         console.log('Something went wrong...');
@@ -44,16 +44,16 @@
 
     $scope.confirmRemove = function confirmRemove() {
       $etlHTTP
-        .remove($scope.currentUser)
+        .remove($scope.currentEtl)
         .then(successRemove, errorHandler);
     };
 
     $scope.cancelRemove = function cancelRemove() {
-      console.log('cancelRemove item', $scope.currentUser);
+      console.log('cancelRemove item', $scope.currentEtl);
     };
 
     $scope.prepareRemove = function prepareRemove(item) {
-      $scope.currentUser = item;
+      $scope.currentEtl = item;
     };
   }
 })();

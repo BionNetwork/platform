@@ -5,53 +5,40 @@
     .service('$etlHTTP', ['$http', '$q', etlHTTP]);
 
   function etlHTTP($http, $q) {
-    var etl = [
-        {
-          id: 11,
-          username: 'etton',
-          email: 'bi@etton.ru',
-          status: 'active'
-        },
-        {
-          id: 12,
-          username: 'test',
-          email: 'rios@etton.ru',
-          status: 'nonactive'
-        }
-      ];
+    var etls = [];
 
-    this.add = function add(user) {
+    this.add = function add(etl) {
       var deferred = $q.defer();
-      user.id = etl.length + 1;
-      etl.push(user);
-      deferred.resolve(user);
+      etl.id = etls.length + 1;
+      etls.push(etl);
+      deferred.resolve(etl);
       return deferred.promise;
     };
 
-    this.update = function update(user) {
+    this.update = function update(etl) {
       var deferred = $q.defer(),
           found = false,
-          i, l = etl.length;
+          i, l = etls.length;
 
-      if (user) {
-        if (!user.id) {
+      if (etl) {
+        if (!etl.id) {
           deferred.reject({
-            message: 'incorrect user - has not id'
+            message: 'incorrect etl - has not id'
           });
           return deferred.promise;
         }
       }
       else {
         deferred.reject({
-          message: 'no user to update was provided'
+          message: 'no etl to update was provided'
         });
         return deferred.promise;
       }
       for (i = 0; i < l; i++) {
-        if (etl[i].id == user.id) {
+        if (etls[i].id == etl.id) {
           found = true;
-          etl[i] = user;
-          deferred.resolve(JSON.parse(JSON.stringify(etl[i])));
+          etls[i] = etl;
+          deferred.resolve(JSON.parse(JSON.stringify(etls[i])));
           break;
         }
       };
@@ -65,15 +52,15 @@
 
     this.read = function read(criteria) {
       var deferred = $q.defer(),
-          found, i, l = etl.length;
+          found, i, l = etls.length;
 
       if (criteria) {
         if (criteria.id) {
           found = false;
           for (i = 0; i < l; i++) {
-            if (etl[i].id == criteria.id) {
+            if (etls[i].id == criteria.id) {
               found = true;
-              deferred.resolve(JSON.parse(JSON.stringify(etl[i])));
+              deferred.resolve(JSON.parse(JSON.stringify(etls[i])));
               break;
             }
           };
@@ -85,35 +72,40 @@
         }
       }
       else {
-        deferred.resolve(JSON.parse(JSON.stringify(etl)));
+        // deferred.resolve(JSON.parse(JSON.stringify(etls)));
+        return $http.get('/etl/api/datasources/')
+          .then(function(response) {
+            etls = response.data.data;
+            return etls;
+          });
       }
       return deferred.promise;
     };
 
-    this.remove = function remove(user) {
+    this.remove = function remove(etl) {
       var deferred = $q.defer(),
           found = false,
-          i, l = etl.length;
+          i, l = etls.length;
 
-      if (user) {
-        if (!user.id) {
+      if (etl) {
+        if (!etl.id) {
           deferred.reject({
-            message: 'incorrect user - has not id'
+            message: 'incorrect etl - has not id'
           });
           return deferred.promise;
         }
       }
       else {
         deferred.reject({
-          message: 'no user to update was provided'
+          message: 'no etl to update was provided'
         });
         return deferred.promise;
       }
       for (i = 0; i < l; i++) {
-        if (etl[i].id == user.id) {
+        if (etls[i].id == etl.id) {
           found = true;
-          etl.splice(i, 1);
-          deferred.resolve(JSON.parse(JSON.stringify(user)));
+          etls.splice(i, 1);
+          deferred.resolve(JSON.parse(JSON.stringify(etl)));
           break;
         }
       }

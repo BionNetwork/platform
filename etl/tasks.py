@@ -11,6 +11,7 @@ import json
 import calendar
 import math
 
+import requests
 from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
@@ -22,16 +23,13 @@ from pymondrian.schema import (
     Hierarchy, MeasureGroup, Measure as MeasureSchema,
     Key, Name, ForeignKeyLink, ReferenceLink)
 from pymondrian.generator import generate
-from etl.services.queue.base import (
-    TaskProcessing, TLSE, STSE, RowKeysCreator, calc_key_for_row,
-    MongodbConnection, AKTSE, DTSE, get_binary_types_list,
-    process_binary_data, get_binary_types_dict, DTCN, LocalDbConnect,
-    SourceDbConnect)
+from etl.services.queue.base import *
 from etl.helpers import DataSourceService
 from core.models import (
-    Datasource, Dimension, Measure, DatasourceMeta,
+    Datasource, Dimension, Measure, DatasourceMeta, QueueList, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
 from django.conf import settings
+from django.core.urlresolvers import reverse
 from djcelery import celery
 from itertools import groupby, izip
 
@@ -105,7 +103,7 @@ class CreateDataset(TaskProcessing):
     """
 
     def processing(self):
-        print 'CreateDataset'
+
         dataset, created = Dataset.objects.get_or_create(key=self.key)
         self.context['dataset_id'] = dataset.id
 
@@ -210,6 +208,7 @@ class LoadMongodb(TaskProcessing):
 
 
 class LoadDb(TaskProcessing):
+
     def processing(self):
         """
         Загрузка данных из Mongodb в базу данных
@@ -314,17 +313,20 @@ class LoadDb(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
                 'rows_count': rows_count,
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
                 'checksum': self.key,
+                'db_update': db_update,
                 'user_id': self.user_id,
                 'tables_info': self.context['tables_info'],
                 'source_id': source.id,
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
 
 
@@ -335,8 +337,16 @@ class LoadDimensions(TaskProcessing):
     table_prefix = DIMENSIONS
     actual_fields_type = ['text', Measure.TIME, Measure.DATE, Measure.TIMESTAMP]
 
-    @classmethod
-    def get_actual_fields(cls, meta_data):
+    @staticmethod
+    def get_column_title(meta_info, table, column):
+        title = None
+        for col_info in meta_info[table]['columns']:
+            if col_info['name'] == column['name']:
+                title = col_info.get('title', None)
+                break
+        return title
+
+    def get_actual_fields(self, meta_data):
         """
         Фильтруем поля по необходимому нам типу
 
@@ -351,7 +361,7 @@ class LoadDimensions(TaskProcessing):
 
             for field in json.loads(record['meta__fields'])['columns']:
                 f_type = TYPES_MAP.get(field['type'])
-                if f_type in cls.actual_fields_type:
+                if f_type in self.actual_fields_type:
                     actual_fields.append((
                         record['meta__collection_name'], field))
 
@@ -397,7 +407,7 @@ class LoadDimensions(TaskProcessing):
         self.save_meta_data(
             self.user_id, self.actual_fields, meta_tables)
 
-        # self.create_reload_triggers()
+        self.create_reload_triggers()
 
         if not self.last_task:
             self.set_next_task_params()
@@ -415,6 +425,9 @@ class LoadDimensions(TaskProcessing):
             fields(list): данные о полях
             meta_tables(dict): ссылка на метаданные хранилища
         """
+
+        meta_info = json.loads(self.context['meta_info'])
+
         level = dict()
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
@@ -436,15 +449,19 @@ class LoadDimensions(TaskProcessing):
                 foreign_key=None
             )
 
-            Dimension.objects.get_or_create(
+            title = self.get_column_title(meta_info, table, field)
+
+            dimension, created = Dimension.objects.get_or_create(
                 name=table_name,
-                title=table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
-                data=json.dumps(data),
                 type=Dimension.TIME_DIMENSION if field['type'] == 'timestamp'
                 else Dimension.STANDART_DIMENSION
             )
+            # ставим title размерности
+            dimension.title = title if title is not None else target_table_name
+            dimension.data = json.dumps(data)
+            dimension.save()
 
     def get_splitted_table_column_names(self):
         """
@@ -633,17 +650,26 @@ class LoadMeasures(LoadDimensions):
             fields(list): данные о полях
             meta_tables(dict): ссылка на метаданные хранилища
         """
+
+        meta_info = json.loads(self.context['meta_info'])
+
         for table, field in fields:
             datasource_meta_id = DatasourceMeta.objects.get(
                 id=meta_tables[table])
-            table_name = STANDART_COLUMN_NAME.format(table, field['name'])
-            Measure.objects.get_or_create(
+            table_name = STANDART_COLUMN_NAME.format(
+                table, field['name'])
+
+            title = self.get_column_title(meta_info, table, field)
+
+            measure, created = Measure.objects.get_or_create(
                 name=table_name,
-                title=table_name,
                 type=field['type'],
                 user_id=user_id,
                 datasources_meta=datasource_meta_id
             )
+            # ставим title мере
+            measure.title = title if title is not None else target_table_name
+            measure.save()
 
     def set_next_task_params(self):
         self.next_task_params = (
@@ -654,6 +680,7 @@ class LoadMeasures(LoadDimensions):
 
 
 class UpdateMongodb(TaskProcessing):
+
     def processing(self):
         """
         1. Процесс обновленения данных в коллекции `sttm_datasource_delta_{key}`
@@ -661,7 +688,6 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
-        print 'UpdateMongodb'
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -769,6 +795,7 @@ class DetectRedundant(TaskProcessing):
         """
         Выявление записей на удаление
         """
+        self.key = self.context['checksum']
         source_collection = MongodbConnection(
             self.gtm(STTM_DATASOURCE_KEYSALL)).collection
         current_collection = MongodbConnection(
@@ -817,6 +844,7 @@ class DetectRedundant(TaskProcessing):
 
 
 class DeleteRedundant(TaskProcessing):
+
 
     """
     Удаление записей из таблицы-источника
@@ -1026,17 +1054,17 @@ class CreateTriggers(TaskProcessing):
                 'cols': self.context['cols'],
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
             })
 
 
 class CreateCube(TaskProcessing):
+
     """
     Создание схемы
     """
 
     def processing(self):
-
-        print 'Start cube creation'
 
         dataset_id = self.context['dataset_id']
         dataset = Dataset.objects.get(id=dataset_id)
@@ -1171,20 +1199,18 @@ class CreateCube(TaskProcessing):
 
         xml = generate(schema, output=1)
 
-        cube = Cube.objects.create(
-            name=cube_key,
-            data=xml,
-            user_id=self.context['user_id'],
-            # user_id=11,
+        resp = requests.post('{0}{1}'.format(
+            settings.API_HTTP_HOST, reverse('api:import_schema')),
+            data={'key': cube_key, 'data': xml,
+                  'user_id': self.context['user_id'], }
         )
 
-        try:
-            send_xml(key, cube.id, xml)
-
-        except OlapServerConnectionErrorException as te:
-            self.error_handling(te.message)
-            logger.error("Can't connect to Olap Server!")
-            logger.error(te.message)
-            raise te  # пробрасываем ошибку дальше
+        if resp.json()['status'] == 'success':
+            cube_id = resp.json()['id']
+            logger.info('Created cube ' + cube_id)
+        else:
+            self.error_handling(resp.json()['message'])
+            logger.error('Error creating cube')
+            logger.error(resp.json()['message'])
 
 # write in console: python manage.py celery -A etl.tasks worker
