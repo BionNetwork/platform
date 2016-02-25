@@ -146,6 +146,12 @@ LOGGING = {
             'filename': os.path.join(BASE_DIR, 'data', 'logs', 'etl.log'),
             'formatter': 'verbose'
         },
+        'api': {
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'data', 'logs', 'api.log'),
+            'formatter': 'verbose'
+        },
         'console': {
             'class': 'logging.StreamHandler'
         }

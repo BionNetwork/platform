@@ -14,7 +14,6 @@ from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import (
     EtlEncoder, get_table_name)
-from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from etl.services.queue.base import *
 from .helpers import (RedisSourceService, DataSourceService,
                       TaskService, TaskStatusEnum,
@@ -1236,19 +1235,16 @@ class CreateCube(TaskProcessing):
 
         resp = requests.post('{0}{1}'.format(
             settings.API_HTTP_HOST, reverse('api:import_schema')),
-            data={'cube_key': cube_key, 'cube_string': cube_string,
+            data={'key': cube_key, 'data': cube_string,
                   'user_id': self.context['user_id'], }
         )
 
-        cube_id = resp.json()['id']
-
-        try:
-            send_xml(key, cube_id, cube_string)
-
-        except OlapServerConnectionErrorException as te:
-            self.error_handling(te.message)
-            logger.error("Can't connect to OLAP Server!")
-            logger.error(te.message)
-            raise te  # пробрасываем ошибку дальше
+        if resp.json()['status'] == 'success':
+            cube_id = resp.json()['id']
+            logger.info('Created cube ' + cube_id)
+        else:
+            self.error_handling(resp.json()['message'])
+            logger.error('Error creating cube')
+            logger.error(resp.json()['message'])
 
 # write in console: python manage.py celery -A etl.tasks worker

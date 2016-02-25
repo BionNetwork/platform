@@ -2,9 +2,15 @@
 from __future__ import unicode_literals
 
 import xmltodict
+import logging
 
 from core.models import Cube
 from core.views import BaseViewNoLogin
+from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
+from django.db import transaction
+
+
+logger = logging.getLogger(__name__)
 
 
 class ImportSchemaView(BaseViewNoLogin):
@@ -14,14 +20,32 @@ class ImportSchemaView(BaseViewNoLogin):
 
     def post(self, request, *args, **kwargs):
         post = request.POST
+        key = post.get('key')
+        data = post.get('data')
 
-        cube = Cube.objects.create(
-            name=post.get('cube_key'),
-            data=post.get('cube_string'),
-            user_id=post.get('user_id'),
-        )
+        try:
+            with transaction.atomic():
+                cube = Cube.objects.get_or_create(
+                    name=key,
+                    user_id=post.get('user_id'),
+                )
+                cube.data = data
+                cube.save()
 
-        return self.json_response({'id': cube.id})
+                send_xml(key, cube.id, data)
+
+                return self.json_response({'id': cube.id, 'status': 'success'})
+
+        except OlapServerConnectionErrorException as e:
+            logger.error("Can't connect to OLAP Server!")
+            logger.error(e.message)
+            message = e.message
+        except Exception as e:
+            logger.error("Error creating cube by key" + key)
+            logger.error(e.message)
+            message = e.message
+
+        return self.json_response({'status': 'error', 'message': message})
 
 
 class ExecuteQueryView(BaseViewNoLogin):
