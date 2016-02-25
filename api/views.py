@@ -8,6 +8,9 @@ from core.views import BaseViewNoLogin
 
 
 class ImportSchemaView(BaseViewNoLogin):
+    """
+    Импортирование схемы куба
+    """
 
     def post(self, request, *args, **kwargs):
         post = request.POST
@@ -22,12 +25,18 @@ class ImportSchemaView(BaseViewNoLogin):
 
 
 class ExecuteQueryView(BaseViewNoLogin):
+    """
+    Выполнение mdx запроса к данным
+    """
 
     def post(self, request, *args, **kwargs):
         return self.json_response({'status': 'success'})
 
 
 class SchemasListView(BaseViewNoLogin):
+    """
+    Список доступных кубов
+    """
 
     def get(self, request, *args, **kwargs):
 
@@ -42,6 +51,9 @@ class SchemasListView(BaseViewNoLogin):
 
 
 class GetSchemaView(BaseViewNoLogin):
+    """
+    Получение информации по кубу
+    """
 
     def get(self, request, *args, **kwargs):
         cube_id = kwargs.get('id')

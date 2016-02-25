@@ -221,8 +221,8 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 
-# local domain address
-LOCAL_DOMAIN = ''  # http://localhost:8000
+# API domain address
+API_HTTP_HOST = ''  # http://localhost:8000
 
 
 # redis conf

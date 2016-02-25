@@ -1235,7 +1235,7 @@ class CreateCube(TaskProcessing):
         cube_string = etree.tostring(schema, pretty_print=True)
 
         resp = requests.post('{0}{1}'.format(
-            settings.LOCAL_DOMAIN, reverse('api.v1:import_schema')),
+            settings.API_HTTP_HOST, reverse('api:import_schema')),
             data={'cube_key': cube_key, 'cube_string': cube_string,
                   'user_id': self.context['user_id'], }
         )
@@ -1247,7 +1247,7 @@ class CreateCube(TaskProcessing):
 
         except OlapServerConnectionErrorException as te:
             self.error_handling(te.message)
-            logger.error("Can't connect to Olap Server!")
+            logger.error("Can't connect to OLAP Server!")
             logger.error(te.message)
             raise te  # пробрасываем ошибку дальше
 
