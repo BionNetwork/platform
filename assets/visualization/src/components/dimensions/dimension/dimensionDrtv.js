@@ -4,13 +4,26 @@
   .module('BI-visualization')
   .directive('dimension', dimension);
 
+  function link(scope, element, attrs, controller, transcludeFn) {
+    [].forEach.call(element, function(item) {
+      item.addEventListener('dragstart', function(e) {
+        var data = { name: scope.name, type: 'dimension' };
+        e.dataTransfer.setData('text/plain', JSON.stringify(data));
+        e.dataTransfer.effectAllowed = "all";
+        e.stopPropagation();
+      }, false);
+    });
+  }
+
   function dimension() {
     return {
       scope: {
-        name: '='
+        name: '=?'
       },
       restrict: 'E',
-      templateUrl: 'components/dimensions/dimension/dimensionTmpl.html'
+      controller: 'dimensionCtrl',
+      templateUrl: 'components/dimensions/dimension/dimensionTmpl.html',
+      link: link
     };
   }
 })();

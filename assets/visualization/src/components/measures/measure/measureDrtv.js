@@ -4,13 +4,26 @@
   .module('BI-visualization')
   .directive('measure', measure);
 
+  function link(scope, element, attrs, controller, transcludeFn) {
+    [].forEach.call(element, function(item) {
+      item.addEventListener('dragstart', function(e) {
+        var data = { name: scope.name, type: 'measure' };
+        e.dataTransfer.setData('text/plain', JSON.stringify(data));
+        e.dataTransfer.effectAllowed = "all";
+        e.stopPropagation();
+      }, false);
+    });
+  }
+
   function measure() {
     return {
       scope: {
-        name: '='
+        name: '=?'
       },
       restrict: 'E',
-      templateUrl: 'components/measures/measure/measureTmpl.html'
+      controller: 'measureCtrl',
+      templateUrl: 'components/measures/measure/measureTmpl.html',
+      link: link
     };
   }
 })();
