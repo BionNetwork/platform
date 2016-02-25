@@ -1112,9 +1112,10 @@ class CreateTriggers(TaskProcessing):
                 trigger_name = trigger_names.get("trigger_name_{0}".format(i))
 
                 # создаем запись о триггере
-                # DatasourcesTrigger.objects.get_or_create(
-                #
-                # )
+                DatasourcesTrigger.objects.get_or_create(
+                    name=trigger_name, src=query,
+                    collection_name=table, datasource=source,
+                )
 
                 # удаляем старый триггер
                 cursor.execute(drop_trigger_query.format(
