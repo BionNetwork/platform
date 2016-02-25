@@ -41,6 +41,7 @@ class SchemasListView(BaseViewNoLogin):
     def get(self, request, *args, **kwargs):
 
         cubes = map(lambda x: {
+            'id': x.id,
             'user_id': x.user_id,
             'create_date': (x.create_date.strftime("%Y-%m-%d %H:%M:%S")
                             if x.create_date else ''),
