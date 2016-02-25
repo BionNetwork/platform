@@ -5,7 +5,6 @@ import logging
 
 import os
 import sys
-import brukva
 from datetime import datetime, timedelta
 import json
 import calendar
@@ -16,31 +15,26 @@ from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import EtlEncoder
-from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema,
     Dimension as DimensionSchema, Attribute, Level,
     Hierarchy, MeasureGroup, Measure as MeasureSchema,
     Key, Name, ForeignKeyLink, ReferenceLink)
 from pymondrian.generator import generate
-from etl.services.queue.base import *
 from etl.helpers import DataSourceService
 from core.models import (
-    Datasource, Dimension, Measure, DatasourceMeta, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta, Cube)
+    Datasource, Dimension, Measure, DatasourceMeta,
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from djcelery import celery
 from itertools import groupby, izip
+from etl.services.queue.base import *
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
 
-client = brukva.Client(host=settings.REDIS_HOST,
-                       port=int(settings.REDIS_PORT),
-                       selected_db=settings.REDIS_DB)
-client.connect()
 
 logger = logging.getLogger(__name__)
 
@@ -223,9 +217,6 @@ class LoadDb(TaskProcessing):
 
         source = Datasource()
         source.set_from_dict(**self.context['source'])
-        # общее количество строк в запросе
-        # self.publisher.rows_count = DataSourceService.get_structure_rows_number(
-        #     source, structure, cols)
         self.publisher.rows_count = self.context['rows_count']
         self.publisher.publish(TLSE.START)
 
@@ -459,7 +450,7 @@ class LoadDimensions(TaskProcessing):
                 else Dimension.STANDART_DIMENSION
             )
             # ставим title размерности
-            dimension.title = title if title is not None else target_table_name
+            dimension.title = title if title is not None else table_name
             dimension.data = json.dumps(data)
             dimension.save()
 
@@ -668,7 +659,7 @@ class LoadMeasures(LoadDimensions):
                 datasources_meta=datasource_meta_id
             )
             # ставим title мере
-            measure.title = title if title is not None else target_table_name
+            measure.title = title if title is not None else table_name
             measure.save()
 
     def set_next_task_params(self):
@@ -695,9 +686,11 @@ class UpdateMongodb(TaskProcessing):
         source = Datasource.objects.get(**self.context['source'])
         meta_info = json.loads(self.context['meta_info'])
 
-        # общее количество строк в запросе
-        self.publisher.rows_count = DataSourceService.get_structure_rows_number(
+        rows_count = DataSourceService.get_structure_rows_number(
             source, structure,  cols)
+
+        # общее количество строк в запросе
+        self.publisher.rows_count = rows_count
         self.publisher.publish(TLSE.START)
 
         col_names = ['_id', '_state', '_date']
@@ -786,6 +779,7 @@ class UpdateMongodb(TaskProcessing):
         delta_collection.update_many(
             {'_state': DTSE.NEW}, {'$set': {'_state': DTSE.SYNCED}})
 
+        self.context['rows_count'] = rows_count
         self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 

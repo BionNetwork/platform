@@ -378,7 +378,13 @@ class Database(object):
         return self.processing_statistic(stat_records)
 
     def get_interval_query(self, source, cols_info):
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        intervals_query = []
+        for table, col_name, col_type, _, _ in cols_info:
+            if 'timestamp' in col_type:
+                query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
+                        col_name, table)
+                intervals_query.append([table, col_name, query])
+        return intervals_query
 
     def get_intervals(self, source, cols_info):
         """

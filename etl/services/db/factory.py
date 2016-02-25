@@ -299,7 +299,7 @@ class DatabaseService(object):
         запрос на создание триггеров в БД локально для размерностей и мер
         """
 
-        cls.get_local_instance().reload_datasource_trigger_query(params)
+        return cls.get_local_instance().reload_datasource_trigger_query(params)
 
     @classmethod
     def get_date_table_names(cls, col_type):

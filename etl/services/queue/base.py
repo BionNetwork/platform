@@ -1,9 +1,9 @@
 # coding: utf-8
 import binascii
+import traceback
 import pymongo
 from pymongo import IndexModel
 import logging
-import brukva
 from bson import Binary
 
 from etl.constants import TYPES_MAP
@@ -23,17 +23,11 @@ from etl.services.middleware.base import datetime_now_str
 from . import client, settings
 
 __all__ = [
-    'TLSE',  'STSE', 'RPublish', 'RowKeysCreator',
-    'calc_key_for_row', 'TableCreateQuery', 'InsertQuery', 'MongodbConnection',
-    'DeleteQuery', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
-    'process_binary_data', 'get_binary_types_dict', 'WhetherTableExistsQuery'
+    'TLSE',  'STSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
+    'calc_key_for_row', 'TaskProcessing', 'SourceDbConnect', 'LocalDbConnect',
+    'DTCN', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
+    'process_binary_data', 'get_binary_types_dict'
 ]
-
-
-client = brukva.Client(host=settings.REDIS_HOST,
-                       port=int(settings.REDIS_PORT),
-                       selected_db=settings.REDIS_DB)
-client.connect()
 
 logger = logging.getLogger(__name__)
 
@@ -49,12 +43,12 @@ class TaskProcessing(object):
         user_id(str): id пользователя
         context(dict): контекстные данные для задачи
         was_error(bool): Факт наличия ошибки
-        err_msg(unicode): Текст ошибки, если случилась
+        err_msg(str): Текст ошибки, если случилась
         publisher(`RPublish`): Посыльный к клиенту о текущем статусе задачи
-        queue_storage(`etl.services.queue.base.QueueStorage`):
-            Посыльный к redis о текущем статусе задачи
+        queue_storage(`QueueStorage`): Посыльный к redis о текущем статусе задачи
         key(str): Ключ
         next_task_params(tuple): Набор данных для след. задачи
+        name(str): Название задачи
     """
 
     def __init__(self, task_id, channel, last_task=False):
@@ -74,6 +68,7 @@ class TaskProcessing(object):
         self.queue_storage = None
         self.key = None
         self.next_task_params = None
+        self.name = self.__class__.__name__
 
     def gtm(self, prefix):
         """
@@ -113,9 +108,11 @@ class TaskProcessing(object):
         """
         self.prepare()
         try:
+            print 'Task <"{0}"> started'.format(self.name)
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
+            traceback.print_exc()
             TaskService.update_task_status(
                 self.task_id, TaskStatusEnum.ERROR,
                 error_code=TaskErrorCodeEnum.DEFAULT_CODE,
@@ -141,8 +138,8 @@ class TaskProcessing(object):
         Обработка ошибки
 
         Args:
-            err_msg(unicode): Текст ошибки
-            err_code(unicode): Код ошибки
+            err_msg(str): Текст ошибки
+            err_code(str): Код ошибки
         """
         self.was_error = True
         # fixme перезаписывается при каждой ошибке
@@ -308,8 +305,8 @@ def get_single_task(task_name, task_def, params):
         return
     task_id, channel = TaskService(task_name).add_task(
         arguments=params)
-    return task_def.apply_async((task_id, channel),), [channel]
-    # return task_def(task_id, channel), [channel]
+    # return task_def.apply_async((task_id, channel),), [channel]
+    return task_def(task_id, channel), [channel]
 
 
 class RowKeysCreator(object):
