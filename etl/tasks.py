@@ -447,6 +447,7 @@ class LoadDb(TaskProcessing):
             })
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
+                'is_meta_stats': self.context['is_meta_stats'],
                 'checksum': self.key,
                 'user_id': self.user_id,
                 'tables_info': self.context['tables_info'],
@@ -964,9 +965,8 @@ class DeleteRedundant(TaskProcessing):
                 self.error_handling(e.message)
             page += 1
 
-        if not self.context['is_meta_stats']:
-            self.next_task_params = (
-                GENERATE_DIMENSIONS, load_dimensions, self.context)
+        self.next_task_params = (
+            GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
