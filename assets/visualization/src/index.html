@@ -18,25 +18,21 @@
   <body>
 
     <cube>
-      <shelf>
-        <div ng-controller="testController">
-          <dimensions items="items" setup-items="setupFn"></dimensions>
-          <button ng-click="doIt()">Do it</button>
-        </div>
-      </shelf>
+      <div ng-controller="testController">
+        <button ng-click="doIt()">Do it</button>
+        <dimensions items=itemsDimension setup-items=setupFnDimensions></dimensions>
+        <measures items=itemsMeasure setup-items=setupFnMeasures></measures>
 
-      <shelf>
-        <measures></measures>
-      </shelf>
-
-      <shelf>
-        <graph-filter></graph-filter>
-      <shelf>
+        <shelf type="typeShelfGraphFilter"><shelf>
+        <shelf type="typeShelfGraphMark"><shelf>
+        <shelf type="typeShelfGraphColumn"><shelf>
+        <shelf type="typeShelfGraphRow"><shelf>
+      </div>
     </cube>
 
   </body>
 
-  <script src="bower_components/angular/angular.min.js"></script>
+  <script src="bower_components/angular/angular.js"></script>
   <script src="bower_components/jquery/dist/jquery.min.js"></script>
   <script src="bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
   <script src="main.js"></script>
@@ -47,12 +43,24 @@ angular
   .controller('testController', ['$scope', testController]);
 
 function testController($scope) {
+  $scope.typeShelfGraphFilter = "graph-filter";
+  $scope.typeShelfGraphRow = "graph-row";
+  $scope.typeShelfGraphColumn = "graph-column";
+  $scope.typeShelfGraphMark = "graph-mark";
+
   $scope.doIt = function() {
-    var items = [
-      { name: 'my Name 1' },
-      { name: 'my Name 2' }
+    var itemsDimension = [
+      { name: 'column1', role: 'dimension' },
+      { name: 'column2', role: 'dimension' }
     ];
-    $scope.setupFn(items);
+
+    var itemsMeasure = [
+      { name: 'column3', role: 'measure' },
+      { name: 'column4', role: 'measure' }
+    ];
+
+    $scope.setupFnDimensions(itemsDimension);
+    $scope.setupFnMeasures(itemsMeasure);
   };
 }
   </script>

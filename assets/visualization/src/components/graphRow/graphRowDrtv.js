@@ -6,8 +6,11 @@
 
   function graphRow() {
     return {
-      scope: { },
+      scope: {
+        name: '=?'
+      },
       restrict: 'E',
+      controller: 'graphRowCtrl',
       templateUrl: 'components/graphRow/graphRowTmpl.html'
     };
   }

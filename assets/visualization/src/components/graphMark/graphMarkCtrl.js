@@ -5,7 +5,7 @@
   .controller('graphMarkCtrl', ['$scope', graphMarkCtrl]);
 
   function graphMarkCtrl($scope) {
-
+    $scope.name = $scope.name || "Not given";
   }
 
 })();

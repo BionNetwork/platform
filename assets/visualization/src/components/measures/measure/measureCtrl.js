@@ -5,7 +5,7 @@
   .controller('measureCtrl', ['$scope', measureCtrl]);
 
   function measureCtrl($scope) {
-
+    $scope.name = $scope.name || 'Not given';
   }
 
 })();

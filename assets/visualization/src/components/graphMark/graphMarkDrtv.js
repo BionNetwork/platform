@@ -6,8 +6,11 @@
 
   function graphMark() {
     return {
-      scope: { },
+      scope: {
+        name: '=?'
+      },
       restrict: 'E',
+      controller: 'graphMarkCtrl',
       templateUrl: 'components/graphMark/graphMarkTmpl.html'
     };
   }

@@ -1,4 +1,4 @@
-(function() {
+;(function() {
   'use strict';
   angular
   .module('BI-visualization')
@@ -7,7 +7,7 @@
   function dimensions() {
     return {
       scope: {
-        items: '=',
+        items: '=?',
         setupItems: '=?'
       },
       restrict: 'E',

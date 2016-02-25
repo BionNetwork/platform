@@ -1,4 +1,4 @@
-(function() {
+;(function() {
   'use strict';
   angular
   .module('BI-visualization')
@@ -6,9 +6,15 @@
 
   function shelf() {
     return {
-      scope: { },
+      scope: {
+        items: '=?',
+        type: '=?',
+        addItem: '=?', onAddItem: '=?',
+        removeItem: '=?', onRemoveItem: '=?'
+      },
       restrict: 'E',
       transclude: true,
+      controller: 'shelfCtrl',
       templateUrl: 'shared/shelf/shelfTmpl.html'
     };
   }

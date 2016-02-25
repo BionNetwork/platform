@@ -5,7 +5,7 @@
   .controller('graphRowCtrl', ['$scope', graphRowCtrl]);
 
   function graphRowCtrl($scope) {
-
+    $scope.name = $scope.name || "Not given";
   }
 
 })();

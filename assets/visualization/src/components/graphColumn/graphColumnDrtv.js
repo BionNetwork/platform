@@ -6,8 +6,11 @@
 
   function graphColumn() {
     return {
-      scope: { },
+      scope: {
+        name: '=?'
+      },
       restrict: 'E',
+      controller: 'graphColumnCtrl',
       templateUrl: 'components/graphColumn/graphColumnTmpl.html'
     };
   }

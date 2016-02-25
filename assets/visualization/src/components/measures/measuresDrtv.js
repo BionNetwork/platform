@@ -7,7 +7,7 @@
   function measures() {
     return {
       scope: {
-        items: '=',
+        items: '=?',
         setupItems: '=?'
       },
       restrict: 'E',

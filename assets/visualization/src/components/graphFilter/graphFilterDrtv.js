@@ -6,8 +6,11 @@
 
   function graphFilter() {
     return {
-      scope: { },
+      scope: {
+        name: '=?'
+      },
       restrict: 'E',
+      controller: 'graphFilterCtrl',
       templateUrl: 'components/graphFilter/graphFilterTmpl.html'
     };
   }

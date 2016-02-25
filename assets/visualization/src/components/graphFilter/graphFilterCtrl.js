@@ -5,7 +5,7 @@
   .controller('graphFilterCtrl', ['$scope', graphFilterCtrl]);
 
   function graphFilterCtrl($scope) {
-
+    $scope.name = $scope.name || "Not given";
   }
 
 })();
