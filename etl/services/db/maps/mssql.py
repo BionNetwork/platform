@@ -59,8 +59,11 @@ for i in booleans:
     MSSQL_TYPES[i] = 'bool'
 
 cols_query = """
-    SELECT table_name, column_name, data_type FROM information_schema.columns
-            where table_name in {0} and table_catalog = '{1}' order by table_name;
+    SELECT table_name, column_name, data_type as column_type, is_nullable,
+        case when COLUMNPROPERTY(object_id(TABLE_NAME), COLUMN_NAME, 'IsIdentity') = 1
+        then 'extra' else null end
+        FROM information_schema.columns
+        where table_name in {0} and table_catalog = '{1}' order by table_name;
 """
 
 indexes_query = """

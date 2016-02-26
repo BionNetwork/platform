@@ -144,7 +144,7 @@ class MsSql(Database):
             for ig in igroup:
                 cols.append(ig[icol_name])
             ind_info["columns"] = cols
-            indexes[key[itable_name]].append(ind_info)
+            indexes[key[itable_name].lower()].append(ind_info)
 
         constraints = defaultdict(list)
         (c_table_name, c_col_name, c_name, c_type,
@@ -152,7 +152,7 @@ class MsSql(Database):
 
         for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
             for ig in igroup:
-                constraints[ikey].append({
+                constraints[ikey.lower()].append({
                     "c_col_name": ig[c_col_name],
                     "c_name": ig[c_name],
                     "c_type": ig[c_type],
@@ -165,12 +165,12 @@ class MsSql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type = xrange(3)
+        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
-            t_indexes = indexes[key]
-            t_consts = constraints[key]
+            t_indexes = indexes[key.lower()]
+            t_consts = constraints[key.lower()]
 
             for x in group:
                 is_index = is_unique = is_primary = False
@@ -188,16 +188,22 @@ class MsSql(Database):
                                     is_unique = True
                                     is_primary = True
 
-                columns[key].append({"name": col,
-                                     "type": (mssql_map.MSSQL_TYPES[cls.lose_brackets(x[col_type])]
-                                              or x[col_type]),
-                                     "is_index": is_index,
-                                     "is_unique": is_unique, "is_primary": is_primary})
+                columns[key.lower()].append({
+                    "name": col,
+                    "type": (
+                        mssql_map.MSSQL_TYPES[cls.lose_brackets(x[col_type])] or x[col_type]),
+                    "is_index": is_index,
+                    "is_unique": is_unique,
+                    "is_primary": is_primary,
+                    "origin_type": x[col_type],
+                    "is_nullable": x[is_nullable],
+                    "extra": x[extra_],
+                })
 
             # находим внешние ключи
             for c in t_consts:
                 if c['c_type'] == 'FOREIGN KEY':
-                    foreigns[key].append({
+                    foreigns[key.lower()].append({
                         "name": c['c_name'],
                         "source": {"table": key, "column": c["c_col_name"]},
                         "destination":

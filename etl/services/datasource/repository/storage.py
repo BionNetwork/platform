@@ -304,6 +304,9 @@ class RedisSourceService(object):
 
     @classmethod
     def filter_exists_tables(cls, source, tables):
+        """
+        Возвращает таблицы, которых нет в редисе в ранее выбранных коллекциях
+        """
         coll_counter = json.loads(cls.get_collection_counter(
             source.user_id, source.id))
         # список коллекций
