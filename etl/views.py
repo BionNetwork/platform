@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 
 import json
 from itertools import groupby
+import traceback
 
 from django.db.models import Q
 from django.core.paginator import Paginator
@@ -283,9 +284,11 @@ class BaseEtlView(BaseView):
             return self.json_response(
                     {'status': SUCCESS, 'data': data, 'message': ''})
         except (Datasource.DoesNotExist, ResponseError) as err:
+            traceback.print_exc()
             return self.json_response(
                 {'status': ERROR, 'code': err.code, 'message': err.message})
         except Exception as e:
+            traceback.print_exc()
             logger.exception(e.message)
             return self.json_response({
                 'status': ERROR,

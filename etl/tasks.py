@@ -182,9 +182,9 @@ class LoadMongodb(TaskProcessing):
                 collection.insert_many(data_to_insert, ordered=False)
                 current_collection.insert_many(
                     data_to_current_insert, ordered=False)
-                loaded_count += len(data_to_insert)
+                loaded_count += ind
                 print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-                    len(data_to_insert), loaded_count, rows_count)
+                    ind, loaded_count, rows_count)
             except Exception as e:
                 self.error_handling(e.message)
 
@@ -318,6 +318,7 @@ class LoadDb(TaskProcessing):
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
                 'meta_info': self.context['meta_info'],
+                'rows_count': rows_count,
             })
 
 
@@ -516,8 +517,7 @@ class LoadDimensions(TaskProcessing):
                 for ind in xrange(col_nums):
                     if ind in date_fields_order.keys():
                         # заменяем дату идентификатором из связой таблицы
-                        i = self.date_tables[
-                            date_fields_order[ind]][record[ind].date()]
+                        i = self.date_tables[record[ind].date()]
                         temp_dict.update({str(ind): i})
                     else:
                         temp_dict.update({str(ind): record[ind]})
@@ -582,47 +582,48 @@ class LoadDimensions(TaskProcessing):
         """
 
         self.date_tables = {}
+        start_date = None
+        end_date = None
         for table, columns in date_intervals_info:
             for column in columns:
-                self.date_tables.update(
-                    {TIME_COLUMN_NAME.format(table, column['name']): {}})
+                current_start_date = datetime.strptime(column['startDate'], "%d.%m.%Y").date()
+                current_end_date = datetime.strptime(column['endDate'], "%d.%m.%Y").date()
+                if not start_date:
+                    start_date, end_date = current_start_date, current_end_date
+                else:
+                    start_date = current_start_date if current_start_date < start_date else start_date
+                    end_date = current_end_date if current_end_date > end_date else end_date
 
-                LocalDbConnect(DataSourceService.get_table_create_query(
-                    self.gtm(TIME_TABLE.format(table, column['name'])),
-                    ', '.join(DataSourceService.get_date_table_names(DTCN.types))))
+        delta = end_date - start_date
 
-                start_day = datetime.strptime(column['startDate'], "%d.%m.%Y").date()
-                end_day = datetime.strptime(column['endDate'], "%d.%m.%Y").date()
-                delta = end_day - start_day
+        LocalDbConnect(DataSourceService.get_table_create_query(
+            self.gtm(TIME_TABLE),
+            ', '.join(DataSourceService.get_date_table_names(DTCN.types))))
 
-                insert_query = DataSourceService.get_table_insert_query(
-                    self.gtm(TIME_TABLE.format(table, column['name'])), 9)
-                insert_db_connect = LocalDbConnect(insert_query, execute=False)
+        insert_query = DataSourceService.get_table_insert_query(
+            self.gtm(TIME_TABLE), 9)
+        insert_db_connect = LocalDbConnect(insert_query, execute=False)
 
-                rows = []
-                for ind, cur_day in enumerate(range(delta.days + 1)):
-                    current_day = start_day + timedelta(days=cur_day)
-                    current_day_str = current_day.isoformat()
-                    month = current_day.month
-                    temp_dict = {}
-                    temp_dict.update(
-                        {
-                            '0': ind+1,
-                            '1': current_day_str,
-                            '2': calendar.day_name[current_day.weekday()],
-                            '3': current_day.year,
-                            '4': month,
-                            '5': current_day.strftime('%B'),
-                            '6': current_day.day,
-                            '7': current_day.isocalendar()[1],
-                            '8': int(math.ceil(month / 3)),
+        rows = []
+        for ind, cur_day in enumerate(range(delta.days + 1)):
+            current_day = start_date + timedelta(days=cur_day)
+            current_day_str = current_day.isoformat()
+            month = current_day.month
+            temp_dict = {
+                    '0': ind+1,
+                    '1': current_day_str,
+                    '2': calendar.day_name[current_day.weekday()],
+                    '3': current_day.year,
+                    '4': month,
+                    '5': current_day.strftime('%B'),
+                    '6': current_day.day,
+                    '7': current_day.isocalendar()[1],
+                    '8': int(math.ceil(month / 3)),
 
-                         }
-                    )
-                    rows.append(temp_dict)
-                    self.date_tables[TIME_COLUMN_NAME.format(
-                        table, column['name'])].update({current_day: ind + 1})
-                insert_db_connect.execute(rows, many=True)
+                 }
+            rows.append(temp_dict)
+            self.date_tables.update({current_day: ind + 1})
+        insert_db_connect.execute(rows, many=True)
 
 
 class LoadMeasures(LoadDimensions):
@@ -1122,35 +1123,35 @@ class CreateCube(TaskProcessing):
                     key="Key_%s" % table_name, type='TIME')
 
                 year = Attribute(
-                    name='Year', key_column=DTCN.YEAR, level_type='TimeYears'
+                    name='Year', key_column=DTCN.THE_YEAR, level_type='TimeYears'
                 )
                 quarter = Attribute(
                     name='Quarter', level_type='TimeQuarters',
-                    attr_key=Key(columns=[DTCN.YEAR, DTCN.QUARTER]),
-                    attr_name=Name(columns=['quarter'])
+                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.QUARTER]),
+                    attr_name=Name(columns=[DTCN.QUARTER])
                 )
                 month = Attribute(
-                    name='Month', level_type='TimeMonth',
-                    attr_key=Key(columns=[DTCN.YEAR, DTCN.MONTH]),
-                    attr_name=Name(columns=[DTCN.MONTH])
+                    name='Month', level_type='TimeMonths',
+                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
+                    attr_name=Name(columns=[DTCN.MONTH_THE_YEAR])
                 )
                 week = Attribute(
-                    name='Week', level_type='TimeWeek',
-                    attr_key=Key(columns=[DTCN.YEAR, DTCN.WEEK_OF_YEAR]),
+                    name='Week', level_type='TimeWeeks',
+                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.WEEK_OF_YEAR]),
                     attr_name=Name(columns=[DTCN.WEEK_OF_YEAR])
                 )
                 day = Attribute(
                     name='Day', level_type='TimeDays',
                     attr_key=Key(columns=[DTCN.TIME_ID]),
-                    attr_name=Name(columns=[DTCN.DAY])
+                    attr_name=Name(columns=[DTCN.DAY_OF_MONTH])
                 )
                 month_name = Attribute(
                     name='Month Name',
-                    attr_key=Key(columns=[DTCN.YEAR, DTCN.MONTH]),
-                    attr_name=Name(columns=[DTCN.MONTH_TEXT])
+                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
+                    attr_name=Name(columns=[DTCN.THE_MONTH])
                 )
                 date = Attribute(
-                    name='Date', key_column=DTCN.RAW_DATE
+                    name='Date', key_column=DTCN.THE_DATE
                 )
                 time_id = Attribute(
                     name="Key_%s" % table_name, key_column=DTCN.TIME_ID

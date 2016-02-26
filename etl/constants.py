@@ -41,7 +41,7 @@ STTM_DATASOURCE_KEYS = 'sttm_datasource_keys'  # Текущее состояни
 STTM_DATASOURCE_KEYSALL = 'sttm_datasource_keysall'  # Таблица всех ключей
 DIMENSIONS = 'dimensions'  # Таблица размерностей
 MEASURES = 'measures'  # Таблица мер
-TIME_TABLE = 'time_{0}__{1}'  # Таблица дат (time_{table_name}__{col})
+TIME_TABLE = 'time_by_day'  # Таблица дат
 
 # Строки формирования названия колонок
 STANDART_COLUMN_NAME = '{0}__{1}'

@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 from collections import defaultdict
 from itertools import groupby
+import datetime
 from django.conf import settings
 
 from etl.constants import FIELD_NAME_SEP
@@ -395,20 +396,23 @@ class Database(object):
             cols_info(list): Информация о колонках
 
         Returns:
-
+            dict: Информация о крайних значениях дат
         """
         res = {}
         interval_queries = self.get_interval_query(source, cols_info)
+        now = datetime.datetime.now()
         for table, col, query in interval_queries:
             start_date, end_date = self.get_query_result(query)[0]
             if res.get(table, None):
                 res[table].append({
+                    'last_updated': now,
                     'name': col,
                     'startDate': start_date,
                     'endDate': end_date,
                 })
             else:
                 res[table] = [{
+                    'last_updated': now,
                     'name': col,
                     'startDate': start_date,
                     'endDate': end_date,
@@ -589,7 +593,7 @@ class Database(object):
                 col_names.append('"{0}" {1}'.format(
                     field_name, field['type']))
             else:
-                col_names.append('"{0}_id" integer REFERENCES time_{0}_{1} (time_id)'.format(
+                col_names.append('"{0}_id" integer REFERENCES time_by_day_{1} (time_id)'.format(
                     field_name, ref_key))
 
         return col_names

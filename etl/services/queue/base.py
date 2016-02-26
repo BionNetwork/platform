@@ -727,29 +727,30 @@ class DateTableColumnsName(BaseEnum):
     """
         Статусы тасков
     """
-    TIME_ID, RAW_DATE, WEEKDAY, YEAR, MONTH, MONTH_TEXT, DAY, WEEK_OF_YEAR, QUARTER = (
-        'time_id', 'raw_date', 'weekday', 'year', 'month', 'month_text',
-        'day', 'week_of_year', 'quarter')
+    (TIME_ID, THE_DATE, THE_DAY, THE_YEAR, MONTH_THE_YEAR, THE_MONTH,
+        DAY_OF_MONTH, WEEK_OF_YEAR, QUARTER) = (
+        'time_id', 'the_date', 'the_day', 'the_year', 'month_of_year',
+        'the_month', 'day_of_month', 'week_of_year', 'quarter')
 
     values = {
         TIME_ID: u'id',
-        RAW_DATE: u'Дата',
-        WEEKDAY: u'День недели',
-        YEAR: u'Год',
-        MONTH: u'Месяц',
-        MONTH_TEXT: u'Месяц текст',
-        DAY: u'День',
+        THE_DATE: u'Дата',
+        THE_DAY: u'День недели',
+        THE_YEAR: u'Год',
+        MONTH_THE_YEAR: u'Месяц',
+        THE_MONTH: u'Месяц текст',
+        DAY_OF_MONTH: u'День',
         WEEK_OF_YEAR: u'Неделя года',
         QUARTER: u'Квартал',
     }
 
     types = [
-        (RAW_DATE, 'timestamp'),
-        (WEEKDAY, 'text'),
-        (YEAR, 'integer'),
-        (MONTH, 'integer'),
-        (MONTH_TEXT, 'text'),
-        (DAY, 'integer'),
+        (THE_DATE, 'timestamp'),
+        (THE_DAY, 'text'),
+        (THE_YEAR, 'integer'),
+        (MONTH_THE_YEAR, 'integer'),
+        (THE_MONTH, 'text'),
+        (DAY_OF_MONTH, 'integer'),
         (WEEK_OF_YEAR, 'integer'),
         (QUARTER, 'integer'),
     ]
