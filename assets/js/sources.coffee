@@ -571,7 +571,7 @@ renameColumn = (headerId) ->
     return
 
 cancelRenameColumn = (headerId) ->
-    $('#text' + headerId).show();
+    $('#text-' + headerId).show();
     $('#input-' + headerId).hide();
     $('#cancel-' + headerId).hide();
     return
