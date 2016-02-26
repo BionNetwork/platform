@@ -8,11 +8,15 @@
     [].forEach.call(element, function(item) {
       item.addEventListener('dragover', function(e) {
         e.preventDefault();
-        e.stopPropagation();
-      });
+      }, true);
+      item.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+      }, true);
       item.addEventListener('drop', function(e) {
-        console.log("drop finished", e.dataTransfer.getData('text/plain'), e);
-      }, false);
+        scope.addItem(JSON.parse(e.dataTransfer.getData('text/plain')));
+        scope.$digest();    // I hate you, Angular!!
+        e.preventDefault();
+      }, true);
     });
   }
 

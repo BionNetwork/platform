@@ -6,9 +6,14 @@
 
   function cube() {
     return {
-      scope: { },
+      scope: {
+        setupMetadata: '=?',
+        getDimensions: '=?',
+        getMeasures: '=?'
+      },
       transclude: true,
       restrict: 'E',
+      controller: 'cubeCtrl',
       templateUrl: 'components/cube/cubeTmpl.html'
     };
   }

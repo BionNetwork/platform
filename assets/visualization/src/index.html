@@ -21,28 +21,34 @@ shelf {
 }
     </style>
   </head>
-  <body>
-    <cube>
-      <div>
-        <div class="col-xs-3" ng-controller="testController">
-          <button ng-click="loadMetadata()">Load Metadata</button>
-          <dimensions items=itemsDimension setup-items=setupFnDimensions>
-          </dimensions>
-          <measures items=itemsMeasure setup-items=setupFnMeasures>
-          </measures>
-        </div>
-        <div class="col-xs-9">
-          <shelf class="col-xs-4" type="typeShelfGraphFilter">
-            Filter
-          </shelf>
-          <shelf class="col-xs-4" type="typeShelfGraphColumn">
-            Column
-          </shelf>
-          <shelf class="col-xs-4" type="typeShelfGraphRow">
-            Row
-          </shelf>
-        </div>
+  <body ng-controller="glueController">
+    <button ng-click="loadMetadata()">Load Metadata</button>
+    <cube setup-metadata="API.setupMetadata"
+          get-dimensions="API.getDimensions"
+          get-measures="API.getMeasures">
+
+      <div class="col-xs-3">
+        <dimensions setup-items="API.setupDimensions"></dimensions>
+        <measures setup-items="API.setupMeasures"></measures>
       </div>
+      <div class="col-xs-9">
+        <shelf class="col-xs-4"
+               type="typeShelfGraphFilter"
+               on-add-item="API.shelfGraphFilterOnAddItem">
+          Filter
+        </shelf>
+        <shelf class="col-xs-4"
+               type="typeShelfGraphColumn"
+               on-add-item="API.shelfGraphColumnOnAddItem">
+          Column
+        </shelf>
+        <shelf class="col-xs-4"
+               type="typeShelfGraphRow"
+               on-add-item="API.shelfGraphRowOnAddItem">
+          Row
+        </shelf>
+      </div>
+
     </cube>
   </body>
 
@@ -54,27 +60,43 @@ shelf {
   <script>
 angular
   .module('BI-visualization')
-  .controller('testController', ['$scope', testController]);
+  .controller('glueController', ['$scope', glueController]);
 
-function testController($scope) {
+function glueController($scope) {
+  $scope.API = {
+    shelfGraphFilterOnAddItem: shelfGraphFilterOnAddItem,
+    shelfGraphColumnOnAddItem: shelfGraphColumnOnAddItem,
+    shelfGraphRowOnAddItem: shelfGraphRowOnAddItem
+  };
+
   $scope.typeShelfGraphFilter = "graph-filter";
   $scope.typeShelfGraphRow = "graph-row";
   $scope.typeShelfGraphColumn = "graph-column";
 
   $scope.loadMetadata = function loadMetadata() {
-    var itemsDimension = [
-      { name: 'column1', role: 'dimension' },
-      { name: 'column2', role: 'dimension' }
+    var metadata = [
+      { name: 'column1', type: 'string'  },
+      { name: 'column2', type: 'string'  },
+      { name: 'column3', type: 'float'   },
+      { name: 'column4', type: 'integer' }
     ];
 
-    var itemsMeasure = [
-      { name: 'column3', role: 'measure' },
-      { name: 'column4', role: 'measure' }
-    ];
-
-    $scope.setupFnDimensions(itemsDimension);
-    $scope.setupFnMeasures(itemsMeasure);
+    $scope.API.setupMetadata(metadata);
+    $scope.API.setupDimensions($scope.API.getDimensions());
+    $scope.API.setupMeasures($scope.API.getMeasures());
   };
+
+  function shelfGraphFilterOnAddItem(item) {
+    console.log(item, "was added");
+  }
+
+  function shelfGraphRowOnAddItem(item) {
+    console.log(item, "was added");
+  }
+
+  function shelfGraphColumnOnAddItem(item) {
+    console.log(item, "was added");
+  }
 }
   </script>
 </html>

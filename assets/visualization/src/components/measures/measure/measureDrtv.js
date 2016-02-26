@@ -7,18 +7,22 @@
   function link(scope, element, attrs, controller, transcludeFn) {
     [].forEach.call(element, function(item) {
       item.addEventListener('dragstart', function(e) {
-        var data = { name: scope.name, type: 'measure' };
+        var data = { name: scope.name, type: scope.type, role: scope.role };
         e.dataTransfer.setData('text/plain', JSON.stringify(data));
         e.dataTransfer.effectAllowed = "all";
-        e.stopPropagation();
-      }, false);
+      }, true);
+      item.addEventListener('dragend', function(e) {
+        e.preventDefault();
+      }, true);
     });
   }
 
   function measure() {
     return {
       scope: {
-        name: '=?'
+        name: '=?',
+        type: '=?',
+        role: '=?'
       },
       restrict: 'E',
       controller: 'measureCtrl',

@@ -30,12 +30,15 @@
       _measures = [];
 
       _metadata.forEach(function(item) {
-        type = item.type.toUpperCase();
+        var _item = JSON.parse(JSON.stringify(item));
+        type = _item.type.toUpperCase();
         if (continuosType.indexOf(type) != -1) {
-          _measures.push(item);
+          _item.role = "measure";
+          _measures.push(_item);
         }
         else {
-          _dimensions.push(item);
+          _item.role = "dimension";
+          _dimensions.push(_item);
         }
       });
     };

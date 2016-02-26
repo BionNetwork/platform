@@ -10,8 +10,8 @@
 
   function measuresCtrl($scope, $measures) {
     $scope.items = $scope.items || [];
-    $scope.setupItems = function setupItems(array) {
-      $measures.setupItems(array);
+    $scope.setupItems = function setupItems(items) {
+      $measures.setupItems(items);
       $scope.items = $measures.getItems();
     }
     $scope.getItemByName = function getItemByName(name) {

@@ -27,7 +27,6 @@
       item._id = lastId++;
       $scope.onAddItem(item);
       $scope.items.push(item);
-      return true;
     };
 
     $scope.getItemBy_id = function getItemBy_id(_id) {
@@ -48,7 +47,7 @@
         if ($scope.items[i]._id === item._id) {
           $scope.onRemoveItem($scope.items[i]);
           $scope.items.splice(i, 1);
-          return;
+          break;
         }
       }
     };
