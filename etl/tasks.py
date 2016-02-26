@@ -1042,6 +1042,7 @@ class CreateTriggers(TaskProcessing):
 
         self.next_task_params = (
             GENERATE_DIMENSIONS, load_dimensions, {
+                'db_update': self.context['db_update'],
                 'checksum': self.key,
                 'user_id': self.user_id,
                 'source_id': self.context['source_id'],
@@ -1201,7 +1202,7 @@ class CreateCube(TaskProcessing):
 
         if resp.json()['status'] == 'success':
             cube_id = resp.json()['id']
-            logger.info('Created cube ' + cube_id)
+            logger.info('Created cube %s' % cube_id)
         else:
             self.error_handling(resp.json()['message'])
             logger.error('Error creating cube')
