@@ -70,7 +70,7 @@ class TaskProcessing(object):
         self.next_task_params = None
         self.name = self.__class__.__name__
 
-    def gtm(self, prefix):
+    def get_table(self, prefix):
         """
         Формирование название таблицы из префикса и ключа
         Args:

@@ -141,11 +141,11 @@ class LoadMongodb(TaskProcessing):
 
         # создаем коллекцию и индексы в Mongodb
         collection = MongodbConnection(
-            self.gtm(STTM_DATASOURCE), indexes=[
+            self.get_table(STTM_DATASOURCE), indexes=[
                 ('_id', ASC), ('_state', ASC), ('_date', ASC)]).collection
 
         # Коллекция с текущими данными
-        current_collection_name = self.gtm(STTM_DATASOURCE_KEYS)
+        current_collection_name = self.get_table(STTM_DATASOURCE_KEYS)
         MongodbConnection.drop(current_collection_name)
         current_collection = MongodbConnection(
             current_collection_name, indexes=[('_id', ASC)]).collection
@@ -230,7 +230,7 @@ class LoadDb(TaskProcessing):
                 TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)].lower())))
             clear_col_names.append(STANDART_COLUMN_NAME.format(t, c))
 
-        source_table_name = self.gtm(STTM_DATASOURCE)
+        source_table_name = self.get_table(STTM_DATASOURCE)
         source_collection = MongodbConnection(source_table_name).collection
 
         if not db_update:
@@ -382,7 +382,7 @@ class LoadDimensions(TaskProcessing):
             create_col_names = DataSourceService.get_dim_measure_table_names(
                 self.actual_fields, self.key)
             LocalDbConnect(DataSourceService.get_table_create_query(
-                self.gtm(self.table_prefix), ', '.join(create_col_names)))
+                self.get_table(self.table_prefix), ', '.join(create_col_names)))
 
             try:
                 self.save_fields()
@@ -500,11 +500,11 @@ class LoadDimensions(TaskProcessing):
         binary_types_dict = get_binary_types_dict(dim_meas_cols, col_types)
 
         local_insert = LocalDbConnect(DataSourceService.get_table_insert_query(
-            self.gtm(self.table_prefix), col_nums), execute=False)
+            self.get_table(self.table_prefix), col_nums), execute=False)
 
         step, offset = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT, 0
         source_connect = LocalDbConnect(DataSourceService.get_page_select_query(
-            self.gtm(STTM_DATASOURCE), column_names), execute=False)
+            self.get_table(STTM_DATASOURCE), column_names), execute=False)
 
         while True:
             rows = source_connect.fetchall((step, offset,))
@@ -548,8 +548,8 @@ class LoadDimensions(TaskProcessing):
             select_cols.append('{1}{0}{1}'.format(col, sep))
 
         query_params = dict(
-            new_table=self.gtm(self.table_prefix),
-            orig_table=self.gtm(STTM_DATASOURCE),
+            new_table=self.get_table(self.table_prefix),
+            orig_table=self.get_table(STTM_DATASOURCE),
             del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
             insert_cols=','.join(insert_cols),
             cols="({0})".format(','.join(select_cols)),
@@ -588,7 +588,7 @@ class LoadDimensions(TaskProcessing):
                     {TIME_COLUMN_NAME.format(table, column['name']): {}})
 
                 LocalDbConnect(DataSourceService.get_table_create_query(
-                    self.gtm(TIME_TABLE.format(table, column['name'])),
+                    self.get_table(TIME_TABLE.format(table, column['name'])),
                     ', '.join(DataSourceService.get_date_table_names(DTCN.types))))
 
                 start_day = datetime.strptime(column['startDate'], "%d.%m.%Y").date()
@@ -596,7 +596,7 @@ class LoadDimensions(TaskProcessing):
                 delta = end_day - start_day
 
                 insert_query = DataSourceService.get_table_insert_query(
-                    self.gtm(TIME_TABLE.format(table, column['name'])), 9)
+                    self.get_table(TIME_TABLE.format(table, column['name'])), 9)
                 insert_db_connect = LocalDbConnect(insert_query, execute=False)
 
                 rows = []
@@ -702,17 +702,17 @@ class UpdateMongodb(TaskProcessing):
         # находим бинарные данные для 1) создания ключей 2) инсерта в монго
         binary_types_list = get_binary_types_list(cols, col_types)
 
-        collection = MongodbConnection(self.gtm(STTM_DATASOURCE)).collection
+        collection = MongodbConnection(self.get_table(STTM_DATASOURCE)).collection
 
         # Коллекция с текущими данными
-        current_collection_name = self.gtm(STTM_DATASOURCE_KEYS)
+        current_collection_name = self.get_table(STTM_DATASOURCE_KEYS)
         MongodbConnection.drop(current_collection_name)
         current_collection = MongodbConnection(
             current_collection_name, indexes=[('_id', ASC)]).collection
 
         # Дельта-коллекция
         delta_collection = MongodbConnection(
-            self.gtm(STTM_DATASOURCE_DELTA), indexes=[
+            self.get_table(STTM_DATASOURCE_DELTA), indexes=[
                 ('_id', ASC), ('_state', ASC), ('_date', ASC)]).collection
 
         source_query = DataSourceService.get_source_rows_query(
@@ -791,12 +791,12 @@ class DetectRedundant(TaskProcessing):
         """
         self.key = self.context['checksum']
         source_collection = MongodbConnection(
-            self.gtm(STTM_DATASOURCE_KEYSALL)).collection
+            self.get_table(STTM_DATASOURCE_KEYSALL)).collection
         current_collection = MongodbConnection(
-            self.gtm(STTM_DATASOURCE_KEYSALL)).collection
+            self.get_table(STTM_DATASOURCE_KEYSALL)).collection
 
         # Обновляем коллекцию всех ключей
-        all_keys_collection_name = self.gtm(STTM_DATASOURCE_KEYSALL)
+        all_keys_collection_name = self.get_table(STTM_DATASOURCE_KEYSALL)
         all_keys_collection = MongodbConnection(
             all_keys_collection_name,
             indexes=[('_state', ASC), ('_deleted', ASC)]).collection
@@ -851,10 +851,10 @@ class DeleteRedundant(TaskProcessing):
     def processing(self):
         self.key = self.context['checksum']
         del_collection = MongodbConnection(
-            self.gtm(STTM_DATASOURCE_KEYSALL)).collection
+            self.get_table(STTM_DATASOURCE_KEYSALL)).collection
 
         delete_connect = LocalDbConnect(DataSourceService.cdc_key_delete_query(
-            self.gtm(STTM_DATASOURCE)), execute=False)
+            self.get_table(STTM_DATASOURCE)), execute=False)
 
         limit = 100
         page = 1
@@ -1082,18 +1082,18 @@ class CreateCube(TaskProcessing):
         physical_schema = PhysicalSchema()
 
         dimension_table, measure_table = (
-            Table(self.gtm(DIMENSIONS)), Table(self.gtm(MEASURES)))
+            Table(self.get_table(DIMENSIONS)), Table(self.get_table(MEASURES)))
         physical_schema.add_tables([dimension_table, measure_table])
 
         cube = CubeSchema(name=cube_key, caption=cube_key,
                           visible=True, cache=False, enabled=True)
 
         dimension = DimensionSchema(
-                name='Dim Table', table=self.gtm(DIMENSIONS), key="Cdc Key")
+                name='Dim Table', table=self.get_table(DIMENSIONS), key="Cdc Key")
         dimension.add_attribute(Attribute(name="Cdc Key", key_column="cdc_key"))
 
         measure_group = MeasureGroup(
-            name=self.gtm(MEASURES), table=self.gtm(MEASURES))
+            name=self.get_table(MEASURES), table=self.get_table(MEASURES))
 
         for dim in dimensions:
             # Если не размерность времени, то создаем атрибуты внутри уже
