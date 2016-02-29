@@ -84,17 +84,6 @@ class Oracle(Database):
         return col_records, index_records, const_records
 
     @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        Запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return cls.db_map.stat_query.format(tables_str, source.db)
-
-    @classmethod
     def processing_records(cls, col_records, index_records, const_records):
         """
         обработка колонок, констраинтов, индексов соурса

@@ -115,7 +115,7 @@ constraints_query = """
 """
 
 stat_query = """
-    SELECT t.NAME, p.rows, (sum(a.used_pages) * 8)
+    SELECT t.NAME, p.rows, (sum(a.used_pages) * 8192)
     FROM sys.tables t
     INNER JOIN sys.indexes i ON t.OBJECT_ID = i.object_id
     INNER JOIN sys.partitions p ON i.object_id = p.OBJECT_ID AND i.index_id = p.index_id
@@ -125,7 +125,7 @@ stat_query = """
     GROUP BY t.NAME, p.rows
 """
 
-rows_query = """
+row_query = """
     WITH Results_CTE AS
     (SELECT {0}, ROW_NUMBER() OVER (ORDER BY {4}) AS RowNum FROM {1})
     SELECT {5} FROM Results_CTE

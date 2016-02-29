@@ -16,6 +16,8 @@ from etl.services.db.maps import mssql as mssql_map
 class MsSql(Database):
     """Управление источником данных MSSQL"""
 
+    db_map = mssql_map
+
     @staticmethod
     def get_connection(conn_info):
         """
@@ -59,9 +61,9 @@ class MsSql(Database):
 
         return records
 
-    def get_rows(self, cols, structure):
+    def get_rows_query(self, cols, structure):
         """
-        достает строки из соурса для превью
+        достает строки из соурса с лимит оффсетом
         :param cols: list
         :param structure: dict
         :return: list
@@ -85,13 +87,9 @@ class MsSql(Database):
         sel_cols_str2 = ', '.join(
             [sel_col2.format(**x) for x in cols])
 
-        query = self.get_rows_query().format(
-            sel_cols_str1, query_join,
-            settings.ETL_COLLECTION_PREVIEW_LIMIT, 0,
+        return self.db_map.row_query.format(
+            sel_cols_str1, query_join, '{0}', '{1}',
             group_cols_str, sel_cols_str2)
-
-        records = self.get_query_result(query)
-        return records
 
     @staticmethod
     def _get_columns_query(source, tables):
@@ -213,19 +211,9 @@ class MsSql(Database):
                     })
         return columns, indexes, foreigns
 
-    @staticmethod
-    def get_rows_query():
+    def get_structure_rows_number(self, structure, cols):
         """
-        возвращает селект запрос c лимитом, оффсетом
-        :return: str
+        возвращает примерное кол-во строк в запросе для планирования
         """
-        return mssql_map.rows_query
-
-    @staticmethod
-    def get_statistic_query(source, tables):
-        """
-        запрос для статистики
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        stats_query = mssql_map.stat_query.format(tables_str, source.db)
-        return stats_query
+        # FIXME не понятно как доставать
+        return 0

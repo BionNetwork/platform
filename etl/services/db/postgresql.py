@@ -72,17 +72,6 @@ class Postgresql(Database):
         indexes_query = pgsql_map.indexes_query.format(tables_str)
         return cols_query, constraints_query, indexes_query
 
-    @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return cls.db_map.stat_query.format(tables_str)
-
     @staticmethod
     def local_table_create_query(key_str, cols_str):
         """

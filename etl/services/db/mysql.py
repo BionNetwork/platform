@@ -91,17 +91,6 @@ class Mysql(Database):
 
         return cols_query, constraints_query, indexes_query
 
-    @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return mysql_map.stat_query.format(tables_str, source.db)
-
     @staticmethod
     def remote_table_create_query():
         """

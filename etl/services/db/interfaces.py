@@ -329,7 +329,8 @@ class Database(object):
         Returns:
             str: Строка запроса для получения статистичеких данных
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+        return cls.db_map.stat_query.format(tables_str, source.db)
 
     def get_statistic(self, source, tables):
         """
