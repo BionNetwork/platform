@@ -469,7 +469,6 @@ class LoadDimensions(TaskProcessing):
                     STANDART_COLUMN_NAME.format(table, field['name']))
         return column_names
 
-
     def filter_columns(self, cols):
         """
         Достаем инфу только тех колонок, которые используются
@@ -611,13 +610,16 @@ class LoadDimensions(TaskProcessing):
         insert_query = DataSourceService.get_table_insert_query(
             self.get_table(TIME_TABLE), 9)
         insert_db_connect = LocalDbConnect(insert_query, execute=False)
+        none_row = {'0': 0}
+        none_row.update({str(x): None for x in range(1, 9)})
+        insert_db_connect.execute([none_row], many=True)
 
         rows = []
         for ind, cur_day in enumerate(range(delta.days + 1)):
             current_day = start_date + timedelta(days=cur_day)
             current_day_str = current_day.isoformat()
             month = current_day.month
-            temp_dict = {
+            rows.append({
                     '0': ind+1,
                     '1': current_day_str,
                     '2': calendar.day_name[current_day.weekday()],
@@ -628,8 +630,7 @@ class LoadDimensions(TaskProcessing):
                     '7': current_day.isocalendar()[1],
                     '8': int(math.ceil(month / 3)),
 
-                 }
-            rows.append(temp_dict)
+                 })
             self.date_tables.update({current_day: ind + 1})
         insert_db_connect.execute(rows, many=True)
 
