@@ -4,7 +4,8 @@ from __future__ import unicode_literals
 import xmltodict
 import logging
 
-from core.models import Cube, Dimension, Measure
+from core.models import (Cube, Dimension, Measure, DatasourceMeta,
+                         DatasourceMetaKeys)
 from core.views import BaseViewNoLogin
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from django.db import transaction
@@ -106,28 +107,36 @@ class GetSchemaView(BaseViewNoLogin):
 
 class GetMeasureDataView(BaseViewNoLogin):
     """
-    Получение информации меры
+    Получение информации о мерах
     """
 
     def get(self, request, *args, **kwargs):
-        measure_id = kwargs.get('id')
+        cube_id = kwargs.get('id')
+
         try:
-            measure = Measure.objects.get(id=measure_id)
-        except Measure.DoesNotExist:
+            cube = Cube.objects.get(id=cube_id)
+        except Cube.DoesNotExist:
             return self.json_response({
                 'status': ERROR,
-                'message': "No measure with id={0}".format(measure_id)
+                'message': "No cube with id={0}".format(cube_id)
             })
 
-        data = {
-            "id": measure_id,
+        key = cube.name.split('cube_')[1]
+
+        meta_ids = DatasourceMetaKeys.objects.filter(
+            value=key).values_list('meta_id', flat=True)
+
+        measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+
+        data = map(lambda measure:{
+            "id": measure.id,
             "name": measure.name,
             "title": measure.title,
             "type": measure.type,
             "aggregator": measure.aggregator,
             "format_string": measure.format_string,
             "visible": measure.visible,
-        }
+        }, measures)
 
         return self.json_response({'data': data, })
 
@@ -138,23 +147,31 @@ class GetDimensionDataView(BaseViewNoLogin):
     """
 
     def get(self, request, *args, **kwargs):
-        dimension_id = kwargs.get('id')
+        cube_id = kwargs.get('id')
+
         try:
-            dimension = Dimension.objects.get(id=dimension_id)
-        except Dimension.DoesNotExist:
+            cube = Cube.objects.get(id=cube_id)
+        except Cube.DoesNotExist:
             return self.json_response({
                 'status': ERROR,
-                'message': "No dimension with id={0}".format(dimension_id)
+                'message': "No cube with id={0}".format(cube_id)
             })
 
-        data = {
-            "id": dimension_id,
+        key = cube.name.split('cube_')[1]
+
+        meta_ids = DatasourceMetaKeys.objects.filter(
+            value=key).values_list('meta_id', flat=True)
+
+        dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+
+        data = map(lambda dimension: {
+            "id": dimension.id,
             "name": dimension.name,
             "title": dimension.title,
             "type": dimension.get_dimension_type(),
             "visible": dimension.visible,
             "high_cardinality": dimension.high_cardinality,
             "data": dimension.data,
-        }
+        }, dimensions)
 
         return self.json_response({'data': data, })
