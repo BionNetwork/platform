@@ -1,28 +1,39 @@
 var gulp = require('gulp'),
     concat = require('gulp-concat'),
     gls = require('gulp-live-server'),
+    less = require('gulp-less'),
     paths = {
       src: 'src/**/*',
       static: 'dist',
+      less: ['src/less/**/*.less', 'src/less/*.less'], distStyles: 'dist',
       templates: 'src/**/*.html', distTemplates: 'dist',
-      scripts: 'src/**/*.js', distScriptPath: 'dist', distScriptFilename: 'main.js',
+      scripts: 'src/**/*.js', distScript: 'dist',
+      distStylesFilename: 'style.css', distScriptFilename: 'main.js',
       dist: 'dist/**/*'
     };
 
+gulp.task('less', function () {
+  return gulp
+    .src(paths.less)
+    .pipe(less())
+    .pipe(concat(paths.distStylesFilename))
+    .pipe(gulp.dest(paths.distStyles));
+});
+
 gulp.task('scripts', function() {
   return gulp
-    .src([paths.scripts])
+    .src(paths.scripts)
     .pipe(concat(paths.distScriptFilename))
-    .pipe(gulp.dest(paths.distScriptPath));
+    .pipe(gulp.dest(paths.distScript));
 });
 
 gulp.task('templates', function() {
   return gulp
-    .src([paths.templates])
+    .src(paths.templates)
     .pipe(gulp.dest(paths.distTemplates));
 });
 
-gulp.task('build', ['templates', 'scripts']);
+gulp.task('build', ['less', 'templates', 'scripts']);
 
 gulp.task('serve', function() {
   var server = gls.static(paths.static, 8888);
@@ -35,6 +46,7 @@ gulp.task('serve', function() {
 });
 
 gulp.task('watch', function() {
+  gulp.watch(paths.less, ['less']);
   gulp.watch([paths.scripts], ['scripts']);
   gulp.watch([paths.templates], ['templates']);
 });
