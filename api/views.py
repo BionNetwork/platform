@@ -29,10 +29,16 @@ class ImportSchemaView(BaseViewNoLogin):
 
         try:
             with transaction.atomic():
-                cube, created = Cube.objects.get_or_create(
-                    name=key,
-                    user_id=post.get('user_id'),
-                )
+                try:
+                    cube = Cube.objects.get(
+                        name=key,
+                        user_id=post.get('user_id'),
+                    )
+                except Cube.DoesNotExist:
+                    cube = Cube(
+                        name=key,
+                        user_id=post.get('user_id'),
+                    )
                 cube.data = data
                 cube.save()
 
