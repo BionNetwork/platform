@@ -86,18 +86,19 @@ class Database(object):
         """
         return str_.split('(')[0].lower()
 
-    def get_query_result(self, query):
+    def get_query_result(self, query, args=None):
         """
         Получаем результат запроса
 
         Args:
             query(str): Строка запроса
+            args(tuple): Набор аргуметов для запроса
 
         Return:
             list: Результирующие данные
         """
         cursor = self.connection.cursor()
-        cursor.execute(query)
+        cursor.execute(query, args)
         return cursor.fetchall()
 
     @staticmethod
@@ -287,10 +288,10 @@ class Database(object):
             list of tuple: Данные по колонкам
         """
 
-        query = self.get_rows_query(cols, structure).format(
-            settings.ETL_COLLECTION_PREVIEW_LIMIT, 0)
+        query = self.get_rows_query(cols, structure)
 
-        return self.get_query_result(query)
+        return self.get_query_result(
+            query, (settings.ETL_COLLECTION_PREVIEW_LIMIT, 0))
 
     @staticmethod
     def get_separator():

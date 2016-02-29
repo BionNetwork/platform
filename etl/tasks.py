@@ -459,8 +459,16 @@ class LoadDimensions(TaskProcessing):
         """
         Возвращает имена колонки вида 'table__column'
         """
-        return map(lambda (table, field): STANDART_COLUMN_NAME.format(
-                    table, field['name']), self.actual_fields)
+        column_names = []
+        for table, field in self.actual_fields:
+            if field['type'] == 'timestamp':
+                column_names.append(
+                TIME_COLUMN_NAME.format(table, field['name']))
+            else:
+                column_names.append(
+                    STANDART_COLUMN_NAME.format(table, field['name']))
+        return column_names
+
 
     def filter_columns(self, cols):
         """
