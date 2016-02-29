@@ -1,73 +1,207 @@
+<!DOCTYPE html>
 <html ng-app="BI-visualization">
-  <head>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>AdminLTE 2 | Dashboard</title>
+  <!-- Tell the browser to be responsive to screen width -->
+  <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
+  <!-- Bootstrap 3.3.5 -->
+  <link rel="stylesheet" href="bower_components/AdminLTE/bootstrap/css/bootstrap.min.css">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+  <!-- Ionicons -->
+  <link rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
+  <!-- jvectormap -->
+  <link rel="stylesheet" href="bower_components/AdminLTE/plugins/jvectormap/jquery-jvectormap-1.2.2.css">
+  <!-- Theme style -->
+  <link rel="stylesheet" href="bower_components/AdminLTE/dist/css/AdminLTE.min.css">
+  <!-- AdminLTE Skins. Choose a skin from the css/skins
+       folder instead of downloading all of them to reduce the load. -->
+  <link rel="stylesheet" href="bower_components/AdminLTE/dist/css/skins/_all-skins.min.css">
+  <link rel="stylesheet" href="style.css">
+  <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+  <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+  <![endif]-->
+  <script src="//localhost:35729/livereload.js"></script>
+</head>
+<body ng-controller="glueController" class="hold-transition skin-blue sidebar-mini">
+<cube setup-metadata="API.setupMetadata"
+      get-dimensions="API.getDimensions"
+      get-measures="API.getMeasures"
+      on-add-graph-filter="API.onAddGraphFilter"
+      on-add-graph-column="API.onAddGraphColumn"
+      on-add-graph-row="API.onAddGraphRow"
+      register-graph-data="API.registerGraphData">
+</cube>
+<div class="wrapper">
 
-    <!-- Bootstrap -->
-    <link href="bower_components/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
+  <header class="main-header">
 
-    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
-    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
-    <!--[if lt IE 9]>
-      <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
-      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
-    <![endif]-->
+    <!-- Logo -->
+    <a href="index2.html" class="logo">
+      <!-- mini logo for sidebar mini 50x50 pixels -->
+      <span class="logo-mini"><b>A</b>LT</span>
+      <!-- logo for regular state and mobile devices -->
+      <span class="logo-lg"><b>Admin</b>LTE</span>
+    </a>
 
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="//localhost:35729/livereload.js"></script>
+    <!-- Header Navbar: style can be found in header.less -->
+    <nav class="navbar navbar-static-top" role="navigation">
+      <!-- Sidebar toggle button-->
+      <a href="#" class="sidebar-toggle" data-toggle="offcanvas" role="button">
+        <span class="sr-only">Toggle navigation</span>
+      </a>
+      <!-- Navbar Right Menu -->
+    </nav>
+  </header>
+  <!-- Left side column. contains the logo and sidebar -->
+  <aside class="main-sidebar">
+    <!-- sidebar: style can be found in sidebar.less -->
+    <section class="sidebar">
+      <!-- Sidebar user panel -->
+      <!-- /.search form -->
+      <!-- sidebar menu: : style can be found in sidebar.less -->
+      <ul class="sidebar-menu">
+        <li class="active treeview">
+          <a href="#">
+            <i class="fa fa-dashboard"></i> <span>Dimensions</span> <i class="fa fa-angle-left pull-right"></i>
+          </a>
+          <dimensions class="treeview-menu" setup-items="API.setupDimensions"></dimensions>
+        </li>
+        <li class="treeview">
+          <a href="#">
+            <i class="fa fa-files-o"></i>
+            <span>Measures</span>
+            <!-- <span class="label label-primary pull-right">4</span> -->
+          </a>
+          <measures class="treeview-menu" setup-items="API.setupMeasures"></measures>
+        </li>
+      </ul>
+    </section>
+    <!-- /.sidebar -->
+  </aside>
 
-    <style>
-shelf {
-  display:inline-block;
-  border: 1px solid black;
-}
-    </style>
-  </head>
-  <body ng-controller="glueController">
-    <button ng-click="loadMetadata()">Load Metadata</button>
-    <cube setup-metadata="API.setupMetadata"
-          get-dimensions="API.getDimensions"
-          get-measures="API.getMeasures">
+  <!-- Content Wrapper. Contains page content -->
+  <div class="content-wrapper">
+    <!-- Main content -->
+    <section class="content">
+      <!-- Info boxes -->
+      <div class="row">
+        <div class="col-md-2 col-sm-4 col-xs-5">
+          <div>
+            <div class='info-box'>
+              <div class="info-box-content">
+                <shelf type="typeShelfGraphFilter"
+                       on-add-item="API.shelfGraphFilterOnAddItem">
+                  <span class="info-box-text">Filter</span>
+                </shelf>
+              </div>
+            </div>
+            <!-- /.info-box-content -->
+          </div>
+          <!-- /.info-box -->
+        </div>
+        <!-- /.col -->
+        <div class="col-md-10 col-sm-8 col-xs-7">
+          <div class='row'>
+            <div class="col-md-12 col-sm-12 col-xs-12">
+              <div class='info-box'>
+                <div class="info-box-content">
+                  <shelf type="typeShelfGraphColumn"
+                         on-add-item="API.shelfGraphColumnOnAddItem">
+                    <span class="info-box-text">Columns</span>
+                  </shelf>
+                </div>
+                <!-- /.info-box-content -->
+              </div>
+            </div>
+            <div class="col-md-12 col-sm-12 col-xs-12">
+              <div class="info-box">
+                <div class="info-box-content">
+                  <shelf type="typeShelfGraphRow"
+                         on-add-item="API.shelfGraphRowOnAddItem">
+                    <span class="info-box-text">Rows</span>
+                  </shelf>
+                </div>
+                <!-- /.info-box-content -->
+              </div>
+            </div>
+          </div>
+          <!-- /.info-box -->
+        </div>
+        <!-- /.col -->
 
-      <div class="col-xs-3">
-        <dimensions setup-items="API.setupDimensions"></dimensions>
-        <measures setup-items="API.setupMeasures"></measures>
+        <div class="col-md-12 col-sm-12 col-xs-12">
+          <div class="info-box">
+            <graph-space setup-data="API.graphSpaceSetupData"></graph-space>
+          </div>
+        </div>
+
+        <!-- fix for small devices only -->
+        <div class="clearfix visible-sm-block"></div>
       </div>
-      <div class="col-xs-9">
-        <shelf class="col-xs-4"
-               type="typeShelfGraphFilter"
-               on-add-item="API.shelfGraphFilterOnAddItem">
-          Filter
-        </shelf>
-        <shelf class="col-xs-4"
-               type="typeShelfGraphColumn"
-               on-add-item="API.shelfGraphColumnOnAddItem">
-          Column
-        </shelf>
-        <shelf class="col-xs-4"
-               type="typeShelfGraphRow"
-               on-add-item="API.shelfGraphRowOnAddItem">
-          Row
-        </shelf>
+      <!-- /.row -->
+
       </div>
+      <!-- /.row -->
+    </section>
+    <!-- /.content -->
+  </div>
+  <!-- /.content-wrapper -->
 
-    </cube>
-  </body>
+  <footer class="main-footer">
+    <div class="pull-right hidden-xs">
+      <b>Version</b> 1.0.1
+    </div>
+    <strong>Copyright &copy; 2016 <a href="http://etton.ru">Etton Company</a>.</strong> All rights
+    reserved.
+  </footer>
 
-  <script src="bower_components/angular/angular.js"></script>
-  <script src="bower_components/jquery/dist/jquery.min.js"></script>
-  <script src="bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
-  <script src="main.js"></script>
+</div>
+<!-- ./wrapper -->
 
-  <script>
+<script src="bower_components/angular/angular.js"></script>
+<!-- jQuery 2.1.4 -->
+<script src="bower_components/AdminLTE/plugins/jQuery/jQuery-2.1.4.min.js"></script>
+<!-- Bootstrap 3.3.5 -->
+<script src="bower_components/AdminLTE/bootstrap/js/bootstrap.min.js"></script>
+<!-- FastClick -->
+<script src="bower_components/AdminLTE/plugins/fastclick/fastclick.js"></script>
+<!-- AdminLTE App -->
+<script src="bower_components/AdminLTE/dist/js/app.min.js"></script>
+<!-- Sparkline -->
+<script src="bower_components/AdminLTE/plugins/sparkline/jquery.sparkline.min.js"></script>
+<!-- jvectormap -->
+<script src="bower_components/AdminLTE/plugins/jvectormap/jquery-jvectormap-1.2.2.min.js"></script>
+<script src="bower_components/AdminLTE/plugins/jvectormap/jquery-jvectormap-world-mill-en.js"></script>
+<!-- SlimScroll 1.3.0 -->
+<script src="bower_components/AdminLTE/plugins/slimScroll/jquery.slimscroll.min.js"></script>
+<!-- ChartJS 1.0.1 -->
+<script src="bower_components/AdminLTE/plugins/chartjs/Chart.min.js"></script>
+<!-- AdminLTE dashboard demo (This is only for demo purposes) -->
+<!-- <script src="/bower_components/AdminLTE/dist/js/pages/dashboard2.js"></script> -->
+<!-- AdminLTE for demo purposes -->
+<!-- <script src="/bower_components/AdminLTE/dist/js/demo.js"></script> -->
+<script src="main.js"></script>
+<script>
 angular
   .module('BI-visualization')
-  .controller('glueController', ['$scope', glueController]);
+  .controller('glueController', ['$scope', '$timeout', glueController]);
 
-function glueController($scope) {
+function glueController($scope, $timeout) {
   $scope.API = {
     shelfGraphFilterOnAddItem: shelfGraphFilterOnAddItem,
     shelfGraphColumnOnAddItem: shelfGraphColumnOnAddItem,
     shelfGraphRowOnAddItem: shelfGraphRowOnAddItem
   };
+
+  function shelfGraphFilterOnAddItem(item) { $scope.API.onAddGraphFilter(item); }
+  function shelfGraphColumnOnAddItem(item) { $scope.API.onAddGraphColumn(item); }
+  function shelfGraphRowOnAddItem(item) { $scope.API.onAddGraphRow(item); }
 
   $scope.typeShelfGraphFilter = "graph-filter";
   $scope.typeShelfGraphRow = "graph-row";
@@ -76,7 +210,7 @@ function glueController($scope) {
   $scope.loadMetadata = function loadMetadata() {
     var metadata = [
       { name: 'column1', type: 'string'  },
-      { name: 'column2', type: 'string'  },
+      { name: 'column2', type: 'float'  },
       { name: 'column3', type: 'float'   },
       { name: 'column4', type: 'integer' }
     ];
@@ -84,19 +218,15 @@ function glueController($scope) {
     $scope.API.setupMetadata(metadata);
     $scope.API.setupDimensions($scope.API.getDimensions());
     $scope.API.setupMeasures($scope.API.getMeasures());
+
+    console.log($scope.API.graphSpaceSetupData);
+    console.log($scope.API.registerGraphData);
+    $scope.API.registerGraphData($scope.API.graphSpaceSetupData);
   };
 
-  function shelfGraphFilterOnAddItem(item) {
-    console.log(item, "was added");
-  }
+  $timeout($scope.loadMetadata, 200);
 
-  function shelfGraphRowOnAddItem(item) {
-    console.log(item, "was added");
-  }
-
-  function shelfGraphColumnOnAddItem(item) {
-    console.log(item, "was added");
-  }
 }
-  </script>
+</script>
+</body>
 </html>

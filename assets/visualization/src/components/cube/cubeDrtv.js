@@ -9,7 +9,11 @@
       scope: {
         setupMetadata: '=?',
         getDimensions: '=?',
-        getMeasures: '=?'
+        getMeasures: '=?',
+        onAddGraphFilter: '=?',
+        onAddGraphColumn: '=?',
+        onAddGraphRow: '=?',
+        registerGraphData: '=?'
       },
       transclude: true,
       restrict: 'E',

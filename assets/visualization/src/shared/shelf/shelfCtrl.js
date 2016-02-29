@@ -22,6 +22,10 @@
     $scope.onAddItem = $scope.onAddItem || function onAddItem(item) { };
     $scope.onRemoveItem = $scope.onRemoveItem || function onRemoveItem(item) { };
 
+    $scope.resetLastId = function resetLastId() {
+      lastId = 1;
+    };
+
     $scope.addItem = function addItem(item) {
       if (!checkType($scope)) { return false; }
       item._id = lastId++;
