@@ -1,6 +1,5 @@
 
 var gulp = require('gulp'),
-    watch = require('gulp-watch'),
     concat = require('gulp-concat'),
     minifyJS = require('gulp-uglify'),
     minifyCSS = require('gulp-minify-css'),
@@ -28,7 +27,7 @@ gulp.task('usemin', function() {
       usemin(
         {
           js: [
-            //minifyJS(),
+            minifyJS(),
             'concat'
           ],
           css: [
@@ -40,7 +39,7 @@ gulp.task('usemin', function() {
         }
       )
     )
-    //.pipe(minifyHTML())
+    .pipe(minifyHTML())
     .pipe(gulp.dest(paths.dist));
 });
 
@@ -71,18 +70,10 @@ gulp.task('scripts', function() {
   .pipe(eslint())
   .pipe(eslint.format())
   //.pipe(eslint.failAfterError())
-  //.pipe(minifyJS())
+  .pipe(minifyJS())
   .pipe(concat(paths.distScripts))
   .pipe(gulp.dest(paths.dist));
 });
 
-gulp.task('watch', function() {
-  gulp.watch([paths.scriptsMain, paths.scriptsShared, paths.scriptsComponents], ['scripts']);
-  gulp.watch([paths.htmlComponents], ['htmlComponents']);
-  gulp.watch([paths.htmlShared], ['htmlShared']);
-  gulp.watch([paths.htmlMain], ['htmlMain']);
-  gulp.watch([paths.index], ['usemin']);
-});
-
-gulp.task('default', ['usemin', 'htmlShared', 'htmlMain', 'htmlComponents', 'scripts', 'watch']);
+gulp.task('default', ['usemin', 'htmlShared', 'htmlMain', 'htmlComponents', 'scripts']);
 
