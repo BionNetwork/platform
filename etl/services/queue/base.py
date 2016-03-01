@@ -1,7 +1,6 @@
 # coding: utf-8
 import binascii
 from contextlib import closing
-import traceback
 import pymongo
 from pymongo import IndexModel
 import logging
@@ -113,7 +112,6 @@ class TaskProcessing(object):
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
-            traceback.print_exc()
             TaskService.update_task_status(
                 self.task_id, TaskStatusEnum.ERROR,
                 error_code=TaskErrorCodeEnum.DEFAULT_CODE,

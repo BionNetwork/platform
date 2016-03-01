@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 import json
 import calendar
 import math
-import traceback
 
 import requests
 from psycopg2 import errorcodes
@@ -267,8 +266,6 @@ class LoadDb(TaskProcessing):
                 print 'inserted %d rows to database. Total inserted %s/%s.' % (
                     len(rows_dict), loaded_count, rows_count)
             except Exception as e:
-                print 'Exception'
-                traceback.print_exc()
                 self.was_error = True
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
