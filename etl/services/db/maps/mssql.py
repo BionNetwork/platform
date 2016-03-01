@@ -27,8 +27,6 @@ texts = [
     'nchar',
     'nvarchar',
     'ntext',
-    'binary',
-    'varbinary',
     'image',
 ]
 dates = [
@@ -38,6 +36,10 @@ dates = [
     'datetime',
     'datetime2',
     'datetimeoffset',
+]
+blobs = [
+    'binary',
+    'varbinary',
 ]
 booleans = [
     'bit',
