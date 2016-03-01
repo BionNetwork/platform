@@ -1,5 +1,6 @@
 # coding: utf-8
 import binascii
+from contextlib import closing
 import traceback
 import pymongo
 from pymongo import IndexModel
@@ -463,17 +464,21 @@ class LocalDbConnect(object):
 
     connection = None
 
-    def __init__(self, query, execute=True):
+    @staticmethod
+    def get_connection(source=None):
+        return DataSourceService.get_local_instance().connection
+
+    def __init__(self, query, source=None, execute=True):
 
         self.query = query
         if not self.connection or self.connection.close:
-            self.connection = DataSourceService.get_local_instance().connection
+            self.connection = self.get_connection(source)
         if execute:
             self.execute()
 
     def execute(self, args=None, many=False):
         with self.connection:
-            with self.connection.cursor() as cursor:
+            with closing(self.connection.cursor()) as cursor:
                 if not many:
                     cursor.execute(self.query, args)
                 else:
@@ -481,7 +486,7 @@ class LocalDbConnect(object):
 
     def fetchall(self, args=None):
         with self.connection:
-            with self.connection.cursor() as cursor:
+            with closing(self.connection.cursor()) as cursor:
                 cursor.execute(self.query, args)
                 return cursor.fetchall()
 
@@ -490,10 +495,12 @@ class SourceDbConnect(LocalDbConnect):
 
     connection = None
 
-    def __init__(self, query, source, execute=False):
-        self.connection = DataSourceService.get_source_connection(source)
-        super(SourceDbConnect, self).__init__(query, execute)
+    @staticmethod
+    def get_connection(source=None):
+        return DataSourceService.get_source_connection(source)
 
+    def __init__(self, query, source, execute=False):
+        super(SourceDbConnect, self).__init__(query, source, execute)
 
 class MongodbConnection(object):
 

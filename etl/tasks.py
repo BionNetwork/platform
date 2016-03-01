@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import json
 import calendar
 import math
+import traceback
 
 import requests
 from psycopg2 import errorcodes
@@ -165,7 +166,7 @@ class LoadMongodb(TaskProcessing):
 
             data_to_insert = []
             data_to_current_insert = []
-            for ind, record in enumerate(rows):
+            for ind, record in enumerate(rows, start=1):
                 row_key = calc_key_for_row(
                     record, tables_key_creator, (page - 1) * limit + ind,
                     binary_types_list)
@@ -267,6 +268,7 @@ class LoadDb(TaskProcessing):
                     len(rows_dict), loaded_count, rows_count)
             except Exception as e:
                 print 'Exception'
+                traceback.print_exc()
                 self.was_error = True
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
@@ -377,7 +379,7 @@ class LoadDimensions(TaskProcessing):
              json.loads(t['meta__stats'])['date_intervals']) for t in meta_data]
 
         if not self.context['db_update']:
-            if date_intervals_info and self.table_prefix == DIMENSIONS:
+            if any([y for x, y in date_intervals_info]) and self.table_prefix == DIMENSIONS:
                 self.create_date_tables(date_intervals_info)
 
             create_col_names = DataSourceService.get_dim_measure_table_names(
@@ -447,7 +449,7 @@ class LoadDimensions(TaskProcessing):
                 name=table_name,
                 user_id=user_id,
                 datasources_meta=datasource_meta_id,
-                type=Dimension.TIME_DIMENSION if field['type'] == 'timestamp'
+                type=Dimension.TIME_DIMENSION if field['type'] in ['timestamp']
                 else Dimension.STANDART_DIMENSION
             )
             # ставим title размерности
@@ -461,7 +463,7 @@ class LoadDimensions(TaskProcessing):
         """
         column_names = []
         for table, field in self.actual_fields:
-            if field['type'] == 'timestamp':
+            if field['type'] in ['timestamp']:
                 column_names.append(
                 TIME_COLUMN_NAME.format(table, field['name']))
             else:
@@ -491,7 +493,7 @@ class LoadDimensions(TaskProcessing):
         date_fields_order = {}
         index = 1
         for table, field in self.actual_fields:
-            if field['type'] == 'timestamp':
+            if field['type'] in ['timestamp']:
                 date_fields_order.update(
                     {index: TIME_COLUMN_NAME.format(table, field['name'])})
             column_names.append(
@@ -524,7 +526,7 @@ class LoadDimensions(TaskProcessing):
                 for ind in xrange(col_nums):
                     if ind in date_fields_order.keys():
                         # заменяем дату идентификатором из связой таблицы
-                        i = self.date_tables[record[ind].date()]
+                        i = self.date_tables[record[ind].date()] if record[ind] else 0
                         temp_dict.update({str(ind): i})
                     else:
                         temp_dict.update({str(ind): record[ind]})
@@ -696,8 +698,8 @@ class UpdateMongodb(TaskProcessing):
         source = Datasource.objects.get(**self.context['source'])
         meta_info = json.loads(self.context['meta_info'])
 
-        rows_count = DataSourceService.get_structure_rows_number(
-            source, structure,  cols)
+        rows_count, loaded_count = DataSourceService.get_structure_rows_number(
+            source, structure,  cols), 0
 
         # общее количество строк в запросе
         self.publisher.rows_count = rows_count
@@ -742,7 +744,7 @@ class UpdateMongodb(TaskProcessing):
                 break
             data_to_insert = []
             data_to_current_insert = []
-            for ind, record in enumerate(rows):
+            for ind, record in enumerate(rows, start=1):
                 row_key = calc_key_for_row(
                     record, tables_key_creator, (page - 1) * limit + ind,
                     binary_types_list)
@@ -757,6 +759,10 @@ class UpdateMongodb(TaskProcessing):
                     data_to_insert.append(dict(izip(col_names, delta_rows)))
 
                 data_to_current_insert.append(dict(_id=row_key))
+            loaded_count += ind
+            print 'updated %d rows to mongodb. Total inserted %s/%s.' % (
+                ind, loaded_count, rows_count)
+
             try:
                 if data_to_insert:
                     delta_collection.insert_many(data_to_insert, ordered=False)
