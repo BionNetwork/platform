@@ -1060,6 +1060,7 @@ class CreateTriggers(TaskProcessing):
                 'col_types': self.context['col_types'],
                 'dataset_id': self.context['dataset_id'],
                 'meta_info': self.context['meta_info'],
+                'rows_count': self.context['rows_count'],
             })
 
 
@@ -1123,68 +1124,68 @@ class CreateCube(TaskProcessing):
                 dimension.add_hierarchies([hierarchy])
 
             else:
+
                 dim_attribute = Attribute(name=title, key_column='%s_id' % name)
                 dimension.add_attribute(dim_attribute)
-
-                table_name = u'time_%s_%s' % (dim.name, key)
-                time_dim = DimensionSchema(
-                    name=dim.name, table=table_name,
-                    key="Key_%s" % table_name, type='TIME')
-
-                year = Attribute(
-                    name='Year', key_column=DTCN.THE_YEAR, level_type='TimeYears'
-                )
-                quarter = Attribute(
-                    name='Quarter', level_type='TimeQuarters',
-                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.QUARTER]),
-                    attr_name=Name(columns=[DTCN.QUARTER])
-                )
-                month = Attribute(
-                    name='Month', level_type='TimeMonths',
-                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
-                    attr_name=Name(columns=[DTCN.MONTH_THE_YEAR])
-                )
-                week = Attribute(
-                    name='Week', level_type='TimeWeeks',
-                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.WEEK_OF_YEAR]),
-                    attr_name=Name(columns=[DTCN.WEEK_OF_YEAR])
-                )
-                day = Attribute(
-                    name='Day', level_type='TimeDays',
-                    attr_key=Key(columns=[DTCN.TIME_ID]),
-                    attr_name=Name(columns=[DTCN.DAY_OF_MONTH])
-                )
-                month_name = Attribute(
-                    name='Month Name',
-                    attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
-                    attr_name=Name(columns=[DTCN.THE_MONTH])
-                )
-                date = Attribute(
-                    name='Date', key_column=DTCN.THE_DATE
-                )
-                time_id = Attribute(
-                    name="Key_%s" % table_name, key_column=DTCN.TIME_ID
-                )
-                time_dim.add_attributes([
-                    year, quarter, month, week, day, month_name, date, time_id])
-
-                time_hierarchy_1 = Hierarchy(name='Time', has_all=False)
-                for level_name in ['Year', 'Quarter', 'Month']:
-                    time_hierarchy_1.add_level(Level(attribute=level_name))
-                time_hierarchy_2 = Hierarchy(name='Weekly', has_all=True)
-                for level_name in ['Year', 'Week', 'Day']:
-                    time_hierarchy_2.add_level(Level(attribute=level_name))
-
-                time_dim.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
-
-                cube.add_dimension(time_dim)
-
                 measure_group.dimension_links.add_dimension_link(
                     ReferenceLink(
-                        dimension=dim.name, via_dimension='Dim Table',
+                        dimension='Time Dim', via_dimension='Dim Table',
                         via_attribute=title, attribute='Date'))
 
-                physical_schema.add_table(Table(table_name))
+        time_table_name = self.get_table(TIME_TABLE)
+        time_dim = DimensionSchema(
+            name='Time Dim', table=time_table_name,
+            key='Time Dim Key', type='TIME')
+
+        year = Attribute(
+            name='Year', key_column=DTCN.THE_YEAR, level_type='TimeYears'
+        )
+        quarter = Attribute(
+            name='Quarter', level_type='TimeQuarters',
+            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.QUARTER]),
+            attr_name=Name(columns=[DTCN.QUARTER])
+        )
+        month = Attribute(
+            name='Month', level_type='TimeMonths',
+            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
+            attr_name=Name(columns=[DTCN.MONTH_THE_YEAR])
+        )
+        week = Attribute(
+            name='Week', level_type='TimeWeeks',
+            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.WEEK_OF_YEAR]),
+            attr_name=Name(columns=[DTCN.WEEK_OF_YEAR])
+        )
+        day = Attribute(
+            name='Day', level_type='TimeDays',
+            attr_key=Key(columns=[DTCN.TIME_ID]),
+            attr_name=Name(columns=[DTCN.DAY_OF_MONTH])
+        )
+        month_name = Attribute(
+            name='Month Name',
+            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
+            attr_name=Name(columns=[DTCN.THE_MONTH])
+        )
+        date = Attribute(
+            name='Date', key_column=DTCN.THE_DATE
+        )
+        time_id = Attribute(
+            name='Time Dim Key', key_column=DTCN.TIME_ID
+        )
+        time_dim.add_attributes([
+            year, quarter, month, week, day, month_name, date, time_id])
+
+        time_hierarchy_1 = Hierarchy(name='Time', has_all=False)
+        for level_name in ['Year', 'Quarter', 'Month']:
+            time_hierarchy_1.add_level(Level(attribute=level_name))
+        time_hierarchy_2 = Hierarchy(name='Weekly', has_all=True)
+        for level_name in ['Year', 'Week', 'Day']:
+            time_hierarchy_2.add_level(Level(attribute=level_name))
+
+        time_dim.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
+
+        cube.add_dimension(time_dim)
+
+        physical_schema.add_table(Table(time_table_name))
 
         cube.measure_groups.add_measure_group(measure_group)
 
