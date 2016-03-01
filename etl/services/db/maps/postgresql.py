@@ -44,6 +44,10 @@ blobs = [
     'bytea',
 ]
 
+booleans = [
+    'boolean',
+]
+
 for i in ints:
     DB_TYPES[i] = 'integer'
 
@@ -59,6 +63,8 @@ for i in dates:
 for i in blobs:
     DB_TYPES[i] = 'binary'
 
+for i in booleans:
+    DB_TYPES[i] = 'bool'
 
 table_query = """
             SELECT table_name FROM information_schema.tables
@@ -72,6 +78,28 @@ cols_query = """
     FROM information_schema.columns
     where table_name in {0} and table_catalog = '{1}' and
           table_schema = '{2}' order by table_name;
+"""
+
+cdc_cols_query = """
+    SELECT column_name, data_type FROM information_schema.columns
+    where table_name in {0} and table_catalog = '{1}' and
+          table_schema = '{2}' order by table_name;
+"""
+
+add_column_query = """
+    alter table {0} add column {1} {2} {3};
+"""
+
+del_column_query = """
+    alter table {0} drop column {1};
+"""
+
+create_index_query = """
+    CREATE INDEX {0} ON {1} ({2});
+"""
+
+drop_index_query = """
+    drop index {0};
 """
 
 constraints_query = """
@@ -137,25 +165,30 @@ remote_table_query = """
         "cdc_delta_flag" smallint NOT NULL,
         "cdc_synced" smallint NOT NULL
     );
-    CREATE INDEX {0}_together_index_bi ON "{0}" USING btree ("cdc_updated_at", "cdc_synced");
-
-    CREATE INDEX {0}_cdc_created_at_index_bi ON "{0}" USING btree ("cdc_created_at");
-
-    CREATE INDEX {0}_cdc_synced_index_bi ON "{0}" USING btree ("cdc_synced");
 """
+
+cdc_required_types = {
+    "cdc_created_at": {"type": "timestamp", "nullable": "NOT NULL"},
+    "cdc_updated_at": {"type": "timestamp", "nullable": ""},
+    "cdc_delta_flag": {"type": "smallint", "nullable": "NOT NULL"},
+    "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
+}
 
 
 remote_triggers_query = """
     CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
-            INSERT INTO "{new_table}" SELECT {old} now(), null, 3, 0;
+            INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
+            SELECT {old} now(), null, 3, 0;
             RETURN OLD;
         ELSIF (TG_OP = 'UPDATE') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), null, 2, 0;
+            INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
+            SELECT {new} now(), null, 2, 0;
             RETURN NEW;
         ELSIF (TG_OP = 'INSERT') THEN
-            INSERT INTO "{new_table}" SELECT {new} now(), null, 1, 0;
+            INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
+            SELECT {new} now(), null, 1, 0;
             RETURN NEW;
         END IF;
         RETURN NULL;
@@ -171,4 +204,46 @@ AFTER INSERT OR UPDATE OR DELETE ON "{orig_table}"
 
 row_query = """
         SELECT {0} FROM {1} LIMIT {2} OFFSET {3};
+"""
+
+pr_key_query = """
+    SELECT c.conname AS constraint_name FROM pg_constraint c
+        LEFT JOIN pg_class t  ON c.conrelid  = t.oid
+            WHERE t.relname in {0} and c.contype = 'p' order by t.relname
+"""
+
+
+delete_primary_key = """
+    alter table {0} drop constraint {1}
+"""
+
+drop_index = """drop index {0}"""
+
+check_table_exists = """
+    SELECT EXISTS (
+        SELECT * FROM   information_schema.tables
+        WHERE table_name = '{0}' AND table_catalog = '{1}'
+   );
+"""
+
+
+dimension_measure_triggers_query = """
+    CREATE OR REPLACE FUNCTION reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
+    BEGIN
+        IF (TG_OP = 'DELETE') THEN
+            DELETE FROM "{new_table}" WHERE {del_condition};
+            RETURN OLD;
+        ELSIF (TG_OP = 'INSERT') THEN
+            INSERT INTO "{new_table}" {cols} SELECT {insert_cols};
+            RETURN NEW;
+        END IF;
+        RETURN NULL;
+    END;
+$dim_meas_recs$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "for_{new_table}" on "{orig_table}";
+
+CREATE TRIGGER "for_{new_table}"
+AFTER INSERT OR DELETE ON "{orig_table}"
+    FOR EACH ROW EXECUTE PROCEDURE reload_{new_table}_records();
 """

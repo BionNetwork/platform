@@ -72,26 +72,30 @@ class DataSourceService(object):
             list: Список словарей с информацией о дереве. Подробрый формат
             ответа см. `RedisSourceService.get_final_info`
         """
-        col_records, index_records, const_records = (
-            DatabaseService.get_columns_info(source, tables))
-
-        stat_records = DatabaseService.get_stats_info(source, tables)
-
-        cols, indexes, foreigns = DatabaseService.processing_records(
-            source, col_records, index_records, const_records)
 
         if not settings.USE_REDIS_CACHE:
-            return []
+                return []
 
-        RedisSourceService.insert_columns_info(
-            source, tables, cols, indexes, foreigns, stat_records)
+        new_tables = RedisSourceService.filter_exists_tables(source, tables)
 
-        # выбранные ранее таблицы в редисе
-        active_tables = RedisSourceService.get_active_list(
+        if new_tables:
+            col_records, index_records, const_records = (
+                DatabaseService.get_columns_info(source, new_tables))
+
+            stat_records = DatabaseService.get_stats_info(source, new_tables)
+
+            cols, indexes, foreigns = DatabaseService.processing_records(
+                source, col_records, index_records, const_records)
+
+            RedisSourceService.insert_columns_info(
+                source, new_tables, cols, indexes, foreigns, stat_records)
+
+        # существование дерева
+        tree_exists = RedisSourceService.check_tree_exists(
             source.user_id, source.id)
 
         # работа с деревьями
-        if not active_tables:
+        if not tree_exists:
             trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
             sel_tree = TablesTree.select_tree(trees)
 
@@ -305,6 +309,23 @@ class DataSourceService(object):
 
         return types_dict
 
+    @classmethod
+    def retitle_table_column(cls, source, table, column, title):
+        """
+        Переименовываем title колонки для схемы куба
+        """
+        table_info = json.loads(
+                RedisSourceService.get_table_full_info(source, table))
+
+        for col in table_info['columns']:
+            if col['name'] == column:
+                col['title'] = title
+                break
+
+        collection_name = RedisSourceService.get_collection_name(source, table)
+
+        r_server.set(collection_name, json.dumps(table_info))
+
     # fixme: не используется
     @classmethod
     def get_separator(cls, source):
@@ -314,6 +335,11 @@ class DataSourceService(object):
     def get_table_create_query(cls, local_instance, key_str, cols_str):
         return DatabaseService.get_table_create_query(
             local_instance, key_str, cols_str)
+
+    @classmethod
+    def check_table_exists_query(cls, local_instance, table_name, db):
+        return DatabaseService.check_table_exists_query(
+            local_instance, table_name, db)
 
     @classmethod
     def get_table_insert_query(cls, local_instance, source_table_name):
@@ -442,9 +468,9 @@ class DataSourceService(object):
                         if sel_col['col'] == col['name']:
                             fields['columns'].append(col)
 
-                        # primary keys
-                        if col['is_primary']:
-                            stats['row_key'].append(col['name'])
+                            # primary keys
+                            if col['is_primary']:
+                                stats['row_key'].append(col['name'])
 
                 if last_row and stats['row_key']:
                     # корневая таблица

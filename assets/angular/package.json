@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "postinstall": "bower install",
-    "build": "npm install && gulp"
+    "prestart": "npm install",
+    "start": "gulp",
+    "devel": "gulp devel"
   },
   "author": "",
   "license": "ISC",

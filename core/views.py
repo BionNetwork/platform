@@ -4,12 +4,16 @@ from __future__ import unicode_literals
 import uuid
 import json
 import logging
+from PIL import Image
+import StringIO
 
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.contrib.auth import authenticate, login, logout
 from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404
 from django.views.generic import TemplateView, View
+from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
 from django.contrib.auth.models import check_password
@@ -28,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 
 class BaseView(View):
+    """
+    Базовый класс для View
+    """
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
 
     def redirect(self, reverse_name, args=None, **kwargs):
         return HttpResponseRedirect(reverse(reverse_name, args=args), **kwargs)
@@ -41,18 +51,20 @@ class BaseView(View):
             json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
-class BaseTemplateView(TemplateView):
+class BaseViewNoLogin(BaseView):
+    """
+    Базовый класс для View без аутентификации
+    """
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
 
-    def redirect(self, reverse_name, args=None, **kwargs):
-        return HttpResponseRedirect(reverse(reverse_name, args=args), **kwargs)
 
-    def redirect_to_url(self, url, **kwargs):
-        return HttpResponseRedirect(url, **kwargs)
-
-    def json_response(self, context, **response_kwargs):
-        response_kwargs['content_type'] = 'application/json'
-        return HttpResponse(
-            json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
+class BaseTemplateView(TemplateView, BaseView):
+    """
+    Базовый класс для View для работ с template
+    """
+    pass
 
 
 class HomeView(BaseTemplateView):
@@ -64,11 +76,11 @@ class HomeView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
         return render(request, "core/home.html")
 
+
 class AngularView(BaseTemplateView):
     """Главная страница dashboard"""
     def get(self, request, *args, **kwargs):
         return render(request, "core/angular.html")
-
 
 
 class LoginView(BaseTemplateView):
@@ -77,10 +89,17 @@ class LoginView(BaseTemplateView):
     """
     template_name = 'core/login.html'
 
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
+
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated():
             return self.redirect_to_url("/")
-        return self.render_to_response({'regUrl': '/registration'})
+        if "next" in request.GET:
+            next_url = request.GET['next']
+        else:
+            next_url = None
+        return self.render_to_response({'regUrl': '/registration', 'next': next_url})
 
     def post(self, request, *args, **kwargs):
         post = request.POST
@@ -88,6 +107,11 @@ class LoginView(BaseTemplateView):
         username = post['username']
         password = post['password']
         user = None
+
+        if "next" in request.POST:
+            next_url = request.POST['next']
+        else:
+            next_url = None
 
         # if email (костылим):
         if '@' in username:
@@ -108,7 +132,10 @@ class LoginView(BaseTemplateView):
         if user is not None:
             if user.is_active:
                 login(request, user)
-                return self.redirect("core:home")
+                if next_url:
+                    return self.redirect_to_url(next_url)
+                else:
+                    return self.redirect("core:home")
             else:
                 if not user.email:
                     return self.render_to_response({
@@ -130,7 +157,8 @@ class LoginView(BaseTemplateView):
                 })
 
         return self.render_to_response({
-            'error': 'Неправильный логин или пароль!'
+            'error': 'Неправильный логин или пароль!',
+            'next': next_url
         })
 
 
@@ -138,6 +166,10 @@ class LogoutView(BaseView):
     """
     Выход пользователя
     """
+
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
+
     def get(self, request, *args, **kwargs):
         logout(request)
         return self.redirect('login')
@@ -147,6 +179,10 @@ class RegistrationView(BaseView):
     """
     Регистрация нового пользователя в системе
     """
+    # у предка dispatch перекрыт login_required
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
+
     def post(self, request, *args, **kwargs):
 
         post = request.POST
@@ -315,7 +351,9 @@ class EditUserView(BaseTemplateView):
 
         form = core_forms.UserForm(instance=user)
         return self.render_to_response({
-            'form': form
+            'form': form,
+            'first_tab': ['avatar', 'username', 'email', ],
+            'full_path': request.get_full_path(),
         })
 
     def post(self, request, *args, **kwargs):
@@ -325,11 +363,60 @@ class EditUserView(BaseTemplateView):
         form = core_forms.UserForm(post, instance=user)
 
         if not form.is_valid():
-            return self.render_to_response({'form': form})
+            return self.render_to_response({
+                'form': form,
+                'first_tab': ['avatar', 'username', 'email', ],
+                'full_path': request.get_full_path(),
+            })
 
-        form.save()
+        profile = form.save(commit=False)
 
-        return self.redirect('core:users')
+        image = request.FILES.get('file', None)
+
+        # добавили аву
+        if image:
+            filename = image.name
+            sm_filename = 'small_'+filename
+
+            avatar_img = Image.open(image)
+            avatar_img.thumbnail(settings.AVATAR_SIZES, Image.ANTIALIAS)
+            big_img_io = StringIO.StringIO()
+            avatar_img.save(big_img_io, format='JPEG')
+            avatar = InMemoryUploadedFile(big_img_io, None, filename,
+                                          'image/jpeg', big_img_io.len, None)
+            user.avatar.delete()
+            user.avatar.save(filename, avatar)
+
+            small_avatar_img = Image.open(image)
+            small_avatar_img.thumbnail(settings.SMALL_AVATAR_SIZES, Image.ANTIALIAS)
+            small_img_io = StringIO.StringIO()
+            small_avatar_img.save(small_img_io, format='JPEG')
+            small_avatar = InMemoryUploadedFile(
+                small_img_io, None, sm_filename,
+                'image/jpeg', small_img_io.len, None)
+            user.avatar_small.delete()
+            user.avatar_small.save(sm_filename, small_avatar)
+
+        # ничего не меняли
+        elif not post.get('fileupload_avatar'):
+            user.avatar.delete()
+            user.avatar_small.delete()
+
+        profile.save()
+
+        next_url = post.get('full_path', None)
+        if next_url and '?next=' in next_url:
+            return HttpResponseRedirect(next_url.split('?next=')[1])
+        else:
+            return self.redirect('core:users')
+
+
+class RedirectToProfileView(EditUserView):
+
+    def post(self, request, *args, **kwargs):
+        super(RedirectToProfileView, self).post(request, *args, **kwargs)
+
+        return self.redirect('users.profile', (request.user.id, ))
 
 
 class UserProfileView(BaseTemplateView):

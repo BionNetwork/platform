@@ -313,6 +313,19 @@ class GetColumnsView(BaseEtlView):
         return info
 
 
+class RetitleColumnView(BaseEtlView):
+
+    def start_post_action(self, request, source):
+        post = request.POST
+        table = post.get('table')
+        column = post.get('column')
+        title = post.get('title')
+
+        helpers.DataSourceService.retitle_table_column(
+            source, table, column, title)
+        return []
+
+
 class GetDataRowsView(BaseEtlView):
 
     def start_post_action(self, request, source):
@@ -504,12 +517,17 @@ class GetUserTasksView(BaseView):
     """
     def get(self, request, *args, **kwargs):
         # берем 10 последних инфо каналов юзера
-        channels_info = helpers.RedisSourceService.get_user_subscribers(
-            request.user.id)[-10:]
+        subscribes = helpers.RedisSourceService.get_user_subscribers(
+            request.user.id)
+        if subscribes:
+            user_subscribes = json.loads(helpers.RedisSourceService.get_user_subscribers(
+                request.user.id))[-10:]
+        else:
+            user_subscribes = []
 
         # сами каналы
         channels = []
-        for ch in channels_info:
+        for ch in user_subscribes:
             channels.append(ch['channel'])
 
         return self.json_response({'channels': channels})

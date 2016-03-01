@@ -46,6 +46,7 @@ INSTALLED_APPS = (
     'djcelery',
     'core',
     'etl',
+    'api',
 )
 
 MIDDLEWARE_CLASSES = (
@@ -73,6 +74,7 @@ TEMPLATES = [
             'context_processors': [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
+                'django.template.context_processors.media',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'core.context_processor.settings_processor',
@@ -107,6 +109,13 @@ EMAIL_PORT = 25
 EMAIL_HOST_USER = ''
 EMAIL_HOST_PASSWORD = ''
 
+OLAP_SERVER_HOST = 'localhost'
+OLAP_SERVER_PORT = '8080'
+OLAP_SERVER_USER = 'admin'
+OLAP_SERVER_PASS = 'admin'
+OLAP_XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
+    host=OLAP_SERVER_HOST, port=OLAP_SERVER_PORT)
+OLAP_REPOSITORY_PATH = 'saiku/repository/default'
 
 import djcelery
 djcelery.setup_loader()
@@ -135,6 +144,12 @@ LOGGING = {
             'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
             'class': 'logging.FileHandler',
             'filename': os.path.join(BASE_DIR, 'data', 'logs', 'etl.log'),
+            'formatter': 'verbose'
+        },
+        'api': {
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'data', 'logs', 'api.log'),
             'formatter': 'verbose'
         },
         'console': {
@@ -206,6 +221,16 @@ STATICFILES_DIRS = (
     os.path.join(BASE_DIR, "assets"),
 )
 
+
+MEDIA_URL = '/media/'
+
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+# API domain address
+API_HTTP_HOST = "http://localhost:8000"  # http://localhost:8000
+
+
 # redis conf
 REDIS_HOST = 'localhost'
 REDIS_PORT = '6379'
@@ -232,6 +257,10 @@ RETRY_COUNT = 3
 DEADLOCK_WAIT_TIMEOUT = 500
 DATABASE_WAIT_TIMEOUT = 10000
 REDIS_LOCK_TIMEOUT = 500
+
+# User photo sizes (width, height)
+AVATAR_SIZES = (160, 160)
+SMALL_AVATAR_SIZES = (40, 40)
 
 try:
     from .local import *

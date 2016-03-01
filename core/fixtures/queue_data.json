@@ -108,6 +108,13 @@
     "fields": {
       "name": "etl.tasks.create_triggers"
     }
+  },
+  {
+    "model": "core.queue",
+    "pk": 11,
+    "fields": {
+      "name": "etl:database:generate_cube"
+    }
   }
 
 ]

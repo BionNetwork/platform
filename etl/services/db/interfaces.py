@@ -69,6 +69,12 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
+    def get_structure_rows_number(self, structure, cols):
+        """
+        Получение предполагаемые кол-во строк
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
     @staticmethod
     def lose_brackets(str_):
         """
@@ -431,5 +437,48 @@ class Database(object):
 
         Returns:
             str: Запрос на выборку
+        """
+        return "SELECT {0} FROM {1}"
+
+    @staticmethod
+    def remote_table_create_query():
+        """
+        запрос на создание новой таблицы в БД клиента
+
+        Returns:
+            str: строка запроса
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def remote_triggers_create_query():
+        """
+        запрос на создание триггеров в БД клиента
+
+        Returns:
+            str: строка запроса
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def get_primary_key(table, db):
+        """
+        Запрос на получение первичного ключа
+        Args:
+            table(str): название таблицы
+            db(str): название базы данных
+
+        Returns:
+            str: запрос на получение первичного ключа
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def delete_primary_query(table, primary):
+        """
+        Запрос на удаление первичного ключа
+        Args:
+            table(str): название таблицы
+            primary(str): название первичного ключа
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)

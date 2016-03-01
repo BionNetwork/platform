@@ -75,5 +75,16 @@ gulp.task('scripts', function() {
   .pipe(gulp.dest(paths.dist));
 });
 
-gulp.task('default', ['usemin', 'htmlShared', 'htmlMain', 'htmlComponents', 'scripts']);
+gulp.task('watch', function() {
+  gulp.watch([paths.scriptsMain, paths.scriptsShared, paths.scriptsComponents], ['scripts']);
+  gulp.watch([paths.htmlComponents], ['htmlComponents']);
+  gulp.watch([paths.htmlShared], ['htmlShared']);
+  gulp.watch([paths.htmlMain], ['htmlMain']);
+  gulp.watch([paths.index], ['usemin']);
+});
 
+gulp.task('build', ['usemin', 'htmlShared', 'htmlMain', 'htmlComponents', 'scripts']);
+
+gulp.task('devel', ['build', 'watch']);
+
+gulp.task('default', ['build']);

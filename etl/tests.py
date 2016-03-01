@@ -381,6 +381,8 @@ class DatasourceTest(TestCase):
 class RedisKeysTest(TestCase):
     def setUp(self):
 
+        r_server.flushdb()
+
         db_conn = connections['default']
         conn_params = db_conn.get_connection_params()
 
@@ -438,20 +440,25 @@ class RedisKeysTest(TestCase):
         tables = ['test_table', ]
         DataSourceService.get_columns_info(self.source, tables)
 
-        keys = ['user_datasources:11:1:active_collections',
-                'user_datasources:11:1:counter',
-                'user_datasources:11:1:ddl:1',
-                'user_datasources:11:1:collection:1',
-                ]
+        source_id = self.source.id
+
+        active_str = 'user_datasources:11:{0}:active_collections'.format(source_id)
+        counter_str = 'user_datasources:11:{0}:counter'.format(source_id)
+        ddl_str = 'user_datasources:11:{0}:ddl:1'.format(source_id)
+        collection_str = 'user_datasources:11:{0}:collection:1'.format(source_id)
+
+        keys = [active_str, counter_str, ddl_str, collection_str, ]
 
         for k in keys:
             self.assertTrue(r_server.exists(k), 'Ключ {0} не создался!'.format(k))
 
-        collections = json.loads(r_server.get('user_datasources:11:1:active_collections'))
+        collections = json.loads(r_server.get(active_str))
         self.assertEqual(collections, [{"name": "test_table", "order": 1}, ],
                          'Активные коллекции сохранены неправильно!')
 
-        self.assertEqual(r_server.get('user_datasources:11:1:counter'), '1',
+        self.assertEqual(json.loads(r_server.get(counter_str)),
+                         {"next_sequence_id": 2,
+                          "data": [{"name": "test_table", "id": 1}]},
                          'Счетчик коллекций сохранен неправильно!')
 
         expected_col1 = {"foreigns": [], "stats": None,
@@ -469,7 +476,7 @@ class RedisKeysTest(TestCase):
                              {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
                              {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]}
 
-        collection1 = json.loads(r_server.get('user_datasources:11:1:collection:1'))
+        collection1 = json.loads(r_server.get(collection_str))
         self.assertEqual(collection1, expected_col1,
                          'Collection сохранен неправильно!')
         expected_ddl1 = {u'foreigns': [], u'stats': None,
@@ -489,7 +496,7 @@ class RedisKeysTest(TestCase):
                                       {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
                                       {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]
                          }
-        ddl1 = json.loads(r_server.get('user_datasources:11:1:ddl:1'))
+        ddl1 = json.loads(r_server.get(ddl_str))
         self.assertEqual(ddl1, expected_ddl1, 'DDL сохранен неправильно!')
 
         self.database.connection.close()
@@ -599,16 +606,23 @@ class DimCreateTest(TestCase):
 
         measures_info = self.cursor.fetchall()
 
-        self.assertEqual(len(dim_info) + len(measures_info), 4)
+        # прибавляем 2 колонки 'cdc_key'
+        self.assertEqual(len(dim_info) + len(measures_info), 4+2)
 
-        for el in dim_info:
+        cut_dim_info = [(x, y) for (x, y) in dim_info if x != 'cdc_key']
+
+        for el in cut_dim_info:
             self.assertTrue(el[1] in ['text'])
 
-        for el in measures_info:
+        cut_meas_info = [(x, y) for (x, y) in measures_info if x != 'cdc_key']
+
+        for el in cut_meas_info:
             self.assertTrue(el[1] in [
                 Measure.INTEGER, Measure.TIME, Measure.DATE, Measure.TIMESTAMP])
 
         self.db.connection.commit()
+
+        self.db.connection.close()
 
 
 class DatasourceMetaTest(TestCase):
