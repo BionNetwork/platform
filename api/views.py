@@ -44,12 +44,12 @@ class ImportSchemaView(BaseViewNoLogin):
                 return self.json_response({'id': cube.id, 'status': 'success'})
 
         except OlapServerConnectionErrorException as e:
-            logger.error("Can't connect to OLAP Server!")
-            logger.error(e.message)
+            message_to_log = "Can't connect to OLAP Server!\n" + e.message + "\nCube data:\n" + data
+            logger.error(message_to_log)
             message = e.message
         except Exception as e:
-            logger.error("Error creating cube by key" + key)
-            logger.error(e.message)
+            message_to_log = "Error creating cube by key" + key + "\n" + e.message + "\nCube data:\n" + data
+            logger.error(message_to_log)
             message = e.message
 
         return self.json_response({'status': 'error', 'message': message})
