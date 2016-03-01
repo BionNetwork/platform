@@ -1261,7 +1261,9 @@ class CreateCube(TaskProcessing):
         resp = requests.post('{0}{1}'.format(
             settings.API_HTTP_HOST, reverse('api:import_schema')),
             data={'key': cube_key, 'data': cube_string,
-                  'user_id': self.context['user_id'], }
+                  'user_id': self.context['user_id'],
+                  'dataset_id': dataset_id,
+                  }
         )
 
         if resp.json()['status'] == 'success':

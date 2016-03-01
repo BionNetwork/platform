@@ -309,6 +309,7 @@ class Cube(models.Model):
     update_date = models.DateTimeField(
         verbose_name="дата обновления", auto_now=True, db_index=True)
     user = models.ForeignKey(User, verbose_name=u'Пользователь')
+    dataset = models.ForeignKey('Dataset', verbose_name=u'Датасет')
 
     class Meta:
         db_table = "cubes"
