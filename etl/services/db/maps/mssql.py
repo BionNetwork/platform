@@ -60,12 +60,40 @@ for i in dates:
 for i in booleans:
     MSSQL_TYPES[i] = 'bool'
 
+table_query = """
+    SELECT table_name FROM information_schema.tables
+        where table_catalog='{0}' and
+        table_type='base table'order by table_name;
+"""
+
 cols_query = """
     SELECT table_name, column_name, data_type as column_type, is_nullable,
         case when COLUMNPROPERTY(object_id(TABLE_NAME), COLUMN_NAME, 'IsIdentity') = 1
         then 'extra' else null end
         FROM information_schema.columns
         where table_name in {0} and table_catalog = '{1}' order by table_name;
+"""
+
+cdc_cols_query = """
+    SELECT column_name, data_type as column_type
+        FROM information_schema.columns
+        where table_name in {0} and table_catalog = '{1}' order by table_name;
+"""
+
+add_column_query = """
+    alter table {0} add {1} {2} {3};
+"""
+
+del_column_query = """
+    alter table {0} drop column {1};
+"""
+
+create_index_query = """
+    CREATE INDEX {0} ON {1} ({2});
+"""
+
+drop_index_query = """
+    drop index {0} on {1};
 """
 
 indexes_query = """
@@ -126,6 +154,24 @@ stat_query = """
     WHERE t.NAME in {0} and tables.table_catalog = '{1}'
     GROUP BY t.NAME, p.rows
 """
+
+remote_table_query = """
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{0}' AND xtype='U')
+    CREATE TABLE "{0}" (
+        {1}
+        "cdc_created_at" timestamp NOT NULL,
+        "cdc_updated_at" timestamp,
+        "cdc_delta_flag" smallint NOT NULL,
+        "cdc_synced" smallint NOT NULL
+    );
+"""
+
+cdc_required_types = {
+    "cdc_created_at": {"type": "timestamp", "nullable": "NOT NULL"},
+    "cdc_updated_at": {"type": "timestamp", "nullable": ""},
+    "cdc_delta_flag": {"type": "smallint", "nullable": "NOT NULL"},
+    "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
+}
 
 row_query = """
     WITH Results_CTE AS

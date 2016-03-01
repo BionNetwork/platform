@@ -92,20 +92,6 @@ class Mysql(Database):
         return cols_query, constraints_query, indexes_query
 
     @staticmethod
-    def remote_table_create_query():
-        """
-        запрос на создание новой таблицы в БД клиента
-        """
-        return mysql_map.remote_table_query
-
-    @staticmethod
-    def remote_triggers_create_query():
-        """
-        запрос на создание триггеров в БД клиента
-        """
-        return mysql_map.remote_triggers_query
-
-    @staticmethod
     def get_primary_key(table, db):
         """
         запрос на получение Primary Key

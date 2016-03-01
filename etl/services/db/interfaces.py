@@ -441,25 +441,25 @@ class Database(object):
         """
         return "SELECT {0} FROM {1}"
 
-    @staticmethod
-    def remote_table_create_query():
+    @classmethod
+    def remote_table_create_query(cls):
         """
         запрос на создание новой таблицы в БД клиента
 
         Returns:
             str: строка запроса
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        return cls.db_map.remote_table_query
 
-    @staticmethod
-    def remote_triggers_create_query():
+    @classmethod
+    def remote_triggers_create_query(cls):
         """
         запрос на создание триггеров в БД клиента
 
         Returns:
             str: строка запроса
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        return cls.db_map.remote_triggers_query
 
     @staticmethod
     def get_primary_key(table, db):

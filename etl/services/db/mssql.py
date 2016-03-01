@@ -44,23 +44,6 @@ class MsSql(Database):
         """
         return '\"'
 
-    def get_tables(self, source):
-        """
-        Получение списка таблиц
-        :param source:
-        :return:
-        """
-        query = """
-            SELECT table_name FROM information_schema.tables
-            where table_catalog='{0}' and
-            table_type='base table'order by table_name;
-        """.format(source.db)
-
-        records = self.get_query_result(query)
-        records = map(lambda x: {'name': x[0], }, records)
-
-        return records
-
     def get_rows_query(self, cols, structure):
         """
         достает строки из соурса с лимит оффсетом
