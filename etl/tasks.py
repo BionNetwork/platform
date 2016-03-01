@@ -883,9 +883,8 @@ class DeleteRedundant(TaskProcessing):
                 self.error_handling(e.message)
             page += 1
 
-        if not self.context['db_update']:
-            self.next_task_params = (
-                GENERATE_DIMENSIONS, load_dimensions, self.context)
+        self.next_task_params = (
+            GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateTriggers(TaskProcessing):
