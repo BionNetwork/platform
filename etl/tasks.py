@@ -627,7 +627,7 @@ class LoadDimensions(TaskProcessing):
                     '5': current_day.strftime('%B'),
                     '6': current_day.day,
                     '7': current_day.isocalendar()[1],
-                    '8': int(math.ceil(month / 3)),
+                    '8': int(math.ceil(float(month) / 3)),
 
                  })
             self.date_tables.update({current_day: ind + 1})

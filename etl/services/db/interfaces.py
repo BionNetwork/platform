@@ -4,6 +4,7 @@ from collections import defaultdict
 from itertools import groupby
 import datetime
 from django.conf import settings
+import time
 
 from etl.constants import FIELD_NAME_SEP
 
@@ -402,7 +403,7 @@ class Database(object):
         """
         res = {}
         interval_queries = self.get_interval_query(source, cols_info)
-        now = datetime.datetime.now()
+        now = time.mktime(datetime.datetime.now().timetuple())
         for table, col, query in interval_queries:
             start_date, end_date = self.get_query_result(query)[0]
             if res.get(table, None):
