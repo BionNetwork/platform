@@ -16,8 +16,8 @@
     "tests"
   ],
   "dependencies": {
-    "angular": "^1.5.0",
-    "bootstrap": "^3.3.6",
+    "nvd3": "^1.8.2",
+    "angular-nvd3": "^1.0.5",
     "AdminLTE": "adminlte#^2.3.2"
   },
   "devDependencies": {
