@@ -255,12 +255,14 @@ class BaseEtlView(BaseView):
     def get(self, request, *args, **kwargs):
         try:
             return self.request_method(request, *args, **kwargs)
+        # TODO: Надо убрать Exception
         except Exception as e:
             return self.json_response({'status': 'error', 'message': e.message})
 
     def post(self, request, *args, **kwargs):
         try:
             return self.request_method(request, *args, **kwargs)
+        # TODO: Надо убрать Exception
         except Exception as e:
             return self.json_response({'status': 'error', 'message': e.message})
 
@@ -491,20 +493,20 @@ class LoadDataView(BaseEtlView):
             'tables_info': helpers.RedisSourceService.get_ddl_tables_info(
                     source, tables),
         }
-        is_meta_stats = False
+        db_update = False
         meta_key = DatasourceMetaKeys.objects.filter(value=table_key)
         if meta_key:
-            is_meta_stats = True
+            db_update = True
             try:
                 meta_stats = json.loads(
                     meta_key[0].meta.stats)['tables_stat']['last_row']['cdc_key']
             except:
                 pass
-        load_args.update({'is_meta_stats': is_meta_stats})
+        load_args.update({'db_update': db_update})
 
         try:
             task, channels = get_single_task(
-                    (CREATE_DATASET, create_dataset, load_args),)
+                CREATE_DATASET, create_dataset, load_args)
         except TaskError as e:
             raise ResponseError(e.message)
 

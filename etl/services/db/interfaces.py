@@ -2,7 +2,11 @@
 from __future__ import unicode_literals
 from collections import defaultdict
 from itertools import groupby
+import datetime
 from django.conf import settings
+import time
+
+from etl.constants import FIELD_NAME_SEP
 
 
 class BaseEnum(object):
@@ -83,18 +87,19 @@ class Database(object):
         """
         return str_.split('(')[0].lower()
 
-    def get_query_result(self, query):
+    def get_query_result(self, query, args=None):
         """
         Получаем результат запроса
 
         Args:
             query(str): Строка запроса
+            args(tuple): Набор аргуметов для запроса
 
         Return:
             list: Результирующие данные
         """
         cursor = self.connection.cursor()
-        cursor.execute(query)
+        cursor.execute(query, args)
         return cursor.fetchall()
 
     @staticmethod
@@ -270,7 +275,7 @@ class Database(object):
 
         return self.db_map.row_query.format(
             cols_str, query_join,
-            '{0}', '{1}')
+            '%s', '%s')
 
     def get_rows(self, cols, structure):
         """
@@ -284,10 +289,10 @@ class Database(object):
             list of tuple: Данные по колонкам
         """
 
-        query = self.get_rows_query(cols, structure).format(
-            settings.ETL_COLLECTION_PREVIEW_LIMIT, 0)
+        query = self.get_rows_query(cols, structure)
 
-        return self.get_query_result(query)
+        return self.get_query_result(
+            query, (settings.ETL_COLLECTION_PREVIEW_LIMIT, 0))
 
     @staticmethod
     def get_separator():
@@ -331,6 +336,35 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
+    @staticmethod
+    def remote_table_create_query():
+        """
+        запрос на создание новой таблицы в БД клиента
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def remote_triggers_create_query():
+        """
+        запрос на создание триггеров в БД клиента
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+
+    @staticmethod
+    def reload_datasource_trigger_query(params):
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+
+        Args:
+            params(dict): Параметры, необходимые для запроса
+
+        Returns:
+            str: Строка запроса
+        """
+
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
     def get_statistic(self, source, tables):
         """
         возвращает статистику таблиц
@@ -345,6 +379,48 @@ class Database(object):
         stats_query = self.get_statistic_query(source, tables)
         stat_records = self.get_query_result(stats_query)
         return self.processing_statistic(stat_records)
+
+    @classmethod
+    def get_interval_query(cls, source, cols_info):
+        intervals_query = []
+        for table, col_name, col_type, _, _ in cols_info:
+            if col_type in cls.db_map.dates:
+                query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
+                        col_name, table)
+                intervals_query.append([table, col_name, query])
+        return intervals_query
+
+    def get_intervals(self, source, cols_info):
+        """
+        Возращается список интервалов для полей типа Дата
+
+        Args:
+            source('Datasource'): Источник
+            cols_info(list): Информация о колонках
+
+        Returns:
+            dict: Информация о крайних значениях дат
+        """
+        res = {}
+        interval_queries = self.get_interval_query(source, cols_info)
+        now = time.mktime(datetime.datetime.now().timetuple())
+        for table, col, query in interval_queries:
+            start_date, end_date = self.get_query_result(query)[0]
+            if res.get(table, None):
+                res[table].append({
+                    'last_updated': now,
+                    'name': col,
+                    'startDate': start_date,
+                    'endDate': end_date,
+                })
+            else:
+                res[table] = [{
+                    'last_updated': now,
+                    'name': col,
+                    'startDate': start_date,
+                    'endDate': end_date,
+                }]
+        return res
 
     @staticmethod
     def processing_statistic(records):
@@ -413,12 +489,26 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
-    @staticmethod
-    def local_table_insert_query(key_str):
+
+    @classmethod
+    def get_page_select_query(cls, table_name, cols):
         """
-        запрос инсерта в таблицу локал хранилища
-        :param key_str: str
-        :raise NotImplementedError:
+        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
+
+        Args:
+            table_name(unicode): Название таблицы
+            cols(list): Список получаемых колонок
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def local_table_insert_query(table_name, cols_num):
+        """
+        Запрос на добавление в новую таблицу локал хранилища
+
+        Args:
+            table_name(str): Название таблиц
+            cols_num(int): Число столбцов
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
@@ -482,3 +572,36 @@ class Database(object):
             primary(str): название первичного ключа
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
+    def get_date_table_names(col_type):
+        """
+        Получене запроса на создание таблицы даты
+        Returns:
+            list: Список строк с названием и типом колонок для таблицы дат
+        """
+        date_table_col_names = ['"time_id" integer PRIMARY KEY']
+        date_table_col_names.extend([
+            '"{0}" {1}'.format(field, f_type) for field, f_type
+            in col_type])
+        return date_table_col_names
+
+    @staticmethod
+    def get_dim_table_names(fields, ref_key):
+        col_names = ['"cdc_key" text PRIMARY KEY']
+        for table, field in fields:
+            field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
+            if field['type'] != 'timestamp':
+
+                col_names.append('"{0}" {1}'.format(
+                    field_name, field['type']))
+            else:
+                col_names.append('"{0}" integer REFERENCES time_by_day_{1} (time_id)'.format(
+                    field_name, ref_key))
+
+        return col_names
+
+    @staticmethod
+    def cdc_key_delete_query(table_name):
+
+        return 'DELETE from {0} where where cdc_key = ANY(%s);'.format(table_name, '%s')

@@ -16,3 +16,4 @@ xmla == 0.7.2
 xmltodict
 kombu==3.0.30
 Pillow
+git+ssh://git@gitlab.etton.ru/bi/pymondrian.git@dev
