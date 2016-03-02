@@ -7,7 +7,8 @@
   function graphSpace() {
     return {
       scope: {
-        setupData: '=?'
+        setupData: '=?',
+        setupData1: '=?'
       },
       restrict: 'E',
       controller: 'graphSpaceCtrl',

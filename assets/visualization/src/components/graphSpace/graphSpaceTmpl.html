@@ -1,6 +1,10 @@
 <div>
   <!-- graphSpace -->
-  Graphic Space for rendering
-  {{data}}
+  <span style="display: none;">
+    {{data}}
+  </span>
+  <button ng-click="render1()">1</button>
+  <button ng-click="render2()">2</button>
+  <nvd3 options="options" data="data2"></nvd3>
 </div>
 

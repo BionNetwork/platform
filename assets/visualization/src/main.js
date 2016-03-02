@@ -1,5 +1,5 @@
 (function() {
   'use strict';
-  angular.module('BI-visualization', []);
+  angular.module('BI-visualization', ['nvd3']);
 
 })();
