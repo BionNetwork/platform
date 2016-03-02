@@ -460,12 +460,8 @@ class LoadDimensions(TaskProcessing):
         """
         column_names = []
         for table, field in self.actual_fields:
-            if field['type'] in ['timestamp']:
-                column_names.append(
-                TIME_COLUMN_NAME.format(table, field['name']))
-            else:
-                column_names.append(
-                    STANDART_COLUMN_NAME.format(table, field['name']))
+            column_names.append(
+                STANDART_COLUMN_NAME.format(table, field['name']))
         return column_names
 
     def filter_columns(self, cols):
@@ -492,7 +488,7 @@ class LoadDimensions(TaskProcessing):
         for table, field in self.actual_fields:
             if field['type'] in ['timestamp']:
                 date_fields_order.update(
-                    {index: TIME_COLUMN_NAME.format(table, field['name'])})
+                    {index: STANDART_COLUMN_NAME.format(table, field['name'])})
             column_names.append(
                 STANDART_COLUMN_NAME.format(table, field['name']))
             index += 1

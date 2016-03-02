@@ -596,7 +596,7 @@ class Database(object):
                 col_names.append('"{0}" {1}'.format(
                     field_name, field['type']))
             else:
-                col_names.append('"{0}_id" integer REFERENCES time_by_day_{1} (time_id)'.format(
+                col_names.append('"{0}" integer REFERENCES time_by_day_{1} (time_id)'.format(
                     field_name, ref_key))
 
         return col_names

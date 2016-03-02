@@ -45,5 +45,4 @@ TIME_TABLE = 'time_by_day'  # Таблица дат
 
 # Строки формирования названия колонок
 STANDART_COLUMN_NAME = '{0}__{1}'
-TIME_COLUMN_NAME = '{0}__{1}_id'
-MONGODB_DB_NAME = 'etl' # база данных в монго
+MONGODB_DB_NAME = 'etl'  # база данных в монго
