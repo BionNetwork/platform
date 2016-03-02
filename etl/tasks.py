@@ -1291,12 +1291,14 @@ class CreateCube(TaskProcessing):
         if resp.json()['status'] == 'success':
             cube_id = resp.json()['id']
             logger.info('Created cube ' + cube_id)
+
+            DatasetUpdateService.update_status(
+                self.context['dataset_id'], DatasetStateChoices.LOADED)
+
         else:
             self.error_handling(resp.json()['message'])
             logger.error('Error creating cube')
             logger.error(resp.json()['message'])
 
-        DatasetUpdateService.update_status(
-            self.context['dataset_id'], DatasetStateChoices.LOADED)
 
 # write in console: python manage.py celery -A etl.tasks worker
