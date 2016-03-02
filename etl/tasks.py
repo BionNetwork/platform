@@ -1124,9 +1124,7 @@ class CreateCube(TaskProcessing):
                 hierarchy = Hierarchy(name='Hierarchy %s' % title)
                 hierarchy.add_level(level)
                 dimension.add_hierarchies([hierarchy])
-
             else:
-
                 dim_attribute = Attribute(name=title, key_column='%s_id' % name)
                 dimension.add_attribute(dim_attribute)
                 measure_group.dimension_links.add_dimension_link(
