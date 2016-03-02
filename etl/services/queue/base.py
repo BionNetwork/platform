@@ -7,7 +7,7 @@ import pymongo
 from etl.constants import TYPES_MAP
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
-from core.models import (QueueList, Queue, QueueStatus)
+from core.models import (QueueList, Queue, QueueStatus, Dataset)
 from core.exceptions import TaskError
 from core.helpers import HashEncoder
 import json
@@ -22,7 +22,8 @@ __all__ = [
     'TLSE',  'STSE', 'RPublish', 'RowKeysCreator',
     'calc_key_for_row', 'TableCreateQuery', 'InsertQuery', 'MongodbConnection',
     'DeleteQuery', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
-    'process_binary_data', 'get_binary_types_dict', 'WhetherTableExistsQuery'
+    'process_binary_data', 'get_binary_types_dict', 'WhetherTableExistsQuery',
+    'DatasetUpdateService',
 ]
 
 
@@ -659,3 +660,15 @@ class AllKeysTableStatusEnum(BaseEnum):
 
 AKTSE = AllKeysTableStatusEnum
 
+
+class DatasetUpdateService(object):
+    """
+    Сервис по работе с моделью Dataset
+    """
+    @staticmethod
+    def update_status(dataset_id, state):
+        # обновляем статус dataset-a
+
+        dataset = Dataset.objects.get(id=dataset_id)
+        dataset.state = state
+        dataset.save()

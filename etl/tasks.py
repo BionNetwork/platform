@@ -20,7 +20,8 @@ from .helpers import (RedisSourceService, DataSourceService,
                       TaskErrorCodeEnum)
 from core.models import (
     Datasource, Dimension, Measure, QueueList, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
+    DatasetStateChoices)
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from djcelery import celery
@@ -224,6 +225,10 @@ class CreateDataset(TaskProcessing):
     def processing(self):
 
         dataset, created = Dataset.objects.get_or_create(key=self.key)
+
+        # меняем статус dataset
+        DatasetUpdateService.update_status(dataset.id, DatasetStateChoices.IDLE)
+
         self.context['dataset_id'] = dataset.id
 
         is_meta_stats = self.context['is_meta_stats']
@@ -244,6 +249,10 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
+
+        DatasetUpdateService.update_status(
+            self.context['dataset_id'], DatasetStateChoices.FILUP)
+
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
@@ -514,6 +523,9 @@ class LoadDimensions(TaskProcessing):
             fields_str, source_table_name, '{0}', '{1}')
 
     def processing(self):
+
+        self.update_dataset()
+
         self.key = self.context['checksum']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -720,6 +732,10 @@ class LoadDimensions(TaskProcessing):
 
         connection.commit()
 
+    def update_dataset(self):
+        DatasetUpdateService.update_status(
+            self.context['dataset_id'], DatasetStateChoices.DIMCR)
+
 
 class LoadMeasures(LoadDimensions):
     """
@@ -762,6 +778,10 @@ class LoadMeasures(LoadDimensions):
             measure.title = title if title is not None else target_table_name
             measure.save()
 
+    def update_dataset(self):
+        DatasetUpdateService.update_status(
+            self.context['dataset_id'], DatasetStateChoices.MSRCR)
+
     def set_next_task_params(self):
         self.next_task_params = (
             CREATE_CUBE, create_cube, self.context)
@@ -776,6 +796,10 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
+
+        DatasetUpdateService.update_status(
+            self.context['dataset_id'], DatasetStateChoices.FILUP)
+
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -1271,5 +1295,8 @@ class CreateCube(TaskProcessing):
             self.error_handling(resp.json()['message'])
             logger.error('Error creating cube')
             logger.error(resp.json()['message'])
+
+        DatasetUpdateService.update_status(
+            self.context['dataset_id'], DatasetStateChoices.LOADED)
 
 # write in console: python manage.py celery -A etl.tasks worker
