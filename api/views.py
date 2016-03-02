@@ -1,12 +1,14 @@
 # coding: utf-8
 from __future__ import unicode_literals
+import json
 
 import xmltodict
 import logging
 
 from core.models import Cube
 from core.views import BaseViewNoLogin
-from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
+from etl.services.olap.base import send_xml, OlapServerConnectionErrorException, \
+    mdx_execute
 from django.db import transaction
 
 
@@ -60,8 +62,30 @@ class ExecuteQueryView(BaseViewNoLogin):
     Выполнение mdx запроса к данным
     """
 
-    def post(self, request, *args, **kwargs):
-        return self.json_response({'status': 'success'})
+    def get(self, request, *args, **kwargs):
+        # mdx_request_info = request.POST('mdx_info')
+        mdx_request_info = """{
+"cube":
+    {"name":"cube_7609424280001558618"},
+"mdx": "SELECT {[Measures].[django_migrations__id]} ON COLUMNS, NON EMPTY {[Dim Table].[django_migrations__app].Members} ON ROWS FROM [cube_7609424280001558618]",
+"name": "BEC1E7D7-12DC-8F5A-A1C3-6CFC636041E2",
+"queryType": "OLAP",
+"type":"QUERYMODEL"
+}"""
+        mdx_info = json.loads(mdx_request_info)
+        mdx = mdx_info['mdx']
+        cube_name = mdx_info['cube']['name']
+        mdx_response = mdx_execute(cube_name, mdx)
+        result = {
+            'cellmap': mdx_response,
+            'query': {
+                'cube:': {'name': cube_name},
+                'mdx': mdx,
+                'queryType': mdx_info['queryType'],
+                'type': mdx_info['type'],
+            }
+        }
+        return self.json_response(result)
 
 
 class SchemasListView(BaseViewNoLogin):

@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+import json
 import os
 from olap.xmla import xmla
 import easywebdav
 
 from django.conf import settings
 from requests import ConnectionError
+from core.models import Cube
 
 
 class OlapClient(object):
@@ -27,6 +29,12 @@ class OlapClient(object):
         )
 
     def file_upload(self, file_name):
+        """
+        Загрузка файла
+
+        Args:
+            file_name(str): Название файла
+        """
         self.webdav.upload(
             os.path.join(
                 settings.BASE_DIR, 'data/resources/cubes/', '{0}/{1}'.format(
@@ -34,6 +42,12 @@ class OlapClient(object):
             remote_path='datasources/{0}'.format(file_name))
 
     def file_delete(self, file_name):
+        """
+        Удаление файла
+
+        Args:
+            file_name(str): Название файла
+        """
         self.webdav.delete('datasources/{0}'.format(file_name))
 
 
@@ -54,7 +68,7 @@ def send_xml(key, cube_id, xml):
         os.makedirs(directory)
 
     datasource_file_name = 'datasource_{0}.sds'.format(key)
-    schema_name = 'cube_{0}.xml'.format(key)
+    schema_name = '{0}.xml'.format(key)
 
     db_info = settings.DATABASES['default']
     settings_str = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -89,9 +103,38 @@ def send_xml(key, cube_id, xml):
     # oc.connect.getDatasources()
 
 
+def mdx_execute(cube_name, mdx=None):
+    """
+    executing mdx request
+
+    Args:
+        mdx(unicode): Строка запроса
+        cube_id(int): Название куба
+    """
+
+    cube_id = Cube.objects.get(name=cube_name).id
+    # cube_id = 68
+    client = OlapClient(cube_id)
+    client.connect.client.options.cache.clear()
+    res = client.connect.Execute(mdx, Catalog=cube_name)
+    axis_0, axis_1 = res.getAxisTuple('Axis0'), res.getAxisTuple('Axis1')
+    cellmap = res.getSlice()
+
+    res
+
+    res = {
+        'axis_0': [dict(i) for i in axis_0],
+        'axis_1': [dict(i) for i in axis_1],
+        'cellmap': [[dict(x) for x in row] for row in cellmap]
+    }
+
+    return res
+
+
 class OlapServerConnectionErrorException(Exception):
     """
     Исключение при ошибке коннекта к olap серверу
     """
+    # FIXME: Опять except Exception
     pass
 
