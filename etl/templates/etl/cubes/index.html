@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% load staticfiles i18n %}
+
+{% block content-header %}
+    <h1>
+        Список кубов
+    </h1>
+{% endblock %}
+
+{% block css %}
+    <link href="{% static 'css/cubes.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="box">
+                <div class="box-header">
+                    <h3 class="box-title">Кубы</h3>
+                </div>
+                <!-- /.box-header -->
+                <div class="box-body table-responsive no-padding">
+                    <table class="table table-hover" id="cube_table">
+                        <tbody>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название</th>
+                            <th>Дата создания</th>
+                            <th>Действия</th>
+                        </tr>
+                        {% for row in cubes %}
+                            <tr>
+                                <td>{{ row.id }}</td>
+                                <td>{{ row.name }}</td>
+                                <td>{{ row.create_date }}</td>
+                                <td>
+                                    <a href="{% url "etl:cubes.edit" row.id %}"><i class="fa fa-edit text-blue"></i></a> &nbsp;
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% endblock content %}
+
+
+{% block javascript %}
+    <script src="{% static 'js/cubes.js' %}"></script>
+{% endblock javascript %}

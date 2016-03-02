@@ -28,5 +28,8 @@ urlpatterns = [
         name='datasources.user_tasks'),
 
     url(r'^api/datasources/$', views.GetDatasources.as_view(),
-        name='api_datasources')
+        name='api_datasources'),
+
+    url(r'^cubes/$', views.CubesListView.as_view(), name='cubes.index'),
+    url(r'^cubes/edit/(?P<id>\d+)/$', views.EditCubeView.as_view(), name='cubes.edit'),
 ]

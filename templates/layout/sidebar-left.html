@@ -41,14 +41,18 @@
             <a href="{% url "core:users" %}"><i class="fa fa-users"></i><span>Пользователи</span></a></li>
         <li id="sources-li-id" class="{% if '/etl/datasources/' in request.path %}active{% endif %}">
             <a href="{% url "etl:datasources.index" %}"><i class="fa fa-circle"></i><span>Источники данных</span></a></li>
-        <li class="treeview">
-            <a href="#"><i class="fa fa-link"></i> <span>Multilevel</span> <i
-                    class="fa fa-angle-left pull-right"></i></a>
-            <ul class="treeview-menu">
-                <li><a href="#">Link in level 2</a></li>
-                <li><a href="#">Link in level 2</a></li>
-            </ul>
-        </li>
+        {% if user.cube_set.all %}
+            <li id="cubes-li-id" class="{% if '/etl/cubes/' in request.path %}active{% endif %}">
+                <a href="{% url "etl:cubes.index" %}"><i class="fa fa-cube"></i><span>Кубы</span></a></li>
+        {% endif %}
+        <!--<li class="treeview">-->
+            <!--<a href="#"><i class="fa fa-link"></i> <span>Multilevel</span> <i-->
+                    <!--class="fa fa-angle-left pull-right"></i></a>-->
+            <!--<ul class="treeview-menu">-->
+                <!--<li><a href="#">Link in level 2</a></li>-->
+                <!--<li><a href="#">Link in level 2</a></li>-->
+            <!--</ul>-->
+        <!--</li>-->
     </ul>
     <!-- /.sidebar-menu -->
 </section>

@@ -18,7 +18,7 @@ from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus,
     DatasourceSettings as SourceSettings, DatasourceSettings,
-    DatasourceMetaKeys)
+    DatasourceMetaKeys, Cube, Dataset, Measure, Dimension)
 from . import forms as etl_forms
 import logging
 
@@ -531,3 +531,43 @@ class GetUserTasksView(BaseView):
             channels.append(ch['channel'])
 
         return self.json_response({'channels': channels})
+
+
+class CubesListView(BaseTemplateView):
+
+    template_name = 'etl/cubes/index.html'
+
+    def get(self, request, *args, **kwargs):
+        cubes = Cube.objects.filter(user=request.user)
+        return self.render_to_response({'cubes': cubes, })
+
+
+class EditCubeView(BaseTemplateView):
+    template_name = 'etl/cubes/edit.html'
+
+    def get(self, request, *args, **kwargs):
+
+        cube = get_object_or_404(Cube, pk=kwargs.get('id'),
+                                 user_id=request.user.id)
+        key = Dataset.objects.get(id=cube.dataset.id).key
+
+        meta_ids = DatasourceMetaKeys.objects.filter(
+            value=key).values_list('meta_id', flat=True)
+        measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+        dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+
+        return self.render_to_response({
+            'cube': cube,
+            'measures': measures,
+            'dimensions': dimensions,
+        })
+
+    def post(self, request, *args, **kwargs):
+
+        post = request.POST
+        cube = get_object_or_404(Cube, pk=kwargs.get('id'),
+                                 user_id=request.user.id)
+        cube.name = post.get('name')
+        cube.save()
+
+        return self.redirect_to_url(reverse('etl:cubes.index'))

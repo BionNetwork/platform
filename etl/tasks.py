@@ -1268,7 +1268,7 @@ class CreateCube(TaskProcessing):
 
         if resp.json()['status'] == 'success':
             cube_id = resp.json()['id']
-            logger.info('Created cube ' + cube_id)
+            logger.info('Created cube ' + str(cube_id))
         else:
             self.error_handling(resp.json()['message'])
             logger.error('Error creating cube')
