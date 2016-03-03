@@ -115,26 +115,68 @@ def mdx_execute(cube_name, mdx=None):
     cube_id = Cube.objects.get(name=cube_name).id
     # cube_id = 68
     client = OlapClient(cube_id)
-    client.connect.client.options.cache.clear()
+    # client.connect.client.options.cache.clear()
     res = client.connect.Execute(mdx, Catalog=cube_name)
     axis_0, axis_1 = res.getAxisTuple('Axis0'), res.getAxisTuple('Axis1')
-    cellmap = res.getSlice()
+    cellmap = [[dict(x) for x in row] for row in res.getSlice()]
 
-    res
+    data = []
 
-    res = {
-        'axis_0': [dict(i) for i in axis_0],
-        'axis_1': [dict(i) for i in axis_1],
-        'cellmap': [[dict(x) for x in row] for row in cellmap]
-    }
+    header = [{
+        'value': '(All)',
+        'type': 'ROW_HEADER_HEADER'
+    }]
+    for column in axis_0:
+        header.append({
+            'value': column['Caption'],
+            'type': 'COLUMN_HEADER',
+            'properties': {
+                'uniquename': column['UName'],
+                'hierarchy': column['_Hierarchy'],
+                'dimension': 'Measures',
+                'level': column['LName']
+            }
+        })
+    data.append(header)
 
-    return res
+    row_names = []
+    for row_name in axis_1:
+        row_names.append({
+            'value': row_name['Caption'],
+            'type': 'ROW_HEADER',
+            'properties': {
+                'uniquename': row_name['UName'],
+                'hierarchy': row_name['_Hierarchy'],
+                'dimension': 'Measures',
+                'level': row_name['LName']
+            }
+        })
+
+    data_cells = []
+    for row in cellmap:
+        row_data = []
+        for cell in row:
+            row_data.append({
+                'value': cell['FmtValue'],
+                'type': 'DATA_CELL',
+                'properties': {
+                    'raw': cell['Value'],
+                    'cell_ordinal': cell['_CellOrdinal'],
+                }
+            })
+            data_cells.append(row_data)
+
+    for row_name, row_data in zip(row_names, data_cells):
+        row = [row_name]
+        row.extend(row_data)
+        data.append(row)
+
+    return data
 
 
 class OlapServerConnectionErrorException(Exception):
     """
     Исключение при ошибке коннекта к olap серверу
     """
-    # FIXME: Опять except Exception
     pass
 
