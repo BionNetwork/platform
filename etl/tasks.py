@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import json
 import calendar
 import math
+from pymondrian.core import SchemaException
 
 import requests
 from psycopg2 import errorcodes
@@ -261,12 +262,13 @@ class LoadDb(TaskProcessing):
 
                 local_insert.execute(self.binary_wrap(
                     rows_dict, binary_types_dict), many=True)
-                offset += limit
                 loaded_count += len(rows_dict)
                 print 'inserted %d rows to database. Total inserted %s/%s.' % (
                     len(rows_dict), loaded_count, rows_count)
+                offset += limit
             except Exception as e:
                 self.was_error = True
+                offset += limit
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
 
@@ -1112,21 +1114,21 @@ class CreateCube(TaskProcessing):
             title = dim.title
 
             if dim.type == 'SD':
-                dim_attribute = Attribute(name=title, key_column=name)
+                dim_attribute = Attribute(name=u'%s' % title, key_column=name)
                 dimension.add_attribute(dim_attribute)
 
                 level = Level(
-                    attribute=title, visible=True)
-                hierarchy = Hierarchy(name='Hierarchy %s' % title)
+                    attribute=u'%s' % title, visible=True)
+                hierarchy = Hierarchy(name=u'Hierarchy %s' % title)
                 hierarchy.add_level(level)
                 dimension.add_hierarchies([hierarchy])
             else:
-                dim_attribute = Attribute(name=title, key_column='%s_id' % name)
+                dim_attribute = Attribute(name=u'%s' % title, key_column='%s' % name)
                 dimension.add_attribute(dim_attribute)
                 measure_group.dimension_links.add_dimension_link(
                     ReferenceLink(
                         dimension='Time Dim', via_dimension='Dim Table',
-                        via_attribute=title, attribute='Date'))
+                        via_attribute=u'%s' % title, attribute='Date'))
 
         time_table_name = self.get_table(TIME_TABLE)
         time_dim = DimensionSchema(
@@ -1191,9 +1193,13 @@ class CreateCube(TaskProcessing):
 
         for measure in measures:
             measure_schema = MeasureSchema(
-                name=measure.name, column=measure.name, caption=measure.title,
+                name=measure.name, column=measure.name, caption=u'%s' % measure.title,
                 visible=True if measure.visible else False, aggregator='sum')
-            measure_group.measures_tag.add_measures(measure_schema)
+            # TODO: Пока только одна ссылка с временных колонок
+            try:
+                measure_group.measures_tag.add_measures(measure_schema)
+            except SchemaException:
+                pass
 
         cube.add_dimension(dimension)
         schema.add_physical_schema(physical_schema)

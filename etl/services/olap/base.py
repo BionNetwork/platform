@@ -124,7 +124,8 @@ def mdx_execute(cube_name, mdx=None):
 
     header = [{
         'value': '(All)',
-        'type': 'ROW_HEADER_HEADER'
+        'type': 'ROW_HEADER_HEADER',
+        'properties': {}
     }]
     for column in axis_0:
         header.append({
@@ -147,7 +148,6 @@ def mdx_execute(cube_name, mdx=None):
             'properties': {
                 'uniquename': row_name['UName'],
                 'hierarchy': row_name['_Hierarchy'],
-                'dimension': 'Measures',
                 'level': row_name['LName']
             }
         })

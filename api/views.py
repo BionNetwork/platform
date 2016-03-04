@@ -64,10 +64,12 @@ class ExecuteQueryView(BaseViewNoLogin):
 
     def get(self, request, *args, **kwargs):
         mdx_request_info = request.POST('mdx_info')
-#         mdx_request_info = """{
+
+        # Тестовый запрос
+        # mdx_request_info = """{
 # "cube":
-#     {"name":"cube_7609424280001558618"},
-# "mdx": "SELECT {[Measures].[django_migrations__id], [Measures].[django_migrations__id]} ON COLUMNS, NON EMPTY {[Dim Table].[django_migrations__app].Members} ON ROWS FROM [cube_7609424280001558618]",
+#     {"name":"cube__2002624614230133262"},
+# "mdx": "SELECT {[Measures].[promotion__promotion_id], [Measures].[promotion__promotion_district_id]} ON COLUMNS, NON EMPTY {[Dim Table].[promotion__media_type].Members} ON ROWS FROM [cube__2002624614230133262]",
 # "name": "BEC1E7D7-12DC-8F5A-A1C3-6CFC636041E2",
 # "queryType": "OLAP",
 # "type":"QUERYMODEL"
