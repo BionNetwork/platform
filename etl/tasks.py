@@ -437,29 +437,24 @@ class LoadDb(TaskProcessing):
             DataSourceService.update_collections_stats(
                 self.context['collections_names'], last_row['0'])
 
+        context = {
+                'is_meta_stats': self.context['is_meta_stats'],
+                'checksum': self.key,
+                'user_id': self.user_id,
+                'source_id': source.id,
+                'cols': self.context['cols'],
+                'col_types': self.context['col_types'],
+                'dataset_id': self.context['dataset_id'],
+                'meta_info': self.context['meta_info'],
+                'tree': self.context['tree'],
+                'joins': self.context['joins'],
+            }
+
         if self.context['cdc_type'] != DatasourceSettings.TRIGGERS:
-            self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
-                'is_meta_stats': self.context['is_meta_stats'],
-                'checksum': self.key,
-                'user_id': self.user_id,
-                'source_id': source.id,
-                'cols': self.context['cols'],
-                'col_types': self.context['col_types'],
-                'dataset_id': self.context['dataset_id'],
-                'meta_info': self.context['meta_info'],
-            })
+            self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, context)
         else:
-            self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
-                'is_meta_stats': self.context['is_meta_stats'],
-                'checksum': self.key,
-                'user_id': self.user_id,
-                'tables_info': self.context['tables_info'],
-                'source_id': source.id,
-                'cols': self.context['cols'],
-                'col_types': self.context['col_types'],
-                'dataset_id': self.context['dataset_id'],
-                'meta_info': self.context['meta_info'],
-            })
+            context.update({'tables_info': self.context['tables_info'], })
+            self.next_task_params = (CREATE_TRIGGERS, create_triggers, context)
 
 
 class LoadDimensions(TaskProcessing):
@@ -1138,15 +1133,7 @@ class CreateTriggers(TaskProcessing):
         connection.close()
 
         self.next_task_params = (
-            GENERATE_DIMENSIONS, load_dimensions, {
-                'checksum': self.key,
-                'user_id': self.user_id,
-                'source_id': self.context['source_id'],
-                'cols': self.context['cols'],
-                'col_types': self.context['col_types'],
-                'dataset_id': self.context['dataset_id'],
-                'meta_info': self.context['meta_info'],
-            })
+            GENERATE_DIMENSIONS, load_dimensions, self.context)
 
 
 class CreateCube(TaskProcessing):
@@ -1258,10 +1245,16 @@ class CreateCube(TaskProcessing):
 
         cube_string = etree.tostring(schema, pretty_print=True)
 
+        tree_structure = json.dumps({
+            'tree': self.context['tree'],
+            'joins': self.context['joins'],
+        })
+
         resp = requests.post('{0}{1}'.format(
             settings.API_HTTP_HOST, reverse('api:import_schema')),
             data={'key': cube_key, 'data': cube_string,
                   'user_id': self.context['user_id'],
+                  'tree_structure': tree_structure,
                   'dataset_id': dataset_id,
                   }
         )

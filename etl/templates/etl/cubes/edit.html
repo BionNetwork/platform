@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "etl/datasources/index.html" %}
 
 {% load staticfiles i18n %}
 
@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block css %}
-    <link href="{% static 'css/cubes.css' %}" rel="stylesheet">
+    <link href="{% static 'css/sources.css' %}" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
@@ -68,7 +68,13 @@
                          <div class="form-group col-md-offset-1">
                             <label style="margin-left:10px">Данные</label>
                                 <div>
-                                    <button type="button" class="btn btn-sm btn-warning">Просмотр</button>
+                                    <button type="button" class="btn btn-sm btn-warning"
+                                        onclick="getConnectionDataOnCube(
+                                        {{cube.id}}, {{source_id}},
+                                        '{% url "etl:cubes.update_cube_tree" %}',
+                                        '{% url "etl:datasources.get_data" source_id %}',
+                                        '{% url "etl:datasources.remove_all_tables" %}'
+                                        )">Просмотр</button>
                                 </div>
                         </div>
                     </div>
@@ -81,5 +87,6 @@
 
 
 {% block javascript %}
+    <script src="{% static 'js/sources.js' %}"></script>
     <script src="{% static 'js/cubes.js' %}"></script>
 {% endblock javascript %}

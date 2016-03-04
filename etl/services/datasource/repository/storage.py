@@ -336,6 +336,18 @@ class RedisSourceService(object):
 
         r_server.set(str_active_tree, json.dumps(tree_structure))
 
+    @classmethod
+    def save_joins_structure(cls, joins_structure, source):
+        """
+        суем структуру джойнов в редис
+        :param joins_structure: dict
+        :param source: Datasource
+        """
+        user_id, source_id = source.user_id, source.id
+        str_joins = RedisCacheKeys.get_source_joins(
+            user_id, source_id)
+        r_server.set(str_joins, json.dumps(joins_structure))
+
     # достаем структуру дерева из редиса
     @classmethod
     def get_active_tree_structure(cls, source):

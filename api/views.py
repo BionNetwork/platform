@@ -38,6 +38,7 @@ class ImportSchemaView(BaseViewNoLogin):
                         dataset_id=post.get('dataset_id'),
                     )
                 cube.data = data
+                cube.structure = post.get('tree_structure')
                 cube.save()
 
                 send_xml(key, cube.id, data)

@@ -32,7 +32,6 @@ checkConnection = ->
       password: required: false
     messages: port: number: 'Введите целое число!'
   $.each form.find('.border-red'), (i, el) ->
-    console.log el
     $(el).removeClass 'border-red'
     return
   if !form.valid()
@@ -144,7 +143,6 @@ getConnectionData = (dataUrl, closingUrl) ->
     if res.status == 'error'
       confirmAlert res.message
     return
-  return
 
 checkTable = (table) ->
   tableRow = $('#' + table)

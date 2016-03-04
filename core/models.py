@@ -310,6 +310,8 @@ class Cube(models.Model):
         verbose_name="дата обновления", auto_now=True, db_index=True)
     user = models.ForeignKey(User, verbose_name=u'Пользователь')
     dataset = models.ForeignKey('Dataset', verbose_name=u'Датасет')
+    structure = models.TextField(
+        verbose_name=u'Структура дерева и джойнов', default="")
 
     class Meta:
         db_table = "cubes"

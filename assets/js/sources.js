@@ -36,7 +36,6 @@ checkConnection = function() {
     }
   });
   $.each(form.find('.border-red'), function(i, el) {
-    console.log(el);
     $(el).removeClass('border-red');
   });
   if (!form.valid()) {
@@ -147,7 +146,7 @@ getConnectionData = function(dataUrl, closingUrl) {
   joinWin = $('#join-window');
   loader = $('#loader');
   loader.hide();
-  $.get(dataUrl, {
+  return $.get(dataUrl, {
     csrfmiddlewaretoken: csrftoken
   }, function(res) {
     var rowsTemplate;

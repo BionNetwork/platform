@@ -32,4 +32,6 @@ urlpatterns = [
 
     url(r'^cubes/$', views.CubesListView.as_view(), name='cubes.index'),
     url(r'^cubes/edit/(?P<id>\d+)/$', views.EditCubeView.as_view(), name='cubes.edit'),
+    url(r'^cubes/update_tree/$', views.UpdateCubeTreeView.as_view(),
+        name='cubes.update_cube_tree'),
 ]

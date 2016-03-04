@@ -18,12 +18,13 @@ from core.views import BaseView, BaseTemplateView
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus,
     DatasourceSettings as SourceSettings, DatasourceSettings,
-    DatasourceMetaKeys, Cube, Dataset, Measure, Dimension)
+    DatasourceMetaKeys, Cube, Dataset, Measure, Dimension, DatasourceMeta)
 from . import forms as etl_forms
 import logging
 
 from . import helpers
 from etl.constants import *
+from etl.models import TablesTree
 from etl.tasks import create_dataset
 from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (generate_columns_string,
@@ -483,6 +484,8 @@ class LoadDataView(BaseEtlView):
                 helpers.DataSourceService.get_columns_types(source, tables)),
             'meta_info': json.dumps(tables_info_for_meta),
             'tree': helpers.RedisSourceService.get_active_tree_structure(source),
+            'joins': helpers.RedisSourceService.get_source_joins(
+                source.user_id, source.id),
             'source': source.get_connection_dict(),
             'user_id': user_id,
             'db_update': False,
@@ -556,10 +559,18 @@ class EditCubeView(BaseTemplateView):
         measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
         dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
 
+        source_ids = DatasourceMeta.objects.filter(id__in=meta_ids).values_list(
+            'datasource_id', flat=True)
+
+        source_id = source_ids[0] if source_ids else None
+
+        assert source_id is not None
+
         return self.render_to_response({
             'cube': cube,
             'measures': measures,
             'dimensions': dimensions,
+            'source_id': source_id
         })
 
     def post(self, request, *args, **kwargs):
@@ -571,3 +582,39 @@ class EditCubeView(BaseTemplateView):
         cube.save()
 
         return self.redirect_to_url(reverse('etl:cubes.index'))
+
+
+class UpdateCubeTreeView(BaseView):
+
+    def get(self, request, *args, **kwargs):
+        get = request.GET
+
+        cube_id = get.get('cube_id')
+        source_id = get.get('source_id')
+        user_id = request.user.id
+
+        cube = get_object_or_404(Cube, pk=cube_id, user_id=user_id)
+        source = get_object_or_404(Datasource, pk=source_id, user_id=user_id)
+
+        structure = json.loads(cube.structure)
+        tree_structure = structure['tree']
+        joins = structure['joins']
+
+        # кладем в редис структуру дерева и джойнов
+        helpers.RedisSourceService.save_active_tree(tree_structure, source)
+        helpers.RedisSourceService.save_joins_structure(joins, source)
+
+        # строим дерево по структуре
+        cube_tree = TablesTree.build_tree_by_structure(tree_structure)
+        ordered_nodes = TablesTree.get_tree_ordered_nodes([cube_tree.root, ])
+
+        tables = [table.val for table in ordered_nodes]
+
+        result = {
+            'status': SUCCESS,
+            'data': helpers.RedisSourceService.get_final_info(
+                    ordered_nodes, source),
+            'tables': tables,
+        }
+
+        return self.json_response(result)
