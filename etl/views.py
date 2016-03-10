@@ -3,8 +3,9 @@ from __future__ import unicode_literals
 
 import json
 from itertools import groupby
+from datetime import datetime
 
-from django.db.models import Q
+from django.db.models import Q, DateField
 from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404
 from django.core.urlresolvers import reverse
@@ -14,7 +15,7 @@ from django.http import HttpResponse
 
 from core.exceptions import ResponseError, ValidationError, ExceptionCode, TaskError
 from core.helpers import CustomJsonEncoder
-from core.views import BaseView, BaseTemplateView
+from core.views import BaseView, BaseTemplateView, JSONMixin
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus,
     DatasourceSettings as SourceSettings, DatasourceSettings,
@@ -81,22 +82,22 @@ class SourcesListView(BaseTemplateView):
 class GetDatasources(BaseView):
 
     def get(self, request, *args, **kwargs):
-        import pickle
 
         ds = Datasource.objects.filter(user_id=request.user.id).values(
             'db', 'port', 'conn_type', 'host', 'user_id', 'login', 'password', 'id')
         return self.json_response({u'data': list(ds)})
 
 
-
-class NewSourceView(BaseTemplateView):
+class NewSourceView(JSONMixin, BaseTemplateView):
     template_name = 'etl/datasources/add.html'
 
     def get(self, request, *args, **kwargs):
         form = etl_forms.SourceForm()
         settings_form = etl_forms.SettingsForm()
-        return render(request, self.template_name, {
-            'form': form, 'settings_form': settings_form})
+        # return render(request, self.template_name, {
+        #     'form': form, 'settings_form': settings_form})
+        return self.render_to_response(
+                {'form': form, 'settings_form': settings_form})
 
     @transaction.atomic()
     def post(self, request, *args, **kwargs):
@@ -141,7 +142,7 @@ class NewSourceView(BaseTemplateView):
             )
 
 
-class EditSourceView(BaseTemplateView):
+class EditSourceView(JSONMixin, BaseTemplateView):
     template_name = 'etl/datasources/edit.html'
 
     def get(self, request, *args, **kwargs):

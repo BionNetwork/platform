@@ -1,11 +1,30 @@
 # coding: utf-8
 from __future__ import unicode_literals
+from smtplib import SMTPServerDisconnected
+import uuid
+from django.conf import settings
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+import json
+from django.contrib.auth.hashers import check_password
+from django.core.mail import send_mail
+from django.core.paginator import Paginator
+from django.core.urlresolvers import reverse
+from django.core import serializers
+from django.db.models import Q
+from django.http.response import HttpResponseRedirect, HttpResponse
+from django.utils.decorators import method_decorator
+from django.views.generic.base import View
+from rest_framework import viewsets
 
 import xmltodict
 import logging
+from api.serializers import UserSerializer
+from core.forms import UserForm, NewUserForm
+from core.helpers import CustomJsonEncoder, Settings
 
-from core.models import Cube
-from core.views import BaseViewNoLogin
+from core.models import Cube, User
+from core.views import BaseViewNoLogin, BaseTemplateView, BaseView, JSONMixin
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from django.db import transaction
 
@@ -99,3 +118,8 @@ class GetSchemaView(BaseViewNoLogin):
         cube_dict = xmltodict.parse(cube.data)
 
         return self.json_response(cube_dict)
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
