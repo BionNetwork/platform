@@ -633,4 +633,4 @@ class Database(object):
     @staticmethod
     def cdc_key_delete_query(table_name):
 
-        return 'DELETE from {0} where where cdc_key = ANY(%s);'.format(table_name, '%s')
+        return 'DELETE from {0} where cdc_key = ANY(%s);'.format(table_name, '%s')

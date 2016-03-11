@@ -415,8 +415,6 @@ class LoadDb(TaskProcessing):
 
             # update таблицы дат
             else:
-                # даты, отсутствующие в таблице дат
-                new_dates = []
 
                 select_dates_query = DatabaseService.get_select_dates_query(
                     self.get_table(TIME_TABLE))
@@ -885,9 +883,9 @@ class DetectRedundant(TaskProcessing):
         """
         self.key = self.context['checksum']
         source_collection = MongodbConnection(
-            self.get_table(STTM_DATASOURCE_KEYSALL)).collection
+            self.get_table(STTM_DATASOURCE)).collection
         current_collection = MongodbConnection(
-            self.get_table(STTM_DATASOURCE_KEYSALL)).collection
+            self.get_table(STTM_DATASOURCE_KEYS)).collection
 
         # Обновляем коллекцию всех ключей
         all_keys_collection_name = self.get_table(STTM_DATASOURCE_KEYSALL)
@@ -955,7 +953,7 @@ class DeleteRedundant(TaskProcessing):
         while True:
             delete_delta = del_collection.find(
                 {'_deleted': True}, limit=limit, skip=(page-1)*limit)
-            delete_records = [record['_id'] for record in delete_delta]
+            delete_records = [str(record['_id']) for record in delete_delta]
             if not delete_records:
                 break
             try:

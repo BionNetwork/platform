@@ -79,8 +79,6 @@ class DataSourceService(object):
         new_tables, old_tables = RedisSourceService.filter_exists_tables(
             source, tables)
 
-        print  new_tables, old_tables
-
         if new_tables:
             col_records, index_records, const_records = (
                 DatabaseService.get_columns_info(source, new_tables))
