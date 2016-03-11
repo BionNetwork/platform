@@ -102,7 +102,6 @@ class DataSourceService(object):
             # актуализируем интервалы дат (min, max) для таблиц с датами
             RedisSourceService.insert_date_intervals(
                 source, old_tables, old_tables_intervals)
-            print 'old_tables_intervals', old_tables_intervals
 
         # существование дерева
         tree_exists = RedisSourceService.check_tree_exists(
