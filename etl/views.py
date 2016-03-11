@@ -3,16 +3,14 @@ from __future__ import unicode_literals
 
 import json
 from itertools import groupby
-from datetime import datetime
 
-from django.db.models import Q, DateField
+from django.db.models import Q
 from django.core.paginator import Paginator
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404
 from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
-from rest_framework import serializers, viewsets
 
 from core.exceptions import ResponseError, ValidationError, ExceptionCode, TaskError
 from core.helpers import CustomJsonEncoder
