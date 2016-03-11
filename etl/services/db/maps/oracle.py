@@ -62,7 +62,7 @@ for i in booleans:
 
 table_query = """SELECT table_name FROM user_tables"""
 
-columns_query = """SELECT table_name, column_name, data_type,
+cols_query = """SELECT table_name, column_name, data_type,
                     CASE WHEN nullable='N' THEN 'NO'
                     ELSE 'YES' END as is_nullable,
                     null as extra

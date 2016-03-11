@@ -122,7 +122,7 @@ stat_query = """
     GROUP BY t.NAME, p.rows
 """
 
-rows_query = """
+row_query = """
     WITH Results_CTE AS
     (SELECT {0}, ROW_NUMBER() OVER (ORDER BY {4}) AS RowNum FROM {1})
     SELECT {5} FROM Results_CTE

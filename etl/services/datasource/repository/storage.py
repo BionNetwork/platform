@@ -314,7 +314,7 @@ class RedisSourceService(object):
         except AssertionError:
             actives_names = []
         not_exists = [t for t in tables if t not in actives_names]
-        return not_exists
+        return not_exists, actives_names
 
     @staticmethod
     def check_tree_exists(user_id, source_id):
@@ -694,11 +694,9 @@ class RedisSourceService(object):
         :param stats:
         :return:
         """
-        user_id = source.user_id
-        source_id = source.id
 
         str_table_by_name = RedisCacheKeys.get_active_table(
-            user_id, source_id, '{0}')
+            source.user_id, source.id, '{0}')
 
         pipe = r_server.pipeline()
 
@@ -713,7 +711,45 @@ class RedisSourceService(object):
                 }, cls=CustomJsonEncoder
             ))
         pipe.execute()
-        a = 4
+
+    @classmethod
+    def insert_date_intervals(cls, source, tables, intervals):
+        # сохраняем актуальный период дат у каждой таблицы
+        # для каждой колонки типа дата
+
+        u_id, s_id = source.user_id, source.id
+
+        str_table = RedisCacheKeys.get_active_table(u_id, s_id, '{0}')
+        str_table_ddl = RedisCacheKeys.get_active_table_ddl(u_id, s_id, '{0}')
+
+        # список имеющихся коллекций
+        actives = cls.get_active_table_list(u_id, s_id)
+        names = [x['name'] for x in actives]
+
+        # если старые таблицы, каким то образом не в активных коллекциях
+        if [t for t in tables if t not in names]:
+            raise Exception("Cтарая таблица, не в активных коллекциях!")
+
+        pipe = r_server.pipeline()
+
+        for t_name in tables:
+
+            found = [x for x in actives if x['name'] == t_name][0]
+            found_id = found["id"]
+            # collection info
+            coll_info = json.loads(
+                r_server.get(str_table.format(found_id)))
+            coll_info["date_intervals"] = intervals.get(t_name, [])
+            pipe.set(str_table.format(found_id),
+                     json.dumps(coll_info, cls=CustomJsonEncoder))
+            # ddl info
+            ddl_info = json.loads(
+                r_server.get(str_table_ddl.format(found_id)))
+            ddl_info["date_intervals"] = intervals.get(t_name, [])
+            pipe.set(str_table_ddl.format(found_id),
+                     json.dumps(ddl_info, cls=CustomJsonEncoder))
+
+        pipe.execute()
 
     @classmethod
     def info_for_tree_building(cls, ordered_nodes, tables, source):

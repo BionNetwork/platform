@@ -212,7 +212,7 @@ class LoadDb(TaskProcessing):
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         # structure = self.context['tree']
-        db_update = self.context['db_update']
+        self.db_update = self.context['db_update']
         rows_count, loaded_count = self.context['rows_count'], 0
 
         source = Datasource()
@@ -220,28 +220,30 @@ class LoadDb(TaskProcessing):
         self.publisher.rows_count = self.context['rows_count']
         self.publisher.publish(TLSE.START)
 
-        col_names = ['"cdc_key" text PRIMARY KEY']
-        clear_col_names = ['cdc_key']
-        for obj in cols:
-            t = obj['table']
-            c = obj['col']
-            col_names.append('"{0}{1}{2}" {3}'.format(
-                t, FIELD_NAME_SEP, c,
-                TYPES_MAP.get(col_types['{0}.{1}'.format(t, c)].lower())))
-            clear_col_names.append(STANDART_COLUMN_NAME.format(t, c))
+        processed_cols, clear_col_names, date_fields = self.get_processed_cols(
+            cols, col_types)
+
+        col_names = DataSourceService.get_table_create_col_names(
+                processed_cols, self.key)
 
         source_table_name = self.get_table(STTM_DATASOURCE)
         source_collection = MongodbConnection(source_table_name).collection
 
-        if not db_update:
+        # работа с таблицей дат
+        self.create_date_tables()
+
+        if not self.db_update:
+            # создаем таблицу sttm_datasource_
             LocalDbConnect(DataSourceService.get_table_create_query(
                 source_table_name, ', '.join(col_names)))
+
         binary_types_dict = get_binary_types_dict(cols, col_types)
         local_insert = LocalDbConnect(DataSourceService.get_table_insert_query(
             source_table_name, len(clear_col_names)), execute=False)
 
         limit, offset = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT, 0
         last_row = None
+
         # Пишем данные в базу
         while True:
             try:
@@ -252,9 +254,14 @@ class LoadDb(TaskProcessing):
                 for record in collection_cursor:
                     temp_dict = {}
                     for ind, col_name in enumerate(clear_col_names):
-                        temp_dict.update(
-                            {str(ind): record['_id'] if col_name == 'cdc_key'
-                                else record[col_name]})
+                        # если дата, достаем id
+                        if col_name in date_fields:
+                            temp_dict.update(
+                                {str(ind): self.date_tables[record[col_name]]})
+                        else:
+                            temp_dict.update(
+                                {str(ind): record['_id'] if col_name == 'cdc_key'
+                                    else record[col_name]})
                     rows_dict.append(temp_dict)
                 if not rows_dict:
                     break
@@ -297,7 +304,7 @@ class LoadDb(TaskProcessing):
         if self.context['cdc_type'] != DatasourceSettings.TRIGGERS:
             self.next_task_params = (DB_DETECT_REDUNDANT, detect_redundant, {
                 'checksum': self.key,
-                'db_update': db_update,
+                'db_update': self.db_update,
                 'user_id': self.user_id,
                 'source_id': source.id,
                 'cols': self.context['cols'],
@@ -309,7 +316,7 @@ class LoadDb(TaskProcessing):
         else:
             self.next_task_params = (CREATE_TRIGGERS, create_triggers, {
                 'checksum': self.key,
-                'db_update': db_update,
+                'db_update': self.db_update,
                 'user_id': self.user_id,
                 'tables_info': self.context['tables_info'],
                 'source_id': source.id,
@@ -319,6 +326,156 @@ class LoadDb(TaskProcessing):
                 'meta_info': self.context['meta_info'],
                 'rows_count': rows_count,
             })
+
+    def get_processed_cols(self, cols, col_types):
+
+        processed_cols = []
+        # простой список колонок
+        clear_col_names = ['cdc_key']
+        # информация о колонках с типом дата
+        date_fields = []
+
+        for obj in cols:
+            table = obj['table']
+            col = obj['col']
+            col_type = TYPES_MAP.get(
+                col_types['{0}.{1}'.format(table, col)].lower())
+
+            processed_cols.append((table, {'name': col, 'type': col_type}))
+
+            st_col_name = STANDART_COLUMN_NAME.format(table, col)
+            clear_col_names.append(st_col_name)
+
+            if col_type in ['timestamp']:
+                date_fields.append(st_col_name)
+
+        return processed_cols, clear_col_names, date_fields
+
+    def create_date_tables(self):
+        """
+        Создание таблиц дат
+
+        Args:
+            date_intervals_info(list):
+                Список данных об интервалах дат в таблицах
+            ::
+                [
+                    (
+                        <table_name1>,
+                        [
+                            {'startDate': <start_date1>, 'endDate': <end_date1>,
+                            'name': <col_name1>},
+                            ...
+                        ]
+                    )
+                    ...
+                ]
+        """
+
+        self.date_tables = {}
+
+        date_intervals_info = fetch_date_intervals(
+                json.loads(self.context['meta_info']))
+        # список всех интервалов
+        intervals = reduce(
+            lambda x, y: x[1]+y[1], date_intervals_info, ['', []])
+
+        if intervals:
+            start_date = min(
+                [datetime.strptime(interval['startDate'], "%d.%m.%Y").date()
+                 for interval in intervals])
+            end_date = max(
+                [datetime.strptime(interval['endDate'], "%d.%m.%Y").date()
+                 for interval in intervals])
+
+            date_cols_length = 9
+
+            insert_query = DataSourceService.get_table_insert_query(
+                self.get_table(TIME_TABLE), date_cols_length)
+            insert_db_connect = LocalDbConnect(insert_query, execute=False)
+
+            # создание новой таблицы
+            if not self.db_update:
+
+                delta = end_date - start_date
+
+                LocalDbConnect(DataSourceService.get_table_create_query(
+                    self.get_table(TIME_TABLE),
+                    ', '.join(DataSourceService.get_date_table_names(DTCN.types))))
+
+                none_row = {'0': 0}
+                none_row.update({str(x): None for x in range(1, 9)})
+                insert_db_connect.execute([none_row], many=True)
+
+                # +1 потому start_date тоже суем
+                records = self.prepare_dates_records(
+                    start_date, delta.days + 1, 0)
+
+                insert_db_connect.execute(records, many=True)
+
+            # update таблицы дат
+            else:
+                # даты, отсутствующие в таблице дат
+                new_dates = []
+
+                select_dates_query = DatabaseService.get_select_dates_query(
+                    self.get_table(TIME_TABLE))
+                dates_db_connect = LocalDbConnect(select_dates_query, execute=False)
+                db_exists_dates = dates_db_connect.fetchall()
+
+                exists_dates = {x[0].strftime("%d.%m.%Y"): x[1] for x in db_exists_dates}
+
+                self.date_tables = exists_dates
+
+                if exists_dates:
+                    max_id = max(exists_dates.itervalues())
+                    dates_list = [x[0] for x in db_exists_dates]
+                    exist_min_date = min(dates_list)
+                    exist_max_date = max(dates_list)
+
+                    min_delta = (exist_min_date - start_date).days
+
+                    if min_delta > 0:
+                        records = self.prepare_dates_records(
+                            start_date, min_delta, max_id)
+
+                        insert_db_connect.execute(records, many=True)
+
+                        max_id += min_delta
+
+                    max_delta = (end_date - exist_max_date).days
+
+                    if max_delta > 0:
+                        records = self.prepare_dates_records(
+                            exist_max_date+timedelta(days=1), max_delta, max_id)
+
+                        insert_db_connect.execute(records, many=True)
+
+                        max_id += min_delta
+
+    def prepare_dates_records(self, start_date, days_count, max_id):
+        # список рекордов для таблицы дат
+        records = []
+        for day_delta in range(days_count):
+            current_day = start_date + timedelta(days=day_delta)
+            current_day_str = current_day.isoformat()
+            month = current_day.month
+            records.append({
+                    '0': max_id + day_delta + 1,
+                    '1': current_day_str,
+                    '2': calendar.day_name[current_day.weekday()],
+                    '3': current_day.year,
+                    '4': month,
+                    '5': current_day.strftime('%B'),
+                    '6': current_day.day,
+                    '7': current_day.isocalendar()[1],
+                    '8': int(math.ceil(float(month) / 3)),
+
+                 })
+            self.date_tables.update(
+                {current_day.strftime("%d.%m.%Y"): max_id + day_delta + 1})
+
+        return records
 
 
 class LoadDimensions(TaskProcessing):
@@ -371,15 +528,9 @@ class LoadDimensions(TaskProcessing):
             'meta__collection_name', 'meta__fields', 'meta__stats')
         self.actual_fields = self.get_actual_fields(meta_data)
 
-        date_intervals_info = [
-            (t['meta__collection_name'],
-             json.loads(t['meta__stats'])['date_intervals']) for t in meta_data]
-
         if not self.context['db_update']:
-            if any([y for x, y in date_intervals_info]) and self.table_prefix == DIMENSIONS:
-                self.create_date_tables(date_intervals_info)
 
-            create_col_names = DataSourceService.get_dim_measure_table_names(
+            create_col_names = DataSourceService.get_table_create_col_names(
                 self.actual_fields, self.key)
             LocalDbConnect(DataSourceService.get_table_create_query(
                 self.get_table(self.table_prefix), ', '.join(create_col_names)))
@@ -517,12 +668,13 @@ class LoadDimensions(TaskProcessing):
             for record in rows:
                 temp_dict = {}
                 for ind in xrange(col_nums):
-                    if ind in date_fields_order.keys():
-                        # заменяем дату идентификатором из связой таблицы
-                        i = self.date_tables[record[ind].date()] if record[ind] else 0
-                        temp_dict.update({str(ind): i})
-                    else:
-                        temp_dict.update({str(ind): record[ind]})
+                    # if ind in date_fields_order.keys():
+                    #     # заменяем дату идентификатором из связой таблицы
+                    #     i = self.date_tables[record[ind].date()] if record[ind] else 0
+                    #     temp_dict.update({str(ind): i})
+                    # else:
+                    temp_dict.update({str(ind): record[ind]})
+
                 rows_dict.append(temp_dict)
             local_insert.execute(self.binary_wrap(
                 rows_dict, binary_types_dict), many=True)
@@ -561,73 +713,6 @@ class LoadDimensions(TaskProcessing):
             DataSourceService.reload_datasource_trigger_query(query_params))
 
         LocalDbConnect(reload_trigger_query).execute()
-
-    def create_date_tables(self, date_intervals_info):
-        """
-        Создание таблиц дат
-
-        Args:
-            date_intervals_info(list):
-                Список данных об интервалах дат в таблицах
-            ::
-                [
-                    (
-                        <table_name1>,
-                        [
-                            {'startDate': <start_date1>, 'endDate': <end_date1>,
-                            'name': <col_name1>},
-                            ...
-                        ]
-                    )
-                    ...
-                ]
-        """
-
-        self.date_tables = {}
-        start_date = None
-        end_date = None
-        for table, columns in date_intervals_info:
-            for column in columns:
-                current_start_date = datetime.strptime(column['startDate'], "%d.%m.%Y").date()
-                current_end_date = datetime.strptime(column['endDate'], "%d.%m.%Y").date()
-                if not start_date:
-                    start_date, end_date = current_start_date, current_end_date
-                else:
-                    start_date = current_start_date if current_start_date < start_date else start_date
-                    end_date = current_end_date if current_end_date > end_date else end_date
-
-        delta = end_date - start_date
-
-        LocalDbConnect(DataSourceService.get_table_create_query(
-            self.get_table(TIME_TABLE),
-            ', '.join(DataSourceService.get_date_table_names(DTCN.types))))
-
-        insert_query = DataSourceService.get_table_insert_query(
-            self.get_table(TIME_TABLE), 9)
-        insert_db_connect = LocalDbConnect(insert_query, execute=False)
-        none_row = {'0': 0}
-        none_row.update({str(x): None for x in range(1, 9)})
-        insert_db_connect.execute([none_row], many=True)
-
-        rows = []
-        for ind, cur_day in enumerate(range(delta.days + 1)):
-            current_day = start_date + timedelta(days=cur_day)
-            current_day_str = current_day.isoformat()
-            month = current_day.month
-            rows.append({
-                    '0': ind+1,
-                    '1': current_day_str,
-                    '2': calendar.day_name[current_day.weekday()],
-                    '3': current_day.year,
-                    '4': month,
-                    '5': current_day.strftime('%B'),
-                    '6': current_day.day,
-                    '7': current_day.isocalendar()[1],
-                    '8': int(math.ceil(float(month) / 3)),
-
-                 })
-            self.date_tables.update({current_day: ind + 1})
-        insert_db_connect.execute(rows, many=True)
 
 
 class LoadMeasures(LoadDimensions):

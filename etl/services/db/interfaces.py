@@ -103,7 +103,11 @@ class Database(object):
         return cursor.fetchall()
 
     @staticmethod
-    def _get_columns_query(source, tables):
+    def get_tables_str(tables):
+        # возвращает строку таблиц вида "('t1', 't2', ...)"
+        return '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+
+    def _get_columns_query(self, source, tables):
         """
          Получение запросов на получение данных о колонках, индексах и
          ограничениях
@@ -115,7 +119,31 @@ class Database(object):
         Returns:
             Кортеж из строк запросов в базу
         """
-        raise ValueError("Columns query is not realized")
+        tables_str = self.get_tables_str(tables)
+
+        cols_query = self.get_columns_query(tables_str, source)
+        constraints_query = self.get_constraints_query(tables_str, source)
+        indexes_query = self.get_indexes_query(tables_str, source)
+
+        return cols_query, constraints_query, indexes_query
+
+    def get_columns_query(self, tables_str, source):
+        # запрос на колонки
+        return self.db_map.cols_query.format(tables_str, source.db)
+
+    def get_constraints_query(self, tables_str, source):
+        # запрос на ограничения
+        return self.db_map.constraints_query.format(tables_str, source.db)
+
+    def get_indexes_query(self, tables_str, source):
+        # запрос на индексы
+        return self.db_map.indexes_query.format(tables_str, source.db)
+
+    def get_columns(self, source, tables):
+        # список колонок таблиц
+        tables_str = self.get_tables_str(tables)
+        cols_query = self.get_columns_query(tables_str, source)
+        return self.get_query_result(cols_query)
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -334,7 +362,8 @@ class Database(object):
         Returns:
             str: Строка запроса для получения статистичеких данных
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        tables_str = cls.get_tables_str(tables)
+        return cls.db_map.stat_query.format(tables_str, source.db)
 
     @staticmethod
     def remote_table_create_query():
@@ -450,7 +479,7 @@ class Database(object):
         return {x[0].lower(): ({'count': int(x[1]), 'size': x[2]}
                 if (x[1] and x[2]) else None) for x in records}
 
-    def get_columns(self, source, tables):
+    def get_columns_info(self, source, tables):
         """
         Получение списка колонок в таблицах
 
@@ -587,7 +616,7 @@ class Database(object):
         return date_table_col_names
 
     @staticmethod
-    def get_dim_table_names(fields, ref_key):
+    def get_table_create_col_names(fields, ref_key):
         col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in fields:
             field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])

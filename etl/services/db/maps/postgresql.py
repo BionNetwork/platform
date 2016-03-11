@@ -247,3 +247,7 @@ CREATE TRIGGER "for_{new_table}"
 AFTER INSERT OR DELETE ON "{orig_table}"
     FOR EACH ROW EXECUTE PROCEDURE reload_{new_table}_records();
 """
+
+select_dates_query = """
+    select the_date::date, time_id from {0} where time_id <> 0
+"""

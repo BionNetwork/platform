@@ -26,7 +26,7 @@ __all__ = [
     'TLSE',  'STSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
     'calc_key_for_row', 'TaskProcessing', 'SourceDbConnect', 'LocalDbConnect',
     'DTCN', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
-    'process_binary_data', 'get_binary_types_dict'
+    'process_binary_data', 'get_binary_types_dict', 'fetch_date_intervals',
 ]
 
 logger = logging.getLogger(__name__)
@@ -458,6 +458,18 @@ def get_binary_types_dict(cols, col_types):
     return binary_types_dict
 
 
+def fetch_date_intervals(meta_info):
+    """
+    возвращает интервалы для таблицы дат
+    :type meta_info: dict
+    """
+    date_intervals_info = [
+        (t_name, t_info['date_intervals'])
+        for (t_name, t_info) in meta_info.iteritems()]
+
+    return date_intervals_info
+
+
 class LocalDbConnect(object):
 
     connection = None
@@ -487,6 +499,12 @@ class LocalDbConnect(object):
             with closing(self.connection.cursor()) as cursor:
                 cursor.execute(self.query, args)
                 return cursor.fetchall()
+
+    def fetchone(self, args=None):
+        with self.connection:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute(self.query, args)
+                return cursor.fetchone()
 
 
 class SourceDbConnect(LocalDbConnect):

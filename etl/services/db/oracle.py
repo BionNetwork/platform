@@ -35,20 +35,7 @@ class Oracle(Database):
         except cx_Oracle.OperationalError:
             return None
 
-    @staticmethod
-    def _get_columns_query(source, tables):
-        """
-        запросы для колонок, констраинтов, индексов соурса
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-
-        cols_query = oracle_map.columns_query.format(tables_str)
-        constraints_query = oracle_map.constraints_query.format(tables_str)
-        indexes_query = oracle_map.indexes_query.format(tables_str)
-
-        return cols_query, constraints_query, indexes_query
-
-    def get_columns(self, source, tables):
+    def get_columns_info(self, source, tables):
         """
         Получение списка колонок в таблицах
 
@@ -82,17 +69,6 @@ class Oracle(Database):
         const_records = self.get_query_result(consts_query)
 
         return col_records, index_records, const_records
-
-    @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        Запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return cls.db_map.stat_query.format(tables_str, source.db)
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):

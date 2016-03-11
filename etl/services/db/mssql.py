@@ -16,6 +16,8 @@ from etl.services.db.maps import mssql as mssql_map
 class MsSql(Database):
     """Управление источником данных MSSQL"""
 
+    db_map = mssql_map
+
     @staticmethod
     def get_connection(conn_info):
         """
@@ -85,41 +87,13 @@ class MsSql(Database):
         sel_cols_str2 = ', '.join(
             [sel_col2.format(**x) for x in cols])
 
-        query = self.get_rows_query().format(
+        query = self.db_map.row_query.format(
             sel_cols_str1, query_join,
             settings.ETL_COLLECTION_PREVIEW_LIMIT, 0,
             group_cols_str, sel_cols_str2)
 
         records = self.get_query_result(query)
         return records
-
-    @staticmethod
-    def _get_columns_query(source, tables):
-        """
-            запросы для колонок, констраинтов, индексов соурса
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-
-        cols_query = mssql_map.cols_query.format(tables_str, source.db)
-
-        constraints_query = mssql_map.constraints_query.format(tables_str, source.db)
-
-        indexes_query = mssql_map.indexes_query.format(tables_str, source.db)
-
-        return cols_query, constraints_query, indexes_query
-
-    def get_columns(self, source, tables):
-        """
-        Получение списка колонок в таблицах
-        """
-        columns_query, consts_query, indexes_query = self._get_columns_query(
-            source, tables)
-
-        col_records = self.get_query_result(columns_query)
-        index_records = self.get_query_result(indexes_query)
-        const_records = self.get_query_result(consts_query)
-
-        return col_records, index_records, const_records
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -206,20 +180,3 @@ class MsSql(Database):
                         "on_update": c["c_upd"],
                     })
         return columns, indexes, foreigns
-
-    @staticmethod
-    def get_rows_query():
-        """
-        возвращает селект запрос c лимитом, оффсетом
-        :return: str
-        """
-        return mssql_map.rows_query
-
-    @staticmethod
-    def get_statistic_query(source, tables):
-        """
-        запрос для статистики
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        stats_query = mssql_map.stat_query.format(tables_str, source.db)
-        return stats_query

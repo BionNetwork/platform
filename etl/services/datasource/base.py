@@ -76,7 +76,10 @@ class DataSourceService(object):
         if not settings.USE_REDIS_CACHE:
                 return []
 
-        new_tables = RedisSourceService.filter_exists_tables(source, tables)
+        new_tables, old_tables = RedisSourceService.filter_exists_tables(
+            source, tables)
+
+        print  new_tables, old_tables
 
         if new_tables:
             col_records, index_records, const_records = (
@@ -84,13 +87,24 @@ class DataSourceService(object):
 
             stat_records = DatabaseService.get_stats_info(source, new_tables)
 
-            intervals = DatabaseService.get_date_intervals(source, col_records)
+            new_tables_intervals = DatabaseService.get_date_intervals(
+                source, col_records)
 
             cols, indexes, foreigns = DatabaseService.processing_records(
                 source, col_records, index_records, const_records)
 
             RedisSourceService.insert_columns_info(
-                source, new_tables, cols, indexes, foreigns, stat_records, intervals)
+                source, new_tables, cols, indexes,
+                foreigns, stat_records, new_tables_intervals)
+
+        if old_tables:
+            # берем колонки старых таблиц
+            all_columns = DatabaseService.fetch_tables_columns(source, tables)
+            old_tables_intervals = DatabaseService.get_date_intervals(source, all_columns)
+            # актуализируем интервалы дат (min, max) для таблиц с датами
+            RedisSourceService.insert_date_intervals(
+                source, old_tables, old_tables_intervals)
+            print 'old_tables_intervals', old_tables_intervals
 
         # существование дерева
         tree_exists = RedisSourceService.check_tree_exists(
@@ -566,9 +580,10 @@ class DataSourceService(object):
         return DatabaseService.get_date_table_names(col_type)
 
     @staticmethod
-    def get_dim_measure_table_names(fields, ref_key):
+    def get_table_create_col_names(fields, ref_key):
         """
-        Список строк запроса для создания колонок таблицы мер и размерности
+        Список строк запроса для создания колонок
+        таблицы sttm_, мер и размерностей
 
         Args:
             fields(): Информация о колонках таблицы
@@ -578,8 +593,7 @@ class DataSourceService(object):
             list: Список строк с названием и типом колонок
             для таблицы мер и размерности
         """
-
-        return DatabaseService.get_dim_table_names(fields, ref_key)
+        return DatabaseService.get_table_create_col_names(fields, ref_key)
 
     @staticmethod
     def cdc_key_delete_query(table_name):

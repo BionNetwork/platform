@@ -58,30 +58,10 @@ class Postgresql(Database):
                 count = d
         return int(count[5:])
 
-    @staticmethod
-    def _get_columns_query(source, tables):
-        """
-        Получение запросов на получение данных о колонках, индексах и
-        ограничениях
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-
-        # public - default scheme for postgres
-        cols_query = pgsql_map.cols_query.format(tables_str, source.db, 'public')
-        constraints_query = pgsql_map.constraints_query.format(tables_str)
-        indexes_query = pgsql_map.indexes_query.format(tables_str)
-        return cols_query, constraints_query, indexes_query
-
     @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return cls.db_map.stat_query.format(tables_str)
+    def get_columns_query(cls, tables_str, source):
+        # public - default scheme for postgres
+        return cls.db_map.cols_query.format(tables_str, source.db, 'public')
 
     @classmethod
     def get_interval_query(cls, source, cols_info):
@@ -122,12 +102,15 @@ class Postgresql(Database):
 
         return table_exists_query
 
-
     @classmethod
     def get_page_select_query(cls, table_name, cols):
         fields_str = '"'+'", "'.join(cols)+'"'
         return cls.db_map.row_query.format(
             fields_str, table_name, '%s', '%s')
+
+    @classmethod
+    def get_select_dates_query(cls, date_table):
+        return cls.db_map.select_dates_query.format(date_table)
 
     @staticmethod
     def local_table_insert_query(table_name, cols_num):
