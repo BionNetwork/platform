@@ -256,8 +256,12 @@ class LoadDb(TaskProcessing):
                     for ind, col_name in enumerate(clear_col_names):
                         # если дата, достаем id
                         if col_name in date_fields:
-                            temp_dict.update(
-                                {str(ind): self.date_tables[record[col_name]]})
+                            # если дата есть, то достаем ее из self.date_tables,
+                            # если дата пустая, проставляем id = 0
+                            temp_dict.update({
+                                str(ind): self.date_tables[record[col_name]]
+                                if record[col_name] is not None else 0
+                                })
                         else:
                             temp_dict.update(
                                 {str(ind): record['_id'] if col_name == 'cdc_key'
@@ -380,25 +384,16 @@ class LoadDb(TaskProcessing):
         intervals = reduce(
             lambda x, y: x[1]+y[1], date_intervals_info, ['', []])
 
+        # если имеются колонки с типом дата
         if intervals:
-            start_date = min(
-                [datetime.strptime(interval['startDate'], "%d.%m.%Y").date()
-                 for interval in intervals])
-            end_date = max(
-                [datetime.strptime(interval['endDate'], "%d.%m.%Y").date()
-                 for interval in intervals])
-
-            date_cols_length = 9
 
             insert_query = DataSourceService.get_table_insert_query(
-                self.get_table(TIME_TABLE), date_cols_length)
+                self.get_table(TIME_TABLE), DATE_TABLE_COLS_LEN)
             insert_db_connect = LocalDbConnect(insert_query, execute=False)
 
-            # создание новой таблицы
+            # как минимум создадим таблицу с 1 записью c id = 0
+            # для пустых значений, если новая закачка
             if not self.db_update:
-
-                delta = end_date - start_date
-
                 LocalDbConnect(DataSourceService.get_table_create_query(
                     self.get_table(TIME_TABLE),
                     ', '.join(DataSourceService.get_date_table_names(DTCN.types))))
@@ -407,49 +402,78 @@ class LoadDb(TaskProcessing):
                 none_row.update({str(x): None for x in range(1, 9)})
                 insert_db_connect.execute([none_row], many=True)
 
-                # +1 потому start_date тоже суем
-                records = self.prepare_dates_records(
-                    start_date, delta.days + 1, 0)
+            # если в таблице в колонке все значения дат пустые, то
+            # startDate и endDate = None, отфильтруем
+            not_none_intervals = [
+                i for i in intervals if i['startDate'] is not None and
+                i['endDate'] is not None
+            ]
 
-                insert_db_connect.execute(records, many=True)
+            # если имеются численные интервалы
+            if not_none_intervals:
+                # новые границы дат, пришедшие с пользователя
+                start_date = min(
+                    [datetime.strptime(interval['startDate'], "%d.%m.%Y").date()
+                     for interval in not_none_intervals])
+                end_date = max(
+                    [datetime.strptime(interval['endDate'], "%d.%m.%Y").date()
+                     for interval in not_none_intervals])
 
-            # update таблицы дат
-            else:
+                delta = end_date - start_date
 
-                select_dates_query = DatabaseService.get_select_dates_query(
-                    self.get_table(TIME_TABLE))
-                dates_db_connect = LocalDbConnect(select_dates_query, execute=False)
-                db_exists_dates = dates_db_connect.fetchall()
+                # первое заполнение таблицы дат
+                if not self.db_update:
+                    # +1 потому start_date тоже суем
+                    records = self.prepare_dates_records(
+                        start_date, delta.days + 1, 0)
 
-                exists_dates = {x[0].strftime("%d.%m.%Y"): x[1] for x in db_exists_dates}
+                    insert_db_connect.execute(records, many=True)
 
-                self.date_tables = exists_dates
+                # update таблицы дат
+                else:
+                    select_dates_query = DatabaseService.get_select_dates_query(
+                        self.get_table(TIME_TABLE))
+                    dates_db_connect = LocalDbConnect(select_dates_query, execute=False)
+                    db_exists_dates = dates_db_connect.fetchall()
 
-                if exists_dates:
-                    max_id = max(exists_dates.itervalues())
-                    dates_list = [x[0] for x in db_exists_dates]
-                    exist_min_date = min(dates_list)
-                    exist_max_date = max(dates_list)
+                    exists_dates = {x[0].strftime("%d.%m.%Y"): x[1] for x in db_exists_dates}
 
-                    min_delta = (exist_min_date - start_date).days
+                    self.date_tables = exists_dates
 
-                    if min_delta > 0:
+                    # если в таблице дат имелись записи кроме id = 0
+                    if exists_dates:
+                        max_id = max(exists_dates.itervalues())
+                        dates_list = [x[0] for x in db_exists_dates]
+                        exist_min_date = min(dates_list)
+                        exist_max_date = max(dates_list)
+
+                        min_delta = (exist_min_date - start_date).days
+
+                        if min_delta > 0:
+                            records = self.prepare_dates_records(
+                                start_date, min_delta, max_id)
+
+                            insert_db_connect.execute(records, many=True)
+
+                            max_id += min_delta
+
+                        max_delta = (end_date - exist_max_date).days
+
+                        if max_delta > 0:
+                            records = self.prepare_dates_records(
+                                exist_max_date+timedelta(days=1), max_delta, max_id)
+
+                            insert_db_connect.execute(records, many=True)
+
+                            max_id += max_delta
+
+                    # если в таблице дат имелся только 1 запись с id = 0
+                    else:
+                        # +1 потому start_date тоже суем
                         records = self.prepare_dates_records(
-                            start_date, min_delta, max_id)
+                            start_date, delta.days + 1, 0)
 
                         insert_db_connect.execute(records, many=True)
-
-                        max_id += min_delta
-
-                    max_delta = (end_date - exist_max_date).days
-
-                    if max_delta > 0:
-                        records = self.prepare_dates_records(
-                            exist_max_date+timedelta(days=1), max_delta, max_id)
-
-                        insert_db_connect.execute(records, many=True)
-
-                        max_id += min_delta
 
     def prepare_dates_records(self, start_date, days_count, max_id):
         # список рекордов для таблицы дат
