@@ -7,6 +7,7 @@ from rest_framework import routers
 
 router = routers.DefaultRouter()
 router.register(r'users', views.UserViewSet)
+router.register(r'datasources', views.DatasourceViewSet)
 
 urlpatterns = [
     url(r'^schema/import$', views.ImportSchemaView.as_view(), name='import_schema'),

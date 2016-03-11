@@ -1,11 +1,14 @@
 from __future__ import absolute_import, unicode_literals
 
-from django.conf.urls import url
+from django.conf.urls import url, include
 from . import views
+from rest_framework import routers
 
-__author__ = 'damir'
+router = routers.DefaultRouter()
+router.register(r'datasource', views.DatasourceViewSet)
 
 urlpatterns = [
+    url(r'^', include(router.urls)),
     url(r'^datasources/$', views.SourcesListView.as_view(), name='datasources.index'),
     url(r'^datasources/delete/(?P<id>\d+)/$', views.RemoveSourceView.as_view(), name='datasources.delete'),
     url(r'^datasources/edit/(?P<id>\d+)/$', views.EditSourceView.as_view(), name='datasources.edit'),

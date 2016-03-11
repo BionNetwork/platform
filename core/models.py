@@ -84,7 +84,7 @@ class DatasourceSettings(models.Model):
     SETTING_CDC_NAME = 'cdc_type'
     name = models.CharField(max_length=255, verbose_name=u'Название', db_index=True)
     value = models.TextField(verbose_name=u'Значение')
-    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник', related_name='settings')
 
     class Meta:
         db_table = "datasources_settings"
