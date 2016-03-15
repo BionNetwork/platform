@@ -1202,17 +1202,17 @@ class CreateCube(TaskProcessing):
         xml = generate(schema, output=1)
 
         resp = requests.post('{0}{1}'.format(
-            settings.API_HTTP_HOST, reverse('api:import_schema')),
-            data={'key': cube_key, 'data': xml,
-                  'user_id': self.context['user_id'], }
+            settings.API_HTTP_HOST, reverse('api:cube-list')),
+            data={
+                'name': cube_key, 'data': xml,
+                'user': self.context['user_id'], }
         )
 
-        if resp.json()['status'] == 'success':
-            cube_id = resp.json()['id']
-            logger.info('Created cube %s' % cube_id)
+        if resp.status_code in [200, 201]:
+            logger.info('Created cube %s' % json.loads(resp.text)['name'])
         else:
-            self.error_handling(resp.json()['message'])
+            self.error_handling(json.loads(resp.text)['detail'])
             logger.error('Error creating cube')
-            logger.error(resp.json()['message'])
+            logger.error(json.loads(resp.text)['detail'])
 
 # write in console: python manage.py celery -A etl.tasks worker

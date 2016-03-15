@@ -59,8 +59,7 @@ class SchemasListSerializer(serializers.ModelSerializer):
                         data=data,
                     )
 
-                send_xml(name, cube.id, user)
-
+                send_xml(name, cube.id, data)
         except OlapServerConnectionErrorException as e:
             logger.error("Can't connect to OLAP Server!\n" + e.message +
                          "\nCube data:\n" + data)

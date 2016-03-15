@@ -2,7 +2,6 @@
 from __future__ import unicode_literals
 from rest_framework import viewsets, generics, mixins
 
-import xmltodict
 import logging
 from api.serializers import UserSerializer, DatasourceSerializer, \
     SchemasListSerializer, SchemasRetreviewSerializer
@@ -11,7 +10,6 @@ from core.models import Cube, User, Datasource
 from core.views import BaseViewNoLogin
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from django.db import transaction
-from rest_framework.exceptions import APIException
 
 
 logger = logging.getLogger(__name__)

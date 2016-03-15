@@ -141,14 +141,15 @@ class NewSourceView(JSONMixin, BaseTemplateView):
             )
 
 
-class EditSourceView(JSONMixin, BaseTemplateView):
+# class EditSourceView(JSONMixin, BaseTemplateView):
+class EditSourceView(BaseTemplateView):
     template_name = 'etl/datasources/edit.html'
 
     def get(self, request, *args, **kwargs):
 
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
         try:
-            cdc_value = source.datasourcesettings_set.get(name='cdc_type').value
+            cdc_value = source.settings.get(name='cdc_type').value
         except DatasourceSettings.DoesNotExist:
             cdc_value = SourceSettings.CHECKSUM
 
