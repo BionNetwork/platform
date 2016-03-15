@@ -125,7 +125,7 @@ class HomeView(BaseTemplateView):
         return super(HomeView, self).dispatch(*args, **kwargs)
 
     def get(self, request, *args, **kwargs):
-        return render(request, "core/home.html")
+        return render(request, "index.html")
 
 
 class AngularView(BaseTemplateView):
