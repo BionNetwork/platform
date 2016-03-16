@@ -18,9 +18,6 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
             'birth_date', 'verify_email_uuid', 'avatar_small', 'avatar')
         depth = 1
 
-    def create(self, validated_data):
-        return User(**validated_data)
-
 
 class SettingsField(serializers.RelatedField):
     def to_representation(self, value):
