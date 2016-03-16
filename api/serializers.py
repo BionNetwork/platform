@@ -1,10 +1,13 @@
+# coding: utf-8
 import logging
 import json
+from django.conf import settings
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import APIException
 import xmltodict
 from core.models import User, Datasource, DatasourceSettings, Cube
+from etl import helpers
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 
 logger = logging.getLogger(__name__)
@@ -29,14 +32,25 @@ class SettingsField(serializers.RelatedField):
 
 
 class DatasourceSerializer(serializers.ModelSerializer):
-    """"""
+    """
+    Серилизатор для источника
+    """
+
     settings = SettingsField(
         many=True, queryset=DatasourceSettings.objects.all())
 
     class Meta:
         model = Datasource
-        fields = ('id', 'user_id', 'db', 'host', 'port', 'login', 'password',
-                  'conn_type', 'settings')
+        fields = ('id', 'db', 'host', 'port', 'login', 'password',
+                  'conn_type', 'user_id', 'settings')
+
+    def update(self, instance, validated_data):
+        instance = super(DatasourceSerializer, self).update(
+            instance, validated_data)
+        if settings.USE_REDIS_CACHE:
+            helpers.DataSourceService.delete_datasource(instance)
+            helpers.DataSourceService.tree_full_clean(instance)
+        return instance
 
 
 class SchemasListSerializer(serializers.ModelSerializer):

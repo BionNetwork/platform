@@ -3,8 +3,9 @@ from __future__ import unicode_literals
 from rest_framework import viewsets, generics, mixins
 
 import logging
-from api.serializers import UserSerializer, DatasourceSerializer, \
-    SchemasListSerializer, SchemasRetreviewSerializer
+from api.serializers import (
+    UserSerializer, DatasourceSerializer, SchemasListSerializer,
+    SchemasRetreviewSerializer)
 
 from core.models import Cube, User, Datasource
 from core.views import BaseViewNoLogin
@@ -76,10 +77,14 @@ class DatasourceViewSet(viewsets.ModelViewSet):
     queryset = Datasource.objects.all()
     serializer_class = DatasourceSerializer
 
+    def create(self, request, *args, **kwargs):
+        request.data.update({'user_id': request.user.id})
+        return super(DatasourceViewSet, self).create(request, *args, **kwargs)
+
 
 class SchemasListView(mixins.ListModelMixin,
-                  mixins.CreateModelMixin,
-                  generics.GenericAPIView):
+                      mixins.CreateModelMixin,
+                      generics.GenericAPIView):
     queryset = Cube.objects.all()
     serializer_class = SchemasListSerializer
 
