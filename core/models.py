@@ -89,6 +89,9 @@ class DatasourceSettings(models.Model):
     class Meta:
         db_table = "datasources_settings"
 
+    def __str__(self):
+        return self.value
+
 
 class DatasourceMeta(models.Model):
     """

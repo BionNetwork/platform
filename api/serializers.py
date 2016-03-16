@@ -1,4 +1,5 @@
 import logging
+import json
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import APIException
@@ -21,14 +22,21 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 
 class SettingsField(serializers.RelatedField):
     def to_representation(self, value):
-        return [value.id, value.name, value.value]
+        return json.dumps({'name': value.name, 'value': value.value})
+
+    def to_internal_value(self, data):
+        return DatasourceSettings(**json.loads(data))
 
 
-class DatasourceSerializer(serializers.HyperlinkedModelSerializer):
-    settings = SettingsField(many=True, queryset=DatasourceSettings.objects.all())
+class DatasourceSerializer(serializers.ModelSerializer):
+    """"""
+    settings = SettingsField(
+        many=True, queryset=DatasourceSettings.objects.all())
+
     class Meta:
         model = Datasource
-        fields = ('id', 'db', 'host', 'port', 'login', 'password', 'conn_type', 'settings')
+        fields = ('id', 'user_id', 'db', 'host', 'port', 'login', 'password',
+                  'conn_type', 'settings')
 
 
 class SchemasListSerializer(serializers.ModelSerializer):
