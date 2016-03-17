@@ -23,21 +23,12 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         depth = 1
 
 
-class SettingsField(serializers.RelatedField):
-    def to_representation(self, value):
-        return json.dumps({'name': value.name, 'value': value.value})
-
-    def to_internal_value(self, data):
-        return DatasourceSettings(**json.loads(data))
-
-
 class DatasourceSerializer(serializers.ModelSerializer):
     """
     Серилизатор для источника
     """
-
-    settings = SettingsField(
-        many=True, queryset=DatasourceSettings.objects.all())
+    settings = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=DatasourceSettings.objects.distinct('name', 'value'))
 
     class Meta:
         model = Datasource
@@ -51,6 +42,15 @@ class DatasourceSerializer(serializers.ModelSerializer):
             helpers.DataSourceService.delete_datasource(instance)
             helpers.DataSourceService.tree_full_clean(instance)
         return instance
+
+    def create(self, validated_data):
+        datasource_settings = validated_data.pop('settings')
+        datasource = Datasource.objects.create(**validated_data)
+        for ds in datasource_settings:
+            ds.pk = None
+            ds.datasource = datasource
+            ds.save()
+        return datasource
 
 
 class SchemasListSerializer(serializers.ModelSerializer):
