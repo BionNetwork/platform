@@ -9,6 +9,7 @@ from api.serializers import (
 
 from core.models import Cube, User, Datasource
 from core.views import BaseViewNoLogin
+from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from django.db import transaction
 
@@ -80,6 +81,12 @@ class DatasourceViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         request.data.update({'user_id': request.user.id})
         return super(DatasourceViewSet, self).create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        source = self.get_object()
+        DataSourceService.delete_datasource(source)
+        DataSourceService.tree_full_clean(source)
+        return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
 
 
 class SchemasListView(mixins.ListModelMixin,
