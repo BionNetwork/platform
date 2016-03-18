@@ -47,3 +47,100 @@
     <button class="btn btn-success" onclick="startLoading(12,'/etl/datasources/load_data/')">START</button>
   </div>
 </div>
+
+
+<!--join window-->
+<script type="text/html" id="join-window-modal">
+    <div class="modal inmodal" tabindex="1" role="dialog" aria-hidden="true" id="join-window">
+        <div class="modal-dialog" style="width:750px;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span aria-hidden="true">&times;</span>
+                        <span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title">Слияние таблиц</h4>
+                </div>
+                <div class="modal-body" style="height:300px; overflow-y:auto">
+                    <div class="row" style="border: solid 1px #ddd">
+                        <div class="col-md-4">
+                            <label class="control-label radio-inline">
+                                <input type="radio" checked name="joinradio" value="inner">Inner Join
+                            </label>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="control-label radio-inline">
+                                <input type="radio" name="joinradio" value="left">Left Join
+                            </label>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="control-label radio-inline">
+                                <input type="radio" name="joinradio" value="right">Right Join
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-1">
+                            <label class="control-label"></label>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="control-label" id="parentLabel"></label>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="control-label">Тип связи</label>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="control-label" id="childLabel"></label>
+                        </div>
+                    </div>
+                    <div id="joinRows"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-danger" onclick="deleteJoins()">Удалить связь</button>
+                    <button class="btn btn-success" onclick="addNewJoin()">Новая связь</button>
+                    <button class="btn btn-primary"
+                            onclick="saveJoins('/etl/datasources/save_new_joins/')">Сохранить</button>
+                    <button class="btn btn-info"
+                            onclick="closeJoins()">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+
+<!--join window row-->
+    <script type="text/html" id="join-win-row">
+        <div class="row form-group join-row with-select-<%= i %>">
+            <div class="col-md-1">
+                <input type="checkbox" class="checkbox-joins">
+            </div>
+            <div class="col-md-4">
+                <select class="form-control col-md-11" name="parent">
+                    <% _.each(parentCols, function(col){ %>
+                        <option value="<%= col %>"><%= col %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-control" name="joinType">
+                    <option value="eq">=</option>
+                    <option value="lt"><</option>
+                    <option value="gt">></option>
+                    <option value="lte"><=</option>
+                    <option value="gte">>=</option>
+                    <option value="neq"><></option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <select class="form-control" name="child">
+                    <% _.each(childCols, function(col){ %>
+                        <option value="<%= col %>"><%= col %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <% if(error){ %>
+                <span style="color:red;">Ошибка</span>
+            <% } %>
+        </div>
+    </script>
