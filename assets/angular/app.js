@@ -1,1 +1,950 @@
-!function(){"use strict";angular.module("BIPlatform",["ui.router"])}(),function(){"use strict";function e(e,t){e.state("not-found",{url:"/not-found",template:"not found"}).state("home",{url:"/",templateUrl:"/assets/angular/main/mainTmpl.html",controller:"mainCtrl"}),t.otherwise(function(e,t){return""===t.path()?"/":void 0})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e){}angular.module("BIPlatform").controller("mainCtrl",["$scope",e])}(),function(){"use strict";function e(e){e.homeRef=e.homeRef||"home"}angular.module("BIPlatform").controller("logoController",["$scope",e])}(),function(){"use strict";function e(){return{restrict:"E",scope:{homeRef:"="},controller:"logoController",templateUrl:"/assets/angular/shared/logo/logoTmpl.html"}}angular.module("BIPlatform").directive("logo",e)}(),function(){"use strict";function e(e){}angular.module("BIPlatform").controller("menuController",["$scope",e])}(),function(){"use strict";function e(){return{restrict:"E",scope:{},controller:"menuController",templateUrl:"/assets/angular/shared/menu/menuTmpl.html"}}angular.module("BIPlatform").directive("menu",e)}(),function(){"use strict";function e(e,t){e.state("etl.add",{url:"/add",controller:"etlFormController",templateUrl:"/assets/angular/components/etl/form/etlFormTmpl.html"}).state("etl.edit",{url:"/edit/:id",controller:"etlFormController",templateUrl:"/assets/angular/components/etl/form/etlFormTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e,t,r){function o(t){e.etl=t,t.settings&&(e.settings=t.settings[0],"apply_checksum"===e.settings&&(e.setting_apply_checksum=!0,e.setting_apply_triggers=!1),"apply_triggers"===e.settings&&(e.setting_apply_checksum=!1,e.setting_apply_triggers=!0))}function n(e){t.go("etl.view")}function l(e){t.go("etl.view")}function a(e){console.log("error",e)}e.etl={},e.settings="apply_checksum",e.setting_apply_checksum=!0,e.setting_apply_triggers=!1,t.params.id&&r.read({id:t.params.id}).then(o,a),e.submit=function(t){t.settings=[e.settings],t.id?r.update(t).then(l,a):r.add(t).then(n,a)}}angular.module("BIPlatform").controller("etlFormController",["$scope","$state","$etlHTTP",e])}(),function(){"use strict";function e(e,t){e.state("etl.graph",{url:"/graph/:data",controller:"etlGraphController",templateUrl:"/assets/angular/components/etl/graph/etlGraphTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e,t,r){function o(){var t={top:20,right:20,bottom:30,left:50},r=960-t.left-t.right,o=500-t.top-t.bottom,n=(d3.time.format("%d-%b-%y"),d3.time.scale().range([0,r])),l=d3.scale.linear().range([o,0]),s=d3.svg.axis().scale(n).orient("bottom"),u=d3.svg.axis().scale(l).orient("left"),i=new Range;i.selectNodeContents(document.getElementById("area57")),i.deleteContents();var c=d3.svg.line().x(function(t){return n(t[e.selectedRow])}).y(function(t){return l(t[e.selectedColumn])}),d=d3.select("#area57").append("svg").attr("width",r+t.left+t.right).attr("height",o+t.top+t.bottom).append("g").attr("transform","translate("+t.left+","+t.top+")");n.domain(d3.extent(a,function(t){return t[e.selectedRow]})),l.domain(d3.extent(a,function(t){return t[e.selectedColumn]})),d.append("g").attr("class","x axis").attr("transform","translate(0,"+o+")").call(s),d.append("g").attr("class","y axis").call(u).append("text").attr("transform","rotate(-90)").attr("y",6).attr("dy",".71em").style("text-anchor","end").text("Price ($)"),d.append("path").datum(a).attr("class","line").attr("d",c)}function n(e){a=e.data.data}function l(e){console.log("reason",e)}var a,s=JSON.parse(t.params.data),u=JSON.parse(s.colsInfo.cols);e.columns=u,r.requestContent(s).then(n,l),e.doRender=function(){o()},e.selectedRow=void 0,e.selectedColumn=void 0}angular.module("BIPlatform").controller("etlGraphController",["$scope","$state","$etlGraphHTTP",e])}(),function(){"use strict";function e(e,t){this.requestContent=function(t){var r=JSON.parse(JSON.stringify(t.colsInfo));return e.post(t.url,r,{transformRequest:function(e){var t=[];for(var r in e)t.push(encodeURIComponent(r)+"="+encodeURIComponent(e[r]));return t.join("&")},headers:{"X-CSRFToken":csrftoken,"Content-Type":"application/x-www-form-urlencoded"}})}}angular.module("BIPlatform").service("$etlGraphHTTP",["$http","$q",e])}(),function(){"use strict";function e(e,t){e.state("etl.manage",{url:"/manage/:id",controller:"etlManageController",templateUrl:"/assets/angular/components/etl/manage/etlManageTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e,t,r){var o=t.params.id;e.getRequest_RefreshData=function(){t.go("etl.graph",{data:JSON.stringify(window.refreshData_request)})},getConnectionData("/etl/datasources/get_data/"+o+"/","/etl/datasources/remove_all_tables/")}angular.module("BIPlatform").controller("etlManageController",["$scope","$state","$etlManageHTTP",e])}(),function(){"use strict";function e(e,t){}angular.module("BIPlatform").service("$etlManageHTTP",["$http","$q",e])}(),function(){"use strict";function e(e,t){e.state("etl.view",{url:"/view",controller:"etlViewController",templateUrl:"/assets/angular/components/etl/view/etlViewTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e,t){function r(t){e.etls=t}function o(t){var r,o=e.etls,n=o.length,l=!1;for(r=0;n>r;r++)if(o[r].id==t.id){l=!0,o.splice(r,1);break}l?$("#etlRemoveModal").modal("hide"):console.log("Something went wrong...")}function n(e){console.log("error",e)}e.etls=[],e.currentEtl=void 0,t.read().then(r,n),e.confirmRemove=function(){t.remove(e.currentEtl).then(o,n)},e.cancelRemove=function(){console.log("cancelRemove item",e.currentEtl)},e.prepareRemove=function(t){e.currentEtl=t}}angular.module("BIPlatform").controller("etlViewController",["$scope","$etlHTTP",e])}(),function(){"use strict";function e(e,t){e.state("users.add",{url:"/add",controller:"usersFormController",templateUrl:"/assets/angular/components/users/form/usersFormTmpl.html"}).state("users.edit",{url:"/edit/:id",controller:"usersFormController",templateUrl:"/assets/angular/components/users/form/usersFormTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e,t,r){function o(t){e.user=t}function n(e){t.go("users.view")}function l(e){t.go("users.view")}function a(e){console.log("error",e)}e.user={status:"active"},t.params.id&&r.read({id:t.params.id}).then(o,a),e.submit=function(e){e.id?r.update(e).then(l,a):r.add(e).then(n,a)}}angular.module("BIPlatform").controller("usersFormController",["$scope","$state","$usersHTTP",e])}(),function(){"use strict";function e(e,t){e.state("users.view",{url:"/view",controller:"usersViewController",templateUrl:"/assets/angular/components/users/view/usersViewTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e,t){function r(t){e.users=t}function o(t){var r,o=e.users,n=o.length,l=!1;for(r=0;n>r;r++)if(o[r].id==t.id){l=!0,o.splice(r,1);break}l?$("#userRemoveModal").modal("hide"):console.log("Something went wrong...")}function n(e){console.log("error",e)}e.users=[],e.currentUser=void 0,t.read().then(r,n),e.confirmRemove=function(){t.remove(e.currentUser).then(o,n)},e.cancelRemove=function(){console.log("cancelRemove item",e.currentUser)},e.prepareRemove=function(t){e.currentUser=t}}angular.module("BIPlatform").controller("usersViewController",["$scope","$usersHTTP",e])}(),function(){"use strict";function e(e,t){e.state("etl",{"abstract":!0,url:"/etl",controller:"etlController",templateUrl:"/assets/angular/components/etl/etlTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e){}angular.module("BIPlatform").controller("etlController",["$scope",e])}(),function(){"use strict";function e(e,l){this.add=function(t){var r=o,n={url:r,data:t,headers:{"X-CSRFToken":csrftoken},method:"POST"};return e(n).then(function(e){return e.data})},this.update=function(t){var o=l.defer(),n=r;if(!t)return o.reject({message:"no etl to update was provided"}),o.promise;if(!t.id)return o.reject({message:"incorrect etl - has not id"}),o.promise;n+=t.id;var a={url:n,data:t,headers:{"X-CSRFToken":csrftoken},method:"PATCH"};return e(a).then(function(e){return e.data})},this.read=function(r){var o=t;r&&r.id&&(o+=r.id);var n={url:o,headers:{"X-CSRFToken":csrftoken},method:"GET"};return e(n).then(function(e){return e.data})},this.remove=function(t){var r=l.defer(),o=n;if(!t)return r.reject({message:"no etl to update was provided"}),r.promise;if(!t.id)return r.reject({message:"incorrect etl - has not id"}),r.promise;o+=t.id;var a={url:o,data:t,headers:{"X-CSRFToken":csrftoken},method:"DELETE"};return e(a).then(function(e){return t})}}angular.module("BIPlatform").service("$etlHTTP",["$http","$q",e]);var t="/api/v1/datasources/",r=t,o=t,n=t}(),function(){"use strict";function e(e,t){e.state("users",{"abstract":!0,url:"/users",controller:"usersController",templateUrl:"/assets/angular/components/users/usersTmpl.html"})}angular.module("BIPlatform").config(["$stateProvider","$urlRouterProvider",e])}(),function(){"use strict";function e(e){}angular.module("BIPlatform").controller("usersController",["$scope",e])}(),function(){"use strict";function e(e,n){this.add=function(r){var o=t,n={url:o,data:r,headers:{"X-CSRFToken":csrftoken},method:"POST"};return e(n).then(function(e){return e.data})},this.update=function(t){var o=n.defer(),l=r;if(!t)return o.reject({message:"no user to update was provided"}),o.promise;if(!t.id)return o.reject({message:"incorrect user - has not id"}),o.promise;l+=t.id;var a={url:l,data:t,headers:{"X-CSRFToken":csrftoken},method:"PATCH"};return e(a).then(function(e){return e.data})},this.read=function(r){var o=t;r&&r.id&&(o+=r.id);var n={url:o,headers:{"X-CSRFToken":csrftoken},method:"GET"};return e(n).then(function(e){return e.data})},this.remove=function(t){var r=n.defer(),l=o;if(!t)return r.reject({message:"no user to update was provided"}),r.promise;if(!t.id)return r.reject({message:"incorrect user - has not id"}),r.promise;l+=t.id;var a={url:l,data:t,headers:{"X-CSRFToken":csrftoken},method:"DELETE"};return e(a).then(function(e){return t})}}angular.module("BIPlatform").service("$usersHTTP",["$http","$q",e]);var t="/api/v1/users/",r=t,o=t}();
+
+(function main() {
+  'use strict';
+  angular.module('BIPlatform', [
+    'ui.router'
+  ]);
+})();
+
+
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      router
+    ]);
+
+  function router($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('not-found', {
+        url: "/not-found",
+        template: "not found"
+      })
+      .state('home', {
+        url: "/",
+        templateUrl: '/assets/angular/main/mainTmpl.html',
+        controller: "mainCtrl"
+      });
+
+    $urlRouterProvider.otherwise(function($injector, $location) {
+      if ($location.path() === '') {
+        return '/';
+      }
+      //return '/not-found';
+    });
+  }
+})();
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .controller('mainCtrl', ['$scope', mainCtrl]);
+
+  function mainCtrl($scope) {
+  }
+})();
+
+;(function() {
+  'use strict';
+
+  angular
+    .module('BIPlatform')
+    .controller('logoController', ['$scope', logoController]);
+
+  function logoController($scope) {
+    $scope.homeRef = $scope.homeRef || 'home';
+  }
+
+})();
+
+
+(function sharedLogo() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .directive('logo', logo);
+
+  function logo() {
+    return {
+      restrict: 'E',
+      scope: {
+        homeRef: '='
+      },
+      controller: 'logoController',
+      templateUrl: '/assets/angular/shared/logo/logoTmpl.html'
+    };
+  }
+})();
+
+;(function() {
+  'use strict';
+
+  angular
+    .module('BIPlatform')
+    .controller('menuController', ['$scope', menuController]);
+
+  function menuController($scope) {
+  }
+
+})();
+
+
+(function sharedLogo() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .directive('menu', menu);
+
+  function menu() {
+    return {
+      restrict: 'E',
+      scope: {
+      },
+      controller: 'menuController',
+      templateUrl: '/assets/angular/shared/menu/menuTmpl.html'
+    };
+  }
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('etl.add', {
+        url: "/add",
+        controller: 'etlFormController',
+        templateUrl: '/assets/angular/components/etl/form/etlFormTmpl.html'
+      })
+      .state('etl.edit', {
+        url: "/edit/:id",
+        controller: 'etlFormController',
+        templateUrl: '/assets/angular/components/etl/form/etlFormTmpl.html'
+      });
+
+  }
+
+})();
+
+
+;(function() {
+	'use strict';
+	angular
+		.module('BIPlatform')
+		.controller('etlFormController', ['$scope', '$state', '$etlHTTP', etlFormController]);
+
+	function etlFormController($scope, $state, $etlHTTP) {
+		$scope.etl = { };
+		$scope.settings = 'apply_checksum';
+		$scope.setting_apply_checksum = true;
+		$scope.setting_apply_triggers = false;
+
+		function successRead(etl) {
+			$scope.etl = etl;
+			if (etl.settings) {
+				$scope.settings = etl.settings[0];
+				if ($scope.settings === "apply_checksum") {
+					$scope.setting_apply_checksum = true;
+					$scope.setting_apply_triggers = false;
+				}
+				if ($scope.settings === "apply_triggers") {
+					$scope.setting_apply_checksum = false;
+					$scope.setting_apply_triggers = true;
+				}
+			}
+		}
+
+		function successCreate(etl) {
+			$state.go('etl.view');
+		}
+
+		function successUpdate(etl) {
+			$state.go('etl.view');
+		}
+
+		function errorHandler(reason) {
+			console.log('error', reason);
+		}
+
+		if ($state.params.id) {
+			$etlHTTP.read({
+				id: $state.params.id
+			}).then(successRead, errorHandler);
+		}
+
+		$scope.submit = function submit(etl) {
+			etl.settings = [$scope.settings];
+			if (etl.id) {
+				$etlHTTP
+					.update(etl)
+					.then(successUpdate, errorHandler);
+			}
+			else {
+				$etlHTTP
+					.add(etl)
+					.then(successCreate, errorHandler);
+			}
+		};
+	}
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('etl.graph', {
+        url: "/graph/:data",
+        controller: 'etlGraphController',
+        templateUrl: '/assets/angular/components/etl/graph/etlGraphTmpl.html'
+      });
+
+  }
+
+})();
+
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .controller('etlGraphController', ['$scope', '$state', '$etlGraphHTTP', etlGraphController]);
+
+  function etlGraphController($scope, $state, $etlGraphHTTP) {
+    var columns_ = JSON.parse($state.params.data),
+        columns = JSON.parse(columns_.colsInfo.cols),
+        graph = [],
+        data_;
+    
+    $scope.columns = columns;
+    function renderGraph() {
+      var margin = {top: 20, right: 20, bottom: 30, left: 50},
+          width = 960 - margin.left - margin.right,
+          height = 500 - margin.top - margin.bottom;
+
+      var formatDate = d3.time.format("%d-%b-%y");
+
+      var x = d3.time.scale()
+          .range([0, width]);
+
+      var y = d3.scale.linear()
+          .range([height, 0]);
+
+      var xAxis = d3.svg.axis()
+          .scale(x)
+          .orient("bottom");
+
+      var yAxis = d3.svg.axis()
+          .scale(y)
+          .orient("left");
+      
+      // Create the Range object
+      var rangeObj = new Range();
+
+      // Select all of theParent's children
+      rangeObj.selectNodeContents(document.getElementById('area57'));
+
+      // Delete everything that is selected
+      rangeObj.deleteContents();
+
+      var line = d3.svg.line()
+          .x(function(d) { return x(d[$scope.selectedRow]); })
+          .y(function(d) { return y(d[$scope.selectedColumn]); });
+
+      var svg = d3.select("#area57").append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+          .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+      //d3.tsv("/assets/angular/dist/data.tsv", type, function(error, data) {
+      //  if (error) throw error;
+
+        x.domain(d3.extent(data_, function(d) { return d[$scope.selectedRow]; }));
+        y.domain(d3.extent(data_, function(d) { return d[$scope.selectedColumn]; }));
+
+        svg.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + height + ")")
+            .call(xAxis);
+
+        svg.append("g")
+            .attr("class", "y axis")
+            .call(yAxis)
+          .append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", 6)
+            .attr("dy", ".71em")
+            .style("text-anchor", "end")
+            .text("Price ($)");
+
+        svg.append("path")
+            .datum(data_)
+            .attr("class", "line")
+            .attr("d", line);
+      //});
+
+      //function type(d) {
+      //  d.date = formatDate.parse(d.date);
+      //  d.close = +d.close;
+      //  return d;
+      //}
+    }
+
+    function successRead(response) {
+      data_ = response.data.data;
+    }
+
+    function errorRead(reason) {
+      console.log('reason', reason);
+    }
+
+    $etlGraphHTTP
+      .requestContent(columns_)
+      .then(successRead, errorRead);
+
+    $scope.doRender = function doRender() {
+      renderGraph();
+    };
+
+    $scope.selectedRow = undefined;
+    $scope.selectedColumn = undefined;
+  }
+})();
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .service('$etlGraphHTTP', ['$http', '$q', etlGraphHTTP]);
+
+  function etlGraphHTTP($http, $q) {
+
+    this.requestContent = function(request) {
+      var request_ = JSON.parse(JSON.stringify(request.colsInfo));
+      return $http.post(request.url, request_, {
+        transformRequest: function(obj) {
+          var str = [];
+          for(var p in obj) {
+            str.push(encodeURIComponent(p) + "=" + encodeURIComponent(obj[p]));
+          }
+          return str.join("&");
+        },
+        headers: {
+          'X-CSRFToken': csrftoken,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+    }
+  }
+
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('etl.manage', {
+        url: "/manage/:id",
+        controller: 'etlManageController',
+        templateUrl: '/assets/angular/components/etl/manage/etlManageTmpl.html'
+      });
+
+  }
+
+})();
+
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .controller('etlManageController', ['$scope', '$state', '$etlManageHTTP', etlManageController]);
+
+  function etlManageController($scope, $state, $etlManageHTTP) {
+    var id = $state.params.id;
+
+    $scope.getRequest_RefreshData = function() {
+      $state.go('etl.graph', { data: JSON.stringify(window.refreshData_request) });
+    };
+    getConnectionData('/etl/datasources/get_data/' + id + '/', '/etl/datasources/remove_all_tables/');
+  }
+})();
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .service('$etlManageHTTP', ['$http', '$q', etlManageHTTP]);
+
+  function etlManageHTTP($http, $q) {
+
+  }
+
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('etl.view', {
+        url: "/view",
+        controller: 'etlViewController',
+        templateUrl: '/assets/angular/components/etl/view/etlViewTmpl.html'
+      });
+  }
+})();
+
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .controller('etlViewController', ['$scope', '$etlHTTP', etlViewController]);
+
+  function etlViewController($scope, $etlHTTP) {
+    $scope.etls = [];
+    $scope.currentEtl = undefined;
+
+    function successRead(etls) {
+      $scope.etls = etls;
+    }
+
+    function successRemove(etl) {
+      var etls = $scope.etls,
+          l = etls.length,
+          found = false,
+          i;
+
+      for (i = 0; i < l; i++) {
+        if (etls[i].id == etl.id) {
+          found = true;
+          etls.splice(i, 1);
+          break;
+        }
+      }
+
+      if (found) {
+        $('#etlRemoveModal').modal('hide');
+      }
+      else {
+        console.log('Something went wrong...');
+      }
+    }
+
+    function errorHandler(reason) {
+      console.log('error', reason);
+    }
+
+    $etlHTTP
+      .read()
+      .then(successRead, errorHandler);
+
+    $scope.confirmRemove = function confirmRemove() {
+      $etlHTTP
+        .remove($scope.currentEtl)
+        .then(successRemove, errorHandler);
+    };
+
+    $scope.cancelRemove = function cancelRemove() {
+      console.log('cancelRemove item', $scope.currentEtl);
+    };
+
+    $scope.prepareRemove = function prepareRemove(item) {
+      $scope.currentEtl = item;
+    };
+  }
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('users.add', {
+        url: "/add",
+        controller: 'usersFormController',
+        templateUrl: '/assets/angular/components/users/form/usersFormTmpl.html'
+      })
+      .state('users.edit', {
+        url: "/edit/:id",
+        controller: 'usersFormController',
+        templateUrl: '/assets/angular/components/users/form/usersFormTmpl.html'
+      });
+
+  }
+
+})();
+
+
+;(function() {
+	'use strict';
+	angular
+		.module('BIPlatform')
+		.controller('usersFormController', ['$scope', '$state', '$usersHTTP', usersFormController]);
+
+	function usersFormController($scope, $state, $usersHTTP) {
+		$scope.user = {
+			status: 'active'
+		};
+
+		function successRead(user) {
+			$scope.user = user;
+		}
+
+		function successCreate(user) {
+			$state.go('users.view');
+		}
+
+		function successUpdate(user) {
+			$state.go('users.view');
+		}
+
+		function errorHandler(reason) {
+			console.log('error', reason);
+		}
+
+		if ($state.params.id) {
+			$usersHTTP.read({
+				id: $state.params.id
+			}).then(successRead, errorHandler);
+		}
+
+		$scope.submit = function submit(user) {
+			if (user.id) {
+				$usersHTTP
+					.update(user)
+					.then(successUpdate, errorHandler);
+			}
+			else {
+				$usersHTTP
+					.add(user)
+					.then(successCreate, errorHandler);
+			}
+		};
+	}
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('users.view', {
+        url: "/view",
+        controller: 'usersViewController',
+        templateUrl: '/assets/angular/components/users/view/usersViewTmpl.html'
+      });
+  }
+})();
+
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .controller('usersViewController', ['$scope', '$usersHTTP', usersViewController]);
+
+  function usersViewController($scope, $usersHTTP) {
+    $scope.users = [];
+    $scope.currentUser = undefined;
+
+    function successRead(users) {
+      $scope.users = users;
+    }
+
+    function successRemove(user) {
+      var users = $scope.users,
+          l = users.length,
+          found = false,
+          i;
+
+      for (i = 0; i < l; i++) {
+        if (users[i].id == user.id) {
+          found = true;
+          users.splice(i, 1);
+          break;
+        }
+      }
+
+      if (found) {
+        $('#userRemoveModal').modal('hide');
+      }
+      else {
+        console.log('Something went wrong...');
+      }
+    }
+
+    function errorHandler(reason) {
+      console.log('error', reason);
+    }
+
+    $usersHTTP
+      .read()
+      .then(successRead, errorHandler);
+
+    $scope.confirmRemove = function confirmRemove() {
+      $usersHTTP
+        .remove($scope.currentUser)
+        .then(successRemove, errorHandler);
+    };
+
+    $scope.cancelRemove = function cancelRemove() {
+      console.log('cancelRemove item', $scope.currentUser);
+    };
+
+    $scope.prepareRemove = function prepareRemove(item) {
+      $scope.currentUser = item;
+    };
+  }
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('etl', {
+        abstract: true,
+        url: "/etl",
+        controller: 'etlController',
+        templateUrl: '/assets/angular/components/etl/etlTmpl.html'
+      });
+  }
+
+})();
+
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .controller('etlController', ['$scope', etlController]);
+
+  function etlController($scope) {
+
+  }
+})();
+
+;(function() {
+	'use strict';
+	angular
+		.module('BIPlatform')
+		.service('$etlHTTP', ['$http', '$q', etlHTTP]);
+
+	var url_read = '/api/v1/datasources/';
+	var url_update = url_read;
+	var url_create = url_read;
+	var url_delete = url_read;
+	function etlHTTP($http, $q) {
+		this.add = function add(etl) {
+			var url = url_create;
+			var config = {
+				url: url,
+				data: etl,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'POST'
+			};
+			return $http(config).then(function(response) {
+				return response.data;
+			});
+		};
+
+		this.update = function update(etl) {
+			var deferred = $q.defer();
+			var url = url_update;
+
+			if (etl) {
+				if (!etl.id) {
+					deferred.reject({
+						message: 'incorrect etl - has not id'
+					});
+					return deferred.promise;
+				}
+				url = url + etl.id;
+			}
+			else {
+				deferred.reject({
+					message: 'no etl to update was provided'
+				});
+				return deferred.promise;
+			}
+			var config = {
+				url: url,
+				data: etl,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'PATCH'
+			};
+			return $http(config).then(function(response) {
+				return response.data;
+			});
+		};
+
+		this.read = function read(criteria) {
+			var url = url_read;
+			if (criteria) {
+				if (criteria.id) {
+					url = url + criteria.id;
+				}
+			}
+			var config = {
+				url: url,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'GET'
+			};
+			return $http(config).then(function(response) {
+				return response.data;
+			});
+		};
+
+		this.remove = function remove(etl) {
+			var deferred = $q.defer();
+			var url = url_delete;
+
+			if (etl) {
+				if (!etl.id) {
+					deferred.reject({
+						message: 'incorrect etl - has not id'
+					});
+					return deferred.promise;
+				}
+				url = url + etl.id;
+			}
+			else {
+				deferred.reject({
+					message: 'no etl to update was provided'
+				});
+				return deferred.promise;
+			}
+			var config = {
+				url: url,
+				data: etl,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'DELETE'
+			};
+			return $http(config).then(function(response) {
+				return etl; // should be here this?
+			});
+		};
+	}
+
+})();
+
+;(function() {
+  "use strict";
+
+  angular
+    .module('BIPlatform')
+    .config([
+      '$stateProvider',
+      '$urlRouterProvider',
+      route
+    ]);
+
+  function route($stateProvider, $urlRouterProvider) {
+    $stateProvider
+      .state('users', {
+        abstract: true,
+        url: "/users",
+        controller: 'usersController',
+        templateUrl: '/assets/angular/components/users/usersTmpl.html'
+      });
+  }
+
+})();
+
+
+;(function() {
+  'use strict';
+  angular
+    .module('BIPlatform')
+    .controller('usersController', ['$scope', usersController]);
+
+  function usersController($scope) {
+
+  }
+})();
+
+;(function() {
+	'use strict';
+	angular
+		.module('BIPlatform')
+		.service('$usersHTTP', ['$http', '$q', usersHTTP]);
+
+	var url_read = '/api/v1/users/';
+	var url_update = url_read;
+	var url_create = url_read;
+	var url_delete = url_read;
+
+	function usersHTTP($http, $q) {
+		this.add = function add(user) {
+			var url = url_read;
+			var config = {
+				url: url,
+				data: user,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'POST'
+			};
+			return $http(config).then(function(response) {
+				return response.data;
+			});
+		};
+
+		this.update = function update(user) {
+			var deferred = $q.defer();
+			var url = url_update;
+
+			if (user) {
+				if (!user.id) {
+					deferred.reject({
+						message: 'incorrect user - has not id'
+					});
+					return deferred.promise;
+				}
+				url = url + user.id;
+			}
+			else {
+				deferred.reject({
+					message: 'no user to update was provided'
+				});
+				return deferred.promise;
+			}
+			var config = {
+				url: url,
+				data: user,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'PATCH'
+			};
+			return $http(config).then(function(response) {
+				return response.data;
+			});
+		};
+
+		this.read = function read(criteria) {
+			var url = url_read;
+			if (criteria) {
+				if (criteria.id) {
+					url = url + criteria.id;
+				}
+			}
+			var config = {
+				url: url,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'GET'
+			};
+			return $http(config).then(function(response) {
+				return response.data;
+			});
+		};
+
+		this.remove = function remove(user) {
+			var deferred = $q.defer();
+			var url = url_delete;
+
+			if (user) {
+				if (!user.id) {
+					deferred.reject({
+						message: 'incorrect user - has not id'
+					});
+					return deferred.promise;
+				}
+				url = url + user.id;
+			}
+			else {
+				deferred.reject({
+					message: 'no user to update was provided'
+				});
+				return deferred.promise;
+			}
+			var config = {
+				url: url,
+				data: user,
+				headers: {
+					'X-CSRFToken': csrftoken
+				},
+				method: 'DELETE'
+			};
+			return $http(config).then(function(response) {
+				return user; // should be here this?
+			});
+		};
+	}
+
+})();
