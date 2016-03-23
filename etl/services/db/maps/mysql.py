@@ -67,8 +67,8 @@ for i in booleans:
 
 table_query = """
     SELECT table_name FROM information_schema.tables
-            where table_schema='{0}' order by table_name;
-        """
+        where table_schema='{0}' order by table_name;
+"""
 
 cols_query = """
     SELECT table_name, column_name, column_type, is_nullable,

@@ -366,31 +366,23 @@ class RowKeysCreator(object):
                 break
 
 
-def process_binary_data(record, binary_types_list):
+def process_binary_data(record, binary_types_list, process_func=None):
     """
-    Если данные бинарные, то оборачиваем в bson.binary.Binary
+    Если данные бинарные, то оборачиваем в bson.binary.Binary,
+    если process_func задан, то бинарные данные обрабатываем ею,
+    например для расчета хэша бин данных, который используется для
+    подсчета cdc_key используем binascii.b2a_base64
     """
+    process_func = process_func or binary.Binary
+
     new_record = list()
 
     for (rec, is_binary) in izip(record, binary_types_list):
-        new_record.append(binary.Binary(
-            rec) if is_binary and rec is not None else rec)
+        new_record.append(
+            process_func(bytes(rec)) if is_binary and rec is not None else rec)
 
     new_record = tuple(new_record)
     return new_record
-
-
-def process_binaries_for_row(row, binary_types_list):
-    """
-    Если пришли бинарные данные,
-    то вычисляем ключ отдельный для каждого из них
-    """
-    new_row = []
-    for i, r in enumerate(row):
-        if binary_types_list[i] and r is not None:
-            r = binascii.b2a_base64(r)
-        new_row.append(r)
-    return tuple(new_row)
 
 
 def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
@@ -407,7 +399,7 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
         int: Ключ для строки
     """
     # преобразуем бинары в строку, если они есть
-    row = process_binaries_for_row(row, binary_types_list)
+    row = process_binary_data(row, binary_types_list, binascii.b2a_base64)
 
     if len(tables_key_creators) > 1:
         row_values_for_calc = [
@@ -418,16 +410,9 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
 
 
 def get_binary_types_list(cols, col_types):
-    """
-    Информация о бинарниках для генерации ключа
-    Args:
-        cols(list): Данные о колонках
-        col_types(): Данные о типах
-
-    Returns:
-        list: Список флагов о бинарности поля
-
-    """
+    # инфа о бинарниках для генерации ключа
+    # генерит список [False, False, True, ...] - инфа
+    # о том, какие данные в строке бинарные
     binary_types_list = []
 
     for i, obj in enumerate(cols, start=1):
@@ -439,24 +424,14 @@ def get_binary_types_list(cols, col_types):
 
 
 def get_binary_types_dict(cols, col_types):
-    """
-    Информация о бинарниках для инсерта в бд
-    Args:
-        cols(list): Данные о колонках
-        col_types(): Данные о типах
-
-    Returns:
-        dict: Пронумированный словарь с флагами о бинарности поля
-    """
-    binary_types_dict = {}
-
-    for i, obj in enumerate(cols, start=1):
-        dotted = '{0}.{1}'.format(obj['table'], obj['col'])
-        map_type = TYPES_MAP.get(col_types[dotted])
-        binary_types_dict[str(i)] = map_type == TYPES_MAP.get('binary')
+    # инфа о бинарниках для инсерта в бд
+    # генерит словарь {'1': False, '2': False, '3': True, ...} - инфа
+    # о том, какие данные в строке бинарные
+    binary_types_list = get_binary_types_list(cols, col_types)
+    binary_types_dict = {
+        str(i): k for i, k in enumerate(binary_types_list, start=1)}
 
     return binary_types_dict
-
 
 def fetch_date_intervals(meta_info):
     """
@@ -517,6 +492,7 @@ class SourceDbConnect(LocalDbConnect):
 
     def __init__(self, query, source, execute=False):
         super(SourceDbConnect, self).__init__(query, source, execute)
+
 
 class MongodbConnection(object):
 
