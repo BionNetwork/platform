@@ -72,7 +72,8 @@ table_query = """
 
 cols_query = """
     SELECT table_name, column_name, column_type, is_nullable,
-    case extra when 'auto_increment' then extra else null end
+    case extra when 'auto_increment' then extra else null end,
+    character_maximum_length
     FROM information_schema.columns
             where table_name in {0} and table_schema = '{1}' order by table_name;
 """

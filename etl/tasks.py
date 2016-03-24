@@ -1034,8 +1034,10 @@ class CreateTriggers(TaskProcessing):
                 new += 'NEW.{0}, '.format(name)
                 old += 'OLD.{0}, '.format(name)
                 cols += ('{name}, '.format(name=name))
-                cols_str += ' {sep}{name}{sep} {typ},'.format(
-                    sep=sep, name=name, typ=col['type']
+                cols_str += ' {sep}{name}{sep} {typ}{length},'.format(
+                    sep=sep, name=name, typ=col['type'],
+                    length='({0})'.format(col['max_length'])
+                    if col['max_length'] is not None else ''
                 )
 
             # если таблица существует

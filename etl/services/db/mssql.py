@@ -135,7 +135,7 @@ class MsSql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -168,6 +168,7 @@ class MsSql(Database):
                     "origin_type": x[col_type],
                     "is_nullable": x[is_nullable],
                     "extra": x[extra_],
+                    "max_length": x[max_length],
                 })
 
             # находим внешние ключи

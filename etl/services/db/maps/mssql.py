@@ -69,7 +69,8 @@ table_query = """
 cols_query = """
     SELECT table_name, column_name, data_type as column_type, is_nullable,
         case when COLUMNPROPERTY(object_id(TABLE_NAME), COLUMN_NAME, 'IsIdentity') = 1
-        then 'extra' else null end
+            then 'extra' else null end,
+        character_maximum_length
         FROM information_schema.columns
         where table_name in {0} and table_catalog = '{1}' order by table_name;
 """
@@ -159,8 +160,8 @@ remote_table_query = """
     IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{0}' AND xtype='U')
     CREATE TABLE "{0}" (
         {1}
-        "cdc_created_at" timestamp NOT NULL,
-        "cdc_updated_at" timestamp,
+        "cdc_created_at" datetime NOT NULL,
+        "cdc_updated_at" datetime,
         "cdc_delta_flag" smallint NOT NULL,
         "cdc_synced" smallint NOT NULL
     );
@@ -172,6 +173,10 @@ cdc_required_types = {
     "cdc_delta_flag": {"type": "smallint", "nullable": "NOT NULL"},
     "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
 }
+
+remote_triggers_query = """
+
+"""
 
 row_query = """
     WITH Results_CTE AS

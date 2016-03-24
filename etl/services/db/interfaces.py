@@ -185,7 +185,7 @@ class Database(object):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -219,6 +219,7 @@ class Database(object):
                                      "origin_type": x[col_type],
                                      "is_nullable": x[is_nullable],
                                      "extra": x[extra_],
+                                     "max_length": x[max_length],
                                      })
 
             # находим внешние ключи
@@ -373,14 +374,6 @@ class Database(object):
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
-    def remote_triggers_create_query():
-        """
-        запрос на создание триггеров в БД клиента
-        """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
-
-
-    @staticmethod
     def reload_datasource_trigger_query(params):
         """
         запрос на создание триггеров в БД локально для размерностей и мер
@@ -411,8 +404,11 @@ class Database(object):
 
     @classmethod
     def get_interval_query(cls, source, cols_info):
+        """
+        список запросов на min max значений для колонок с датами
+        """
         intervals_query = []
-        for table, col_name, col_type, _, _ in cols_info:
+        for table, col_name, col_type, _, _, _ in cols_info:
             if col_type in cls.db_map.dates:
                 query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
                         col_name, table)
