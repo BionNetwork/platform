@@ -1054,7 +1054,9 @@ class CreateTriggers(TaskProcessing):
                     cursor.execute(del_pr_query)
 
                 # добавление недостающих колонок, не учитывая cdc-колонки
-                new_came_cols = [(x['name'], x["type"]) for x in columns]
+                new_came_cols = [
+                    (x['name'], x["type"], '({0})'.format(x['max_length'])
+                        if x['max_length'] is not None else '') for x in columns]
 
                 diff_cols = [x for x in new_came_cols if x[0] not in existing_cols]
 
@@ -1062,7 +1064,8 @@ class CreateTriggers(TaskProcessing):
                     add_cols_str = """
                         alter table {0} {1}
                     """.format(table_name, ', '.join(
-                        ['add column {0} {1}'.format(x[0], x[1]) for x in diff_cols]))
+                        ['add column {0} {1}{2}'.format(x[0], x[1], x[2])
+                         for x in diff_cols]))
 
                     cursor.execute(add_cols_str)
                     connection.commit()
