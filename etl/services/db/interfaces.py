@@ -5,6 +5,7 @@ from itertools import groupby
 import datetime
 from django.conf import settings
 import time
+from contextlib import closing
 
 from etl.constants import FIELD_NAME_SEP
 
@@ -633,3 +634,14 @@ class Database(object):
     def cdc_key_delete_query(table_name):
 
         return 'DELETE from {0} where cdc_key = ANY(%s);'.format(table_name, '%s')
+
+    @staticmethod
+    def get_fetchall_result(connection, query, args):
+        """
+        возвращает результат fetchall преобразованного запроса с аргументами
+        """
+        with connection:
+            with closing(connection.cursor()) as cursor:
+                cursor = connection.cursor()
+                cursor.execute(query, args)
+                return cursor.fetchall()

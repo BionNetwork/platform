@@ -4,7 +4,7 @@ from contextlib import closing
 import pymongo
 from pymongo import IndexModel
 import logging
-from bson import Binary
+from psycopg2 import Binary
 
 from etl.constants import TYPES_MAP
 from etl.services.datasource.base import DataSourceService
@@ -456,6 +456,8 @@ class LocalDbConnect(object):
     def __init__(self, query, source=None, execute=True):
 
         self.query = query
+        self.source = source
+
         if not self.connection or self.connection.close:
             self.connection = self.get_connection(source)
         if execute:
@@ -492,6 +494,13 @@ class SourceDbConnect(LocalDbConnect):
 
     def __init__(self, query, source, execute=False):
         super(SourceDbConnect, self).__init__(query, source, execute)
+
+    def fetchall(self, args=None):
+        """
+        Расширение, у каждого database свой fetchall определяем
+        """
+        return DataSourceService.get_fetchall_result(
+            self.connection, self.source, self.query, args)
 
 
 class MongodbConnection(object):

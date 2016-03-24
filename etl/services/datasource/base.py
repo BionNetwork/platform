@@ -596,6 +596,10 @@ class DataSourceService(object):
     def cdc_key_delete_query(table_name):
         return DatabaseService.cdc_key_delete_query(table_name)
 
-
-
-
+    @staticmethod
+    def get_fetchall_result(connection, source, query, args):
+        """
+        возвращает результат fetchall преобразованного запроса с аргументами
+        """
+        return DatabaseService.get_fetchall_result(
+            connection, source, query, args)

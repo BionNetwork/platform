@@ -3,7 +3,7 @@
 __author__ = 'damir(GDR)'
 
 from django.conf import settings
-
+from contextlib import closing
 from .interfaces import Database
 import pymssql
 
@@ -44,7 +44,7 @@ class MsSql(Database):
         """
         return '\"'
 
-    def get_rows(self, cols, structure):
+    def get_rows_query(self, cols, structure):
         """
         достает строки из соурса для превью
         :param cols: list
@@ -70,13 +70,26 @@ class MsSql(Database):
         sel_cols_str2 = ', '.join(
             [sel_col2.format(**x) for x in cols])
 
-        query = self.db_map.row_query.format(
+        return self.db_map.row_query.format(
             sel_cols_str1, query_join,
-            settings.ETL_COLLECTION_PREVIEW_LIMIT, 0,
+            '{0}', '{1}',
             group_cols_str, sel_cols_str2)
 
-        records = self.get_query_result(query)
-        return records
+    def get_rows(self, cols, structure):
+        """
+        Получаем записи из клиентской базы для предварительного показа
+
+        Args:
+            cols(dict): Название колонок
+            structure(dict): Структура данных
+
+        Returns:
+            list of tuple: Данные по колонкам
+        """
+        query = self.get_rows_query(cols, structure)
+
+        return self.get_query_result(
+            query.format(settings.ETL_COLLECTION_PREVIEW_LIMIT, 0))
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -176,3 +189,13 @@ class MsSql(Database):
         """
         # FIXME не понятно как доставать
         return 0
+
+    @staticmethod
+    def get_fetchall_result(connection, query, args):
+        """
+        возвращает результат fetchall преобразованного запроса с аргументами,
+        появляются проблемы когда вместо формата %s есть {0}, {1} ...
+        """
+        cursor = connection.cursor()
+        cursor.execute(query.format(*args))
+        return cursor.fetchall()
