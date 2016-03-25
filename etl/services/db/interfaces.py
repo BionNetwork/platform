@@ -406,11 +406,16 @@ class Database(object):
     def get_interval_query(cls, source, cols_info):
         """
         список запросов на min max значений для колонок с датами
+
+        Args:
+            source(Datasource): экземпляр источника данных
+            cols_info(list): Список данных о колонках
+
         """
         intervals_query = []
         for table, col_name, col_type, _, _, _ in cols_info:
-            if col_type in cls.db_map.dates:
-                query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
+            if col_type.lower() in cls.db_map.dates:
+                query = "SELECT MIN({0}), MAX({0}) FROM {1}".format(
                         col_name, table)
                 intervals_query.append([table, col_name, query])
         return intervals_query

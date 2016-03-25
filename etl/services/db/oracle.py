@@ -201,6 +201,11 @@ class Oracle(Database):
 
         return 0
 
+    def get_query_result(self, query, args=None):
+        cursor = self.connection.cursor()
+        cursor.execute(query) if not args else cursor.execute(query, args)
+        return cursor.fetchall()
+
 
 def reform_binary_data(data):
     # проблемы с Oracle

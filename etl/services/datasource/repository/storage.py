@@ -709,7 +709,8 @@ class RedisSourceService(object):
                     "columns": columns[t_name.lower()],
                     "indexes": indexes[t_name.lower()],
                     "foreigns": foreigns[t_name.lower()],
-                    "stats": stats[t_name.lower()],
+                    # "stats": stats[t_name.lower()],
+                    "stats": [],
                     "date_intervals": intervals.get(t_name, [])
                 }, cls=CustomJsonEncoder
             ))

@@ -53,10 +53,10 @@ for i in texts:
 
 for i in dates:
     DB_TYPES[i] = 'timestamp'
-    
+
 for i in blobs:
     DB_TYPES[i] = 'binary'
-    
+
 for i in booleans:
     DB_TYPES[i] = 'bool'
 
@@ -65,7 +65,7 @@ table_query = """SELECT table_name FROM user_tables"""
 cols_query = """SELECT table_name, column_name, data_type,
                     CASE WHEN nullable='N' THEN 'NO'
                     ELSE 'YES' END as is_nullable,
-                    null as extra
+                    null as extra, CHAR_COL_DECL_LENGTH
  FROM user_tab_columns WHERE table_name IN {0}"""
 
 
