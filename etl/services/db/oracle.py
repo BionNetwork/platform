@@ -192,14 +192,12 @@ class Oracle(Database):
         :param cols:
         :return:
         """
-        # fixme стоит заглушка! не совсем понятно как доставать explain данные!
-        # sql1 = 'explain plan for SELECT * FROM REGIONS'
-        # sql2 = 'SELECT PLAN_TABLE_OUTPUT FROM table(dbms_xplan.display)'
-        # cursor.execute(sql1)
-        # cursor.execute(sql2)
-        # cursor.fetchall() и дальше структура неприятная приходит
+        query_join = self.generate_join(structure)
+        cols_str = 'COUNT(ROWNUM)'
+        rownum = self.get_query_result(self.get_select_query().format(
+            cols_str, query_join))
 
-        return 0
+        return rownum[0][0]
 
     def get_query_result(self, query, args=None):
         cursor = self.connection.cursor()
