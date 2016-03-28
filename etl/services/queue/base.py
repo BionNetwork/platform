@@ -471,10 +471,10 @@ class LocalDbConnect(object):
                 else:
                     cursor.executemany(self.query, args)
 
-    def fetchall(self, args=None):
+    def fetchall(self, **kwargs):
         with self.connection:
             with closing(self.connection.cursor()) as cursor:
-                cursor.execute(self.query, args)
+                cursor.execute(self.query, **kwargs)
                 return cursor.fetchall()
 
     def fetchone(self, args=None):
@@ -495,12 +495,12 @@ class SourceDbConnect(LocalDbConnect):
     def __init__(self, query, source, execute=False):
         super(SourceDbConnect, self).__init__(query, source, execute)
 
-    def fetchall(self, args=None):
+    def fetchall(self, **kwargs):
         """
         Расширение, у каждого database свой fetchall определяем
         """
         return DataSourceService.get_fetchall_result(
-            self.connection, self.source, self.query, args)
+            self.connection, self.source, self.query, **kwargs)
 
 
 class MongodbConnection(object):
