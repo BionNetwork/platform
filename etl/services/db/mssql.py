@@ -72,7 +72,7 @@ class MsSql(Database):
 
         return self.db_map.row_query.format(
             sel_cols_str1, query_join,
-            '%(limit)d', '%(offset)d',
+            '{0}', '{1}',
             group_cols_str, sel_cols_str2)
 
     def get_rows(self, cols, structure):
@@ -198,7 +198,11 @@ class MsSql(Database):
         появляются проблемы когда вместо формата %s есть {0}, {1} ...
         """
         cursor = connection.cursor()
-        cursor.execute(query, **kwargs)
+
+        if 'limit' and 'offset' in kwargs:
+            query = query.format(kwargs['limit'], kwargs['offset'])
+
+        cursor.execute(query)
         return cursor.fetchall()
 
     @staticmethod

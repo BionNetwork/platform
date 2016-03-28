@@ -1075,8 +1075,6 @@ class CreateTriggers(TaskProcessing):
 
                 for cdc_k, v in cdc_required_types.iteritems():
                     if cdc_k not in existing_cols:
-                        print add_col_q.format(
-                            table_name, cdc_k, v["type"], "", v["nullable"])
                         cursor.execute(add_col_q.format(
                             table_name, cdc_k, v["type"], "", v["nullable"]))
                     else:
