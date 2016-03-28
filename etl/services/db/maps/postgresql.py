@@ -88,7 +88,7 @@ cdc_cols_query = """
 """
 
 add_column_query = """
-    alter table {0} add column {1} {2} {3};
+    alter table {0} add column {1} {2}{3} {4};
 """
 
 del_column_query = """

@@ -412,7 +412,7 @@ class RedisSourceService(object):
 
                 for column in info_for_coll["columns"]:
                     del column["origin_type"]
-                    del column["is_nullable"]
+                    # del column["is_nullable"]
                     del column["extra"]
 
                 pipe.set(str_table.format(sequence_id), json.dumps(info_for_coll))

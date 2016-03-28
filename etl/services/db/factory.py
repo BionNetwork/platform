@@ -336,3 +336,21 @@ class DatabaseService(object):
         """
         instance = cls.get_source_instance(source)
         return instance.get_fetchall_result(connection, query, *args, **kwargs)
+
+    @classmethod
+    def get_processed_for_triggers(cls, source, columns):
+        """
+        Получает инфу о колонках, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_processed_for_triggers(columns)
+
+    @classmethod
+    def get_processed_indexes(cls, source, indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_processed_indexes(indexes)
