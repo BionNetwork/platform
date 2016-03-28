@@ -304,8 +304,8 @@ def get_single_task(task_name, task_def, params):
         return
     task_id, channel = TaskService(task_name).add_task(
         arguments=params)
-    return task_def.apply_async((task_id, channel),), [channel]
-    # return task_def(task_id, channel), [channel]
+    # return task_def.apply_async((task_id, channel),), [channel]
+    return task_def(task_id, channel), [channel]
 
 
 class RowKeysCreator(object):
@@ -474,7 +474,7 @@ class LocalDbConnect(object):
     def fetchall(self, **kwargs):
         with self.connection:
             with closing(self.connection.cursor()) as cursor:
-                cursor.execute(self.query, **kwargs)
+                cursor.execute(self.query, kwargs)
                 return cursor.fetchall()
 
     def fetchone(self, args=None):

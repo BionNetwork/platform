@@ -88,7 +88,7 @@ class Postgresql(Database):
     def get_page_select_query(cls, table_name, cols):
         fields_str = '"'+'", "'.join(cols)+'"'
         return cls.db_map.row_query.format(
-            fields_str, table_name, '%s', '%s')
+            fields_str, table_name, '%(limit)s', '%(offset)s')
 
     @classmethod
     def get_select_dates_query(cls, date_table):
