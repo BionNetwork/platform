@@ -1001,7 +1001,7 @@ class CreateTriggers(TaskProcessing):
         source = Datasource.objects.get(id=self.context['source_id'])
 
         db_instance = DatabaseService.get_source_instance(source)
-        sep = db_instance.get_separator()
+
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
 
@@ -1024,21 +1024,9 @@ class CreateTriggers(TaskProcessing):
             required_indexes = {k.format(table_name): v
                                 for k, v in REQUIRED_INDEXES.iteritems()}
 
-            cols_str = ''
-            new = ''
-            old = ''
-            cols = ''
-
-            for col in columns:
-                name = col['name']
-                new += 'NEW.{0}, '.format(name)
-                old += 'OLD.{0}, '.format(name)
-                cols += ('{name}, '.format(name=name))
-                cols_str += ' {sep}{name}{sep} {typ}{length},'.format(
-                    sep=sep, name=name, typ=col['type'],
-                    length='({0})'.format(col['max_length'])
-                    if col['max_length'] is not None else ''
-                )
+            for_triggers = DatabaseService.get_processed_for_triggers(
+                source, columns)
+            cols_str = for_triggers['cols_str']
 
             # если таблица существует
             if existing_cols:
@@ -1055,37 +1043,46 @@ class CreateTriggers(TaskProcessing):
 
                 # добавление недостающих колонок, не учитывая cdc-колонки
                 new_came_cols = [
-                    (x['name'], x["type"], '({0})'.format(x['max_length'])
-                        if x['max_length'] is not None else '') for x in columns]
+                    {
+                        'col_name': x['name'],
+                        'col_type': x["type"],
+                        'max_length': '({0})'.format(x['max_length'])
+                            if x['max_length'] is not None else '',
+                        'nullable': 'not null' if x['is_nullable'] == 'NO' else ''
+                    }
+                    for x in columns]
 
-                diff_cols = [x for x in new_came_cols if x[0] not in existing_cols]
+                diff_cols = [x for x in new_came_cols
+                             if x['col_name'] not in existing_cols]
 
-                if diff_cols:
-                    add_cols_str = """
-                        alter table {0} {1}
-                    """.format(table_name, ', '.join(
-                        ['add column {0} {1}{2}'.format(x[0], x[1], x[2])
-                         for x in diff_cols]))
+                add_col_q = db_instance.db_map.add_column_query
+                del_col_q = db_instance.db_map.del_column_query
 
-                    cursor.execute(add_cols_str)
+                for d_col in diff_cols:
+                    cursor.execute(add_col_q.format(
+                        table_name,
+                        d_col['col_name'],
+                        d_col['col_type'],
+                        d_col['max_length'],
+                        d_col['nullable']
+                    ))
                     connection.commit()
 
                 # проверка cdc-колонок на существование и типы
                 cdc_required_types = db_instance.db_map.cdc_required_types
 
-                add_col_q = db_instance.db_map.add_column_query
-                del_col_q = db_instance.db_map.del_column_query
-
                 for cdc_k, v in cdc_required_types.iteritems():
-                    if not cdc_k in existing_cols:
+                    if cdc_k not in existing_cols:
+                        print add_col_q.format(
+                            table_name, cdc_k, v["type"], "", v["nullable"])
                         cursor.execute(add_col_q.format(
-                            table_name, cdc_k, v["type"], v["nullable"]))
+                            table_name, cdc_k, v["type"], "", v["nullable"]))
                     else:
                         # если типы не совпадают
                         if not existing_cols[cdc_k].startswith(v["type"]):
                             cursor.execute(del_col_q.format(table_name, cdc_k))
                             cursor.execute(add_col_q.format(
-                                table_name, cdc_k, v["type"], v["nullable"]))
+                                table_name, cdc_k, v["type"], "", v["nullable"]))
 
                 connection.commit()
 
@@ -1097,7 +1094,10 @@ class CreateTriggers(TaskProcessing):
                 cursor.execute(indexes_query)
                 exist_indexes = cursor.fetchall()
 
-                index_cols_i, index_name_i = 1, 2
+                exist_indexes = DatabaseService.get_processed_indexes(
+                    source, exist_indexes)
+
+                index_cols_i, index_name_i = 0, 1
 
                 create_index_q = db_instance.db_map.create_index_query
                 drop_index_q = db_instance.db_map.drop_index_query
@@ -1148,8 +1148,10 @@ class CreateTriggers(TaskProcessing):
                 connection.commit()
 
             trigger_commands = remote_triggers_create_query.format(
-                orig_table=table, new_table=table_name, new=new, old=old,
-                cols=cols)
+                orig_table=table, new_table=table_name,
+                new=for_triggers['new'],
+                old=for_triggers['old'],
+                cols=for_triggers['cols'])
 
             # multi queries of mysql, delimiter $$
             for query in trigger_commands.split('$$'):

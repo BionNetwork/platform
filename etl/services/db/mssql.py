@@ -200,3 +200,20 @@ class MsSql(Database):
         cursor = connection.cursor()
         cursor.execute(query.format(*args))
         return cursor.fetchall()
+
+    @staticmethod
+    def get_processed_indexes(exist_indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        # indexes_query смотреть
+        index_name_i, index_col_i = 1, 4
+        # группировка по названию индекса, в группе названия колонок
+        indexes = []
+
+        for ind_name, ind_group in groupby(exist_indexes, lambda x: x[index_name_i]):
+            cols = [ig[index_col_i] for ig in ind_group]
+            indexes.append([','.join(cols), ind_name, ])
+
+        return indexes
