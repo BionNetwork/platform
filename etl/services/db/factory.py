@@ -330,9 +330,9 @@ class DatabaseService(object):
         return cls.get_local_instance().cdc_key_delete_query(table_name)
 
     @classmethod
-    def get_fetchall_result(cls, connection, source, query, args):
+    def get_fetchall_result(cls, connection, source, query, *args, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
         instance = cls.get_source_instance(source)
-        return instance.get_fetchall_result(connection, query, args)
+        return instance.get_fetchall_result(connection, query, *args, **kwargs)

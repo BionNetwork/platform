@@ -183,7 +183,7 @@ class Oracle(Database):
 
         return self.db_map.row_query.format(
             ', '.join(alias_list), cols_str, query_join,
-            '{1}', '{0}')
+            ':limit', ':offset')
 
     def get_structure_rows_number(self, structure, cols):
         """
@@ -199,9 +199,9 @@ class Oracle(Database):
 
         return rownum[0][0]
 
-    def get_query_result(self, query, args=None):
+    def get_query_result(self, query, **kwargs):
         cursor = self.connection.cursor()
-        cursor.execute(query) if not args else cursor.execute(query, args)
+        cursor.execute(query) if not kwargs else cursor.execute(query, kwargs)
         return cursor.fetchall()
 
 

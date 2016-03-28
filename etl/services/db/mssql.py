@@ -72,7 +72,7 @@ class MsSql(Database):
 
         return self.db_map.row_query.format(
             sel_cols_str1, query_join,
-            '{0}', '{1}',
+            '%(limit)d', '%(offset)d',
             group_cols_str, sel_cols_str2)
 
     def get_rows(self, cols, structure):
@@ -192,11 +192,11 @@ class MsSql(Database):
         return 0
 
     @staticmethod
-    def get_fetchall_result(connection, query, args):
+    def get_fetchall_result(connection, query, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами,
         появляются проблемы когда вместо формата %s есть {0}, {1} ...
         """
         cursor = connection.cursor()
-        cursor.execute(query.format(*args))
+        cursor.execute(query, **kwargs)
         return cursor.fetchall()

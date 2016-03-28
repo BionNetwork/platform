@@ -87,11 +87,7 @@ indexes_query = """
     WHERE i.table_name IN {0} and i.index_name = c.index_name
 """
 
-row_query = """
-    SELECT {0} FROM (
-    SELECT {1}, ROW_NUMBER() OVER (ORDER BY ROWNUM) AS rn FROM {2})
-    WHERE rn BETWEEN {3} AND {4}
-"""
+row_query = """SELECT {0} FROM (SELECT {1}, ROW_NUMBER() OVER (ORDER BY ROWNUM) AS rn FROM {2}) WHERE rn BETWEEN {4} AND {4}+{3}"""
 
 stat_query = """
     SELECT ut.table_name, ut.num_rows, s.t_size

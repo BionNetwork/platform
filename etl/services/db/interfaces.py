@@ -88,7 +88,7 @@ class Database(object):
         """
         return str_.split('(')[0].lower()
 
-    def get_query_result(self, query, args=None):
+    def get_query_result(self, query, **kwargs):
         """
         Получаем результат запроса
 
@@ -99,7 +99,7 @@ class Database(object):
             list: Результирующие данные
         """
         cursor = self.connection.cursor()
-        cursor.execute(query, args)
+        cursor.execute(query, kwargs)
         return cursor.fetchall()
 
     @staticmethod
@@ -304,7 +304,7 @@ class Database(object):
 
         return self.db_map.row_query.format(
             cols_str, query_join,
-            '%s', '%s')
+            '%(limit)s', '%(offset)s')
 
     def get_rows(self, cols, structure):
         """
@@ -321,7 +321,7 @@ class Database(object):
         query = self.get_rows_query(cols, structure)
 
         return self.get_query_result(
-            query, (settings.ETL_COLLECTION_PREVIEW_LIMIT, 0))
+            query=query, limit=settings.ETL_COLLECTION_PREVIEW_LIMIT, offset=0)
 
     @staticmethod
     def get_separator():
@@ -637,12 +637,11 @@ class Database(object):
         return 'DELETE from {0} where cdc_key = ANY(%s);'.format(table_name, '%s')
 
     @staticmethod
-    def get_fetchall_result(connection, query, args):
+    def get_fetchall_result(connection, query, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
         with connection:
             with closing(connection.cursor()) as cursor:
-                cursor = connection.cursor()
-                cursor.execute(query, args)
+                cursor.execute(query, kwargs)
                 return cursor.fetchall()

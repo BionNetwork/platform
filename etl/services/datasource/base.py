@@ -382,8 +382,7 @@ class DataSourceService(object):
         :return:
         """
 
-        rows_query = DatabaseService.get_rows_query(source, cols, structure)
-        return rows_query
+        return DatabaseService.get_rows_query(source, cols, structure)
 
     @classmethod
     def check_existing_table(cls, table_name):
@@ -597,9 +596,9 @@ class DataSourceService(object):
         return DatabaseService.cdc_key_delete_query(table_name)
 
     @staticmethod
-    def get_fetchall_result(connection, source, query, args):
+    def get_fetchall_result(connection, source, query, *args, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
         return DatabaseService.get_fetchall_result(
-            connection, source, query, args)
+            connection, source, query, *args, **kwargs)
