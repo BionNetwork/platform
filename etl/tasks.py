@@ -1001,7 +1001,7 @@ class CreateTriggers(TaskProcessing):
         source = Datasource.objects.get(id=self.context['source_id'])
 
         db_instance = DatabaseService.get_source_instance(source)
-        sep = db_instance.get_separator()
+        # sep = db_instance.get_separator()
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
 
@@ -1024,21 +1024,9 @@ class CreateTriggers(TaskProcessing):
             required_indexes = {k.format(table_name): v
                                 for k, v in REQUIRED_INDEXES.iteritems()}
 
-            cols_str = ''
-            new = ''
-            old = ''
-            cols = ''
-
-            for col in columns:
-                name = col['name']
-                new += 'NEW.{0}, '.format(name)
-                old += 'OLD.{0}, '.format(name)
-                cols += ('{name}, '.format(name=name))
-                cols_str += ' {sep}{name}{sep} {typ}{length},'.format(
-                    sep=sep, name=name, typ=col['type'],
-                    length='({0})'.format(col['max_length'])
-                    if col['max_length'] is not None else ''
-                )
+            for_triggers = DatabaseService.get_processed_for_triggers(
+                source, columns)
+            cols_str = for_triggers['cols_str']
 
             # если таблица существует
             if existing_cols:
@@ -1148,8 +1136,10 @@ class CreateTriggers(TaskProcessing):
                 connection.commit()
 
             trigger_commands = remote_triggers_create_query.format(
-                orig_table=table, new_table=table_name, new=new, old=old,
-                cols=cols)
+                orig_table=table, new_table=table_name,
+                new=for_triggers['new'],
+                old=for_triggers['old'],
+                cols=for_triggers['cols'])
 
             # multi queries of mysql, delimiter $$
             for query in trigger_commands.split('$$'):

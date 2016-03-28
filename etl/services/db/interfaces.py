@@ -638,6 +638,32 @@ class Database(object):
         """
         with connection:
             with closing(connection.cursor()) as cursor:
-                cursor = connection.cursor()
                 cursor.execute(query, args)
                 return cursor.fetchall()
+
+    def get_processed_for_triggers(self, columns):
+        """
+        Получает инфу о колонках, возвращает преобразованную инфу
+        для создания триггеров
+        """
+
+        cols_str = ''
+        new = ''
+        old = ''
+        cols = ''
+        sep = self.get_separator()
+
+        for col in columns:
+            name = col['name']
+            new += 'NEW.{0}, '.format(name)
+            old += 'OLD.{0}, '.format(name)
+            cols += ('{name}, '.format(name=name))
+            cols_str += ' {sep}{name}{sep} {typ}{length},'.format(
+                sep=sep, name=name, typ=col['type'],
+                length='({0})'.format(col['max_length'])
+                if col['max_length'] is not None else ''
+            )
+
+        return {
+            'cols_str': cols_str, 'new': new, 'old': old, 'cols': cols,
+        }
