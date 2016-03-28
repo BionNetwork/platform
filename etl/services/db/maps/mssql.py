@@ -82,7 +82,7 @@ cdc_cols_query = """
 """
 
 add_column_query = """
-    alter table {0} add {1} {2} {3};
+    alter table {0} add {1} {2}{3} {4};
 """
 
 del_column_query = """
@@ -166,12 +166,12 @@ remote_table_query = """
         "cdc_synced" smallint NOT NULL
     );
 """
-
+# у mssql при alter table колонка должна быть null
 cdc_required_types = {
-    "cdc_created_at": {"type": "timestamp", "nullable": "NOT NULL"},
-    "cdc_updated_at": {"type": "timestamp", "nullable": ""},
-    "cdc_delta_flag": {"type": "smallint", "nullable": "NOT NULL"},
-    "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
+    "cdc_created_at": {"type": "datetime", "nullable": ""},
+    "cdc_updated_at": {"type": "datetime", "nullable": ""},
+    "cdc_delta_flag": {"type": "smallint", "nullable": ""},
+    "cdc_synced": {"type": "smallint", "nullable": ""},
 }
 
 remote_triggers_query = """
@@ -210,3 +210,11 @@ row_query = """
     WHERE RowNum > {3}
     AND RowNum <= {2}+{3}
 """
+
+pr_key_query = """
+    SELECT c.constraint_name AS constraint_name
+    FROM information_schema.table_constraints as c
+        WHERE c.table_name in {0} and c.table_catalog = '{1}' and
+        c.constraint_type='primary key'
+"""
+

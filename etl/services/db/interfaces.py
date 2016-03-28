@@ -575,8 +575,8 @@ class Database(object):
         """
         return cls.db_map.remote_triggers_query
 
-    @staticmethod
-    def get_primary_key(table, db):
+    @classmethod
+    def get_primary_key(cls, table, db):
         """
         Запрос на получение первичного ключа
         Args:
@@ -586,7 +586,7 @@ class Database(object):
         Returns:
             str: запрос на получение первичного ключа
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        return cls.db_map.pr_key_query.format("('{0}')".format(table), db)
 
     @staticmethod
     def delete_primary_query(table, primary):
@@ -667,3 +667,14 @@ class Database(object):
         return {
             'cols_str': cols_str, 'new': new, 'old': old, 'cols': cols,
         }
+
+    @staticmethod
+    def get_processed_indexes(indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        # indexes_query смотреть
+        index_cols_i, index_name_i = 1, 2
+
+        return [[index[index_cols_i], index[index_name_i]] for index in indexes]
