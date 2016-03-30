@@ -218,8 +218,6 @@ delete_primary_key = """
     alter table {0} drop constraint {1}
 """
 
-drop_index = """drop index {0}"""
-
 check_table_exists = """
     SELECT EXISTS (
         SELECT * FROM   information_schema.tables

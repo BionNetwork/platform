@@ -111,7 +111,7 @@ class Oracle(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -145,6 +145,7 @@ class Oracle(Database):
                                      "origin_type": x[col_type],
                                      "is_nullable": x[is_nullable],
                                      "extra": x[extra_],
+                                     "max_length": x[max_length],
                                      })
 
             # находим внешние ключи
@@ -203,6 +204,59 @@ class Oracle(Database):
         cursor = self.connection.cursor()
         cursor.execute(query) if not kwargs else cursor.execute(query, kwargs)
         return cursor.fetchall()
+
+    def get_processed_for_triggers(self, columns):
+        """
+        Получает инфу о колонках, возвращает преобразованную инфу
+        для создания триггеров
+        """
+
+        cols_str = ''
+        new = ''
+        old = ''
+        cols = ''
+        sep = self.get_separator()
+
+        for col in columns:
+            name = col['name']
+            new += ':NEW.{0}, '.format(name)
+            old += ':OLD.{0}, '.format(name)
+            cols += ('{sep}{name}{sep}, '.format(name=name, sep=sep))
+            cols_str += ' {sep}{name}{sep} {typ}{length},'.format(
+                sep=sep, name=name, typ=col['type'],
+                length='({0})'.format(col['max_length'])
+                if col['max_length'] is not None else ''
+            )
+
+        return {
+            'cols_str': cols_str, 'new': new, 'old': old, 'cols': cols,
+        }
+
+    @staticmethod
+    def get_required_indexes():
+        # название и колонки индексов, необходимые для вспомогательной таблицы триггеров
+        return {
+            '{0}_created': ['CDC_CREATED_AT', ],
+            '{0}_synced': ['CDC_SYNCED', ],
+            '{0}_syn_upd': ['CDC_SYNCED', 'CDC_UPDATED_AT', ],
+        }
+
+    @staticmethod
+    def get_processed_indexes(exist_indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        # indexes_query смотреть
+        index_name_i, index_col_i = 2, 1
+        # группировка по названию индекса, в группе названия колонок
+        indexes = []
+
+        for ind_name, ind_group in groupby(exist_indexes, lambda x: x[index_name_i]):
+            cols = [ig[index_col_i] for ig in ind_group]
+            indexes.append([','.join(cols), ind_name, ])
+
+        return indexes
 
 
 def reform_binary_data(data):

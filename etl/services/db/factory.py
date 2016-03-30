@@ -354,3 +354,8 @@ class DatabaseService(object):
         """
         instance = cls.get_source_instance(source)
         return instance.get_processed_indexes(indexes)
+
+    @classmethod
+    def get_required_indexes(cls, source):
+        instance = cls.get_source_instance(source)
+        return instance.get_required_indexes()

@@ -81,7 +81,3 @@ class Mysql(Database):
         запрос на создание новой таблицы в БД клиента
         """
         return mysql_map.remote_table_query
-
-    @staticmethod
-    def delete_primary_query(table, primary):
-        return mysql_map.delete_primary_key.format(table, primary)

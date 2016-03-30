@@ -188,8 +188,17 @@ class MsSql(Database):
         """
         возвращает примерное кол-во строк в запросе для планирования
         """
-        # FIXME не понятно как доставать
-        return 0
+        # FIXME не понятно как доставать, поэтому тупо count
+
+        query_join = self.generate_join(structure)
+        select_query = self.get_select_query()
+        explain_query = select_query.format(
+            'count(1)', query_join)
+
+        result = self.get_query_result(explain_query)
+        count = result[0][0]
+
+        return count
 
     @staticmethod
     def get_fetchall_result(connection, query, **kwargs):

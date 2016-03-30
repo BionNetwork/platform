@@ -1004,6 +1004,8 @@ class CreateTriggers(TaskProcessing):
 
         db_instance = DatabaseService.get_source_instance(source)
 
+        sep = db_instance.get_separator()
+
         remote_table_create_query = db_instance.remote_table_create_query()
         remote_triggers_create_query = db_instance.remote_triggers_create_query()
 
@@ -1012,7 +1014,7 @@ class CreateTriggers(TaskProcessing):
 
         for table, columns in tables_info.iteritems():
 
-            table_name = '_etl_datasource_cdc_{0}'.format(table)
+            table_name = '_etl_{0}'.format(table)
             tables_str = "('{0}')".format(table_name)
 
             cdc_cols_query = db_instance.db_map.cdc_cols_query.format(
@@ -1022,6 +1024,8 @@ class CreateTriggers(TaskProcessing):
             fetched_cols = cursor.fetchall()
 
             existing_cols = {k: v for (k, v) in fetched_cols}
+
+            REQUIRED_INDEXES = DatabaseService.get_required_indexes(source)
 
             required_indexes = {k.format(table_name): v
                                 for k, v in REQUIRED_INDEXES.iteritems()}
@@ -1110,12 +1114,15 @@ class CreateTriggers(TaskProcessing):
                     if index_name not in required_indexes:
                         cursor.execute(drop_index_q.format(index_name, table_name))
                     else:
-                        index_cols = sorted(index_name[index_cols_i].split(','))
+                        index_cols = sorted(index[index_cols_i].split(','))
                         if index_cols != required_indexes[index_name]:
+
                             cursor.execute(drop_index_q.format(index_name, table_name))
                             cursor.execute(create_index_q.format(
                                 index_name, table_name,
-                                ','.join(required_indexes[index_name]),
+                                ','.join(
+                                    ['{0}{1}{0}'.format(sep, x)
+                                     for x in required_indexes[index_name]]),
                                 source.db))
 
                         allright_index_names.append(index_name)
@@ -1127,7 +1134,8 @@ class CreateTriggers(TaskProcessing):
                     cursor.execute(
                         create_index_q.format(
                             d_index, table_name,
-                            ','.join(required_indexes[d_index])))
+                            ','.join(['{0}{1}{0}'.format(sep, x)
+                                      for x in required_indexes[d_index]])))
 
                 connection.commit()
 
@@ -1141,6 +1149,10 @@ class CreateTriggers(TaskProcessing):
                 create_index_q = db_instance.db_map.create_index_query
 
                 for index_name, index_cols in required_indexes.iteritems():
+
+                    index_cols = [
+                        '{0}{1}{0}'.format(sep, x) for x in index_cols]
+
                     cursor.execute(create_index_q.format(
                         index_name, table_name,
                         ','.join(index_cols), source.db))
@@ -1153,7 +1165,7 @@ class CreateTriggers(TaskProcessing):
                 old=for_triggers['old'],
                 cols=for_triggers['cols'])
 
-            # multi queries of mysql, delimiter $$
+            # multi queries for some DBs, delimiter $$
             for query in trigger_commands.split('$$'):
                 cursor.execute(query)
 
