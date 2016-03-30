@@ -458,7 +458,7 @@ class LocalDbConnect(object):
         self.query = query
         self.source = source
 
-        if not self.connection or self.connection.close:
+        if not self.connection:
             self.connection = self.get_connection(source)
         if execute:
             self.execute()

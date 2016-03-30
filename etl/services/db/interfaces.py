@@ -593,15 +593,9 @@ class Database(object):
         """
         return cls.db_map.pr_key_query.format("('{0}')".format(table), db)
 
-    @staticmethod
-    def delete_primary_query(table, primary):
-        """
-        Запрос на удаление первичного ключа
-        Args:
-            table(str): название таблицы
-            primary(str): название первичного ключа
-        """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+    @classmethod
+    def delete_primary_query(cls, table, primary):
+        return cls.db_map.delete_primary_key.format(table, primary)
 
     @staticmethod
     def get_date_table_names(col_type):
@@ -683,3 +677,12 @@ class Database(object):
         index_cols_i, index_name_i = 1, 2
 
         return [[index[index_cols_i], index[index_name_i]] for index in indexes]
+
+    @staticmethod
+    def get_required_indexes():
+        # название и колонки индексов, необходимые для вспомогательной таблицы триггеров
+        return {
+            '{0}_created': ['cdc_created_at', ],
+            '{0}_synced': ['cdc_synced', ],
+            '{0}_syn_upd': ['cdc_synced', 'cdc_updated_at', ],
+        }

@@ -182,5 +182,3 @@ pr_key_query = """
 delete_primary_key = """
     ALTER TABLE {0} drop primary key
 """
-
-drop_index = """drop index {0} on {1}"""
