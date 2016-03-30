@@ -83,7 +83,7 @@ class DataSourceService(object):
             col_records, index_records, const_records = (
                 DatabaseService.get_columns_info(source, new_tables))
 
-            # stat_records = DatabaseService.get_stats_info(source, new_tables)
+            stat_records = DatabaseService.get_stats_info(source, new_tables)
 
             new_tables_intervals = DatabaseService.get_date_intervals(
                 source, col_records)
@@ -93,7 +93,7 @@ class DataSourceService(object):
 
             RedisSourceService.insert_columns_info(
                 source, new_tables, cols, indexes,
-                foreigns, {}, new_tables_intervals)
+                foreigns, stat_records, new_tables_intervals)
 
         if old_tables:
             # берем колонки старых таблиц
