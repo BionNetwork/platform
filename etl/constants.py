@@ -36,12 +36,16 @@ CREATE_CUBE = 'etl:database:generate_cube'
 
 # Префиксы названий таблиц
 STTM_DATASOURCE = 'sttm_datasource'  # Временная загружаемая таблица
-STTM_DATASOURCE_DELTA = 'sttm_datasource_delta'  # таблица для докачки новых данных
-STTM_DATASOURCE_KEYS = 'sttm_datasource_keys'  # Текущее состояния пользовательских таблиц
+STTM_DATASOURCE_DELTA = 'sttm_datasource_delta'  # таблица для докачки
+STTM_DATASOURCE_KEYS = 'sttm_datasource_keys'  # Текущее состояния польз. таблиц
 STTM_DATASOURCE_KEYSALL = 'sttm_datasource_keysall'  # Таблица всех ключей
 DIMENSIONS = 'dimensions'  # Таблица размерностей
 MEASURES = 'measures'  # Таблица мер
-MONGODB_DB_NAME = 'etl' # база данных в монго
+TIME_TABLE = 'time_by_day'  # Таблица дат
+
+# Строки формирования названия колонок
+STANDART_COLUMN_NAME = '{0}__{1}'
+MONGODB_DB_NAME = 'etl'  # база данных в монго
 
 # название локального триггера для мер, либо для размерностей
 LOCAL_TRIGGER_NAME = "for_{0}_{1}"
