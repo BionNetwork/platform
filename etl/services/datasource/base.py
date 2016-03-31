@@ -1,5 +1,6 @@
 # coding: utf-8
-from core.models import DatasourceMeta, DatasourceMetaKeys, DatasetToMeta
+from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
+                         DatasourcesJournal)
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService
 from etl.services.datasource.repository.storage import RedisSourceService
@@ -33,6 +34,12 @@ class DataSourceService(object):
         :type source: Datasource
         """
         tables = DatabaseService.get_tables(source)
+
+        trigger_tables = DatasourcesJournal.objects.filter(
+            trigger__datasource=source).values_list('name', flat=True)
+
+        # фильтруем, не показываем таблицы триггеров
+        tables = filter(lambda x: x['name'] not in trigger_tables, tables)
 
         if settings.USE_REDIS_CACHE:
             return RedisSourceService.get_tables(source, tables)
@@ -84,11 +91,13 @@ class DataSourceService(object):
 
             stat_records = DatabaseService.get_stats_info(source, new_tables)
 
+            intervals = DatabaseService.get_date_intervals(source, col_records)
+
             cols, indexes, foreigns = DatabaseService.processing_records(
                 source, col_records, index_records, const_records)
 
             RedisSourceService.insert_columns_info(
-                source, new_tables, cols, indexes, foreigns, stat_records)
+                source, new_tables, cols, indexes, foreigns, stat_records, intervals)
 
         # существование дерева
         tree_exists = RedisSourceService.check_tree_exists(
@@ -332,9 +341,9 @@ class DataSourceService(object):
         return DatabaseService.get_separator(source)
 
     @classmethod
-    def get_table_create_query(cls, local_instance, key_str, cols_str):
+    def get_table_create_query(cls, table_name, cols_str):
         return DatabaseService.get_table_create_query(
-            local_instance, key_str, cols_str)
+            table_name, cols_str)
 
     @classmethod
     def check_table_exists_query(cls, local_instance, table_name, db):
@@ -342,12 +351,24 @@ class DataSourceService(object):
             local_instance, table_name, db)
 
     @classmethod
-    def get_table_insert_query(cls, local_instance, source_table_name):
-        return DatabaseService.get_table_insert_query(
-            local_instance, source_table_name)
+    def get_page_select_query(cls, table_name, cols):
+        """
+        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
+
+        Args:
+            table_name(unicode): Название таблицы
+            cols(list): Список получаемых колонок
+        """
+
+        return DatabaseService.get_page_select_query(table_name, cols)
 
     @classmethod
-    def get_rows_query_for_loading_task(cls, source, structure, cols):
+    def get_table_insert_query(cls, source_table_name, cols_num):
+        return DatabaseService.get_table_insert_query(
+            source_table_name, cols_num)
+
+    @classmethod
+    def get_source_rows_query(cls, source, structure, cols):
         """
         Получение предзапроса данных указанных
         колонок и таблиц для селери задачи
@@ -395,9 +416,8 @@ class DataSourceService(object):
         :param source: Datasource
         :param columns: list список вида [{'table': 'name', 'col': 'name'}]
         """
-        tables_info_for_meta = RedisSourceService.tables_info_for_metasource(
+        return RedisSourceService.tables_info_for_metasource(
             source, tables)
-        return tables_info_for_meta
 
     @staticmethod
     def update_collections_stats(collections_names, last_key):
@@ -458,6 +478,7 @@ class DataSourceService(object):
                 fields = {'columns': [], }
 
                 table_info = tables_info_for_meta[table]
+                stats['date_intervals'] = table_info['date_intervals']
 
                 stats['tables_stat'] = table_info['stats']
                 t_cols = table_info['columns']
@@ -523,3 +544,54 @@ class DataSourceService(object):
         возвращает запрос на создание триггеров в БД клиента
         """
         return DatabaseService.get_remote_triggers_create_query(source)
+
+    @staticmethod
+    def reload_datasource_trigger_query(params):
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+
+        Args:
+            params(dict): Параметры, необходимые для запроса
+
+        Returns:
+            str: Строка запроса
+        """
+
+        return DatabaseService.reload_datasource_trigger_query(params)
+
+    @staticmethod
+    def get_date_table_names(col_type):
+        """
+        Получение запроса на создание колонок таблицы дат
+
+        Args:
+            col_type(dict): Соответсвие название поля и типа
+
+        Returns:
+            list: Список строк с названием и типом колонок для таблицы дат
+        """
+        return DatabaseService.get_date_table_names(col_type)
+
+    @staticmethod
+    def get_dim_measure_table_names(fields, ref_key):
+        """
+        Список строк запроса для создания колонок таблицы мер и размерности
+
+        Args:
+            fields(): Информация о колонках таблицы
+            ref_key(str): идентификатор для создания внешнего ключа
+
+        Returns:
+            list: Список строк с названием и типом колонок
+            для таблицы мер и размерности
+        """
+
+        return DatabaseService.get_dim_table_names(fields, ref_key)
+
+    @staticmethod
+    def cdc_key_delete_query(table_name):
+        return DatabaseService.cdc_key_delete_query(table_name)
+
+
+
+

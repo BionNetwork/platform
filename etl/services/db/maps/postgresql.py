@@ -174,9 +174,12 @@ cdc_required_types = {
     "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
 }
 
+drop_remote_trigger = """
+    DROP TRIGGER IF EXISTS "{trigger_name}" on "{orig_table}";
+"""
 
-remote_triggers_query = """
-    CREATE OR REPLACE FUNCTION process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
+remote_triggers_query = """CREATE OR REPLACE FUNCTION
+    process_{new_table}_audit() RETURNS TRIGGER AS $cdc_audit$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
             INSERT INTO "{new_table}" ({cols} "cdc_created_at", "cdc_updated_at", "cdc_delta_flag", "cdc_synced")
@@ -195,9 +198,7 @@ remote_triggers_query = """
     END;
 $cdc_audit$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS "{new_table}_audit" on "{orig_table}";
-
-CREATE TRIGGER "{new_table}_audit"
+CREATE TRIGGER "{trigger_name_0}"
 AFTER INSERT OR UPDATE OR DELETE ON "{orig_table}"
     FOR EACH ROW EXECUTE PROCEDURE process_{new_table}_audit();
 """
@@ -227,8 +228,8 @@ check_table_exists = """
 """
 
 
-dimension_measure_triggers_query = """
-    CREATE OR REPLACE FUNCTION reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
+dimension_measure_triggers_query = """CREATE OR REPLACE FUNCTION
+    reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
     BEGIN
         IF (TG_OP = 'DELETE') THEN
             DELETE FROM "{new_table}" WHERE {del_condition};
