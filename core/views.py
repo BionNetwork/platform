@@ -13,6 +13,7 @@ from django.utils.decorators import method_decorator
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404
 from django.views.generic import TemplateView, View
+from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
 from django.contrib.auth.models import check_password
@@ -52,6 +53,15 @@ class BaseView(View):
             json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
+class BaseViewNoLogin(BaseView):
+    """
+    Базовый класс для View без аутентификации
+    """
+    @csrf_exempt
+    def dispatch(self, *args, **kwargs):
+        return super(BaseView, self).dispatch(*args, **kwargs)
+
+
 class BaseTemplateView(TemplateView, BaseView):
     """
     Базовый класс для View для работ с template
@@ -68,11 +78,11 @@ class HomeView(BaseTemplateView):
     def get(self, request, *args, **kwargs):
         return render(request, "core/home.html")
 
+
 class AngularView(BaseTemplateView):
     """Главная страница dashboard"""
     def get(self, request, *args, **kwargs):
         return render(request, "core/angular.html")
-
 
 
 class LoginView(BaseTemplateView):

@@ -46,6 +46,7 @@ INSTALLED_APPS = (
     'djcelery',
     'core',
     'etl',
+    'api',
 )
 
 MIDDLEWARE_CLASSES = (
@@ -145,6 +146,12 @@ LOGGING = {
             'filename': os.path.join(BASE_DIR, 'data', 'logs', 'etl.log'),
             'formatter': 'verbose'
         },
+        'api': {
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'DEBUG'),
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'data', 'logs', 'api.log'),
+            'formatter': 'verbose'
+        },
         'console': {
             'class': 'logging.StreamHandler'
         }
@@ -218,6 +225,10 @@ STATICFILES_DIRS = (
 MEDIA_URL = '/media/'
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+# API domain address
+API_HTTP_HOST = "http://localhost:8000"  # http://localhost:8000
 
 
 # redis conf

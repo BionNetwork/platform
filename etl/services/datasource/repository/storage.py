@@ -5,6 +5,7 @@ from copy import deepcopy
 from django.conf import settings
 from collections import defaultdict
 from redis_collections import Dict as RedisDict, List as RedisList
+from core.helpers import CustomJsonEncoder
 
 
 class RedisCacheKeys(object):
@@ -664,21 +665,25 @@ class RedisSourceService(object):
                       }
             order = cls.get_order_from_actives(n_val, actives)
             table_info = json.loads(r_server.get(str_table.format(order)))
-            n_info['cols'] = [x['name'] for x in table_info['columns']]
+            n_info['cols'] = [{'col_name': x['name'],
+                               'col_title': x.get('title', None), }
+                              for x in table_info['columns']]
             result.append(n_info)
 
         if last:
             table_info = json.loads(r_server.get(str_table_by_name.format(last)))
             l_info = {'tname': last, 'db': db, 'host': host,
                       'dest': n_val, 'without_bind': True,
-                      'cols': [x['name'] for x in table_info['columns']]
+                      'cols': [{'col_name': x['name'],
+                                'col_title': x.get('title', None), }
+                               for x in table_info['columns']]
                       }
             result.append(l_info)
         return result
 
     @classmethod
     def insert_columns_info(cls, source, tables, columns,
-                            indexes, foreigns, stats):
+                            indexes, foreigns, stats, intervals):
         """
         инфа о колонках, констраинтах, индексах в редис
         :param source:
@@ -704,9 +709,11 @@ class RedisSourceService(object):
                     "indexes": indexes[t_name.lower()],
                     "foreigns": foreigns[t_name.lower()],
                     "stats": stats[t_name.lower()],
-                }
+                    "date_intervals": intervals.get(t_name, [])
+                }, cls=CustomJsonEncoder
             ))
         pipe.execute()
+        a = 4
 
     @classmethod
     def info_for_tree_building(cls, ordered_nodes, tables, source):

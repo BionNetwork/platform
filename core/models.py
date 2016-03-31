@@ -160,8 +160,8 @@ class Dimension(models.Model):
     STANDART_DIMENSION = 'SD'
     TIME_DIMENSION = 'TD'
     DIMENSION_TYPE = (
-        (STANDART_DIMENSION, 'StandardDimension'),
-        (STANDART_DIMENSION, 'TimeDimension'),
+        (STANDART_DIMENSION, 'OTHER'),
+        (TIME_DIMENSION, 'TIME'),
     )
     name = models.CharField(
         verbose_name="название измерения", max_length=255, db_index=True)
@@ -366,3 +366,39 @@ class DatasetToMeta(models.Model, MultiPrimaryKeyModel):
 
     class Meta:
         db_table = "datasets_to_meta"
+
+
+class DatasourcesTrigger(models.Model):
+    """
+    Таблица созданных триггеров
+    """
+    name = models.CharField(
+        verbose_name="Название", max_length=1024, db_index=True, null=False)
+    src = models.TextField(verbose_name='текст триггера')
+    collection_name = models.CharField(
+        verbose_name="Название коллекции", max_length=1024, db_index=True)
+    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+
+    class Meta:
+        db_table = "datasources_trigger"
+
+
+class DatasourcesJournal(models.Model):
+    """
+    Таблица-журнал для триггеров
+    """
+    name = models.CharField(
+        verbose_name="Название таблицы триггера источника",
+        max_length=1024, db_index=True)
+    collection_name = models.CharField(
+        verbose_name="Название коллекции", max_length=1024, db_index=True)
+    date_created = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True)
+    date_updated = models.DateTimeField(
+        verbose_name="дата обновления", auto_now=True)
+    rows_read = models.IntegerField(verbose_name='Считано', default=0)
+    rows_written = models.IntegerField(verbose_name='Записано', default=0)
+    trigger = models.ForeignKey(DatasourcesTrigger, verbose_name="Триггер")
+
+    class Meta:
+        db_table = "datasources_journal"

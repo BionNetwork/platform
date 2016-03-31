@@ -42,14 +42,16 @@ def send_xml(key, cube_id, xml):
     Отправка файлов в mondrian-server
 
     Args:
-        key(str): ключ
+        key(unicode): ключ
         cube_id(int): id куба
         xml(str): содержимое схемы
     """
 
     directory = os.path.join(
         settings.BASE_DIR, 'data/resources/cubes/{0}/'.format(cube_id))
-    os.makedirs(directory)
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
     datasource_file_name = 'datasource_{0}.sds'.format(key)
     schema_name = 'cube_{0}.xml'.format(key)
@@ -92,3 +94,4 @@ class OlapServerConnectionErrorException(Exception):
     Исключение при ошибке коннекта к olap серверу
     """
     pass
+

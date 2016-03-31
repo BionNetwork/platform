@@ -13,6 +13,7 @@ urlpatterns = [
     url(r'^datasources/check_conn/$', views.CheckConnectionView.as_view(), name='datasources.check_conn'),
     url(r'^datasources/get_data/(?P<id>\d+)/$', views.GetConnectionDataView.as_view(), name='datasources.get_data'),
     url(r'^datasources/get_columns/$', views.GetColumnsView.as_view(), name='datasources.get_columns'),
+    url(r'^datasources/retitle_column/$', views.RetitleColumnView.as_view(), name='datasources.retitle_column'),
     url(r'^datasources/get_rows/$', views.GetDataRowsView.as_view(), name='datasources.get_rows'),
     url(r'^datasources/remove_tables/$', views.RemoveTablesView.as_view(), name='datasources.remove_tables'),
     url(r'^datasources/remove_all_tables/$', views.RemoveAllTablesView.as_view(),
@@ -25,4 +26,7 @@ urlpatterns = [
         name='datasources.load_data'),
     url(r'^datasources/user_tasks/$', views.GetUserTasksView.as_view(),
         name='datasources.user_tasks'),
+
+    url(r'^api/datasources/$', views.GetDatasources.as_view(),
+        name='api_datasources')
 ]
