@@ -659,16 +659,3 @@ class AllKeysTableStatusEnum(BaseEnum):
     }
 
 AKTSE = AllKeysTableStatusEnum
-
-
-class DatasetUpdateService(object):
-    """
-    Сервис по работе с моделью Dataset
-    """
-    @staticmethod
-    def update_status(dataset_id, state):
-        # обновляем статус dataset-a
-
-        dataset = Dataset.objects.get(id=dataset_id)
-        dataset.state = state
-        dataset.save()

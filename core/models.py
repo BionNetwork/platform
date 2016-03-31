@@ -338,6 +338,13 @@ class Dataset(models.Model):
         verbose_name='Статус', choices=DatasetStateChoices.choices,
         default=DatasetStateChoices.IDLE, db_index=True)
 
+    @classmethod
+    def update_state(cls, dataset_id, state):
+        # замена статуса датасета
+        instance = cls.objects.get(id=dataset_id)
+        instance.state = state
+        instance.save()
+
     class Meta:
         db_table = "datasets"
 

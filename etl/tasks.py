@@ -227,7 +227,7 @@ class CreateDataset(TaskProcessing):
         dataset, created = Dataset.objects.get_or_create(key=self.key)
 
         # меняем статус dataset
-        DatasetUpdateService.update_status(dataset.id, DatasetStateChoices.IDLE)
+        Dataset.update_state(dataset.id, DatasetStateChoices.IDLE)
 
         self.context['dataset_id'] = dataset.id
 
@@ -250,7 +250,7 @@ class LoadMongodb(TaskProcessing):
 
     def processing(self):
 
-        DatasetUpdateService.update_status(
+        Dataset.update_state(
             self.context['dataset_id'], DatasetStateChoices.FILUP)
 
         cols = json.loads(self.context['cols'])
@@ -733,7 +733,7 @@ class LoadDimensions(TaskProcessing):
         connection.commit()
 
     def update_dataset(self):
-        DatasetUpdateService.update_status(
+        Dataset.update_state(
             self.context['dataset_id'], DatasetStateChoices.DIMCR)
 
 
@@ -779,7 +779,7 @@ class LoadMeasures(LoadDimensions):
             measure.save()
 
     def update_dataset(self):
-        DatasetUpdateService.update_status(
+        Dataset.update_state(
             self.context['dataset_id'], DatasetStateChoices.MSRCR)
 
     def set_next_task_params(self):
@@ -797,7 +797,7 @@ class UpdateMongodb(TaskProcessing):
         текущего состояния источника
         """
 
-        DatasetUpdateService.update_status(
+        Dataset.update_state(
             self.context['dataset_id'], DatasetStateChoices.FILUP)
 
         self.key = self.context['checksum']
@@ -1292,7 +1292,7 @@ class CreateCube(TaskProcessing):
             cube_id = resp.json()['id']
             logger.info('Created cube ' + cube_id)
 
-            DatasetUpdateService.update_status(
+            Dataset.update_state(
                 self.context['dataset_id'], DatasetStateChoices.LOADED)
 
         else:
