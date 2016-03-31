@@ -378,8 +378,11 @@ class LoadDimensions(TaskProcessing):
              json.loads(t['meta__stats'])['date_intervals']) for t in meta_data]
 
         if not self.context['db_update']:
+            # определяем нужно ли создавать таблицы с датами
             if any([y for x, y in date_intervals_info]) and self.table_prefix == DIMENSIONS:
-                self.create_date_tables(date_intervals_info)
+                date_tables = self.create_date_tables(date_intervals_info)
+            else:
+                date_tables = {}
 
             create_col_names = DataSourceService.get_dim_measure_table_names(
                 self.actual_fields, self.key)
@@ -387,7 +390,7 @@ class LoadDimensions(TaskProcessing):
                 self.get_table(self.table_prefix), ', '.join(create_col_names)))
 
             try:
-                self.save_fields()
+                self.save_fields(date_tables)
             except Exception as e:
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
@@ -478,9 +481,12 @@ class LoadDimensions(TaskProcessing):
                     dim_meas_cols_info.append(c)
         return dim_meas_cols_info
 
-    def save_fields(self):
+    def save_fields(self, date_tables):
         """
         Заполняем таблицу данными
+
+        Args:
+            date_tables(dict): список таблиц с датами
         """
 
         column_names = ['cdc_key']
@@ -521,7 +527,7 @@ class LoadDimensions(TaskProcessing):
                 for ind in xrange(col_nums):
                     if ind in date_fields_order.keys():
                         # заменяем дату идентификатором из связой таблицы
-                        i = self.date_tables[record[ind].date()] if record[ind] else 0
+                        i = date_tables[record[ind].date()] if record[ind] else 0
                         temp_dict.update({str(ind): i})
                     else:
                         temp_dict.update({str(ind): record[ind]})
@@ -568,7 +574,7 @@ class LoadDimensions(TaskProcessing):
 
         # создаем запись о триггере
         local_source_trigger, created = DatasourcesTrigger.objects.get_or_create(
-            name=trigger_name, collection_name=sttm_table,
+            name=trigger_name, collection_name=self.get_table(STTM_DATASOURCE),
             datasource_id=self.context['source_id'],
         )
         local_source_trigger.src = reload_trigger_query
@@ -577,6 +583,7 @@ class LoadDimensions(TaskProcessing):
     def create_date_tables(self, date_intervals_info):
         """
         Создание таблиц дат
+        Возвращает список созданных таблиц
 
         Args:
             date_intervals_info(list):
@@ -595,7 +602,7 @@ class LoadDimensions(TaskProcessing):
                 ]
         """
 
-        self.date_tables = {}
+        date_tables = {}
         start_date = None
         end_date = None
         for table, columns in date_intervals_info:
@@ -638,8 +645,9 @@ class LoadDimensions(TaskProcessing):
                     '8': int(math.ceil(float(month) / 3)),
 
                  })
-            self.date_tables.update({current_day: ind + 1})
+            date_tables.update({current_day: ind + 1})
         insert_db_connect.execute(rows, many=True)
+        return date_tables
 
 
 class LoadMeasures(LoadDimensions):
@@ -859,8 +867,6 @@ class DetectRedundant(TaskProcessing):
 
 
 class DeleteRedundant(TaskProcessing):
-
-
     """
     Удаление записей из таблицы-источника
 

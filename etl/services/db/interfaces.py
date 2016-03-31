@@ -574,6 +574,15 @@ class Database(object):
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
     @staticmethod
+    def get_remote_trigger_names(table_name):
+        """
+        Названия создаваемых триггеров для remote источников
+        Args:
+            table_name:
+        """
+        raise NotImplementedError("Method %s is not implemented" % __name__)
+
+    @staticmethod
     def get_date_table_names(col_type):
         """
         Получене запроса на создание таблицы даты
