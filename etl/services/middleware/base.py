@@ -1,9 +1,10 @@
 # coding: utf-8
 
 import decimal
-import binascii
 import datetime
 import operator
+
+from core.helpers import HashEncoder
 
 
 class EtlEncoder:
@@ -42,7 +43,7 @@ def generate_table_name_key(source, cols_str):
         str: Ключ для названия промежуточной таблицы
 
     """
-    key = binascii.crc32(
+    key = HashEncoder.encode(
         reduce(operator.add,
                [source.host, str(source.port),
                 str(source.user_id), cols_str], ''))
@@ -54,8 +55,8 @@ def get_table_name(prefix, key):
     название новой таблицы
 
     Args:
-        prefix(str): префикс перед ключем
-        key(str): ключ
+        prefix(unicode): префикс перед ключем
+        key(unicode): ключ
     Returns:
         str: Название новой наблицы
     """

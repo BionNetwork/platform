@@ -25,5 +25,7 @@ urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
     url(r'', include(core_urls, namespace='core'), name="index"),
     url(r'^etl/', include('etl.urls', namespace='etl')),
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + (
+    url(r'^api/v1/', include('api.urls', namespace='api')),
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + \
+    static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) + (
     core_urls.urlpatterns)

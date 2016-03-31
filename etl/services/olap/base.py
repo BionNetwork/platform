@@ -6,10 +6,6 @@ import easywebdav
 from django.conf import settings
 from requests import ConnectionError
 
-XMLA_URL = 'http://{host}:{port}/saiku/xmla'.format(
-    host=settings.OLAP_SERVER_HOST, port=settings.OLAP_SERVER_PORT)
-REPOSITORY_PATH = 'saiku/repository/default'
-
 
 class OlapClient(object):
     """
@@ -21,11 +17,11 @@ class OlapClient(object):
             cube_id(int): id куба
         """
         self.cube_id = cude_id
-        self.connect = xmla.XMLAProvider().connect(location=XMLA_URL)
+        self.connect = xmla.XMLAProvider().connect(location=settings.OLAP_XMLA_URL)
         self.webdav = easywebdav.connect(
             host=settings.OLAP_SERVER_HOST,
             port=settings.OLAP_SERVER_PORT,
-            path=REPOSITORY_PATH,
+            path=settings.OLAP_REPOSITORY_PATH,
             username=settings.OLAP_SERVER_USER,
             password=settings.OLAP_SERVER_PASS
         )
@@ -46,14 +42,16 @@ def send_xml(key, cube_id, xml):
     Отправка файлов в mondrian-server
 
     Args:
-        key(str): ключ
+        key(unicode): ключ
         cube_id(int): id куба
         xml(str): содержимое схемы
     """
 
     directory = os.path.join(
         settings.BASE_DIR, 'data/resources/cubes/{0}/'.format(cube_id))
-    os.makedirs(directory)
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
     datasource_file_name = 'datasource_{0}.sds'.format(key)
     schema_name = 'cube_{0}.xml'.format(key)
@@ -96,3 +94,4 @@ class OlapServerConnectionErrorException(Exception):
     Исключение при ошибке коннекта к olap серверу
     """
     pass
+

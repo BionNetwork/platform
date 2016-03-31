@@ -24,7 +24,7 @@
       if ($location.path() === '') {
         return '/';
       }
-      return '/not-found';
+      //return '/not-found';
     });
   }
 })();

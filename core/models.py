@@ -12,7 +12,7 @@ from djchoices import ChoiceItem, DjangoChoices
 from core.model_helpers import MultiPrimaryKeyModel
 
 from .db.services import RetryQueryset
-from .helpers import get_utf8_string
+from .helpers import get_utf8_string, users_avatar_upload_path
 
 """
 Базовые модели приложения
@@ -138,6 +138,12 @@ class User(AbstractUser):
     middle_name = models.CharField(max_length=50, blank=True, verbose_name='Отчество', default='')
     birth_date = models.DateField(verbose_name='Дата рождения', null=True, blank=True)
     verify_email_uuid = models.CharField(max_length=50, null=True, blank=True)
+    avatar_small = models.ImageField(
+        verbose_name='Аватар preview', upload_to=users_avatar_upload_path,
+        null=True, blank=True, max_length=500)
+    avatar = models.ImageField(
+        verbose_name='Аватар', upload_to=users_avatar_upload_path, null=True,
+        blank=True, max_length=500)
 
     # objects = models.Manager.from_queryset(RetryQueryset)()
 
@@ -154,8 +160,8 @@ class Dimension(models.Model):
     STANDART_DIMENSION = 'SD'
     TIME_DIMENSION = 'TD'
     DIMENSION_TYPE = (
-        (STANDART_DIMENSION, 'StandardDimension'),
-        (STANDART_DIMENSION, 'TimeDimension'),
+        (STANDART_DIMENSION, 'OTHER'),
+        (TIME_DIMENSION, 'TIME'),
     )
     name = models.CharField(
         verbose_name="название измерения", max_length=255, db_index=True)
@@ -360,3 +366,39 @@ class DatasetToMeta(models.Model, MultiPrimaryKeyModel):
 
     class Meta:
         db_table = "datasets_to_meta"
+
+
+class DatasourcesTrigger(models.Model):
+    """
+    Таблица созданных триггеров
+    """
+    name = models.CharField(
+        verbose_name="Название", max_length=1024, db_index=True, null=False)
+    src = models.TextField(verbose_name='текст триггера')
+    collection_name = models.CharField(
+        verbose_name="Название коллекции", max_length=1024, db_index=True)
+    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+
+    class Meta:
+        db_table = "datasources_trigger"
+
+
+class DatasourcesJournal(models.Model):
+    """
+    Таблица-журнал для триггеров
+    """
+    name = models.CharField(
+        verbose_name="Название таблицы триггера источника",
+        max_length=1024, db_index=True)
+    collection_name = models.CharField(
+        verbose_name="Название коллекции", max_length=1024, db_index=True)
+    date_created = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True)
+    date_updated = models.DateTimeField(
+        verbose_name="дата обновления", auto_now=True)
+    rows_read = models.IntegerField(verbose_name='Считано', default=0)
+    rows_written = models.IntegerField(verbose_name='Записано', default=0)
+    trigger = models.ForeignKey(DatasourcesTrigger, verbose_name="Триггер")
+
+    class Meta:
+        db_table = "datasources_journal"

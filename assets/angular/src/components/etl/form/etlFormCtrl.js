@@ -5,19 +5,18 @@
     .controller('etlFormController', ['$scope', '$state', '$etlHTTP', etlFormController]);
 
   function etlFormController($scope, $state, $etlHTTP) {
-    $scope.user = {
-      status: 'active'
+    $scope.etl = {
     };
 
-    function successRead(user) {
-      $scope.user = user;
+    function successRead(etl) {
+      $scope.etl = etl;
     }
 
-    function successCreate(user) {
+    function successCreate(etl) {
       $state.go('etl.view');
     }
 
-    function successUpdate(user) {
+    function successUpdate(etl) {
       $state.go('etl.view');
     }
 
@@ -31,15 +30,15 @@
       }).then(successRead, errorHandler);
     }
 
-    $scope.submit = function submit(user) {
-      if (user.id) {
+    $scope.submit = function submit(etl) {
+      if (etl.id) {
         $etlHTTP
-          .update(user)
+          .update(etl)
           .then(successUpdate, errorHandler);
       }
       else {
         $etlHTTP
-          .add(user)
+          .add(etl)
           .then(successCreate, errorHandler);
       }
     };

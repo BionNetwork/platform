@@ -17,7 +17,7 @@
           </a>
         </li>
       </ul>
-      <form novalidate="" role="form" method="post" id="conn_form" data-url="/etl/datasources/check_conn/" data-save-url="/etl/datasources/add/">
+      <form role="form" id="conn_form" ng-submit="submit(etl)">
       <div class="tab-content">
         <div class="tab-pane active" id="source">
           <!-- /.box-header -->
@@ -39,7 +39,7 @@
                 <div class="form-group">
                   <label>Db</label>
                     <div>
-                      <input class="form-control" id="id_db" maxlength="255" name="db" required="true" type="text">
+                      <input class="form-control" id="id_db" maxlength="255" name="db" required="true" type="text" ng-model="etl.db">
                     </div>
                   <div>
                   </div>
@@ -47,7 +47,7 @@
                 <div class="form-group">
                   <label>Login</label>
                     <div>
-                      <input class="form-control" id="id_login" maxlength="1024" name="login" required="true" type="text">
+                      <input class="form-control" id="id_login" maxlength="1024" name="login" required="true" type="text" ng-model="etl.login">
                     </div>
                   <div>
                   </div>
@@ -55,7 +55,7 @@
                 <div class="form-group">
                   <label>Password</label>
                     <div>
-                      <input class="form-control" id="id_password" maxlength="255" name="password" required="true" type="password">
+                      <input class="form-control" id="id_password" maxlength="255" name="password" required="true" type="password" ng-model="etl.password">
                     </div>
                   <div>
                   </div>
@@ -63,7 +63,7 @@
                 <div class="form-group">
                   <label>Host</label>
                     <div>
-                      <input class="form-control" id="id_host" maxlength="255" name="host" required="true" type="text">
+                      <input class="form-control" id="id_host" maxlength="255" name="host" required="true" type="text" ng-model="etl.host">
                     </div>
                   <div>
                   </div>
@@ -71,7 +71,7 @@
                 <div class="form-group">
                   <label>Port</label>
                     <div>
-                      <input class="form-control" id="id_port" name="port" required="true" type="text">
+                      <input class="form-control" id="id_port" name="port" required="true" type="text" ng-model="etl.port">
                     </div>
                   <div>
                   </div>
@@ -97,7 +97,7 @@
           </div>
         </div>
         <div class="box-body">
-          <button type="button" class="btn" onclick="saveNewSource()">Сохранить</button>
+          <button type="submit" class="btn">Сохранить</button>
         </div>
         <div class="form-group">
           <label></label>

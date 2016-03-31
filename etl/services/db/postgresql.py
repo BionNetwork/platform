@@ -72,14 +72,6 @@ class Postgresql(Database):
         indexes_query = pgsql_map.indexes_query.format(tables_str)
         return cols_query, constraints_query, indexes_query
 
-    @staticmethod
-    def get_select_query():
-        """
-        возвращает селект запрос
-        :return: str
-        """
-        return "SELECT {0} FROM {1};"
-
     @classmethod
     def get_statistic_query(cls, source, tables):
         """
@@ -90,6 +82,24 @@ class Postgresql(Database):
         """
         tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
         return cls.db_map.stat_query.format(tables_str)
+
+    @classmethod
+    def get_interval_query(cls, source, cols_info):
+        """
+
+        Args:
+
+
+        Returns:
+
+        """
+        intervals_query = []
+        for table, col_name, col_type, _, _ in cols_info:
+            if col_type in cls.db_map.dates:
+                query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
+                        col_name, table)
+                intervals_query.append([table, col_name, query])
+        return intervals_query
 
     @staticmethod
     def local_table_create_query(key_str, cols_str):
@@ -112,14 +122,27 @@ class Postgresql(Database):
 
         return table_exists_query
 
+
+    @classmethod
+    def get_page_select_query(cls, table_name, cols):
+        fields_str = '"'+'", "'.join(cols)+'"'
+        return cls.db_map.row_query.format(
+            fields_str, table_name, '%s', '%s')
+
     @staticmethod
-    def local_table_insert_query(key_str):
+    def local_table_insert_query(table_name, cols_num):
         """
-        запрос на инсерт в новую таблицу локал хранилища
-        :param key_str:
-        :return:
+        Запрос на добавление в новую таблицу локал хранилища
+
+        Args:
+            table_name(str): Название таблиц
+            cols_num(int): Число столбцов
+        Returns:
+            str: Строка на выполнение
         """
-        insert_query = "INSERT INTO {0} VALUES {1}".format(key_str, '{0}')
+        cols = '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(
+                cols_num)])
+        insert_query = "INSERT INTO {0} VALUES {1}".format(table_name, cols)
         return insert_query
 
     @staticmethod
@@ -128,15 +151,6 @@ class Postgresql(Database):
         запрос на создание новой таблицы в БД клиента
         """
         return pgsql_map.remote_table_query
-
-    @staticmethod
-    def remote_table_indexes():
-        """
-        запрос на создание индексов новой таблицы в БД клиента
-        """
-        return (pgsql_map.updated_synced_index,
-                pgsql_map.created_index,
-                pgsql_map.synced_index, )
 
     @staticmethod
     def remote_triggers_create_query():
@@ -157,8 +171,14 @@ class Postgresql(Database):
         return pgsql_map.delete_primary_key.format(table, primary)
 
     @staticmethod
-    def reload_datasource_trigger_query():
+    def reload_datasource_trigger_query(params):
         """
         запрос на создание триггеров в БД локально для размерностей и мер
         """
-        return pgsql_map.dimension_measure_triggers_query
+        return pgsql_map.dimension_measure_triggers_query.format(**params)
+
+    @staticmethod
+    def get_remote_trigger_names(table_name):
+        return {
+            "trigger_name_0": "cdc_{0}_audit".format(table_name),
+        }

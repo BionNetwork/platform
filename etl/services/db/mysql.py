@@ -91,14 +91,6 @@ class Mysql(Database):
 
         return cols_query, constraints_query, indexes_query
 
-    @staticmethod
-    def get_select_query():
-        """
-        возвращает селект запрос
-        :return: str
-        """
-        return "SELECT {0} FROM {1};"
-
     @classmethod
     def get_statistic_query(cls, source, tables):
         """
@@ -134,3 +126,11 @@ class Mysql(Database):
     @staticmethod
     def delete_primary_query(table, primary):
         return mysql_map.delete_primary_key.format(table, primary)
+
+    @staticmethod
+    def get_remote_trigger_names(table_name):
+        return {
+            "trigger_name_0": "cdc_{0}_insert".format(table_name),
+            "trigger_name_1": "cdc_{0}_update".format(table_name),
+            "trigger_name_2": "cdc_{0}_delete".format(table_name),
+        }

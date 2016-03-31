@@ -45,6 +45,8 @@ blobs = [
     'binary',
 ]
 
+booleans = []
+
 for i in ints:
     DB_TYPES[i] = 'integer'
 
@@ -60,6 +62,8 @@ for i in dates:
 for i in blobs:
     DB_TYPES[i] = 'binary'
 
+for i in booleans:
+    DB_TYPES[i] = 'bool'
 
 table_query = """
     SELECT table_name FROM information_schema.tables
@@ -136,25 +140,23 @@ cdc_required_types = {
     "cdc_synced": {"type": "smallint", "nullable": "NOT NULL"},
 }
 
-remote_triggers_query = """
-    DROP TRIGGER IF EXISTS `cdc_{orig_table}_insert` $$
-    CREATE TRIGGER `cdc_{orig_table}_insert` AFTER INSERT ON `{orig_table}`
+drop_remote_trigger = """
+    DROP TRIGGER IF EXISTS `{trigger_name}`;
+"""
+
+remote_triggers_query = """CREATE TRIGGER `{trigger_name_0}` AFTER INSERT ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
     VALUES ({new} now(), null, 1, 0);
     END
-    $$
 
-    DROP TRIGGER IF EXISTS `cdc_{orig_table}_update` $$
-    CREATE  TRIGGER `cdc_{orig_table}_update` AFTER UPDATE ON `{orig_table}`
+    $$CREATE  TRIGGER `{trigger_name_1}` AFTER UPDATE ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
     VALUES ({new} now(), null, 2, 0);
     END
-    $$
 
-    DROP TRIGGER IF EXISTS `cdc_{orig_table}_delete` $$
-    CREATE  TRIGGER `cdc_{orig_table}_delete` AFTER DELETE ON `{orig_table}`
+    $$CREATE  TRIGGER `{trigger_name_2}` AFTER DELETE ON `{orig_table}`
     FOR EACH ROW BEGIN
     INSERT INTO `{new_table}` ({cols} `cdc_created_at`, `cdc_updated_at`, `cdc_delta_flag`, `cdc_synced`)
     VALUES ({old} now(), null, 3, 0);
