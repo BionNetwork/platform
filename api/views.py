@@ -12,6 +12,7 @@ from etl.services.olap.base import send_xml, OlapServerConnectionErrorException,
     mdx_execute
 from django.db import transaction
 
+from django.http import HttpResponse
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,8 @@ class ExecuteQueryView(BaseViewNoLogin):
     Выполнение mdx запроса к данным
     """
 
-    def get(self, request, *args, **kwargs):
-        mdx_request_info = request.POST('mdx_info')
+    def post(self, request, *args, **kwargs):
+        mdx_info = json.loads(request.body)
 
         # Тестовый запрос
         # mdx_request_info = """{
@@ -80,7 +81,7 @@ class ExecuteQueryView(BaseViewNoLogin):
 # "queryType": "OLAP",
 # "type":"QUERYMODEL"
 # }"""
-        mdx_info = json.loads(mdx_request_info)
+
         mdx = mdx_info['mdx']
         cube_name = mdx_info['cube']['name']
         mdx_response = mdx_execute(cube_name, mdx)
