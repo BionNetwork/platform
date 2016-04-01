@@ -8,7 +8,7 @@ import core.helpers
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0031_auto_20160225_1527'),
+        ('core', '0032_auto_20160225_1527'),
     ]
 
     operations = [
