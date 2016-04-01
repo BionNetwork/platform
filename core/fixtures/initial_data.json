@@ -16,7 +16,9 @@
       "site": "",
       "city": "Kazan",
       "birth_date": "2015-12-31",
-      "verify_email_uuid": ""
+      "verify_email_uuid": "",
+      "avatar_small": null,
+      "avatar": null
     }
   }
 ]
