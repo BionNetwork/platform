@@ -25,7 +25,7 @@ from etl.helpers import DataSourceService
 from core.models import (
     Datasource, Dimension, Measure, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
-    DatasourcesTrigger, DatasourcesJournal)
+    DatasetStateChoices, DatasourcesTrigger, DatasourcesJournal)
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.db import transaction
@@ -101,6 +101,10 @@ class CreateDataset(TaskProcessing):
     def processing(self):
 
         dataset, created = Dataset.objects.get_or_create(key=self.key)
+
+        # меняем статус dataset
+        Dataset.update_state(dataset.id, DatasetStateChoices.IDLE)
+
         self.context['dataset_id'] = dataset.id
 
         if not self.context['db_update']:
@@ -117,6 +121,10 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
+
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.FILUP)
+
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
@@ -360,6 +368,9 @@ class LoadDimensions(TaskProcessing):
         return actual_fields
 
     def processing(self):
+
+        self.update_dataset()
+
         self.key = self.context['checksum']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -546,38 +557,47 @@ class LoadDimensions(TaskProcessing):
         Создание триггеров для размерностей и мер,
         обеспечивающих синхронизацию данных для источника
         """
-        local_instance = DataSourceService.get_local_instance()
-        sep = local_instance.get_separator()
-
-        column_names = ['cdc_key'] + self.get_splitted_table_column_names()
-        insert_cols = []
-        select_cols = []
-        for col in column_names:
-            insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
-            select_cols.append('{1}{0}{1}'.format(col, sep))
 
         trigger_name = LOCAL_TRIGGER_NAME.format(self.table_prefix, self.key)
-        query_params = dict(
-            trigger_name=trigger_name,
-            new_table=self.get_table(self.table_prefix),
-            orig_table=self.get_table(STTM_DATASOURCE),
-            del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
-            insert_cols=','.join(insert_cols),
-            cols="({0})".format(','.join(select_cols)),
-        )
+        orig_table_name = self.get_table(STTM_DATASOURCE)
+        source_id = self.context['source_id']
 
-        reload_trigger_query = (
-            DataSourceService.reload_datasource_trigger_query(query_params))
+        trigger = DatasourcesTrigger.objects.filter(
+            name=trigger_name, collection_name=orig_table_name,
+            datasource_id=source_id)
 
-        LocalDbConnect(reload_trigger_query).execute()
+        if not trigger.exists():
 
-        # создаем запись о триггере
-        local_source_trigger, created = DatasourcesTrigger.objects.get_or_create(
-            name=trigger_name, collection_name=self.get_table(STTM_DATASOURCE),
-            datasource_id=self.context['source_id'],
-        )
-        local_source_trigger.src = reload_trigger_query
-        local_source_trigger.save()
+            local_instance = DataSourceService.get_local_instance()
+            sep = local_instance.get_separator()
+
+            column_names = ['cdc_key'] + self.get_splitted_table_column_names()
+            insert_cols = []
+            select_cols = []
+            for col in column_names:
+                insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
+                select_cols.append('{1}{0}{1}'.format(col, sep))
+
+            query_params = dict(
+                trigger_name=trigger_name,
+                new_table=self.get_table(self.table_prefix),
+                orig_table=orig_table_name,
+                del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
+                insert_cols=','.join(insert_cols),
+                cols="({0})".format(','.join(select_cols)),
+            )
+
+            reload_trigger_query = (
+                DataSourceService.reload_datasource_trigger_query(query_params))
+
+            LocalDbConnect(reload_trigger_query).execute()
+
+            # создаем запись о триггере
+            DatasourcesTrigger.objects.create(
+                name=trigger_name, collection_name=orig_table_name,
+                datasource_id=source_id,
+                src=reload_trigger_query,
+            )
 
     def create_date_tables(self, date_intervals_info):
         """
@@ -648,6 +668,10 @@ class LoadDimensions(TaskProcessing):
         insert_db_connect.execute(rows, many=True)
         return date_tables
 
+    def update_dataset(self):
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.DIMCR)
+
 
 class LoadMeasures(LoadDimensions):
     """
@@ -686,6 +710,10 @@ class LoadMeasures(LoadDimensions):
             measure.title = title if title is not None else table_name
             measure.save()
 
+    def update_dataset(self):
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.MSRCR)
+
     def set_next_task_params(self):
         self.next_task_params = (
             CREATE_CUBE, create_cube, self.context)
@@ -703,6 +731,10 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
+
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.FILUP)
+
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -1053,7 +1085,7 @@ class CreateTriggers(TaskProcessing):
                 connection.commit()
 
             trigger_names = db_instance.get_remote_trigger_names(table)
-            drop_trigger_query = db_instance.db_map.drop_remote_trigger
+            # drop_trigger_query = db_instance.db_map.drop_remote_trigger
 
             trigger_commands = remote_triggers_create_query.format(
                 orig_table=table, new_table=table_name, new=new, old=old,
@@ -1064,28 +1096,34 @@ class CreateTriggers(TaskProcessing):
 
                 trigger_name = trigger_names.get("trigger_name_{0}".format(i))
 
-                # удаляем старый триггер
-                cursor.execute(drop_trigger_query.format(
-                    trigger_name=trigger_name, orig_table=table,
-                ))
-                # создаем новый триггер
-                cursor.execute(create_trigger_query)
+                trigger = DatasourcesTrigger.objects.filter(
+                    name=trigger_name, collection_name=table, datasource=source)
 
-                with transaction.atomic():
-                    # создаем запись о триггере
-                    source_trigger, created = DatasourcesTrigger.objects.get_or_create(
-                        name=trigger_name, collection_name=table, datasource=source,
-                    )
-                    source_trigger.src = create_trigger_query
-                    source_trigger.save()
+                if not trigger.exists():
 
-                    # создаем запись об удаленной таблице триггера
-                    DatasourcesJournal.objects.get_or_create(
-                        name=table_name, collection_name=table,
-                        trigger=source_trigger,
-                    )
+                    # # удаляем старый триггер
+                    # cursor.execute(drop_trigger_query.format(
+                    #     trigger_name=trigger_name, orig_table=table,
+                    # ))
 
-            connection.commit()
+                    # создаем новый триггер
+                    cursor.execute(create_trigger_query)
+
+                    with transaction.atomic():
+                        # создаем запись о триггере
+                        source_trigger = DatasourcesTrigger(
+                            name=trigger_name, collection_name=table, datasource=source,
+                        )
+                        source_trigger.src = create_trigger_query
+                        source_trigger.save()
+
+                        # создаем запись о триггере для remote источника
+                        DatasourcesJournal.objects.create(
+                            name=table_name, collection_name=table,
+                            trigger=source_trigger,
+                        )
+
+                    connection.commit()
 
         cursor.close()
         connection.close()
@@ -1252,9 +1290,13 @@ class CreateCube(TaskProcessing):
         if resp.json()['status'] == 'success':
             cube_id = resp.json()['id']
             logger.info('Created cube %s' % cube_id)
+
+            Dataset.update_state(
+                self.context['dataset_id'], DatasetStateChoices.LOADED)
         else:
             self.error_handling(resp.json()['message'])
             logger.error('Error creating cube')
             logger.error(resp.json()['message'])
+
 
 # write in console: python manage.py celery -A etl.tasks worker

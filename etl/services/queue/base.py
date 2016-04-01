@@ -504,6 +504,7 @@ class SourceDbConnect(LocalDbConnect):
     def __init__(self, query, source, execute=False):
         super(SourceDbConnect, self).__init__(query, source, execute)
 
+
 class MongodbConnection(object):
 
     def __init__(self, name, db_name='etl', indexes=None):
