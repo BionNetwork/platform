@@ -23,7 +23,7 @@ from pymondrian.schema import (
 from pymondrian.generator import generate
 from etl.helpers import DataSourceService
 from core.models import (
-    Datasource, Dimension, Measure, QueueList, DatasourceMeta,
+    Datasource, Dimension, Measure, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
     DatasetStateChoices, DatasourcesTrigger, DatasourcesJournal)
 from django.conf import settings

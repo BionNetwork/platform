@@ -10,7 +10,7 @@ from etl.constants import TYPES_MAP
 from etl.services.datasource.base import DataSourceService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
-from core.models import (QueueList, Queue, QueueStatus, Dataset)
+from core.models import (QueueList, Queue, QueueStatus)
 from etl.services.middleware.base import get_table_name
 from core.exceptions import TaskError
 from core.helpers import HashEncoder
@@ -24,9 +24,9 @@ from . import client, settings
 
 __all__ = [
     'TLSE',  'STSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
-    'calc_key_for_row', 'TableCreateQuery', 'InsertQuery', 'DeleteQuery', 'TaskProcessing', 'SourceDbConnect', 'LocalDbConnect',
+    'calc_key_for_row', 'TaskProcessing', 'SourceDbConnect', 'LocalDbConnect',
     'DTCN', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
-    'process_binary_data', 'get_binary_types_dict', 'WhetherTableExistsQuery'
+    'process_binary_data', 'get_binary_types_dict'
 ]
 
 logger = logging.getLogger(__name__)
@@ -499,6 +499,7 @@ class SourceDbConnect(LocalDbConnect):
 
     def __init__(self, query, source, execute=False):
         super(SourceDbConnect, self).__init__(query, source, execute)
+
 
 class MongodbConnection(object):
 
