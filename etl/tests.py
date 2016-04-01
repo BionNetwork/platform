@@ -487,9 +487,6 @@ class RedisKeysTest(BaseCoreTest):
         for interval in collection1['date_intervals']:
             interval['last_updated'] = None
 
-        print '-----------'
-        print collection1
-
         self.assertEqual(collection1, expected_col1,
                          'Collection сохранен неправильно!')
         expected_ddl1 = {u'foreigns': [], u'stats': None,
