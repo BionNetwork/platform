@@ -5,6 +5,7 @@ from copy import deepcopy
 from django.conf import settings
 from collections import defaultdict
 from redis_collections import Dict as RedisDict, List as RedisList
+from core.helpers import CustomJsonEncoder
 
 
 class RedisCacheKeys(object):
@@ -682,7 +683,7 @@ class RedisSourceService(object):
 
     @classmethod
     def insert_columns_info(cls, source, tables, columns,
-                            indexes, foreigns, stats):
+                            indexes, foreigns, stats, intervals):
         """
         инфа о колонках, констраинтах, индексах в редис
         :param source:
@@ -708,9 +709,11 @@ class RedisSourceService(object):
                     "indexes": indexes[t_name.lower()],
                     "foreigns": foreigns[t_name.lower()],
                     "stats": stats[t_name.lower()],
-                }
+                    "date_intervals": intervals.get(t_name, [])
+                }, cls=CustomJsonEncoder
             ))
         pipe.execute()
+        a = 4
 
     @classmethod
     def info_for_tree_building(cls, ordered_nodes, tables, source):
