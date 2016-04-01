@@ -376,7 +376,11 @@ class DatasourceTest(BaseCoreTest):
                 info = DataSourceService.get_columns_info(self.source, [u'VERSION_BUNDLE', ])
                 expected_info = [
                     {'dest': None, 'without_bind': False, 'db': u'',
-                     'cols': [u'NODE_ID', u'BUNDLE_DATA', u's'],
+                     'cols': [
+                         {'col_title': None, 'col_name': u'NODE_ID'},
+                         {'col_title': None, 'col_name': u'BUNDLE_DATA'},
+                         {'col_title': None, 'col_name': u's'}
+                     ],
                      'is_root': True, 'host': u'', 'tname': u'VERSION_BUNDLE'}
                 ]
 
@@ -474,9 +478,18 @@ class RedisKeysTest(BaseCoreTest):
                              {u'is_primary': False, u'is_unique': True, u'name': u'test_uniq_together_index', u'columns': [u'date_created', u'queue_id']},
                              {u'is_primary': False, u'is_unique': False, u'name': u'test_queue_id_index', u'columns': [u'queue_id']},
                              {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
-                             {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]}
+                             {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}],
+                         "date_intervals": [{u'startDate': None, u'last_updated': None, u'name': u'date_created', u'endDate': None}],
+                         }
 
         collection1 = json.loads(r_server.get(collection_str))
+
+        for interval in collection1['date_intervals']:
+            interval['last_updated'] = None
+
+        print '-----------'
+        print collection1
+
         self.assertEqual(collection1, expected_col1,
                          'Collection сохранен неправильно!')
         expected_ddl1 = {u'foreigns': [], u'stats': None,
@@ -494,15 +507,21 @@ class RedisKeysTest(BaseCoreTest):
                                       {u'is_primary': False, u'is_unique': True, u'name': u'test_uniq_together_index', u'columns': [u'date_created', u'queue_id']},
                                       {u'is_primary': False, u'is_unique': False, u'name': u'test_queue_id_index', u'columns': [u'queue_id']},
                                       {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
-                                      {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}]
+                                      {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}],
+                         u'date_intervals': [{u'startDate': None, u'last_updated': None, u'name': u'date_created', u'endDate': None}]
                          }
         ddl1 = json.loads(r_server.get(ddl_str))
+
+        for interval in ddl1['date_intervals']:
+            interval['last_updated'] = None
+
         self.assertEqual(ddl1, expected_ddl1, 'DDL сохранен неправильно!')
 
         self.database.connection.close()
 
 
 class DimCreateTest(BaseCoreTest):
+
     def setUp(self):
 
         db_conn = connections['default']
@@ -522,7 +541,7 @@ class DimCreateTest(BaseCoreTest):
             **connection_params
         )
 
-        fields_info = {
+        self.fields_info = {
             'columns': [{
                 'is_index': True,
                 'is_unique': True,
@@ -554,7 +573,8 @@ class DimCreateTest(BaseCoreTest):
         source_meta = DatasourceMeta.objects.create(
             datasource=self.source,
             collection_name='table1',
-            fields=json.dumps(fields_info)
+            fields=json.dumps(self.fields_info),
+            stats=json.dumps({u'date_intervals': [], }),
         )
 
         self.meta_data = DatasourceMetaKeys.objects.create(
@@ -582,7 +602,9 @@ class DimCreateTest(BaseCoreTest):
             'is_meta_stats': True,
             'checksum': 123456789,
             'user_id': 11,
-            'source_id': self.source.id
+            'source_id': self.source.id,
+            'db_update': False,
+            'meta_info': json.dumps({'table1': self.fields_info}),
         }
 
         task_id, channel = TaskService(GENERATE_DIMENSIONS).add_task(
@@ -660,6 +682,7 @@ class DatasourceMetaTest(BaseCoreTest):
         self.meta_info = {
             u'datasources': {
                 u'foreigns': [],
+                u'date_intervals': [],
                 u'stats': {
                     u'count': 2,
                     u'size': 8192
@@ -687,6 +710,7 @@ class DatasourceMetaTest(BaseCoreTest):
                      u'destination': {u'column': u'id', u'table': u'datasources'},
                      u'name': u'datasources_me_datasource_id_2bccd05d1d1955f1_fk_datasources_id', u'on_delete': u'NO ACTION'}
                 ],
+                u'date_intervals': [],
                 u'stats': {u'count': 10, u'size': 24576},
                 u'columns': [
                     {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'collection_name', u'is_primary': False},
@@ -717,7 +741,8 @@ class DatasourceMetaTest(BaseCoreTest):
 
         ds_stats = {'row_key_value': [{u'id': 4}],
                     'row_key': [u'id'],
-                    'tables_stat': {u'count': 2, u'size': 8192}}
+                    'tables_stat': {u'count': 2, u'size': 8192},
+                    'date_intervals': []}
         ds_fields = {'columns':
                          [
                              {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'db', u'is_primary': False},
@@ -732,7 +757,8 @@ class DatasourceMetaTest(BaseCoreTest):
 
         dsm_stats = {'row_key_value': [{u'id': 37}],
                      'row_key': [u'id'],
-                     'tables_stat': {u'count': 10, u'size': 24576}}
+                     'tables_stat': {u'count': 10, u'size': 24576},
+                     'date_intervals': []}
         dsm_fields = {'columns':
                           [
                               {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'datasource_id', u'is_primary': False},
