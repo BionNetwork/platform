@@ -1,5 +1,6 @@
 # coding: utf-8
-from core.models import DatasourceMeta, DatasourceMetaKeys, DatasetToMeta
+from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
+                         DatasourcesJournal)
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService
 from etl.services.datasource.repository.storage import RedisSourceService
@@ -33,6 +34,12 @@ class DataSourceService(object):
         :type source: Datasource
         """
         tables = DatabaseService.get_tables(source)
+
+        trigger_tables = DatasourcesJournal.objects.filter(
+            trigger__datasource=source).values_list('name', flat=True)
+
+        # фильтруем, не показываем таблицы триггеров
+        tables = filter(lambda x: x['name'] not in trigger_tables, tables)
 
         if settings.USE_REDIS_CACHE:
             return RedisSourceService.get_tables(source, tables)
