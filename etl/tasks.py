@@ -1085,7 +1085,7 @@ class CreateTriggers(TaskProcessing):
                 connection.commit()
 
             trigger_names = db_instance.get_remote_trigger_names(table)
-            # drop_trigger_query = db_instance.db_map.drop_remote_trigger
+            drop_trigger_query = db_instance.db_map.drop_remote_trigger
 
             trigger_commands = remote_triggers_create_query.format(
                 orig_table=table, new_table=table_name, new=new, old=old,
@@ -1101,10 +1101,10 @@ class CreateTriggers(TaskProcessing):
 
                 if not trigger.exists():
 
-                    # # удаляем старый триггер
-                    # cursor.execute(drop_trigger_query.format(
-                    #     trigger_name=trigger_name, orig_table=table,
-                    # ))
+                    # удаляем старый триггер
+                    cursor.execute(drop_trigger_query.format(
+                        trigger_name=trigger_name, orig_table=table,
+                    ))
 
                     # создаем новый триггер
                     cursor.execute(create_trigger_query)
