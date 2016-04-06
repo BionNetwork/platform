@@ -189,6 +189,14 @@ class EditSourceView(BaseTemplateView):
                 {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
 
 
+# FIXME доделать
+class NewFileSourceView(BaseView):
+    """
+    Сохранение источников на основе файлов
+    """
+    pass
+
+
 class RemoveSourceView(BaseView):
 
     def post(self, request, *args, **kwargs):

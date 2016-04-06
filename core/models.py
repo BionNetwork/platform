@@ -12,7 +12,8 @@ from djchoices import ChoiceItem, DjangoChoices
 from core.model_helpers import MultiPrimaryKeyModel
 
 from .db.services import RetryQueryset
-from .helpers import get_utf8_string, users_avatar_upload_path
+from .helpers import (get_utf8_string, users_avatar_upload_path,
+                      users_file_upload_path)
 
 """
 Базовые модели приложения
@@ -25,6 +26,7 @@ class ConnectionChoices(DjangoChoices):
     MYSQL = ChoiceItem(2, 'Mysql')
     MS_SQL = ChoiceItem(3, 'MsSql')
     ORACLE = ChoiceItem(4, 'Oracle')
+    FILE = ChoiceItem(5, 'File')
 
 
 class Datasource(models.Model):
@@ -38,16 +40,23 @@ class Datasource(models.Model):
     def was_created_recently(self):
         return self.create_date >= timezone.now() - datetime.timedelta(days=1)
 
-    db = models.CharField(max_length=255, help_text="База данных", null=False)
-    host = models.CharField(max_length=255, help_text="имя хоста", db_index=True)
-    port = models.IntegerField(help_text="Порт подключения")
+    name = models.CharField(
+        verbose_name='Название источника', max_length=255, null=True)
+    db = models.CharField(max_length=255, help_text="База данных", null=True)
+    host = models.CharField(
+        max_length=255, help_text="имя хоста", db_index=True, null=True)
+    port = models.IntegerField(help_text="Порт подключения", null=True)
     login = models.CharField(max_length=1024, null=True, help_text="логин")
     password = models.CharField(max_length=255, null=True, help_text="пароль")
-    create_date = models.DateTimeField('create_date', help_text="дата создания", auto_now_add=True, db_index=True)
+    create_date = models.DateTimeField(
+        'create_date', help_text="дата создания", auto_now_add=True, db_index=True)
     user_id = models.IntegerField(help_text='идентификатор пользователя')
     conn_type = models.SmallIntegerField(
         verbose_name='Тип подключения', choices=ConnectionChoices.choices,
         default=ConnectionChoices.POSTGRESQL)
+    file = models.FileField(
+        verbose_name='Файл', upload_to=users_file_upload_path,
+        null=True, max_length=500)
 
     objects = models.Manager.from_queryset(RetryQueryset)()
 
