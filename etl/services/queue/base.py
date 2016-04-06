@@ -148,7 +148,7 @@ class TaskProcessing(object):
             error_code=err_code or TaskErrorCodeEnum.DEFAULT_CODE,
             error_msg=self.err_msg)
 
-        self.queue_storage['status'] = TaskStatusEnum.ERROR
+        self.queue_storage.update(status=TaskStatusEnum.ERROR)
 
         # сообщаем об ошибке
         self.publisher.publish(TLSE.ERROR, self.err_msg)
@@ -170,7 +170,7 @@ class TaskProcessing(object):
         else:
             # меняем статус задачи на 'Выполнено'
             TaskService.update_task_status(self.task_id, TaskStatusEnum.DONE, )
-            self.queue_storage.update(TaskStatusEnum.DONE)
+            self.queue_storage.update(status=TaskStatusEnum.DONE)
 
         # удаляем инфу о работе таска
         RedisSourceService.delete_queue(self.task_id)
@@ -204,6 +204,7 @@ class QueueStorage(object):
     def __setitem__(self, key, val):
         if key not in self.allowed_keys:
             raise KeyError('Неверный ключ для словаря информации задачи!')
+        self.queue[key] = val
 
     def set_init_params(self):
         """
@@ -216,10 +217,13 @@ class QueueStorage(object):
         self.queue['status'] = TaskStatusEnum.PROCESSING
         self.queue['percent'] = 0
 
-    def update(self, status=None):
+    def update(self, **queue_info):
+        for k, v in queue_info.items():
+            if k not in self.allowed_keys:
+                raise KeyError('Неверный ключ для словаря информации задачи!')
+            self.queue[k] = v
+
         self.queue['date_updated'] = datetime_now_str()
-        if status:
-            self.queue['status'] = status
 
 
 class RPublish(object):
@@ -500,6 +504,7 @@ class SourceDbConnect(LocalDbConnect):
     def __init__(self, query, source, execute=False):
         super(SourceDbConnect, self).__init__(query, source, execute)
 
+
 class MongodbConnection(object):
 
     def __init__(self, name, db_name='etl', indexes=None):
@@ -602,7 +607,6 @@ class TaskService(object):
             arguments['user_id'], channel_data)
 
         return task_id, new_channel
-
 
     @staticmethod
     def get_queue(task_id, user_id):

@@ -24,9 +24,11 @@ from pymondrian.generator import generate
 from etl.helpers import DataSourceService
 from core.models import (
     Datasource, Dimension, Measure, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta)
+    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
+    DatasetStateChoices, DatasourcesTrigger, DatasourcesJournal)
 from django.conf import settings
 from django.core.urlresolvers import reverse
+from django.db import transaction
 from djcelery import celery
 from itertools import groupby, izip
 from etl.services.queue.base import *
@@ -99,6 +101,10 @@ class CreateDataset(TaskProcessing):
     def processing(self):
 
         dataset, created = Dataset.objects.get_or_create(key=self.key)
+
+        # меняем статус dataset
+        Dataset.update_state(dataset.id, DatasetStateChoices.IDLE)
+
         self.context['dataset_id'] = dataset.id
 
         if not self.context['db_update']:
@@ -115,6 +121,10 @@ class LoadMongodb(TaskProcessing):
     """
 
     def processing(self):
+
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.FILUP)
+
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
@@ -189,11 +199,11 @@ class LoadMongodb(TaskProcessing):
                 self.error_handling(e.message)
 
             # обновляем информацию о работе таска
-            self.queue_storage.update()
             self.publisher.loaded_count += limit
             self.publisher.publish(TLSE.PROCESSING)
-            self.queue_storage['percent'] = (
-                100 if self.publisher.is_complete else self.publisher.percent)
+            self.queue_storage.update(
+                percent=100 if self.publisher.is_complete
+                else self.publisher.percent)
 
             page += 1
 
@@ -276,11 +286,10 @@ class LoadDb(TaskProcessing):
             else:
                 last_row = rows_dict[-1]  # получаем последнюю запись
                 # обновляем информацию о работе таска
-                self.queue_storage.update()
                 self.publisher.loaded_count += limit
                 self.publisher.publish(TLSE.PROCESSING)
-                self.queue_storage['percent'] = (
-                    100 if self.publisher.is_complete
+                self.queue_storage.update(
+                    percent=100 if self.publisher.is_complete
                     else self.publisher.percent)
 
         source_collection.update_many(
@@ -359,6 +368,9 @@ class LoadDimensions(TaskProcessing):
         return actual_fields
 
     def processing(self):
+
+        self.update_dataset()
+
         self.key = self.context['checksum']
         # Наполняем контекст
         source = Datasource.objects.get(id=self.context['source_id'])
@@ -376,8 +388,11 @@ class LoadDimensions(TaskProcessing):
              json.loads(t['meta__stats'])['date_intervals']) for t in meta_data]
 
         if not self.context['db_update']:
+            # определяем нужно ли создавать таблицы с датами
             if any([y for x, y in date_intervals_info]) and self.table_prefix == DIMENSIONS:
-                self.create_date_tables(date_intervals_info)
+                date_tables = self.create_date_tables(date_intervals_info)
+            else:
+                date_tables = {}
 
             create_col_names = DataSourceService.get_dim_measure_table_names(
                 self.actual_fields, self.key)
@@ -385,7 +400,7 @@ class LoadDimensions(TaskProcessing):
                 self.get_table(self.table_prefix), ', '.join(create_col_names)))
 
             try:
-                self.save_fields()
+                self.save_fields(date_tables)
             except Exception as e:
                 # код и сообщение ошибки
                 pg_code = getattr(e, 'pgcode', None)
@@ -476,9 +491,12 @@ class LoadDimensions(TaskProcessing):
                     dim_meas_cols_info.append(c)
         return dim_meas_cols_info
 
-    def save_fields(self):
+    def save_fields(self, date_tables):
         """
         Заполняем таблицу данными
+
+        Args:
+            date_tables(dict): список таблиц с датами
         """
 
         column_names = ['cdc_key']
@@ -519,7 +537,7 @@ class LoadDimensions(TaskProcessing):
                 for ind in xrange(col_nums):
                     if ind in date_fields_order.keys():
                         # заменяем дату идентификатором из связой таблицы
-                        i = self.date_tables[record[ind].date()] if record[ind] else 0
+                        i = date_tables[record[ind].date()] if record[ind] else 0
                         temp_dict.update({str(ind): i})
                     else:
                         temp_dict.update({str(ind): record[ind]})
@@ -539,32 +557,52 @@ class LoadDimensions(TaskProcessing):
         Создание триггеров для размерностей и мер,
         обеспечивающих синхронизацию данных для источника
         """
-        local_instance = DataSourceService.get_local_instance()
-        sep = local_instance.get_separator()
 
-        column_names = ['cdc_key'] + self.get_splitted_table_column_names()
-        insert_cols = []
-        select_cols = []
-        for col in column_names:
-            insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
-            select_cols.append('{1}{0}{1}'.format(col, sep))
+        trigger_name = LOCAL_TRIGGER_NAME.format(self.table_prefix, self.key)
+        orig_table_name = self.get_table(STTM_DATASOURCE)
+        source_id = self.context['source_id']
 
-        query_params = dict(
-            new_table=self.get_table(self.table_prefix),
-            orig_table=self.get_table(STTM_DATASOURCE),
-            del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
-            insert_cols=','.join(insert_cols),
-            cols="({0})".format(','.join(select_cols)),
-        )
+        trigger = DatasourcesTrigger.objects.filter(
+            name=trigger_name, collection_name=orig_table_name,
+            datasource_id=source_id)
 
-        reload_trigger_query = (
-            DataSourceService.reload_datasource_trigger_query(query_params))
+        if not trigger.exists():
 
-        LocalDbConnect(reload_trigger_query).execute()
+            local_instance = DataSourceService.get_local_instance()
+            sep = local_instance.get_separator()
+
+            column_names = ['cdc_key'] + self.get_splitted_table_column_names()
+            insert_cols = []
+            select_cols = []
+            for col in column_names:
+                insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
+                select_cols.append('{1}{0}{1}'.format(col, sep))
+
+            query_params = dict(
+                trigger_name=trigger_name,
+                new_table=self.get_table(self.table_prefix),
+                orig_table=orig_table_name,
+                del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
+                insert_cols=','.join(insert_cols),
+                cols="({0})".format(','.join(select_cols)),
+            )
+
+            reload_trigger_query = (
+                DataSourceService.reload_datasource_trigger_query(query_params))
+
+            LocalDbConnect(reload_trigger_query).execute()
+
+            # создаем запись о триггере
+            DatasourcesTrigger.objects.create(
+                name=trigger_name, collection_name=orig_table_name,
+                datasource_id=source_id,
+                src=reload_trigger_query,
+            )
 
     def create_date_tables(self, date_intervals_info):
         """
         Создание таблиц дат
+        Возвращает список созданных таблиц
 
         Args:
             date_intervals_info(list):
@@ -583,7 +621,7 @@ class LoadDimensions(TaskProcessing):
                 ]
         """
 
-        self.date_tables = {}
+        date_tables = {}
         start_date = None
         end_date = None
         for table, columns in date_intervals_info:
@@ -626,8 +664,13 @@ class LoadDimensions(TaskProcessing):
                     '8': int(math.ceil(float(month) / 3)),
 
                  })
-            self.date_tables.update({current_day: ind + 1})
+            date_tables.update({current_day: ind + 1})
         insert_db_connect.execute(rows, many=True)
+        return date_tables
+
+    def update_dataset(self):
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.DIMCR)
 
 
 class LoadMeasures(LoadDimensions):
@@ -667,6 +710,10 @@ class LoadMeasures(LoadDimensions):
             measure.title = title if title is not None else table_name
             measure.save()
 
+    def update_dataset(self):
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.MSRCR)
+
     def set_next_task_params(self):
         self.next_task_params = (
             CREATE_CUBE, create_cube, self.context)
@@ -684,6 +731,10 @@ class UpdateMongodb(TaskProcessing):
         2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
         текущего состояния источника
         """
+
+        Dataset.update_state(
+            self.context['dataset_id'], DatasetStateChoices.FILUP)
+
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -847,8 +898,6 @@ class DetectRedundant(TaskProcessing):
 
 
 class DeleteRedundant(TaskProcessing):
-
-
     """
     Удаление записей из таблицы-источника
 
@@ -903,7 +952,7 @@ class CreateTriggers(TaskProcessing):
 
         for table, columns in tables_info.iteritems():
 
-            table_name = '_etl_datasource_cdc_{0}'.format(table)
+            table_name = REMOTE_TRIGGER_TABLE_NAME.format(table)
             tables_str = "('{0}')".format(table_name)
 
             cdc_cols_query = db_instance.db_map.cdc_cols_query.format(
@@ -1035,15 +1084,46 @@ class CreateTriggers(TaskProcessing):
 
                 connection.commit()
 
+            trigger_names = db_instance.get_remote_trigger_names(table)
+            drop_trigger_query = db_instance.db_map.drop_remote_trigger
+
             trigger_commands = remote_triggers_create_query.format(
                 orig_table=table, new_table=table_name, new=new, old=old,
-                cols=cols)
+                cols=cols, **trigger_names)
 
             # multi queries of mysql, delimiter $$
-            for query in trigger_commands.split('$$'):
-                cursor.execute(query)
+            for i, create_trigger_query in enumerate(trigger_commands.split('$$')):
 
-            connection.commit()
+                trigger_name = trigger_names.get("trigger_name_{0}".format(i))
+
+                trigger = DatasourcesTrigger.objects.filter(
+                    name=trigger_name, collection_name=table, datasource=source)
+
+                if not trigger.exists():
+
+                    # удаляем старый триггер
+                    cursor.execute(drop_trigger_query.format(
+                        trigger_name=trigger_name, orig_table=table,
+                    ))
+
+                    # создаем новый триггер
+                    cursor.execute(create_trigger_query)
+
+                    with transaction.atomic():
+                        # создаем запись о триггере
+                        source_trigger = DatasourcesTrigger(
+                            name=trigger_name, collection_name=table, datasource=source,
+                        )
+                        source_trigger.src = create_trigger_query
+                        source_trigger.save()
+
+                        # создаем запись о триггере для remote источника
+                        DatasourcesJournal.objects.create(
+                            name=table_name, collection_name=table,
+                            trigger=source_trigger,
+                        )
+
+                    connection.commit()
 
         cursor.close()
         connection.close()
@@ -1202,17 +1282,23 @@ class CreateCube(TaskProcessing):
         xml = generate(schema, output=1)
 
         resp = requests.post('{0}{1}'.format(
-            settings.API_HTTP_HOST, reverse('api:cube-list')),
-            data={
-                'name': cube_key, 'data': xml,
-                'user': self.context['user_id'], }
+            settings.API_HTTP_HOST, reverse('api:import_schema')),
+            data={'key': cube_key, 'data': xml,
+                  'user_id': self.context['user_id'],
+                  'dataset_id': dataset_id,
+                  }
         )
 
-        if resp.status_code in [200, 201]:
-            logger.info('Created cube %s' % json.loads(resp.text)['name'])
+        if resp.json()['status'] == 'success':
+            cube_id = resp.json()['id']
+            logger.info('Created cube %s' % cube_id)
+
+            Dataset.update_state(
+                self.context['dataset_id'], DatasetStateChoices.LOADED)
         else:
             self.error_handling(json.loads(resp.text)['detail'])
             logger.error('Error creating cube')
             logger.error(json.loads(resp.text)['detail'])
+
 
 # write in console: python manage.py celery -A etl.tasks worker

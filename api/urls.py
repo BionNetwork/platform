@@ -10,9 +10,13 @@ router.register(r'users', views.UserViewSet)
 router.register(r'datasources', views.DatasourceViewSet)
 
 urlpatterns = [
-    # url(r'^schema/import$', views.ImportSchemaView.as_view(), name='import_schema'),
+    url(r'^schema/import$', views.ImportSchemaView.as_view(), name='import_schema'),
     url(r'^query/execute$', views.ExecuteQueryView.as_view(), name='execute_query'),
-    url(r'^schema/(?P<pk>\d+)/$', views.GetSchemaView.as_view(), name='get_schema'),
-    url(r'^schema/$', views.SchemasListView.as_view(), name='cube-list'),
+    url(r'^schema/(?P<pk>\d+)$', views.GetSchemaView.as_view(), name='get_schema'),
+    url(r'^schema$', views.SchemasListView.as_view(), name='schemas_list'),
+    url(r'^schema/(?P<id>\d+)/measures$', views.GetMeasureDataView.as_view(),
+        name='measure_data'),
+    url(r'^schema/(?P<id>\d+)/dimensions$', views.GetDimensionDataView.as_view(),
+        name='dimension_data'),
     url(r'^', include(router.urls)),
 ]
