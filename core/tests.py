@@ -16,7 +16,12 @@ from core.models import User
 from core.helpers import convert_milliseconds_to_seconds, HashEncoder
 
 
-class AuthenticationTest(TestCase):
+class BaseCoreTest(TestCase):
+
+    fixtures = ['initial_data.json', ]
+
+
+class AuthenticationTest(BaseCoreTest):
 
     def setUp(self):
         self.client = Client()
@@ -144,7 +149,7 @@ class DatabaseErrorsCheckTestCase(TransactionTestCase):
         t2.join()
 
 
-class HashTest(TestCase):
+class HashTest(BaseCoreTest):
     """
     Тесты на хэш функции
     """

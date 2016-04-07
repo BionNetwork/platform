@@ -47,6 +47,8 @@ INSTALLED_APPS = (
     'core',
     'etl',
     'api',
+    'rest_framework',
+    'rest_framework.authtoken'
 )
 
 MIDDLEWARE_CLASSES = (

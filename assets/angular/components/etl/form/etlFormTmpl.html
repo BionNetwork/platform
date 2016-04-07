@@ -1,0 +1,110 @@
+<div class="row">
+  <div class="col-lg-12">
+    <div class="box box-warning">
+      <ul class="nav nav-tabs">
+        <li class="active">
+          <a href="#source" data-toggle="tab" aria-expanded="true">
+            <div class="box-header with-border">
+              <h3 class="box-title">Источник</h3>
+            </div>
+          </a>
+        </li>
+        <li class="">
+          <a href="#settings" data-toggle="tab" aria-expanded="false">
+            <div class="box-header with-border">
+              <h3 class="box-title">Настройки</h3>
+            </div>
+          </a>
+        </li>
+      </ul>
+      <form role="form" id="conn_form" ng-submit="submit(etl)">
+      <div class="tab-content">
+        <div class="tab-pane active" id="source">
+          <!-- /.box-header -->
+          <div class="box-body">
+              <input type="hidden" name="csrfmiddlewaretoken" value="aOH4pAY20Frzkf59XprrDMPXHBzCKWjr">
+                <div class="form-group">
+                  <label>Тип подключения</label>
+                    <div>
+                      <select class="form-control" id="id_conn_type" name="conn_type" required="true">
+                        <option value="1" selected="selected">Postgresql</option>
+                        <option value="2">Mysql</option>
+                        <option value="3">MsSql</option>
+                        <option value="4">Oracle</option>
+                      </select>
+                    </div>
+                  <div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Db</label>
+                    <div>
+                      <input class="form-control" id="id_db" maxlength="255" name="db" required="true" type="text" ng-model="etl.db">
+                    </div>
+                  <div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Login</label>
+                    <div>
+                      <input class="form-control" id="id_login" maxlength="1024" name="login" required="true" type="text" ng-model="etl.login">
+                    </div>
+                  <div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Password</label>
+                    <div>
+                      <input class="form-control" id="id_password" maxlength="255" name="password" required="true" type="password" ng-model="etl.password">
+                    </div>
+                  <div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Host</label>
+                    <div>
+                      <input class="form-control" id="id_host" maxlength="255" name="host" required="true" type="text" ng-model="etl.host">
+                    </div>
+                  <div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Port</label>
+                    <div>
+                      <input class="form-control" id="id_port" name="port" required="true" type="text" ng-model="etl.port">
+                    </div>
+                  <div>
+                  </div>
+                </div>
+              <input type="hidden" id="win_type" data="">
+              <button type="button" class="btn" onclick="checkConnection()">Проверить подключение</button>
+          </div>
+          <!-- /.box-body -->
+        </div>
+        <div class="tab-pane" id="settings">
+          <div class="box-body">
+            <h4 class="modal-title"><label for="id_cdc_type_field">Тип обновления данных:</label></h4>
+          </div>
+          <div class="box-body">
+            <div class="row">
+              <div class="col-md-offset-1 col-md-10">
+                <select class="form-control col-md-6" id="cdc_select" style="width: 50%" ng-model="settings">
+                  <option value="apply_checksum" ng-selected="setting_apply_checksum">Полное сравнение на основе расчета контрольных сумм</option>
+                  <option value="apply_triggers" ng-selected="setting_apply_triggers">На основе триггеров (требуются права на создание триггеров)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="box-body">
+          <button type="submit" class="btn">Сохранить</button>
+        </div>
+        <div class="form-group">
+          <label></label>
+        </div>
+
+      </div>
+    </form>
+    </div>
+  </div>
+</div>

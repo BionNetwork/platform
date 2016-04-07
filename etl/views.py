@@ -14,7 +14,7 @@ from django.http import HttpResponse
 
 from core.exceptions import ResponseError, ValidationError, ExceptionCode, TaskError
 from core.helpers import CustomJsonEncoder
-from core.views import BaseView, BaseTemplateView
+from core.views import BaseView, BaseTemplateView, JSONMixin
 from core.models import (
     Datasource, Queue, QueueList, QueueStatus,
     DatasourceSettings as SourceSettings, DatasourceSettings,
@@ -87,15 +87,16 @@ class GetDatasources(BaseView):
         return self.json_response({u'data': list(ds)})
 
 
-
-class NewSourceView(BaseTemplateView):
+class NewSourceView(JSONMixin, BaseTemplateView):
     template_name = 'etl/datasources/add.html'
 
     def get(self, request, *args, **kwargs):
         form = etl_forms.SourceForm()
         settings_form = etl_forms.SettingsForm()
-        return render(request, self.template_name, {
-            'form': form, 'settings_form': settings_form})
+        # return render(request, self.template_name, {
+        #     'form': form, 'settings_form': settings_form})
+        return self.render_to_response(
+                {'form': form, 'settings_form': settings_form})
 
     @transaction.atomic()
     def post(self, request, *args, **kwargs):
@@ -140,6 +141,7 @@ class NewSourceView(BaseTemplateView):
             )
 
 
+# class EditSourceView(JSONMixin, BaseTemplateView):
 class EditSourceView(BaseTemplateView):
     template_name = 'etl/datasources/edit.html'
 
@@ -147,7 +149,7 @@ class EditSourceView(BaseTemplateView):
 
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
         try:
-            cdc_value = source.datasourcesettings_set.get(name='cdc_type').value
+            cdc_value = source.settings.get(name='cdc_type').value
         except DatasourceSettings.DoesNotExist:
             cdc_value = SourceSettings.CHECKSUM
 

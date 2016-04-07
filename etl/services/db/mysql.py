@@ -81,3 +81,11 @@ class Mysql(Database):
         запрос на создание новой таблицы в БД клиента
         """
         return mysql_map.remote_table_query
+
+    @staticmethod
+    def get_remote_trigger_names(table_name):
+        return {
+            "trigger_name_0": "cdc_{0}_insert".format(table_name),
+            "trigger_name_1": "cdc_{0}_update".format(table_name),
+            "trigger_name_2": "cdc_{0}_delete".format(table_name),
+        }

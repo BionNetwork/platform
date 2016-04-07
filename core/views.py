@@ -6,6 +6,7 @@ import json
 import logging
 from PIL import Image
 import StringIO
+from datetime import datetime
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.contrib.auth import authenticate, login, logout
@@ -20,8 +21,10 @@ from django.contrib.auth.models import check_password
 from django.conf import settings
 from django.core.mail import send_mail
 from django.http import HttpResponse
-from django.db.models import Q
+from django.db.models import Q, DateField
 from django.core.paginator import Paginator
+
+from django.core.management.commands import loaddata
 
 from smtplib import SMTPServerDisconnected
 from .models import User
@@ -51,6 +54,56 @@ class BaseView(View):
             json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
+class JSONMixin(object):
+    def render_to_response(self, context, **httpresponse_kwargs):
+        return self.get_json_response(
+            self.convert_context_to_json(context),
+            **httpresponse_kwargs
+        )
+
+    def get_json_response(self, content, **httpresponse_kwargs):
+        return HttpResponse(
+            content,
+            content_type='application/json',
+            **httpresponse_kwargs
+        )
+
+    def convert_context_to_json(self, context):
+        u""" This method serialises a Django form and
+        returns JSON object with its fields and errors
+        """
+        forms = {}
+        for form_name, form in context.iteritems():
+            form = context.get('form')
+            to_json = {}
+            options = context.get('options', {})
+            to_json.update(options=options)
+            to_json.update(success=context.get('success', False))
+            fields = {}
+            for field_name, field in form.fields.items():
+                if isinstance(field, DateField) \
+                        and isinstance(form[field_name].value(), datetime.date):
+                    fields[field_name] = \
+                        unicode(form[field_name].value().strftime('%d.%m.%Y'))
+                else:
+                    fields[field_name] = \
+                        form[field_name].value() \
+                        and unicode(form[field_name].value()) \
+                        or form[field_name].value()
+            to_json.update(fields=fields)
+            if form.errors:
+                errors = {
+                    'non_field_errors': form.non_field_errors(),
+                }
+                fields = {}
+                for field_name, text in form.errors.items():
+                    fields[field_name] = text
+                errors.update(fields=fields)
+                to_json.update(errors=errors)
+            forms.update({form_name: to_json})
+        return json.dumps(forms)
+
+
 class BaseViewNoLogin(BaseView):
     """
     Базовый класс для View без аутентификации
@@ -74,13 +127,13 @@ class HomeView(BaseTemplateView):
         return super(HomeView, self).dispatch(*args, **kwargs)
 
     def get(self, request, *args, **kwargs):
-        return render(request, "core/home.html")
+        return render(request, "index.html")
 
 
 class AngularView(BaseTemplateView):
     """Главная страница dashboard"""
     def get(self, request, *args, **kwargs):
-        return render(request, "core/angular.html")
+        return render(request, "index.html")
 
 
 class LoginView(BaseTemplateView):
@@ -292,6 +345,41 @@ class UserListView(BaseTemplateView):
         users = paginator.page(page + 1)
 
         return self.render_to_response(
+            {
+                'users': users,
+                'range': range(page_count),
+                'page': page,
+                'max': page_count-1,
+                'search': search or ''
+            }
+        )
+
+
+class UserListViewRest(BaseTemplateView):
+
+    def get(self, request, *args, **kwargs):
+        get = request.GET
+        or_cond = Q()
+
+        search = get.get('search', None)
+        if search:
+            for field in ('username', 'email', 'id'):
+                or_cond |= Q(
+                    **{"%s__icontains" % field: search}
+                )
+        users = User.objects.filter(or_cond)
+        count = 20
+
+        paginator = Paginator(users, count)
+        page_count = paginator.num_pages
+
+        page = int(get.get('page', 0))
+        if page not in xrange(page_count):
+            page = 0
+
+        users = paginator.page(page + 1)
+
+        return self.json_response(
             {
                 'users': users,
                 'range': range(page_count),
