@@ -87,7 +87,6 @@ class GetDatasources(BaseView):
         return self.json_response({u'data': list(ds)})
 
 
-
 class NewSourceView(BaseTemplateView):
     template_name = 'etl/datasources/add.html'
 

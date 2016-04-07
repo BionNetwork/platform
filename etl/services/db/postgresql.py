@@ -63,6 +63,24 @@ class Postgresql(Database):
         # public - default scheme for postgres
         return cls.db_map.cols_query.format(tables_str, source.db, 'public')
 
+    @classmethod
+    def get_interval_query(cls, source, cols_info):
+        """
+
+        Args:
+
+
+        Returns:
+
+        """
+        intervals_query = []
+        for table, col_name, col_type, _, _ in cols_info:
+            if col_type in cls.db_map.dates:
+                query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
+                        col_name, table)
+                intervals_query.append([table, col_name, query])
+        return intervals_query
+
     @staticmethod
     def local_table_create_query(key_str, cols_str):
         """
@@ -123,3 +141,9 @@ class Postgresql(Database):
         запрос на создание триггеров в БД локально для размерностей и мер
         """
         return pgsql_map.dimension_measure_triggers_query.format(**params)
+
+    @staticmethod
+    def get_remote_trigger_names(table_name):
+        return {
+            "trigger_name_0": "cdc_{0}_audit".format(table_name),
+        }
