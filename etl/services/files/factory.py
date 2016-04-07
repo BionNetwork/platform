@@ -1,38 +1,48 @@
 # coding: utf-8
-__author__ = 'damir'
+__author__ = 'damir(GDR)'
 
 from django.conf import settings
 
 from core.models import ConnectionChoices
-from etl.services.db import mysql, postgresql
+from etl.services.base_service import DataService
 
 
-class FileService(object):
+class FileService(DataService):
     """Сервис для источников данных на основе файлов"""
 
     @staticmethod
-    def factory(**connection):
+    def factory(source):
         """
-        фабрика для инстанса бд
+        Фабрика для инстанса файлов
 
         Args:
-            **connection(dict): словарь с информацией о подключении
+            source: DataSource
 
         Returns:
-            etl.services.db.interfaces.Database
+            etl.services.files.interfaces.File
         """
-        conn_type = int(connection.get('conn_type', ''))
-        del connection['conn_type']
+        conn_type = source.conn_type
 
-        if conn_type == ConnectionChoices.POSTGRESQL:
-            return postgresql.Postgresql(connection)
-        elif conn_type == ConnectionChoices.MYSQL:
-            return mysql.Mysql(connection)
-        elif conn_type == ConnectionChoices.MS_SQL:
-            import mssql
-            return mssql.MsSql(connection)
-        elif conn_type == ConnectionChoices.ORACLE:
-            import oracle
-            return oracle.Oracle(connection)
+        if conn_type == ConnectionChoices.EXCEL:
+            return
+        elif conn_type == ConnectionChoices.CSV:
+            return
+        elif conn_type == ConnectionChoices.TXT:
+            return
         else:
-            raise ValueError("Неизвестный тип подключения!")
+            raise ValueError("Нефайловый тип подключения!")
+
+    @classmethod
+    def get_source_instance(cls, source):
+        """
+        инстанс соурса-файла
+
+        Args:
+            source(core.models.Datasource): источник
+
+        Returns:
+            etl.services.db.interfaces.File
+        """
+        instance = cls.factory(source)
+
+        return instance

@@ -243,7 +243,7 @@ class GetConnectionDataView(BaseView):
         helpers.DataSourceService.tree_full_clean(source)
 
         try:
-            db = helpers.DataSourceService.get_database_info(source)
+            db = helpers.DataSourceService.get_source_tables(source)
         except ValueError as err:
             return self.json_response({'status': ERROR, 'message': err.message})
 

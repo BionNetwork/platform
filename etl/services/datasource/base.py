@@ -33,7 +33,7 @@ class DataSourceService(object):
     ]
 
     @classmethod
-    def factory(cls, source):
+    def service_factory(cls, source):
         """
         В зависимости от типа источника перенаправляет на нужный сервис
         """
@@ -68,12 +68,14 @@ class DataSourceService(object):
         """
         RedisSourceService.tree_full_clean(source)
 
-    @staticmethod
-    def get_database_info(source):
-        """
-        Возвращает таблицы истоника данных.
+    @classmethod
+    def get_source_tables(cls, source):
+        """ 
+        Возвращает таблицы истоника данных
         Фильтрация таблиц по факту создания раннее триггеров
-
+        
+        :type source: Datasource
+        
         Args:
             source(core.models.Datasource): Источник данных
 
@@ -87,7 +89,10 @@ class DataSourceService(object):
 
         """
         # FIXME: Описать ответ
-        tables = DatabaseService.get_tables(source)
+        
+        service = cls.service_factory(source)
+        
+        tables = service.get_tables(source)
 
         trigger_tables = DatasourcesJournal.objects.filter(
             trigger__datasource=source).values_list('name', flat=True)

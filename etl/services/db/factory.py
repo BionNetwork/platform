@@ -2,10 +2,11 @@
 from django.conf import settings
 
 from core.models import ConnectionChoices
+from etl.services.base_service import DataService
 from etl.services.db import mysql, postgresql
 
 
-class DatabaseService(object):
+class DatabaseService(DataService):
     """Сервис для источников данных"""
 
     @staticmethod
