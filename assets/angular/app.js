@@ -89,8 +89,17 @@
     .controller('menuController', ['$scope', menuController]);
 
   function menuController($scope) {
+		var all_items = ['#menu_item_1', '#menu_item_2', '#menu_item_3'];
+		function setActive(id, e) {
+			all_items.forEach(function(item) {
+				document.querySelector(item).classList.remove('active');
+			});
+			document.querySelector(id).classList.add('active');
+		}
+		all_items.forEach(function(item) {
+			document.querySelector(item).addEventListener('click', setActive.bind(null, item));
+		});
   }
-
 })();
 
 
@@ -374,58 +383,6 @@
 
   function route($stateProvider, $urlRouterProvider) {
     $stateProvider
-      .state('etl.manage', {
-        url: "/manage/:id",
-        controller: 'etlManageController',
-        templateUrl: '/assets/angular/components/etl/manage/etlManageTmpl.html'
-      });
-
-  }
-
-})();
-
-
-;(function() {
-  'use strict';
-  angular
-    .module('BIPlatform')
-    .controller('etlManageController', ['$scope', '$state', '$etlManageHTTP', etlManageController]);
-
-  function etlManageController($scope, $state, $etlManageHTTP) {
-    var id = $state.params.id;
-
-    $scope.getRequest_RefreshData = function() {
-      $state.go('etl.graph', { data: JSON.stringify(window.refreshData_request) });
-    };
-    getConnectionData('/etl/datasources/get_data/' + id + '/', '/etl/datasources/remove_all_tables/');
-  }
-})();
-
-;(function() {
-  'use strict';
-  angular
-    .module('BIPlatform')
-    .service('$etlManageHTTP', ['$http', '$q', etlManageHTTP]);
-
-  function etlManageHTTP($http, $q) {
-
-  }
-
-})();
-
-;(function() {
-  "use strict";
-
-  angular
-    .module('BIPlatform')
-    .config([
-      '$stateProvider',
-      '$urlRouterProvider',
-      route
-    ]);
-
-  function route($stateProvider, $urlRouterProvider) {
-    $stateProvider
       .state('etl.view', {
         url: "/view",
         controller: 'etlViewController',
@@ -494,6 +451,7 @@
     };
     
     $scope.showETL = function showETL(id) {
+			window.SUPER_MEGA_ETL_ID = id;
 			getConnectionData('/etl/datasources/get_data/' + id + '/', '/etl/datasources/remove_all_tables/');
 		};
   }
