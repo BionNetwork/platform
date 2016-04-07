@@ -492,6 +492,10 @@
     $scope.prepareRemove = function prepareRemove(item) {
       $scope.currentEtl = item;
     };
+    
+    $scope.showETL = function showETL(id) {
+			getConnectionData('/etl/datasources/get_data/' + id + '/', '/etl/datasources/remove_all_tables/');
+		};
   }
 })();
 
