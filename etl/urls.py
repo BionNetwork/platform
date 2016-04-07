@@ -3,8 +3,6 @@ from __future__ import absolute_import, unicode_literals
 from django.conf.urls import url
 from . import views
 
-__author__ = 'damir'
-
 urlpatterns = [
     url(r'^datasources/$', views.SourcesListView.as_view(), name='datasources.index'),
     url(r'^datasources/delete/(?P<id>\d+)/$', views.RemoveSourceView.as_view(), name='datasources.delete'),

@@ -1296,9 +1296,9 @@ class CreateCube(TaskProcessing):
             Dataset.update_state(
                 self.context['dataset_id'], DatasetStateChoices.LOADED)
         else:
-            self.error_handling(resp.json()['message'])
+            self.error_handling(json.loads(resp.text)['detail'])
             logger.error('Error creating cube')
-            logger.error(resp.json()['message'])
+            logger.error(json.loads(resp.text)['detail'])
 
 
 # write in console: python manage.py celery -A etl.tasks worker

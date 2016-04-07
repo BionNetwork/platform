@@ -144,7 +144,7 @@ getConnectionData = function(dataUrl, closingUrl) {
   initDataTable = _.template($('#datatable-init').html());
   joinWinRow = _.template($('#join-win-row').html());
   dataWindow = $('#modal-data');
-  joinWin = $('#join-window');
+  joinWin = $(_.template($('#join-window-modal').html())());
   loader = $('#loader');
   loader.hide();
   $.get(dataUrl, {
@@ -495,7 +495,7 @@ showJoinWindow = function(url, parent, child, isWithoutBind) {
     if (res.status === 'error') {
       confirmAlert(res.message);
     } else {
-      joinRows = $('#joinRows');
+      joinRows = joinWin.find('#joinRows');
       data = res.data;
       joinRows.html('');
       joinRows.data('table-left', parent);
@@ -510,8 +510,8 @@ showJoinWindow = function(url, parent, child, isWithoutBind) {
       } else {
         insertJoinRows(data, parent, child, joinRows);
       }
-      $('#parentLabel').text(parent);
-      $('#childLabel').text(child);
+      joinWin.find('#parentLabel').text(parent);
+      joinWin.find('#childLabel').text(child);
       joinWin.modal('show');
     }
   });
