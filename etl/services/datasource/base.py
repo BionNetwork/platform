@@ -48,21 +48,45 @@ class DataSourceService(object):
 
     @classmethod
     def delete_datasource(cls, source):
-        """ удаляет информацию о датасосре
+        """
+        Redis
+        Удаляет информацию об источнике
+
+        Args:
+            source(core.models.Datasource): Источник данных
         """
         RedisSourceService.delete_datasource(source)
 
     @classmethod
     def tree_full_clean(cls, source):
-        """ удаляет информацию о таблицах, джоинах, дереве
+        """
+        Redis
+        Удаляет информацию о таблицах, джоинах, дереве
+
+        Args:
+            source(core.models.Datasource): Источник данных
         """
         RedisSourceService.tree_full_clean(source)
 
     @staticmethod
     def get_database_info(source):
-        """ Возвращает таблицы истоника данных
-        :type source: Datasource
         """
+        Возвращает таблицы истоника данных.
+        Фильтрация таблиц по факту создания раннее триггеров
+
+        Args:
+            source(core.models.Datasource): Источник данных
+
+        Returns:
+            dict: {
+                db: <str>,
+                host: <str>,
+                tables: [{'name': <table_name_1>, 'name': <table_name_2>}]
+            }
+
+
+        """
+        # FIXME: Описать ответ
         tables = DatabaseService.get_tables(source)
 
         trigger_tables = DatasourcesJournal.objects.filter(
@@ -82,7 +106,9 @@ class DataSourceService(object):
 
     @staticmethod
     def check_connection(post):
-        """ Проверяет подключение
+        """
+        Database
+        Проверяет подключение
         """
         conn_info = {
             'host': get_utf8_string(post.get('host')),
@@ -107,7 +133,7 @@ class DataSourceService(object):
 
         Returns:
             list: Список словарей с информацией о дереве. Подробрый формат
-            ответа см. `RedisSourceService.get_final_info`
+            ответа см. RedisSourceService.get_final_info
         """
 
         if not settings.USE_REDIS_CACHE:
@@ -178,11 +204,16 @@ class DataSourceService(object):
     @classmethod
     def get_rows_info(cls, source, cols):
         """
+        redis
         Получение списка значений указанных колонок и таблиц в выбранном источнике данных
 
-        :param source: Datasource
-        :param cols: list
-        :return: list
+
+        Args:
+            source(core.models.Datasource): Источник
+            cols(list): Описать
+
+        Returns:
+            list Описать
         """
         structure = RedisSourceService.get_active_tree_structure(source)
         return DatabaseService.get_rows(source, cols, structure)
@@ -190,10 +221,14 @@ class DataSourceService(object):
     @classmethod
     def remove_tables_from_tree(cls, source, tables):
         """
+        Redis
         удаление таблиц из дерева
-        :param source:
-        :param tables:
+
+        Args:
+            source(core.models.Datasource): Источник
+            tables(): Описать
         """
+        # FIXME: Описать аргумент tables
         # достаем структуру дерева из редиса
         structure = RedisSourceService.get_active_tree_structure(source)
         # строим дерево
@@ -209,6 +244,7 @@ class DataSourceService(object):
 
     @classmethod
     def check_is_binding_remain(cls, source, child_table):
+        # FIXME: Описать
         remain = RedisSourceService.get_last_remain(
             source.user_id, source.id)
         return remain == child_table
@@ -217,14 +253,19 @@ class DataSourceService(object):
     def get_columns_and_joins_for_join_window(
         cls, source, parent_table, child_table, has_warning):
         """
-        список колонок и джойнов таблиц для окнв связей таблиц
-        :param source:
-        :param parent_table:
-        :param child_table:
-        :param has_warning:
-        :return:
-        """
+        Redis
+        список колонок и джойнов таблиц для окна связей таблиц
 
+        Args:
+            source(core.models.Datasource): Источник
+            parent_table(): Описать
+            child_table(): Описать
+            has_warning(): Описать
+
+        Returns:
+            dict: Описать
+        """
+        # FIXME: Описать
         is_binding_remain = cls.check_is_binding_remain(
             source, child_table)
 
@@ -253,13 +294,20 @@ class DataSourceService(object):
     def check_new_joins(cls, source, left_table, right_table, joins):
         # избавление от дублей
         """
-        проверяет пришедшие джойны на совпадение типов
-        :param source:
-        :param left_table:
-        :param right_table:
-        :param joins:
-        :return:
+        Redis
+        Проверяет пришедшие джойны на совпадение типов
+
+        Args:
+            source(core.models.Datasource): Источник
+            left_table(): Описать
+            right_table(): Описать
+            joins(): Описать
+
+        Returns:
+            Описать
         """
+
+        # FIXME: Описать
         joins_set = set()
         for j in joins:
             joins_set.add(tuple(j))
@@ -283,14 +331,21 @@ class DataSourceService(object):
     @classmethod
     def save_new_joins(cls, source, left_table, right_table, join_type, joins):
         """
-        сохранение новых джойнов
-        :param source:
-        :param left_table:
-        :param right_table:
-        :param join_type:
-        :param joins:
-        :return:
+        Redis
+        Cохранение новых джойнов
+
+        Args:
+            source(core.models.Datasource): Источник
+            left_table(): Описать
+            right_table(): Описать
+            join_type(): Описать
+            joins(): Описать
+
+        Returns:
+            Описать
         """
+
+        # FIXME: Описать
         # joins_set избавляет от дублей
         good_joins, error_joins, joins_set = cls.check_new_joins(
             source, left_table, right_table, joins)
@@ -331,38 +386,58 @@ class DataSourceService(object):
     @staticmethod
     def get_collections_names(source, tables):
         """
+        Redis
         Получение списка имен коллекций
 
         Args:
-            source(): Источник
-            table(list): Список названий таблиц
-        """
+            source(core.models.Datasource): Источник
+            tables(list): Список названий таблиц
 
+        Return:
+            (list): Описать
+        """
+        # FIXME: Описать
         return [RedisSourceService.get_collection_name(source, table)
                 for table in tables]
 
     @classmethod
     def get_columns_types(cls, source, tables):
         """
-        типы колонок таблиц
-        :param source:
-        :param tables:
-        :return:
+        Redis
+        Получение типов колонок таблиц
+
+        Args:
+            source(core.models.Datasource): Источник
+            tables(): Описать
+
+        Returns:
+            Описать
         """
-        types_dict = {}
+        # FIXME: Описать
+        cols_types = {}
 
         for table in tables:
             t_cols = json.loads(
                 RedisSourceService.get_table_full_info(source, table))['columns']
             for col in t_cols:
-                types_dict['{0}.{1}'.format(table, col['name'])] = col['type']
+                cols_types['{0}.{1}'.format(table, col['name'])] = col['type']
 
-        return types_dict
+        return cols_types
 
     @classmethod
     def retitle_table_column(cls, source, table, column, title):
         """
-        Переименовываем title колонки для схемы куба
+        Redis
+        Переименовываем заголовка(title) колонки для схемы куба
+
+        Args:
+            source(core.models.Datasource): Источник
+            table(): Описать
+            column(): Описать
+            title(): Описать
+
+        Returns:
+            Описать
         """
         table_info = json.loads(
                 RedisSourceService.get_table_full_info(source, table))
@@ -376,18 +451,37 @@ class DataSourceService(object):
 
         r_server.set(collection_name, json.dumps(table_info))
 
-    # fixme: не используется
+    # fixme: не используется?
     @classmethod
     def get_separator(cls, source):
+        """
+        Database
+        Args:
+            source(core.models.Datasource): Источник
+
+        Returns:
+            Описать
+        """
         return DatabaseService.get_separator(source)
 
     @classmethod
     def get_table_create_query(cls, table_name, cols_str):
-        return DatabaseService.get_table_create_query(
-            table_name, cols_str)
+        """
+        local db
+        Запрос на создание таблицы
+
+        Args:
+            table_name(unicode): Название таблицы
+            cols_str(unicode):
+
+        Returns:
+            str: Строка запроса
+        """
+        return DatabaseService.get_table_create_query(table_name, cols_str)
 
     @classmethod
     def check_table_exists_query(cls, local_instance, table_name, db):
+        # FIXME: Описать
         return DatabaseService.check_table_exists_query(
             local_instance, table_name, db)
 
@@ -399,6 +493,9 @@ class DataSourceService(object):
         Args:
             table_name(unicode): Название таблицы
             cols(list): Список получаемых колонок
+
+        Returns:
+            str: Строка запроса
         """
 
         return DatabaseService.get_page_select_query(table_name, cols)
@@ -411,6 +508,7 @@ class DataSourceService(object):
     @classmethod
     def get_source_rows_query(cls, source, structure, cols):
         """
+        source db
         Получение предзапроса данных указанных
         колонок и таблиц для селери задачи
         :param source:
@@ -418,7 +516,7 @@ class DataSourceService(object):
         :param cols:
         :return:
         """
-
+        # FIXME: Описать
         return DatabaseService.get_rows_query(source, cols, structure)
 
     @classmethod
@@ -428,6 +526,7 @@ class DataSourceService(object):
         :param table_name:
         :return:
         """
+        # FIXME: Описать
         from django.db import connection
         return table_name in connection.introspection.table_names()
 
@@ -437,49 +536,63 @@ class DataSourceService(object):
         Получить объект соединения источника данных
         :type source: Datasource
         """
+        # FIXME: Описать
         return DatabaseService.get_connection(source)
 
     @classmethod
     def get_local_instance(cls):
         """
-        возвращает инстанс локального хранилища данных(Postgresql)
-        :rtype : object Postgresql()
-        :return:
+        возвращает инстанс локального хранилища данных
+
+        Returns:
+
         """
         return DatabaseService.get_local_instance()
 
     @classmethod
     def tables_info_for_metasource(cls, source, tables):
         """
-        Достает инфу о колонках, выбранных таблиц,
+        Redis
+        Получение инфу о колонках, выбранных таблиц,
         для хранения в DatasourceMeta
-        :param source: Datasource
-        :param columns: list список вида [{'table': 'name', 'col': 'name'}]
+
+        Args:
+            source(core.models.Datasource): Источник данных
+            tables(list): список вида [{'table': <table_name>, 'col': <col_name>}]
+
+        Returns:
+            Описать
         """
+
+        # FIXME: Описать
         return RedisSourceService.tables_info_for_metasource(
             source, tables)
 
     @staticmethod
     def update_collections_stats(collections_names, last_key):
+        """
+        Redis
+        Описать
+        """
+        # FIXME: Перенести в RedisSourceService
 
-            pipe = r_server.pipeline()
+        pipe = r_server.pipeline()
 
-            for collection in collections_names:
-                info_str = r_server.get(collection)
-                if info_str:
-                    table_info = json.loads(info_str)
-                    if table_info['stats']:
-                        table_info['stats'].update({
-                            'last_row': {
-                                'cdc_key': last_key,
-                            }
-                        })
+        for collection in collections_names:
+            info_str = r_server.get(collection)
+            if info_str:
+                table_info = json.loads(info_str)
+                if table_info['stats']:
+                    table_info['stats'].update({
+                        'last_row': {
+                            'cdc_key': last_key,
+                        }
+                    })
 
                     pipe.set(collection, json.dumps(table_info))
             pipe.execute()
 
     @staticmethod
-    # @transaction.atomic()
     def update_datasource_meta(key, source, cols,
                                tables_info_for_meta, last_row, dataset_id):
         """
@@ -562,33 +675,57 @@ class DataSourceService(object):
     @classmethod
     def get_structure_rows_number(cls, source, structure,  cols):
         """
-        возвращает примерное кол-во строк в запросе селекта для планирования
-        :param source:
-        :param structure:
-        :param cols:
-        :return:
+        Source db
+        Возвращает примерное кол-во строк в запросе селекта для планирования
+
+        Args:
+            source(core.models.Datasource): Источник данных
+            structure():
+            cols():
+
+        Returns:
+            Описать
         """
+
+        # FIXME: Описать
         return DatabaseService.get_structure_rows_number(
             source, structure,  cols)
 
     @classmethod
     def get_remote_table_create_query(cls, source):
         """
-        возвращает запрос на создание таблицы в БД клиента
+        Source db
+        Возвращает запрос на создание таблицы в БД клиента
+
+        Args:
+            source(core.models.Datasource): Источник данных
+
+        Returns:
+            str: Строка запроса
         """
+
         return DatabaseService.get_remote_table_create_query(source)
 
     @classmethod
     def get_remote_triggers_create_query(cls, source):
         """
-        возвращает запрос на создание триггеров в БД клиента
+        Source db
+        Возвращает запрос на создание триггеров в БД клиента
+
+        Args:
+            source(core.models.Datasource): Источник данных
+
+        Returns:
+            str: Строка запроса
         """
+        # FIXME: Описать
         return DatabaseService.get_remote_triggers_create_query(source)
 
     @staticmethod
     def reload_datasource_trigger_query(params):
         """
-        запрос на создание триггеров в БД локально для размерностей и мер
+        Local db
+        Запрос на создание триггеров в БД локально для размерностей и мер
 
         Args:
             params(dict): Параметры, необходимые для запроса
@@ -596,12 +733,14 @@ class DataSourceService(object):
         Returns:
             str: Строка запроса
         """
+        # FIXME: Описать "Параметры, необходимые для запроса"
 
         return DatabaseService.reload_datasource_trigger_query(params)
 
     @staticmethod
     def get_date_table_names(col_type):
         """
+        Local db
         Получение запроса на создание колонок таблицы дат
 
         Args:
@@ -630,6 +769,16 @@ class DataSourceService(object):
 
     @staticmethod
     def cdc_key_delete_query(table_name):
+        """
+        Local db
+        Запрос на удаление записей по cdc-ключу
+
+        Args:
+            table_name(unicode): Название таблицы
+
+        Returns:
+            str: Строка запроса
+        """
         return DatabaseService.cdc_key_delete_query(table_name)
 
     @staticmethod
