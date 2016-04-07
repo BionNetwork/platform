@@ -1,12 +1,16 @@
 # coding: utf-8
 from __future__ import unicode_literals
+from rest_framework import viewsets, generics, mixins
 
-import xmltodict
 import logging
+from api.serializers import (
+    UserSerializer, DatasourceSerializer, SchemasListSerializer,
+    SchemasRetreviewSerializer)
 
-from core.models import (Cube, Dimension, Measure, DatasourceMeta,
+from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys)
 from core.views import BaseViewNoLogin
+from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from django.db import transaction
 
@@ -27,19 +31,20 @@ class ImportSchemaView(BaseViewNoLogin):
         post = request.POST
         key = post.get('key')
         data = post.get('data')
+        user_id = post.get('user_id')
 
         try:
             with transaction.atomic():
                 try:
                     cube = Cube.objects.get(
                         name=key,
-                        user_id=post.get('user_id'),
+                        user_id=int(user_id),
                         dataset_id=post.get('dataset_id'),
                     )
                 except Cube.DoesNotExist:
                     cube = Cube(
                         name=key,
-                        user_id=post.get('user_id'),
+                        user_id=int(user_id),
                         dataset_id=post.get('dataset_id'),
                     )
                 cube.data = data
@@ -70,41 +75,48 @@ class ExecuteQueryView(BaseViewNoLogin):
         return self.json_response({'status': SUCCESS})
 
 
-class SchemasListView(BaseViewNoLogin):
-    """
-    Список доступных кубов
-    """
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+
+class DatasourceViewSet(viewsets.ModelViewSet):
+    queryset = Datasource.objects.all()
+    serializer_class = DatasourceSerializer
+
+    def create(self, request, *args, **kwargs):
+        request.data.update({'user_id': request.user.id})
+        return super(DatasourceViewSet, self).create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        source = self.get_object()
+        DataSourceService.delete_datasource(source)
+        DataSourceService.tree_full_clean(source)
+        return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
+
+
+class SchemasListView(mixins.ListModelMixin,
+                      mixins.CreateModelMixin,
+                      generics.GenericAPIView):
+    queryset = Cube.objects.all()
+    serializer_class = SchemasListSerializer
 
     def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
 
-        cubes = map(lambda x: {
-            'id': x.id,
-            'user_id': x.user_id,
-            'create_date': (x.create_date.strftime("%Y-%m-%d %H:%M:%S")
-                            if x.create_date else ''),
-            'name': x.name,
-        }, Cube.objects.all())
-
-        return self.json_response(cubes)
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
 
 
-class GetSchemaView(BaseViewNoLogin):
-    """
-    Получение информации по кубу
-    """
+class GetSchemaView(mixins.RetrieveModelMixin,
+                    generics.GenericAPIView):
+    queryset = Cube.objects.all()
+    serializer_class = SchemasRetreviewSerializer
 
     def get(self, request, *args, **kwargs):
-        cube_id = kwargs.get('id')
+        return self.retrieve(request, *args, **kwargs)
 
-        try:
-            cube = Cube.objects.get(id=cube_id)
-        except Cube.DoesNotExist:
-            return self.json_response(
-                {'status': 'error', 'message': 'No such schema!'})
 
-        cube_dict = xmltodict.parse(cube.data)
-
-        return self.json_response(cube_dict)
 
 
 class GetMeasureDataView(BaseViewNoLogin):

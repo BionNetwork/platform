@@ -1,0 +1,47 @@
+.buttons{
+    height: 138px;
+    width: 40px;
+    margin: 100px auto auto;
+}
+
+
+.table-columns{
+    list-style-image: url('../icons/column_right2.ico');
+}
+
+.loader{
+    position: relative;
+    left:50%;
+    top:50%;
+    font-size:30px;
+}
+
+#dbTables .table-selected {
+  background-color: orange;
+}
+
+#data-table th {
+    text-align: center;
+}
+
+.relation{
+    margin-top:15px;
+    margin-right:5px;
+}
+
+a {
+    cursor: pointer;
+}
+
+.width150 {
+    width: 150%;
+}
+input.error {
+    border: 1px solid #b94a48;
+}
+.border-red {
+    border-color: red;
+}
+label.error {
+    color: #f89406;
+}
