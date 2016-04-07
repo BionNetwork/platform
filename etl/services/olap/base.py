@@ -103,22 +103,43 @@ def send_xml(key, cube_id, xml):
     # oc.connect.getDatasources()
 
 
+
+def get_axis(data, axis):
+    """
+    Получение данных по осям
+
+    Args:
+        data(TupleFormatReader): Данные
+        axis(str): Название оси. 'Axis1' или 'Axis2'
+
+    Returns:
+        list: Данные по оси
+    """
+    try:
+        return data.getAxisTuple(axis)
+    except IndexError:
+        return None
+
+
 def mdx_execute(cube_name, mdx=None):
     """
     executing mdx request
 
     Args:
         mdx(unicode): Строка запроса
-        cube_id(int): Название куба
+        cube_name(unicode): Название куба
+
+    Returns:
+        list: Данные mdx-запроса
     """
 
     cube_id = Cube.objects.get(name=cube_name).id
     # cube_id = 68
     client = OlapClient(cube_id)
-    # client.connect.client.options.cache.clear()
     res = client.connect.Execute(mdx, Catalog=cube_name)
-    axis_0, axis_1 = res.getAxisTuple('Axis0'), res.getAxisTuple('Axis1')
-    cellmap = [[dict(x) for x in row] for row in res.getSlice()]
+
+    axis_0 = get_axis(res, 'Axis0')
+    axis_1 = get_axis(res, 'Axis1')
 
     data = []
 
@@ -127,8 +148,19 @@ def mdx_execute(cube_name, mdx=None):
         'type': 'ROW_HEADER_HEADER',
         'properties': {}
     }]
+    if not axis_0:
+        cell = res.getSlice()
+        data.append({
+            'value': cell['FmtValue'],
+            'type': 'DATA_CELL',
+            'properties': {
+                'raw': cell['Value'],
+                'cell_ordinal': cell['_CellOrdinal'],
+            }
+        })
+        return data
     for column in axis_0:
-        header.append({
+        column_header = {
             'value': column['Caption'],
             'type': 'COLUMN_HEADER',
             'properties': {
@@ -136,9 +168,16 @@ def mdx_execute(cube_name, mdx=None):
                 'hierarchy': column['_Hierarchy'],
                 'dimension': 'Measures',
                 'level': column['LName']
-            }
-        })
+            },
+        }
+        if not axis_1:
+            column_header['display_value'] = column['DisplayInfo']
+        header.append(column_header)
+
     data.append(header)
+
+    if not axis_1:
+        return data
 
     row_names = []
     for row_name in axis_1:
@@ -152,6 +191,7 @@ def mdx_execute(cube_name, mdx=None):
             }
         })
 
+    cellmap = [[dict(x) for x in row] for row in res.getSlice()]
     data_cells = []
     for row in cellmap:
         row_data = []
