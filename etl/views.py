@@ -235,6 +235,7 @@ class GetConnectionDataView(BaseView):
     def get(self, request, *args, **kwargs):
         source = get_object_or_404(Datasource, pk=kwargs.get('id'))
 
+        # FIXME в зависимости от типа источника, определить как очищать редис
         # очищаем из редиса инфу дерева перед созданием нового
         helpers.DataSourceService.tree_full_clean(source)
 

@@ -26,7 +26,9 @@ class ConnectionChoices(DjangoChoices):
     MYSQL = ChoiceItem(2, 'Mysql')
     MS_SQL = ChoiceItem(3, 'MsSql')
     ORACLE = ChoiceItem(4, 'Oracle')
-    FILE = ChoiceItem(5, 'File')
+    EXCEL = ChoiceItem(5, 'Excel')
+    CSV = ChoiceItem(6, 'Csv')
+    TXT = ChoiceItem(7, 'Text')
 
 
 class Datasource(models.Model):
@@ -35,7 +37,14 @@ class Datasource(models.Model):
     """
 
     def __str__(self):
-        return "<Datasource object> " + self.host + " " + self.db
+        return ' '.join(
+            ["Datasource:", self.get_source_type(),
+             self.name or '', self.host or '', self.db or '']
+        )
+
+    def get_source_type(self):
+        # Название типа соурса
+        return ConnectionChoices.values.get(self.conn_type)
 
     def was_created_recently(self):
         return self.create_date >= timezone.now() - datetime.timedelta(days=1)
@@ -71,6 +80,24 @@ class Datasource(models.Model):
             # доп параметры для селери тасков юзера
             'id': self.id,
             'user_id': self.user_id,
+        }
+
+    @classmethod
+    def get_source_info(cls, source_id):
+        """
+        Инфа соурса
+        """
+        instance = cls.objects.get(id=source_id)
+        return {
+            'name': get_utf8_string(instance.name or ''),
+            'host': get_utf8_string(instance.host or ''),
+            'login': get_utf8_string(instance.login or ''),
+            'password': get_utf8_string(instance.password or ''),
+            'db': get_utf8_string(instance.db or ''),
+            'port': instance.port or '',
+            'conn_type': instance.conn_type,
+            'source_id': instance.id,
+            'user_id': instance.user_id,
         }
 
     def set_from_dict(self, **data):

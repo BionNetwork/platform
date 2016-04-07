@@ -1,21 +1,51 @@
 # coding: utf-8
+
+import json
+from itertools import groupby
+
+from django.db import transaction
+from django.conf import settings
+
 from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
-                         DatasourcesJournal)
+                         DatasourcesJournal, ConnectionChoices)
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService
+from etl.services.files.factory import FileService
 from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
-from django.conf import settings
-from itertools import groupby
-from django.db import transaction
-import json
 
 
 class DataSourceService(object):
     """
-        Сервис управляет сервисами БД и Редиса
+        Сервис управляет сервисами БД, Файлов и Редиса!
     """
+    DB_TYPES = [
+        ConnectionChoices.POSTGRESQL,
+        ConnectionChoices.MYSQL,
+        ConnectionChoices.MS_SQL,
+        ConnectionChoices.ORACLE,
+    ]
+    FILE_TYPES = [
+        ConnectionChoices.EXCEL,
+        ConnectionChoices.CSV,
+        ConnectionChoices.TXT,
+    ]
+
+    @classmethod
+    def factory(cls, source):
+        """
+        В зависимости от типа источника перенаправляет на нужный сервис
+        """
+        conn_type = source.conn_type
+
+        if conn_type in cls.DB_TYPES:
+            return DatabaseService
+        elif conn_type in cls.FILE_TYPES:
+            return FileService
+        else:
+            raise ValueError("Неизвестный тип подключения!")
+
     @classmethod
     def delete_datasource(cls, source):
         """ удаляет информацию о датасосре
