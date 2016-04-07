@@ -76,56 +76,11 @@ class Mysql(Database):
         return total
 
     @staticmethod
-    def _get_columns_query(source, tables):
-        """
-        запросы для колонок, констраинтов, индексов соурса
-        :param source: Datasource
-        :param tables:
-        :return: tuple
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-
-        cols_query = mysql_map.cols_query.format(tables_str, source.db)
-        constraints_query = mysql_map.constraints_query.format(tables_str, source.db)
-        indexes_query = mysql_map.indexes_query.format(tables_str, source.db)
-
-        return cols_query, constraints_query, indexes_query
-
-    @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return mysql_map.stat_query.format(tables_str, source.db)
-
-    @staticmethod
     def remote_table_create_query():
         """
         запрос на создание новой таблицы в БД клиента
         """
         return mysql_map.remote_table_query
-
-    @staticmethod
-    def remote_triggers_create_query():
-        """
-        запрос на создание триггеров в БД клиента
-        """
-        return mysql_map.remote_triggers_query
-
-    @staticmethod
-    def get_primary_key(table, db):
-        """
-        запрос на получение Primary Key
-        """
-        return mysql_map.pr_key_query.format("('{0}')".format(table), db)
-
-    @staticmethod
-    def delete_primary_query(table, primary):
-        return mysql_map.delete_primary_key.format(table, primary)
 
     @staticmethod
     def get_remote_trigger_names(table_name):

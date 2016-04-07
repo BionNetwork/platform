@@ -3,7 +3,7 @@
 __author__ = 'damir(GDR)'
 
 from django.conf import settings
-
+from contextlib import closing
 from .interfaces import Database
 import pymssql
 
@@ -15,6 +15,8 @@ from etl.services.db.maps import mssql as mssql_map
 
 class MsSql(Database):
     """Управление источником данных MSSQL"""
+
+    db_map = mssql_map
 
     @staticmethod
     def get_connection(conn_info):
@@ -42,24 +44,7 @@ class MsSql(Database):
         """
         return '\"'
 
-    def get_tables(self, source):
-        """
-        Получение списка таблиц
-        :param source:
-        :return:
-        """
-        query = """
-            SELECT table_name FROM information_schema.tables
-            where table_catalog='{0}' and
-            table_type='base table'order by table_name;
-        """.format(source.db)
-
-        records = self.get_query_result(query)
-        records = map(lambda x: {'name': x[0], }, records)
-
-        return records
-
-    def get_rows(self, cols, structure):
+    def get_rows_query(self, cols, structure):
         """
         достает строки из соурса для превью
         :param cols: list
@@ -85,41 +70,26 @@ class MsSql(Database):
         sel_cols_str2 = ', '.join(
             [sel_col2.format(**x) for x in cols])
 
-        query = self.get_rows_query().format(
+        return self.db_map.row_query.format(
             sel_cols_str1, query_join,
-            settings.ETL_COLLECTION_PREVIEW_LIMIT, 0,
+            '{0}', '{1}',
             group_cols_str, sel_cols_str2)
 
-        records = self.get_query_result(query)
-        return records
-
-    @staticmethod
-    def _get_columns_query(source, tables):
+    def get_rows(self, cols, structure):
         """
-            запросы для колонок, констраинтов, индексов соурса
+        Получаем записи из клиентской базы для предварительного показа
+
+        Args:
+            cols(dict): Название колонок
+            structure(dict): Структура данных
+
+        Returns:
+            list of tuple: Данные по колонкам
         """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+        query = self.get_rows_query(cols, structure)
 
-        cols_query = mssql_map.cols_query.format(tables_str, source.db)
-
-        constraints_query = mssql_map.constraints_query.format(tables_str, source.db)
-
-        indexes_query = mssql_map.indexes_query.format(tables_str, source.db)
-
-        return cols_query, constraints_query, indexes_query
-
-    def get_columns(self, source, tables):
-        """
-        Получение списка колонок в таблицах
-        """
-        columns_query, consts_query, indexes_query = self._get_columns_query(
-            source, tables)
-
-        col_records = self.get_query_result(columns_query)
-        index_records = self.get_query_result(indexes_query)
-        const_records = self.get_query_result(consts_query)
-
-        return col_records, index_records, const_records
+        return self.get_query_result(
+            query.format(settings.ETL_COLLECTION_PREVIEW_LIMIT, 0))
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -144,7 +114,7 @@ class MsSql(Database):
             for ig in igroup:
                 cols.append(ig[icol_name])
             ind_info["columns"] = cols
-            indexes[key[itable_name]].append(ind_info)
+            indexes[key[itable_name].lower()].append(ind_info)
 
         constraints = defaultdict(list)
         (c_table_name, c_col_name, c_name, c_type,
@@ -152,7 +122,7 @@ class MsSql(Database):
 
         for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
             for ig in igroup:
-                constraints[ikey].append({
+                constraints[ikey.lower()].append({
                     "c_col_name": ig[c_col_name],
                     "c_name": ig[c_name],
                     "c_type": ig[c_type],
@@ -165,12 +135,12 @@ class MsSql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type = xrange(3)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
-            t_indexes = indexes[key]
-            t_consts = constraints[key]
+            t_indexes = indexes[key.lower()]
+            t_consts = constraints[key.lower()]
 
             for x in group:
                 is_index = is_unique = is_primary = False
@@ -188,16 +158,23 @@ class MsSql(Database):
                                     is_unique = True
                                     is_primary = True
 
-                columns[key].append({"name": col,
-                                     "type": (mssql_map.MSSQL_TYPES[cls.lose_brackets(x[col_type])]
-                                              or x[col_type]),
-                                     "is_index": is_index,
-                                     "is_unique": is_unique, "is_primary": is_primary})
+                columns[key.lower()].append({
+                    "name": col,
+                    "type": (
+                        mssql_map.MSSQL_TYPES[cls.lose_brackets(x[col_type])] or x[col_type]),
+                    "is_index": is_index,
+                    "is_unique": is_unique,
+                    "is_primary": is_primary,
+                    "origin_type": x[col_type],
+                    "is_nullable": x[is_nullable],
+                    "extra": x[extra_],
+                    "max_length": x[max_length],
+                })
 
             # находим внешние ключи
             for c in t_consts:
                 if c['c_type'] == 'FOREIGN KEY':
-                    foreigns[key].append({
+                    foreigns[key.lower()].append({
                         "name": c['c_name'],
                         "source": {"table": key, "column": c["c_col_name"]},
                         "destination":
@@ -207,19 +184,49 @@ class MsSql(Database):
                     })
         return columns, indexes, foreigns
 
-    @staticmethod
-    def get_rows_query():
+    def get_structure_rows_number(self, structure, cols):
         """
-        возвращает селект запрос c лимитом, оффсетом
-        :return: str
+        возвращает примерное кол-во строк в запросе для планирования
         """
-        return mssql_map.rows_query
+        # FIXME не понятно как доставать, поэтому тупо count
+
+        query_join = self.generate_join(structure)
+        select_query = self.get_select_query()
+        explain_query = select_query.format(
+            'count(1)', query_join)
+
+        result = self.get_query_result(explain_query)
+        count = result[0][0]
+
+        return count
 
     @staticmethod
-    def get_statistic_query(source, tables):
+    def get_fetchall_result(connection, query, **kwargs):
         """
-        запрос для статистики
+        возвращает результат fetchall преобразованного запроса с аргументами,
+        появляются проблемы когда вместо формата %s есть {0}, {1} ...
         """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        stats_query = mssql_map.stat_query.format(tables_str, source.db)
-        return stats_query
+        cursor = connection.cursor()
+
+        if 'limit' and 'offset' in kwargs:
+            query = query.format(kwargs['limit'], kwargs['offset'])
+
+        cursor.execute(query)
+        return cursor.fetchall()
+
+    @staticmethod
+    def get_processed_indexes(exist_indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        # indexes_query смотреть
+        index_name_i, index_col_i = 1, 4
+        # группировка по названию индекса, в группе названия колонок
+        indexes = []
+
+        for ind_name, ind_group in groupby(exist_indexes, lambda x: x[index_name_i]):
+            cols = [ig[index_col_i] for ig in ind_group]
+            indexes.append([','.join(cols), ind_name, ])
+
+        return indexes

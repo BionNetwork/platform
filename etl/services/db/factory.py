@@ -86,8 +86,15 @@ class DatabaseService(object):
             tables(list): список таблиц
 
         Returns:
-            list: список колонок таблицы
+            list: список колонок, ограничений и индекксов таблицы
         """
+        instance = cls.get_source_instance(source)
+        return instance.get_columns_info(source, tables)
+
+    @classmethod
+    def fetch_tables_columns(cls, source, tables):
+        # возвращает список колонок таблиц
+
         instance = cls.get_source_instance(source)
         return instance.get_columns(source, tables)
 
@@ -108,13 +115,11 @@ class DatabaseService(object):
         Получение данных из
         Args:
 
-
         Returns:
 
         """
         instance = cls.get_source_instance(source)
         return instance.get_intervals(source, cols_info)
-
 
     @classmethod
     def get_rows_query(cls, source, cols, structure):
@@ -168,6 +173,14 @@ class DatabaseService(object):
         """
         local_instance = cls.get_local_instance()
         return local_instance.get_page_select_query(table_name, cols)
+
+    @classmethod
+    def get_select_dates_query(cls, date_table):
+        """
+        Получение всех дат из таблицы дат
+        """
+        local_instance = cls.get_local_instance()
+        return local_instance.get_select_dates_query(date_table)
 
     @classmethod
     def get_table_insert_query(cls, table_name, cols_num):
@@ -309,9 +322,40 @@ class DatabaseService(object):
         return cls.get_local_instance().get_date_table_names(col_type)
 
     @classmethod
-    def get_dim_table_names(cls, fields, ref_key):
-        return cls.get_local_instance().get_dim_table_names(fields, ref_key)
+    def get_table_create_col_names(cls, fields, ref_key):
+        return cls.get_local_instance().get_table_create_col_names(fields, ref_key)
 
     @classmethod
     def cdc_key_delete_query(cls, table_name):
         return cls.get_local_instance().cdc_key_delete_query(table_name)
+
+    @classmethod
+    def get_fetchall_result(cls, connection, source, query, *args, **kwargs):
+        """
+        возвращает результат fetchall преобразованного запроса с аргументами
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_fetchall_result(connection, query, *args, **kwargs)
+
+    @classmethod
+    def get_processed_for_triggers(cls, source, columns):
+        """
+        Получает инфу о колонках, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_processed_for_triggers(columns)
+
+    @classmethod
+    def get_processed_indexes(cls, source, indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        instance = cls.get_source_instance(source)
+        return instance.get_processed_indexes(indexes)
+
+    @classmethod
+    def get_required_indexes(cls, source):
+        instance = cls.get_source_instance(source)
+        return instance.get_required_indexes()

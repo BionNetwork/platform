@@ -5,6 +5,7 @@ from itertools import groupby
 import datetime
 from django.conf import settings
 import time
+from contextlib import closing
 
 from etl.constants import FIELD_NAME_SEP
 
@@ -87,23 +88,26 @@ class Database(object):
         """
         return str_.split('(')[0].lower()
 
-    def get_query_result(self, query, args=None):
+    def get_query_result(self, query, **kwargs):
         """
         Получаем результат запроса
 
         Args:
             query(str): Строка запроса
-            args(tuple): Набор аргуметов для запроса
 
         Return:
             list: Результирующие данные
         """
         cursor = self.connection.cursor()
-        cursor.execute(query, args)
+        cursor.execute(query, kwargs)
         return cursor.fetchall()
 
     @staticmethod
-    def _get_columns_query(source, tables):
+    def get_tables_str(tables):
+        # возвращает строку таблиц вида "('t1', 't2', ...)"
+        return '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
+
+    def _get_columns_query(self, source, tables):
         """
          Получение запросов на получение данных о колонках, индексах и
          ограничениях
@@ -115,7 +119,31 @@ class Database(object):
         Returns:
             Кортеж из строк запросов в базу
         """
-        raise ValueError("Columns query is not realized")
+        tables_str = self.get_tables_str(tables)
+
+        cols_query = self.get_columns_query(tables_str, source)
+        constraints_query = self.get_constraints_query(tables_str, source)
+        indexes_query = self.get_indexes_query(tables_str, source)
+
+        return cols_query, constraints_query, indexes_query
+
+    def get_columns_query(self, tables_str, source):
+        # запрос на колонки
+        return self.db_map.cols_query.format(tables_str, source.db)
+
+    def get_constraints_query(self, tables_str, source):
+        # запрос на ограничения
+        return self.db_map.constraints_query.format(tables_str, source.db)
+
+    def get_indexes_query(self, tables_str, source):
+        # запрос на индексы
+        return self.db_map.indexes_query.format(tables_str, source.db)
+
+    def get_columns(self, source, tables):
+        # список колонок таблиц
+        tables_str = self.get_tables_str(tables)
+        cols_query = self.get_columns_query(tables_str, source)
+        return self.get_query_result(cols_query)
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -157,7 +185,7 @@ class Database(object):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -191,6 +219,7 @@ class Database(object):
                                      "origin_type": x[col_type],
                                      "is_nullable": x[is_nullable],
                                      "extra": x[extra_],
+                                     "max_length": x[max_length],
                                      })
 
             # находим внешние ключи
@@ -275,7 +304,7 @@ class Database(object):
 
         return self.db_map.row_query.format(
             cols_str, query_join,
-            '%s', '%s')
+            '%(limit)s', '%(offset)s')
 
     def get_rows(self, cols, structure):
         """
@@ -292,7 +321,7 @@ class Database(object):
         query = self.get_rows_query(cols, structure)
 
         return self.get_query_result(
-            query, (settings.ETL_COLLECTION_PREVIEW_LIMIT, 0))
+            query=query, limit=settings.ETL_COLLECTION_PREVIEW_LIMIT, offset=0)
 
     @staticmethod
     def get_separator():
@@ -334,7 +363,8 @@ class Database(object):
         Returns:
             str: Строка запроса для получения статистичеких данных
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        tables_str = cls.get_tables_str(tables)
+        return cls.db_map.stat_query.format(tables_str, source.db)
 
     @staticmethod
     def remote_table_create_query():
@@ -342,14 +372,6 @@ class Database(object):
         запрос на создание новой таблицы в БД клиента
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
-
-    @staticmethod
-    def remote_triggers_create_query():
-        """
-        запрос на создание триггеров в БД клиента
-        """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
-
 
     @staticmethod
     def reload_datasource_trigger_query(params):
@@ -382,10 +404,18 @@ class Database(object):
 
     @classmethod
     def get_interval_query(cls, source, cols_info):
+        """
+        список запросов на min max значений для колонок с датами
+
+        Args:
+            source(Datasource): экземпляр источника данных
+            cols_info(list): Список данных о колонках
+
+        """
         intervals_query = []
-        for table, col_name, col_type, _, _ in cols_info:
-            if col_type in cls.db_map.dates:
-                query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
+        for table, col_name, col_type, _, _, _ in cols_info:
+            if col_type.lower() in cls.db_map.dates:
+                query = "SELECT MIN({0}), MAX({0}) FROM {1}".format(
                         col_name, table)
                 intervals_query.append([table, col_name, query])
         return intervals_query
@@ -450,7 +480,7 @@ class Database(object):
         return {x[0].lower(): ({'count': int(x[1]), 'size': x[2]}
                 if (x[1] and x[2]) else None) for x in records}
 
-    def get_columns(self, source, tables):
+    def get_columns_info(self, source, tables):
         """
         Получение списка колонок в таблицах
 
@@ -530,28 +560,28 @@ class Database(object):
         """
         return "SELECT {0} FROM {1}"
 
-    @staticmethod
-    def remote_table_create_query():
+    @classmethod
+    def remote_table_create_query(cls):
         """
         запрос на создание новой таблицы в БД клиента
 
         Returns:
             str: строка запроса
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        return cls.db_map.remote_table_query
 
-    @staticmethod
-    def remote_triggers_create_query():
+    @classmethod
+    def remote_triggers_create_query(cls):
         """
         запрос на создание триггеров в БД клиента
 
         Returns:
             str: строка запроса
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        return cls.db_map.remote_triggers_query
 
-    @staticmethod
-    def get_primary_key(table, db):
+    @classmethod
+    def get_primary_key(cls, table, db):
         """
         Запрос на получение первичного ключа
         Args:
@@ -561,17 +591,11 @@ class Database(object):
         Returns:
             str: запрос на получение первичного ключа
         """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+        return cls.db_map.pr_key_query.format("('{0}')".format(table), db)
 
-    @staticmethod
-    def delete_primary_query(table, primary):
-        """
-        Запрос на удаление первичного ключа
-        Args:
-            table(str): название таблицы
-            primary(str): название первичного ключа
-        """
-        raise NotImplementedError("Method %s is not implemented" % __name__)
+    @classmethod
+    def delete_primary_query(cls, table, primary):
+        return cls.db_map.delete_primary_key.format(table, primary)
 
     @staticmethod
     def get_remote_trigger_names(table_name):
@@ -596,7 +620,7 @@ class Database(object):
         return date_table_col_names
 
     @staticmethod
-    def get_dim_table_names(fields, ref_key):
+    def get_table_create_col_names(fields, ref_key):
         col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in fields:
             field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
@@ -613,4 +637,61 @@ class Database(object):
     @staticmethod
     def cdc_key_delete_query(table_name):
 
-        return 'DELETE from {0} where where cdc_key = ANY(%s);'.format(table_name, '%s')
+        return 'DELETE from {0} where cdc_key = ANY(%s);'.format(table_name, '%s')
+
+    @staticmethod
+    def get_fetchall_result(connection, query, **kwargs):
+        """
+        возвращает результат fetchall преобразованного запроса с аргументами
+        """
+        with connection:
+            with closing(connection.cursor()) as cursor:
+                cursor.execute(query, kwargs)
+                return cursor.fetchall()
+
+    def get_processed_for_triggers(self, columns):
+        """
+        Получает инфу о колонках, возвращает преобразованную инфу
+        для создания триггеров
+        """
+
+        cols_str = ''
+        new = ''
+        old = ''
+        cols = ''
+        sep = self.get_separator()
+
+        for col in columns:
+            name = col['name']
+            new += 'NEW.{0}, '.format(name)
+            old += 'OLD.{0}, '.format(name)
+            cols += ('{name}, '.format(name=name))
+            cols_str += ' {sep}{name}{sep} {typ}{length},'.format(
+                sep=sep, name=name, typ=col['type'],
+                length='({0})'.format(col['max_length'])
+                if col['max_length'] is not None else ''
+            )
+
+        return {
+            'cols_str': cols_str, 'new': new, 'old': old, 'cols': cols,
+        }
+
+    @staticmethod
+    def get_processed_indexes(indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        # indexes_query смотреть
+        index_cols_i, index_name_i = 1, 2
+
+        return [[index[index_cols_i], index[index_name_i]] for index in indexes]
+
+    @staticmethod
+    def get_required_indexes():
+        # название и колонки индексов, необходимые для вспомогательной таблицы триггеров
+        return {
+            '{0}_created': ['cdc_created_at', ],
+            '{0}_synced': ['cdc_synced', ],
+            '{0}_syn_upd': ['cdc_synced', 'cdc_updated_at', ],
+        }

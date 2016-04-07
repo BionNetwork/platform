@@ -27,8 +27,6 @@ texts = [
     'nchar',
     'nvarchar',
     'ntext',
-    'binary',
-    'varbinary',
     'image',
 ]
 dates = [
@@ -38,6 +36,10 @@ dates = [
     'datetime',
     'datetime2',
     'datetimeoffset',
+]
+blobs = [
+    'binary',
+    'varbinary',
 ]
 booleans = [
     'bit',
@@ -58,9 +60,41 @@ for i in dates:
 for i in booleans:
     MSSQL_TYPES[i] = 'bool'
 
+table_query = """
+    SELECT table_name FROM information_schema.tables
+        where table_catalog='{0}' and
+        table_type='base table'order by table_name;
+"""
+
 cols_query = """
-    SELECT table_name, column_name, data_type FROM information_schema.columns
-            where table_name in {0} and table_catalog = '{1}' order by table_name;
+    SELECT table_name, column_name, data_type as column_type, is_nullable,
+        case when COLUMNPROPERTY(object_id(TABLE_NAME), COLUMN_NAME, 'IsIdentity') = 1
+            then 'extra' else null end,
+        character_maximum_length
+        FROM information_schema.columns
+        where table_name in {0} and table_catalog = '{1}' order by table_name;
+"""
+
+cdc_cols_query = """
+    SELECT column_name, data_type as column_type
+        FROM information_schema.columns
+        where table_name in {0} and table_catalog = '{1}' order by table_name;
+"""
+
+add_column_query = """
+    alter table {0} add {1} {2}{3} {4};
+"""
+
+del_column_query = """
+    alter table {0} drop column {1};
+"""
+
+create_index_query = """
+    CREATE INDEX {0} ON {1} ({2});
+"""
+
+drop_index_query = """
+    drop index {0} on {1};
 """
 
 indexes_query = """
@@ -112,7 +146,7 @@ constraints_query = """
 """
 
 stat_query = """
-    SELECT t.NAME, p.rows, (sum(a.used_pages) * 8)
+    SELECT t.NAME, p.rows, (sum(a.used_pages) * 8192)
     FROM sys.tables t
     INNER JOIN sys.indexes i ON t.OBJECT_ID = i.object_id
     INNER JOIN sys.partitions p ON i.object_id = p.OBJECT_ID AND i.index_id = p.index_id
@@ -122,10 +156,65 @@ stat_query = """
     GROUP BY t.NAME, p.rows
 """
 
-rows_query = """
+remote_table_query = """
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{0}' AND xtype='U')
+    CREATE TABLE "{0}" (
+        {1}
+        "cdc_created_at" datetime NOT NULL,
+        "cdc_updated_at" datetime,
+        "cdc_delta_flag" smallint NOT NULL,
+        "cdc_synced" smallint NOT NULL
+    );
+"""
+# у mssql при alter table колонка должна быть null
+cdc_required_types = {
+    "cdc_created_at": {"type": "datetime", "nullable": ""},
+    "cdc_updated_at": {"type": "datetime", "nullable": ""},
+    "cdc_delta_flag": {"type": "smallint", "nullable": ""},
+    "cdc_synced": {"type": "smallint", "nullable": ""},
+}
+
+remote_triggers_query = """
+    IF EXISTS (SELECT * FROM sys.triggers
+            WHERE name = 'cdc_{orig_table}_insert')
+        DROP TRIGGER cdc_{orig_table}_insert $$
+
+    CREATE TRIGGER cdc_{orig_table}_insert ON "{orig_table}"
+    AFTER INSERT AS BEGIN SET NOCOUNT ON INSERT INTO {new_table}
+    ({cols} cdc_created_at, cdc_updated_at, cdc_delta_flag, cdc_synced)
+    SELECT {cols} getdate(), null, 1, 0 FROM INSERTED END $$
+
+    IF EXISTS (SELECT * FROM sys.triggers
+            WHERE name = 'cdc_{orig_table}_update')
+        DROP TRIGGER cdc_{orig_table}_update $$
+
+    CREATE TRIGGER cdc_{orig_table}_update ON "{orig_table}"
+    AFTER UPDATE AS BEGIN SET NOCOUNT ON INSERT INTO {new_table}
+    ({cols} cdc_created_at, cdc_updated_at, cdc_delta_flag, cdc_synced)
+    SELECT {cols} getdate(), null, 2, 0 FROM INSERTED END $$
+
+    IF EXISTS (SELECT * FROM sys.triggers
+            WHERE name = 'cdc_{orig_table}_delete')
+        DROP TRIGGER cdc_{orig_table}_delete $$
+
+    CREATE TRIGGER cdc_{orig_table}_delete ON "{orig_table}"
+    AFTER DELETE AS BEGIN SET NOCOUNT ON INSERT INTO {new_table}
+    ({cols} cdc_created_at, cdc_updated_at, cdc_delta_flag, cdc_synced)
+    SELECT {cols} getdate(), null, 3, 0 FROM DELETED END
+"""
+
+row_query = """
     WITH Results_CTE AS
     (SELECT {0}, ROW_NUMBER() OVER (ORDER BY {4}) AS RowNum FROM {1})
     SELECT {5} FROM Results_CTE
     WHERE RowNum > {3}
     AND RowNum <= {2}+{3}
 """
+
+pr_key_query = """
+    SELECT c.constraint_name AS constraint_name
+    FROM information_schema.table_constraints as c
+        WHERE c.table_name in {0} and c.table_catalog = '{1}' and
+        c.constraint_type='primary key'
+"""
+

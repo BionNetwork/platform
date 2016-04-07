@@ -74,7 +74,8 @@ table_query = """
 cols_query = """
     SELECT table_name, column_name, data_type as column_type, is_nullable,
     case when substring(column_default, 0, 8) = 'nextval'
-         then 'serial' else null end as extra
+         then 'serial' else null end as extra,
+    character_maximum_length
     FROM information_schema.columns
     where table_name in {0} and table_catalog = '{1}' and
           table_schema = '{2}' order by table_name;
@@ -87,7 +88,7 @@ cdc_cols_query = """
 """
 
 add_column_query = """
-    alter table {0} add column {1} {2} {3};
+    alter table {0} add column {1} {2}{3} {4};
 """
 
 del_column_query = """
@@ -218,8 +219,6 @@ delete_primary_key = """
     alter table {0} drop constraint {1}
 """
 
-drop_index = """drop index {0}"""
-
 check_table_exists = """
     SELECT EXISTS (
         SELECT * FROM   information_schema.tables
@@ -247,4 +246,8 @@ DROP TRIGGER IF EXISTS "for_{new_table}" on "{orig_table}";
 CREATE TRIGGER "for_{new_table}"
 AFTER INSERT OR DELETE ON "{orig_table}"
     FOR EACH ROW EXECUTE PROCEDURE reload_{new_table}_records();
+"""
+
+select_dates_query = """
+    select the_date::date, time_id from {0} where time_id <> 0
 """

@@ -35,20 +35,7 @@ class Oracle(Database):
         except cx_Oracle.OperationalError:
             return None
 
-    @staticmethod
-    def _get_columns_query(source, tables):
-        """
-        запросы для колонок, констраинтов, индексов соурса
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-
-        cols_query = oracle_map.columns_query.format(tables_str)
-        constraints_query = oracle_map.constraints_query.format(tables_str)
-        indexes_query = oracle_map.indexes_query.format(tables_str)
-
-        return cols_query, constraints_query, indexes_query
-
-    def get_columns(self, source, tables):
+    def get_columns_info(self, source, tables):
         """
         Получение списка колонок в таблицах
 
@@ -82,17 +69,6 @@ class Oracle(Database):
         const_records = self.get_query_result(consts_query)
 
         return col_records, index_records, const_records
-
-    @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        Запрос для статистики
-        :param source: Datasource
-        :param tables: list
-        :return: str
-        """
-        tables_str = '(' + ', '.join(["'{0}'".format(y) for y in tables]) + ')'
-        return cls.db_map.stat_query.format(tables_str, source.db)
 
     @classmethod
     def processing_records(cls, col_records, index_records, const_records):
@@ -135,7 +111,7 @@ class Oracle(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_ = xrange(5)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 
@@ -169,6 +145,7 @@ class Oracle(Database):
                                      "origin_type": x[col_type],
                                      "is_nullable": x[is_nullable],
                                      "extra": x[extra_],
+                                     "max_length": x[max_length],
                                      })
 
             # находим внешние ключи
@@ -207,7 +184,7 @@ class Oracle(Database):
 
         return self.db_map.row_query.format(
             ', '.join(alias_list), cols_str, query_join,
-            '{1}', '{0}')
+            ':limit', ':offset')
 
     def get_structure_rows_number(self, structure, cols):
         """
@@ -216,14 +193,70 @@ class Oracle(Database):
         :param cols:
         :return:
         """
-        # fixme стоит заглушка! не совсем понятно как доставать explain данные!
-        # sql1 = 'explain plan for SELECT * FROM REGIONS'
-        # sql2 = 'SELECT PLAN_TABLE_OUTPUT FROM table(dbms_xplan.display)'
-        # cursor.execute(sql1)
-        # cursor.execute(sql2)
-        # cursor.fetchall() и дальше структура неприятная приходит
+        query_join = self.generate_join(structure)
+        cols_str = 'COUNT(ROWNUM)'
+        rownum = self.get_query_result(self.get_select_query().format(
+            cols_str, query_join))
 
-        return 0
+        return rownum[0][0]
+
+    def get_query_result(self, query, **kwargs):
+        cursor = self.connection.cursor()
+        cursor.execute(query) if not kwargs else cursor.execute(query, kwargs)
+        return cursor.fetchall()
+
+    def get_processed_for_triggers(self, columns):
+        """
+        Получает инфу о колонках, возвращает преобразованную инфу
+        для создания триггеров
+        """
+
+        cols_str = ''
+        new = ''
+        old = ''
+        cols = ''
+        sep = self.get_separator()
+
+        for col in columns:
+            name = col['name']
+            new += ':NEW.{0}, '.format(name)
+            old += ':OLD.{0}, '.format(name)
+            cols += ('{sep}{name}{sep}, '.format(name=name, sep=sep))
+            cols_str += ' {sep}{name}{sep} {typ}{length},'.format(
+                sep=sep, name=name, typ=col['type'],
+                length='({0})'.format(col['max_length'])
+                if col['max_length'] is not None else ''
+            )
+
+        return {
+            'cols_str': cols_str, 'new': new, 'old': old, 'cols': cols,
+        }
+
+    @staticmethod
+    def get_required_indexes():
+        # название и колонки индексов, необходимые для вспомогательной таблицы триггеров
+        return {
+            '{0}_created': ['CDC_CREATED_AT', ],
+            '{0}_synced': ['CDC_SYNCED', ],
+            '{0}_syn_upd': ['CDC_SYNCED', 'CDC_UPDATED_AT', ],
+        }
+
+    @staticmethod
+    def get_processed_indexes(exist_indexes):
+        """
+        Получает инфу об индексах, возвращает преобразованную инфу
+        для создания триггеров
+        """
+        # indexes_query смотреть
+        index_name_i, index_col_i = 2, 1
+        # группировка по названию индекса, в группе названия колонок
+        indexes = []
+
+        for ind_name, ind_group in groupby(exist_indexes, lambda x: x[index_name_i]):
+            cols = [ig[index_col_i] for ig in ind_group]
+            indexes.append([','.join(cols), ind_name, ])
+
+        return indexes
 
 
 def reform_binary_data(data):

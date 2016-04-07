@@ -67,12 +67,13 @@ for i in booleans:
 
 table_query = """
     SELECT table_name FROM information_schema.tables
-            where table_schema='{0}' order by table_name;
-        """
+        where table_schema='{0}' order by table_name;
+"""
 
 cols_query = """
     SELECT table_name, column_name, column_type, is_nullable,
-    case extra when 'auto_increment' then extra else null end
+    case extra when 'auto_increment' then extra else null end,
+    character_maximum_length
     FROM information_schema.columns
             where table_name in {0} and table_schema = '{1}' order by table_name;
 """
@@ -83,7 +84,7 @@ cdc_cols_query = """
 """
 
 add_column_query = """
-    alter table {0} add {1} {2} {3};
+    alter table {0} add {1} {2}{3} {4};
 """
 
 del_column_query = """
@@ -179,5 +180,3 @@ pr_key_query = """
 delete_primary_key = """
     ALTER TABLE {0} drop primary key
 """
-
-drop_index = """drop index {0} on {1}"""

@@ -13,15 +13,6 @@ TYPES_MAP = {
     'bool': 'boolean',
 }
 
-
-# название и колонки индексов, необходимые для вспомогательной таблицы триггеров
-REQUIRED_INDEXES = {
-    '{0}_cdc_created_at_index_bi': ['cdc_created_at', ],
-    '{0}_cdc_synced_index_bi': ['cdc_synced', ],
-    '{0}_together_index_bi': ['cdc_synced', 'cdc_updated_at', ],
-}
-
-
 # Название задач
 CREATE_DATASET = 'etl:database:create_dataset'
 MONGODB_DATA_LOAD = 'etl:load_data:mongo'
@@ -52,3 +43,6 @@ LOCAL_TRIGGER_NAME = "for_{0}_{1}"
 
 # название удаленной таблицы триггера
 REMOTE_TRIGGER_TABLE_NAME = "_etl_datasource_cdc_{0}"
+
+# количество колонок в таблице дат
+DATE_TABLE_COLS_LEN = 9
