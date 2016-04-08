@@ -8,9 +8,9 @@ from django.conf import settings
 
 from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
                          DatasourcesJournal, ConnectionChoices)
+from etl.services import get_datasource
 from etl.services.datasource.repository import r_server
-from etl.services.db.factory import DatabaseService
-from etl.services.files.factory import FileService
+from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
@@ -32,19 +32,19 @@ class DataSourceService(object):
         ConnectionChoices.TXT,
     ]
 
-    @classmethod
-    def service_factory(cls, source):
-        """
-        В зависимости от типа источника перенаправляет на нужный сервис
-        """
-        conn_type = source.conn_type
-
-        if conn_type in cls.DB_TYPES:
-            return DatabaseService
-        elif conn_type in cls.FILE_TYPES:
-            return FileService
-        else:
-            raise ValueError("Неизвестный тип подключения!")
+    # @classmethod
+    # def service_factory(cls, source):
+    #     """
+    #     В зависимости от типа источника перенаправляет на нужный сервис
+    #     """
+    #     conn_type = source.conn_type
+    #
+    #     if conn_type in cls.DB_TYPES:
+    #         return DatabaseService
+    #     elif conn_type in cls.FILE_TYPES:
+    #         return FileService
+    #     else:
+    #         raise ValueError("Неизвестный тип подключения!")
 
     @classmethod
     def delete_datasource(cls, source):
@@ -70,12 +70,12 @@ class DataSourceService(object):
 
     @classmethod
     def get_source_tables(cls, source):
-        """ 
+        """
         Возвращает таблицы истоника данных
         Фильтрация таблиц по факту создания раннее триггеров
-        
+
         :type source: Datasource
-        
+
         Args:
             source(core.models.Datasource): Источник данных
 
@@ -89,10 +89,9 @@ class DataSourceService(object):
 
         """
         # FIXME: Описать ответ
-        
-        service = cls.service_factory(source)
-        
-        tables = service.get_tables(source)
+
+        service = get_datasource(source)
+        tables = service.get_tables()
 
         trigger_tables = DatasourcesJournal.objects.filter(
             trigger__datasource=source).values_list('name', flat=True)
@@ -552,7 +551,7 @@ class DataSourceService(object):
         Returns:
 
         """
-        return DatabaseService.get_local_instance()
+        return LocalDatabaseService().datasource
 
     @classmethod
     def tables_info_for_metasource(cls, source, tables):

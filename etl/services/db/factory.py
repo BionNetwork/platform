@@ -2,26 +2,26 @@
 from django.conf import settings
 
 from core.models import ConnectionChoices
-from etl.services.base_service import DataService
+
 from etl.services.db import mysql, postgresql
+from etl.services.source import DatasourceApi
 
 
-class DatabaseService(DataService):
+class DatabaseService(DatasourceApi):
     """Сервис для источников данных"""
 
-    @staticmethod
-    def factory(**connection):
+    def factory(self, source):
         """
         фабрика для инстанса бд
 
         Args:
-            **connection(dict): словарь с информацией о подключении
+            source
 
         Returns:
             etl.services.db.interfaces.Database
         """
-        conn_type = int(connection.get('conn_type', ''))
-        del connection['conn_type']
+        connection = self.get_source_data()
+        conn_type = source.get_source_type()
 
         if conn_type == ConnectionChoices.POSTGRESQL:
             return postgresql.Postgresql(connection)
@@ -36,50 +36,35 @@ class DatabaseService(DataService):
         else:
             raise ValueError("Неизвестный тип подключения!")
 
-    @classmethod
-    def get_source_instance(cls, source):
+    def get_source_instance(self):
         """
         инстанс бд соурса
 
-        Args:
-            source(core.models.Datasource): источник
-
         Returns:
             etl.services.db.interfaces.Database
-
         """
-        data = cls.get_source_data(source)
-        instance = cls.factory(**data)
-        return instance
+        return self.datasource
 
-    @classmethod
-    def get_tables(cls, source):
+    def get_source_data(self):
+        """
+        Возвращает список модели источника данных
+        Returns:
+            dict: словарь с информацией подключения
+        """
+        return {'db': self.source.db, 'host': self.source.host,
+                'port': self.source.port, 'login': self.source.login,
+                'password': self.source.password}
+
+    def get_tables(self):
         """
         Возвращает таблицы источника
-        Args:
-            source(core.models.Datasource): источник
 
         Returns:
             list: список таблиц
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_tables(source)
+        return self.datasource.get_tables(self.source)
 
-    @classmethod
-    def get_source_data(cls, source):
-        """
-        Возвращает список модели источника данных
-        Args:
-            source(core.models.Datasource): источник
-
-        Returns:
-            dict: словарь с информацией подключения
-        """
-        return dict({'db': source.db, 'host': source.host, 'port': source.port, 'login': source.login,
-                     'password': source.password, 'conn_type': source.conn_type})
-
-    @classmethod
-    def get_columns_info(cls, source, tables):
+    def get_columns_info(self, source, tables):
         """
             Получение списка колонок
         Args:
@@ -89,29 +74,23 @@ class DatabaseService(DataService):
         Returns:
             list: список колонок, ограничений и индекксов таблицы
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_columns_info(source, tables)
+        return self.datasource.get_columns_info(source, tables)
 
-    @classmethod
-    def fetch_tables_columns(cls, source, tables):
+    def fetch_tables_columns(self, source, tables):
         # возвращает список колонок таблиц
 
-        instance = cls.get_source_instance(source)
-        return instance.get_columns(source, tables)
+        return self.datasource.get_columns(source, tables)
 
-    @classmethod
-    def get_stats_info(cls, source, tables):
+    def get_stats_info(self, source, tables):
         """
         Получение списка размера и кол-ва строк таблиц
         :param source: Datasource
         :param tables:
         :return:
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_statistic(source, tables)
+        return self.datasource.get_statistic(source, tables)
 
-    @classmethod
-    def get_date_intervals(cls, source, cols_info):
+    def get_date_intervals(self, source, cols_info):
         """
         Получение данных из
         Args:
@@ -119,21 +98,17 @@ class DatabaseService(DataService):
         Returns:
 
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_intervals(source, cols_info)
+        return self.datasource.get_intervals(source, cols_info)
 
-    @classmethod
-    def get_rows_query(cls, source, cols, structure):
+    def get_rows_query(self, source, cols, structure):
         """
         Получение запроса выбранных колонок из указанных таблиц выбранного источника
         :param source: Datasource
         :return:
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_rows_query(cols, structure)
+        return self.datasource.get_rows_query(cols, structure)
 
-    @classmethod
-    def get_rows(cls, source, cols, structure):
+    def get_rows(self, source, cols, structure):
         """
         Получение значений выбранных колонок из указанных таблиц и выбранного источника
         :type structure: dict
@@ -141,72 +116,16 @@ class DatabaseService(DataService):
         :param cols: list
         :return:
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_rows(cols, structure)
+        return self.datasource.get_rows(cols, structure)
 
-    @classmethod
-    def get_table_create_query(cls, table_name, cols_str):
-        """
-        Получение запроса на создание новой таблицы
-        для локального хранилища данных
-        :param table_name: str
-        :param cols_str: str
-        :return: str
-        """
-        local_instance = cls.get_local_instance()
-        return local_instance.local_table_create_query(table_name, cols_str)
-
-    @classmethod
-    def check_table_exists_query(cls, local_instance, table, db):
-        """
-        Проверка на существование таблицы
-        """
-        return local_instance.check_table_exists_query(table, db)
-
-    @classmethod
-    def get_page_select_query(cls, table_name, cols):
-        """
-        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
-
-        Args:
-            table_name(unicode): Название таблицы
-            cols(list): Список получаемых колонок
-        """
-        local_instance = cls.get_local_instance()
-        return local_instance.get_page_select_query(table_name, cols)
-
-    @classmethod
-    def get_select_dates_query(cls, date_table):
-        """
-        Получение всех дат из таблицы дат
-        """
-        local_instance = cls.get_local_instance()
-        return local_instance.get_select_dates_query(date_table)
-
-    @classmethod
-    def get_table_insert_query(cls, table_name, cols_num):
-        """
-        Запрос на добавление в новую таблицу локал хранилища
-
-        Args:
-            table_name(str): Название таблиц
-            cols_num(int): Число столбцов
-        Returns:
-            str: Строка на выполнение
-        """
-        local_instance = cls.get_local_instance()
-        return local_instance.local_table_insert_query(table_name, cols_num)
-
-    @classmethod
-    def get_generated_joins(cls, source, structure):
+    def get_generated_joins(self, source, structure):
         """
         связи таблиц
         :param source: Datasource
         :param structure: dict
         :return: str
         """
-        instance = cls.get_source_instance(source)
-        return instance.generate_join(structure)
+        return self.datasource.generate_join(structure)
 
     @classmethod
     def get_connection(cls, source):
@@ -233,8 +152,7 @@ class DatabaseService(DataService):
             raise ValueError("Сбой при подключении!")
         return conn
 
-    @classmethod
-    def processing_records(cls, source, col_records, index_records, const_records):
+    def processing_records(self, source, col_records, index_records, const_records):
         """
         обработка колонок, констраинтов, индексов соурса
         :param col_records: str
@@ -242,8 +160,7 @@ class DatabaseService(DataService):
         :param const_records: str
         :return: tuple
         """
-        instance = cls.get_source_instance(source)
-        return instance.processing_records(col_records, index_records, const_records)
+        return self.datasource.processing_records(col_records, index_records, const_records)
 
     @classmethod
     def get_local_connection_dict(cls):
@@ -274,13 +191,10 @@ class DatabaseService(DataService):
         return instance
 
     # fixme: не использутеся
-    @classmethod
-    def get_separator(cls, source):
-        instance = cls.get_source_instance(source)
-        return instance.get_separator()
+    def get_separator(self, source):
+        return self.datasource.get_separator()
 
-    @classmethod
-    def get_structure_rows_number(cls, source, structure, cols):
+    def get_structure_rows_number(self, source, structure, cols):
         """
         возвращает примерное кол-во строк в запросе селекта для планирования
         :param source:
@@ -288,75 +202,118 @@ class DatabaseService(DataService):
         :param cols:
         :return:
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_structure_rows_number(structure, cols)
+        return self.datasource.get_structure_rows_number(structure, cols)
 
-    @classmethod
-    def get_remote_table_create_query(cls, source):
+    def get_remote_table_create_query(self, source):
         """
         возвращает запрос на создание таблицы в БД клиента
         """
-        instance = cls.get_source_instance(source)
-        return instance.remote_table_create_query()
+        return self.datasource.remote_table_create_query()
 
-    @classmethod
-    def get_remote_triggers_create_query(cls, source):
+    def get_remote_triggers_create_query(self, source):
         """
         возвращает запрос на создание григгеров в БД клиента
         """
-        instance = cls.get_source_instance(source)
-        return instance.remote_triggers_create_query()
+        return self.datasource.remote_triggers_create_query()
 
-    @classmethod
-    def reload_datasource_trigger_query(cls, params):
-        """
-        запрос на создание триггеров в БД локально для размерностей и мер
-        """
-
-        return cls.get_local_instance().reload_datasource_trigger_query(params)
-
-    @classmethod
-    def get_date_table_names(cls, col_type):
-        """
-        Получене запроса на создание таблицы даты
-        """
-        return cls.get_local_instance().get_date_table_names(col_type)
-
-    @classmethod
-    def get_table_create_col_names(cls, fields, ref_key):
-        return cls.get_local_instance().get_table_create_col_names(fields, ref_key)
-
-    @classmethod
-    def cdc_key_delete_query(cls, table_name):
-        return cls.get_local_instance().cdc_key_delete_query(table_name)
-
-    @classmethod
-    def get_fetchall_result(cls, connection, source, query, *args, **kwargs):
+    def get_fetchall_result(self, connection, source, query, *args, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_fetchall_result(connection, query, *args, **kwargs)
+        return self.datasource.get_fetchall_result(connection, query, *args, **kwargs)
 
-    @classmethod
-    def get_processed_for_triggers(cls, source, columns):
+    def get_processed_for_triggers(self, source, columns):
         """
         Получает инфу о колонках, возвращает преобразованную инфу
         для создания триггеров
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_processed_for_triggers(columns)
+        return self.datasource.get_processed_for_triggers(columns)
 
-    @classmethod
-    def get_processed_indexes(cls, source, indexes):
+    def get_processed_indexes(self, source, indexes):
         """
         Получает инфу об индексах, возвращает преобразованную инфу
         для создания триггеров
         """
-        instance = cls.get_source_instance(source)
-        return instance.get_processed_indexes(indexes)
+        return self.datasource.get_processed_indexes(indexes)
 
-    @classmethod
-    def get_required_indexes(cls, source):
-        instance = cls.get_source_instance(source)
-        return instance.get_required_indexes()
+    def get_required_indexes(self, source):
+        return self.datasource.get_required_indexes()
+
+
+class LocalDatabaseService(object):
+
+    def __init__(self):
+        self.datasource = self.get_local_connection()
+
+    @staticmethod
+    def get_local_connection():
+        db_info = settings.DATABASES['default']
+        params = {
+            'host': db_info['HOST'], 'db': db_info['NAME'],
+            'login': db_info['USER'], 'password': db_info['PASSWORD'],
+            'port': str(db_info['PORT']),
+        }
+
+        return postgresql.Postgresql(params)
+
+    def reload_datasource_trigger_query(self, params):
+        """
+        запрос на создание триггеров в БД локально для размерностей и мер
+        """
+        return self.datasource.reload_datasource_trigger_query(params)
+
+    def get_date_table_names(self, col_type):
+        """
+        Получене запроса на создание таблицы даты
+        """
+        return self.datasource.get_date_table_names(col_type)
+
+    def get_table_create_col_names(self, fields, ref_key):
+        return self.datasource.get_table_create_col_names(fields, ref_key)
+
+    def cdc_key_delete_query(self, table_name):
+        return self.datasource.cdc_key_delete_query(table_name)
+
+    def get_table_create_query(self, table_name, cols_str):
+        """
+        Получение запроса на создание новой таблицы
+        для локального хранилища данных
+        :param table_name: str
+        :param cols_str: str
+        :return: str
+        """
+        return self.datasource.local_table_create_query(table_name, cols_str)
+
+    def check_table_exists_query(self, local_instance, table, db):
+        """
+        Проверка на существование таблицы
+        """
+        return self.datasource.check_table_exists_query(table, db)
+
+    def get_page_select_query(self, table_name, cols):
+        """
+        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
+
+        Args:
+            table_name(unicode): Название таблицы
+            cols(list): Список получаемых колонок
+        """
+        return self.datasource.get_page_select_query(table_name, cols)
+
+    def get_select_dates_query(self, date_table):
+        """
+        Получение всех дат из таблицы дат
+        """
+        return self.datasource.get_select_dates_query(date_table)
+
+    def get_table_insert_query(self, table_name, cols_num):
+        """
+        Запрос на добавление в новую таблицу локал хранилища
+
+        Args:
+            table_name(str): Название таблиц
+            cols_num(int): Число столбцов
+        Returns:
+            str: Строка на выполнение
+        """
+        return self.datasource.local_table_insert_query(table_name, cols_num)

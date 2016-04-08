@@ -13,6 +13,7 @@ import math
 import requests
 from psycopg2 import errorcodes
 from etl.constants import *
+from etl.services import get_datasource
 from etl.services.db.factory import DatabaseService
 from etl.services.middleware.base import EtlEncoder
 from pymondrian.schema import (
@@ -1041,7 +1042,8 @@ class CreateTriggers(TaskProcessing):
 
         source = Datasource.objects.get(id=self.context['source_id'])
 
-        db_instance = DatabaseService.get_source_instance(source)
+        service = get_datasource(source)
+        db_instance = service.datasource
 
         sep = db_instance.get_separator()
 

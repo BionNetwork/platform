@@ -1,14 +1,11 @@
 # coding: utf-8
-__author__ = 'damir(GDR)'
-
-from django.conf import settings
-
+from etl.services.source import DatasourceApi
 from core.models import ConnectionChoices
-from etl.services.base_service import DataService
 
 
-class FileService(DataService):
+class FileService(DatasourceApi):
     """Сервис для источников данных на основе файлов"""
+
 
     @staticmethod
     def factory(source):
@@ -16,7 +13,7 @@ class FileService(DataService):
         Фабрика для инстанса файлов
 
         Args:
-            source: DataSource
+            source(core.models.Datasource): Источник данных
 
         Returns:
             etl.services.files.interfaces.File
@@ -32,17 +29,3 @@ class FileService(DataService):
         else:
             raise ValueError("Нефайловый тип подключения!")
 
-    @classmethod
-    def get_source_instance(cls, source):
-        """
-        инстанс соурса-файла
-
-        Args:
-            source(core.models.Datasource): источник
-
-        Returns:
-            etl.services.db.interfaces.File
-        """
-        instance = cls.factory(source)
-
-        return instance

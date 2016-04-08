@@ -8,6 +8,7 @@ from psycopg2 import Binary
 
 from etl.constants import TYPES_MAP
 from etl.services.datasource.base import DataSourceService
+from etl.services.db.factory import LocalDatabaseService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
 from core.models import (QueueList, Queue, QueueStatus)
@@ -455,7 +456,7 @@ class LocalDbConnect(object):
 
     @staticmethod
     def get_connection(source=None):
-        return DataSourceService.get_local_instance().connection
+        return LocalDatabaseService().datasource.connection
 
     def __init__(self, query, source=None, execute=True):
 
