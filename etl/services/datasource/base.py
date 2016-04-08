@@ -114,16 +114,15 @@ class DataSourceService(object):
         Database
         Проверяет подключение
         """
+        conn_type = int(get_utf8_string(post.get('conn_type')))
         conn_info = {
             'host': get_utf8_string(post.get('host')),
             'login': get_utf8_string(post.get('login')),
             'password': get_utf8_string(post.get('password')),
             'db': get_utf8_string(post.get('db')),
             'port': get_utf8_string(post.get('port')),
-            'conn_type': get_utf8_string(post.get('conn_type')),
         }
-
-        return DatabaseService.get_connection_by_dict(conn_info)
+        return DatabaseService.get_connection_by_dict(conn_type, conn_info)
 
     @classmethod
     def get_columns_info(cls, source, tables):
@@ -142,21 +141,20 @@ class DataSourceService(object):
 
         if not settings.USE_REDIS_CACHE:
                 return []
-
+        service = get_datasource(source)
         new_tables, old_tables = RedisSourceService.filter_exists_tables(
             source, tables)
 
         if new_tables:
             col_records, index_records, const_records = (
-                DatabaseService.get_columns_info(source, new_tables))
+                service.get_columns_info(new_tables))
 
-            stat_records = DatabaseService.get_stats_info(source, new_tables)
+            stat_records = service.get_stats_info(new_tables)
 
-            new_tables_intervals = DatabaseService.get_date_intervals(
-                source, col_records)
+            new_tables_intervals = service.get_date_intervals(col_records)
 
-            cols, indexes, foreigns = DatabaseService.processing_records(
-                source, col_records, index_records, const_records)
+            cols, indexes, foreigns = service.processing_records(
+                col_records, index_records, const_records)
 
             RedisSourceService.insert_columns_info(
                 source, new_tables, cols, indexes,
@@ -164,8 +162,8 @@ class DataSourceService(object):
 
         if old_tables:
             # берем колонки старых таблиц
-            all_columns = DatabaseService.fetch_tables_columns(source, tables)
-            old_tables_intervals = DatabaseService.get_date_intervals(source, all_columns)
+            all_columns = service.fetch_tables_columns(tables)
+            old_tables_intervals = service.get_date_intervals(all_columns)
             # актуализируем интервалы дат (min, max) для таблиц с датами
             RedisSourceService.insert_date_intervals(
                 source, old_tables, old_tables_intervals)
@@ -220,7 +218,8 @@ class DataSourceService(object):
             list Описать
         """
         structure = RedisSourceService.get_active_tree_structure(source)
-        return DatabaseService.get_rows(source, cols, structure)
+        service = get_datasource(source)
+        return service.get_rows(cols, structure)
 
     @classmethod
     def remove_tables_from_tree(cls, source, tables):
@@ -466,7 +465,8 @@ class DataSourceService(object):
         Returns:
             Описать
         """
-        return DatabaseService.get_separator(source)
+        service = get_datasource(source)
+        return service.get_separator()
 
     @classmethod
     def get_table_create_query(cls, table_name, cols_str):
@@ -481,12 +481,14 @@ class DataSourceService(object):
         Returns:
             str: Строка запроса
         """
-        return DatabaseService.get_table_create_query(table_name, cols_str)
+        service = LocalDatabaseService()
+        return service.get_table_create_query(table_name, cols_str)
 
     @classmethod
     def check_table_exists_query(cls, local_instance, table_name, db):
         # FIXME: Описать
-        return DatabaseService.check_table_exists_query(
+        service = LocalDatabaseService()
+        return service.check_table_exists_query(
             local_instance, table_name, db)
 
     @classmethod
@@ -501,12 +503,13 @@ class DataSourceService(object):
         Returns:
             str: Строка запроса
         """
-
-        return DatabaseService.get_page_select_query(table_name, cols)
+        service = LocalDatabaseService()
+        return service.get_page_select_query(table_name, cols)
 
     @classmethod
     def get_table_insert_query(cls, source_table_name, cols_num):
-        return DatabaseService.get_table_insert_query(
+        service = LocalDatabaseService()
+        return service.get_table_insert_query(
             source_table_name, cols_num)
 
     @classmethod
@@ -521,7 +524,8 @@ class DataSourceService(object):
         :return:
         """
         # FIXME: Описать
-        return DatabaseService.get_rows_query(source, cols, structure)
+        service = get_datasource(source)
+        return service.get_rows_query(source, cols, structure)
 
     @classmethod
     def check_existing_table(cls, table_name):
@@ -541,7 +545,8 @@ class DataSourceService(object):
         :type source: Datasource
         """
         # FIXME: Описать
-        return DatabaseService.get_connection(source)
+        service = get_datasource(source)
+        return service.get_connection(source)
 
     @classmethod
     def get_local_instance(cls):
@@ -692,8 +697,8 @@ class DataSourceService(object):
         """
 
         # FIXME: Описать
-        return DatabaseService.get_structure_rows_number(
-            source, structure,  cols)
+        service = get_datasource(source)
+        return service.get_structure_rows_number(structure,  cols)
 
     @classmethod
     def get_remote_table_create_query(cls, source):
@@ -707,8 +712,8 @@ class DataSourceService(object):
         Returns:
             str: Строка запроса
         """
-
-        return DatabaseService.get_remote_table_create_query(source)
+        service = get_datasource(source)
+        return service.get_remote_table_create_query()
 
     @classmethod
     def get_remote_triggers_create_query(cls, source):
@@ -723,7 +728,8 @@ class DataSourceService(object):
             str: Строка запроса
         """
         # FIXME: Описать
-        return DatabaseService.get_remote_triggers_create_query(source)
+        service = get_datasource(source)
+        return service.get_remote_triggers_create_query()
 
     @staticmethod
     def reload_datasource_trigger_query(params):
@@ -738,8 +744,8 @@ class DataSourceService(object):
             str: Строка запроса
         """
         # FIXME: Описать "Параметры, необходимые для запроса"
-
-        return DatabaseService.reload_datasource_trigger_query(params)
+        service = LocalDatabaseService()
+        return service.reload_datasource_trigger_query(params)
 
     @staticmethod
     def get_date_table_names(col_type):
@@ -753,7 +759,8 @@ class DataSourceService(object):
         Returns:
             list: Список строк с названием и типом колонок для таблицы дат
         """
-        return DatabaseService.get_date_table_names(col_type)
+        service = LocalDatabaseService()
+        return service.get_date_table_names(col_type)
 
     @staticmethod
     def get_table_create_col_names(fields, ref_key):
@@ -769,7 +776,8 @@ class DataSourceService(object):
             list: Список строк с названием и типом колонок
             для таблицы мер и размерности
         """
-        return DatabaseService.get_table_create_col_names(fields, ref_key)
+        service = LocalDatabaseService()
+        return service.get_table_create_col_names(fields, ref_key)
 
     @staticmethod
     def cdc_key_delete_query(table_name):
@@ -783,12 +791,14 @@ class DataSourceService(object):
         Returns:
             str: Строка запроса
         """
-        return DatabaseService.cdc_key_delete_query(table_name)
+        service = LocalDatabaseService()
+        return service.cdc_key_delete_query(table_name)
 
     @staticmethod
     def get_fetchall_result(connection, source, query, *args, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
-        return DatabaseService.get_fetchall_result(
-            connection, source, query, *args, **kwargs)
+        service = get_datasource(source)
+        return service.get_fetchall_result(
+            connection, query, *args, **kwargs)

@@ -16,7 +16,7 @@ def get_datasource(source):
         etl.services.source.DatasourceApi: Сервис для работы с источником
     """
 
-    connection_type = source.get_source_type()
+    connection_type = source.conn_type
     if connection_type in [
         ConnType.POSTGRESQL, ConnType.MYSQL, ConnType.MS_SQL, ConnType.ORACLE]:
         return DatabaseService(source)

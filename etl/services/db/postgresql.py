@@ -74,7 +74,7 @@ class Postgresql(Database):
 
         """
         intervals_query = []
-        for table, col_name, col_type, _, _ in cols_info:
+        for table, col_name, col_type, _, _, _ in cols_info:
             if col_type in cls.db_map.dates:
                 query = "SELECT MIN({0}), MAX({0}) FROM {1};".format(
                         col_name, table)

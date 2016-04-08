@@ -10,18 +10,15 @@ from etl.services.source import DatasourceApi
 class DatabaseService(DatasourceApi):
     """Сервис для источников данных"""
 
-    def factory(self, source):
+
+    @staticmethod
+    def factory(conn_type, connection):
         """
         фабрика для инстанса бд
-
-        Args:
-            source
 
         Returns:
             etl.services.db.interfaces.Database
         """
-        connection = self.get_source_data()
-        conn_type = source.get_source_type()
 
         if conn_type == ConnectionChoices.POSTGRESQL:
             return postgresql.Postgresql(connection)
@@ -43,7 +40,10 @@ class DatabaseService(DatasourceApi):
         Returns:
             etl.services.db.interfaces.Database
         """
-        return self.datasource
+        connection = self.get_source_data()
+        conn_type = self.source.conn_type
+
+        return self.factory(conn_type, connection)
 
     def get_source_data(self):
         """
@@ -64,7 +64,7 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_tables(self.source)
 
-    def get_columns_info(self, source, tables):
+    def get_columns_info(self, tables):
         """
             Получение списка колонок
         Args:
@@ -74,23 +74,23 @@ class DatabaseService(DatasourceApi):
         Returns:
             list: список колонок, ограничений и индекксов таблицы
         """
-        return self.datasource.get_columns_info(source, tables)
+        return self.datasource.get_columns_info(self.source, tables)
 
-    def fetch_tables_columns(self, source, tables):
+    def fetch_tables_columns(self, tables):
         # возвращает список колонок таблиц
 
-        return self.datasource.get_columns(source, tables)
+        return self.datasource.get_columns(self.source, tables)
 
-    def get_stats_info(self, source, tables):
+    def get_stats_info(self, tables):
         """
         Получение списка размера и кол-ва строк таблиц
         :param source: Datasource
         :param tables:
         :return:
         """
-        return self.datasource.get_statistic(source, tables)
+        return self.datasource.get_statistic(self.source, tables)
 
-    def get_date_intervals(self, source, cols_info):
+    def get_date_intervals(self, cols_info):
         """
         Получение данных из
         Args:
@@ -98,9 +98,9 @@ class DatabaseService(DatasourceApi):
         Returns:
 
         """
-        return self.datasource.get_intervals(source, cols_info)
+        return self.datasource.get_intervals(self.source, cols_info)
 
-    def get_rows_query(self, source, cols, structure):
+    def get_rows_query(self, cols, structure):
         """
         Получение запроса выбранных колонок из указанных таблиц выбранного источника
         :param source: Datasource
@@ -137,14 +137,13 @@ class DatabaseService(DatasourceApi):
         return cls.get_connection_by_dict(conn_info)
 
     @classmethod
-    def get_connection_by_dict(cls, conn_info):
+    def get_connection_by_dict(cls, con_type, conn_info):
         """
         Получение соединения источника
         :type conn_info: dict
         """
-        instance = cls.factory(**conn_info)
+        instance = cls.factory(con_type, conn_info)
 
-        del conn_info['conn_type']
         conn_info['port'] = int(conn_info['port'])
 
         conn = instance.get_connection(conn_info)
@@ -152,7 +151,7 @@ class DatabaseService(DatasourceApi):
             raise ValueError("Сбой при подключении!")
         return conn
 
-    def processing_records(self, source, col_records, index_records, const_records):
+    def processing_records(self, col_records, index_records, const_records):
         """
         обработка колонок, констраинтов, индексов соурса
         :param col_records: str
@@ -191,10 +190,10 @@ class DatabaseService(DatasourceApi):
         return instance
 
     # fixme: не использутеся
-    def get_separator(self, source):
+    def get_separator(self):
         return self.datasource.get_separator()
 
-    def get_structure_rows_number(self, source, structure, cols):
+    def get_structure_rows_number(self, structure, cols):
         """
         возвращает примерное кол-во строк в запросе селекта для планирования
         :param source:
@@ -204,19 +203,19 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_structure_rows_number(structure, cols)
 
-    def get_remote_table_create_query(self, source):
+    def get_remote_table_create_query(self):
         """
         возвращает запрос на создание таблицы в БД клиента
         """
         return self.datasource.remote_table_create_query()
 
-    def get_remote_triggers_create_query(self, source):
+    def get_remote_triggers_create_query(self):
         """
         возвращает запрос на создание григгеров в БД клиента
         """
         return self.datasource.remote_triggers_create_query()
 
-    def get_fetchall_result(self, connection, source, query, *args, **kwargs):
+    def get_fetchall_result(self, connection, query, *args, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """

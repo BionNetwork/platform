@@ -8,17 +8,16 @@ class DatasourceApi(object):
 
     def __init__(self, source):
         self.source = source
-        self.datasource = self.factory(source)
+        self.datasource = self.get_source_instance()
 
-    def factory(self, source):
+    def get_source_instance(self):
         """
-        Args:
-            source(core.models.Datasource): источник данных
-
-        Returns:
-
+        Получение экземпляра источника
         """
         raise NotImplementedError
 
     def get_tables(self):
+        raise NotImplementedError
+
+    def get_separator(self):
         raise NotImplementedError
