@@ -497,12 +497,14 @@ class DataSourceService(object):
         service = LocalDatabaseService()
         return service.get_page_select_query(table_name, cols)
 
+    # FIXME Удалить
     @classmethod
     def get_table_insert_query(cls, source_table_name, cols_num):
         service = LocalDatabaseService()
         return service.get_table_insert_query(
             source_table_name, cols_num)
 
+    # FIXME Удалить
     @classmethod
     def get_source_rows_query(cls, source, structure, cols):
         """
@@ -753,22 +755,23 @@ class DataSourceService(object):
         service = LocalDatabaseService()
         return service.get_date_table_names(col_type)
 
+    # FIXME: Удалить
     @staticmethod
-    def get_table_create_col_names(fields, ref_key):
+    def get_table_create_col_names(fields, time_table_name):
         """
         Список строк запроса для создания колонок
         таблицы sttm_, мер и размерностей
 
         Args:
             fields(): Информация о колонках таблицы
-            ref_key(str): идентификатор для создания внешнего ключа
+            time_table_name(str): Название таблицы времени
 
         Returns:
             list: Список строк с названием и типом колонок
             для таблицы мер и размерности
         """
         service = LocalDatabaseService()
-        return service.get_table_create_col_names(fields, ref_key)
+        return service.get_table_create_col_names(fields, time_table_name)
 
     @staticmethod
     def cdc_key_delete_query(table_name):

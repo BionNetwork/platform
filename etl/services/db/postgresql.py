@@ -125,8 +125,7 @@ class Postgresql(Database):
         """
         cols = '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(
                 cols_num)])
-        insert_query = "INSERT INTO {0} VALUES {1}".format(table_name, cols)
-        return insert_query
+        return "INSERT INTO {0} VALUES {1}".format(table_name, cols)
 
     @staticmethod
     def remote_table_create_query():

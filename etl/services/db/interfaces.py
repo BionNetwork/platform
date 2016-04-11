@@ -620,7 +620,7 @@ class Database(object):
         return date_table_col_names
 
     @staticmethod
-    def get_table_create_col_names(fields, ref_key):
+    def get_table_create_col_names(fields, time_table_name):
         col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in fields:
             field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
@@ -629,8 +629,8 @@ class Database(object):
                 col_names.append('"{0}" {1}'.format(
                     field_name, field['type']))
             else:
-                col_names.append('"{0}" integer REFERENCES time_by_day_{1} (time_id)'.format(
-                    field_name, ref_key))
+                col_names.append('"{0}" integer REFERENCES {1} (time_id)'.format(
+                    field_name, time_table_name))
 
         return col_names
 

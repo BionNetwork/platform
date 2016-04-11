@@ -13,7 +13,7 @@ def get_source_service(source):
         source(core.models.Datasource): источник данных
 
     Returns:
-        etl.services.source.DatasourceApi: Сервис для работы с источником
+        etl.services.source.DatasourceApi(): Сервис для работы с источником
     """
 
     connection_type = source.conn_type

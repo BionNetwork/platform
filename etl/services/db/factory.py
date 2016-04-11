@@ -1,14 +1,33 @@
 # coding: utf-8
+import calendar
+from contextlib import closing
+
+import math
+
+from datetime import timedelta, datetime
 from django.conf import settings
 
 from core.models import (ConnectionChoices, DatasourcesJournal)
-
+from etl.constants import DATE_TABLE_COLS_LEN
 from etl.services.db import mysql, postgresql
+from etl.services.queue.base import DTCN
 from etl.services.source import DatasourceApi
 
 
 class DatabaseService(DatasourceApi):
     """Сервис для источников данных"""
+
+    def __init__(self, source):
+        super(DatabaseService, self).__init__(source=source)
+        self.connection = self.get_connection(source)
+
+    def execute(self, query, args=None, many=False):
+        with self.connection:
+            with closing(self.connection.cursor()) as cursor:
+                if not many:
+                    cursor.execute(query, args)
+                else:
+                    cursor.executemany(query, args)
 
     @staticmethod
     def factory(conn_type, connection):
@@ -107,6 +126,7 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_intervals(self.source, cols_info)
 
+    # FIXME: Удалить
     def get_rows_query(self, cols, structure):
         """
         Получение запроса выбранных колонок из указанных таблиц выбранного источника
@@ -247,6 +267,14 @@ class DatabaseService(DatasourceApi):
     def get_required_indexes(self, source):
         return self.datasource.get_required_indexes()
 
+    def get_source_rows(self, structure, cols, limit=None, offset=None):
+        """
+        Получение постраничных данных из базы пользователя
+        """
+
+        query = self.datasource.get_rows_query(cols, structure)
+        return self.get_fetchall_result(self.connection, query, limit=limit, offset=offset)
+
 
 class LocalDatabaseService(object):
 
@@ -264,6 +292,20 @@ class LocalDatabaseService(object):
 
         return postgresql.Postgresql(params)
 
+    def execute(self, query, args=None, many=False):
+        with self.datasource.connection:
+            with closing(self.datasource.connection.cursor()) as cursor:
+                if not many:
+                    cursor.execute(query, args)
+                else:
+                    cursor.executemany(query, args)
+
+    def fetchall(self, query, **kwargs):
+        with self.datasource.connection:
+            with closing(self.datasource.connection.cursor()) as cursor:
+                cursor.execute(query, kwargs)
+                return cursor.fetchall()
+
     def reload_datasource_trigger_query(self, params):
         """
         запрос на создание триггеров в БД локально для размерностей и мер
@@ -276,8 +318,9 @@ class LocalDatabaseService(object):
         """
         return self.datasource.get_date_table_names(col_type)
 
-    def get_table_create_col_names(self, fields, ref_key):
-        return self.datasource.get_table_create_col_names(fields, ref_key)
+    # FIXME удалить
+    def get_table_create_col_names(self, fields, time_table_name):
+        return self.datasource.get_table_create_col_names(fields, time_table_name)
 
     def cdc_key_delete_query(self, table_name):
         return self.datasource.cdc_key_delete_query(table_name)
@@ -308,12 +351,14 @@ class LocalDatabaseService(object):
         """
         return self.datasource.get_page_select_query(table_name, cols)
 
+    # FIXME Удалить
     def get_select_dates_query(self, date_table):
         """
         Получение всех дат из таблицы дат
         """
         return self.datasource.get_select_dates_query(date_table)
 
+    # FIXME Удалить
     def get_table_insert_query(self, table_name, cols_num):
         """
         Запрос на добавление в новую таблицу локал хранилища
@@ -325,3 +370,156 @@ class LocalDatabaseService(object):
             str: Строка на выполнение
         """
         return self.datasource.local_table_insert_query(table_name, cols_num)
+
+    def create_time_table(self, time_table_name):
+        cols = ', '.join(self.datasource.get_date_table_names(DTCN.types))
+        query = self.datasource.local_table_create_query(time_table_name, cols)
+        self.execute(query, many=True)
+
+    def create_sttm_table(self, sttm_table_name, time_table_name, processed_cols):
+        col_names = self.datasource.get_table_create_col_names(
+            processed_cols, time_table_name)
+        self.execute(self.datasource.local_table_create_query(
+            sttm_table_name, ', '.join(col_names)))
+
+    def local_insert(self, table_name, cols_num, data):
+        query = self.datasource.local_table_insert_query(
+            table_name, cols_num)
+        self.execute(query, data, many=True)
+
+    def date_select(self, table_name):
+        query = self.datasource.get_select_dates_query(table_name)
+        return self.fetchall(query)
+
+    def create_date_tables(self, time_table_name, meta_info, is_update):
+        """
+        Создание таблиц дат
+        """
+
+        date_tables = {}
+
+        date_intervals_info = [(t_name, t_info['date_intervals'])
+                               for (t_name, t_info) in meta_info.iteritems()]
+
+        # список всех интервалов
+        intervals = reduce(
+            lambda x, y: x[1]+y[1], date_intervals_info, ['', []])
+
+        if not intervals:
+            return date_tables
+
+        # как минимум создадим таблицу с 1 записью c id = 0
+        # для пустых значений, если новая закачка
+        if not is_update:
+            self.create_time_table(time_table_name)
+
+            none_row = {'0': 0}
+            none_row.update({str(x): None for x in range(1, DATE_TABLE_COLS_LEN)})
+            self.local_insert(time_table_name, DATE_TABLE_COLS_LEN, [none_row])
+
+        # если в таблице в колонке все значения дат пустые, то
+        # startDate и endDate = None, отфильтруем
+        not_none_intervals = [
+            i for i in intervals if i['startDate'] is not None and
+            i['endDate'] is not None
+        ]
+
+        if not not_none_intervals:
+            return date_tables
+
+        # если имеются численные интервалы
+        # новые границы дат, пришедшие с пользователя
+        start_date = min(
+            [datetime.strptime(interval['startDate'], "%d.%m.%Y").date()
+             for interval in not_none_intervals])
+        end_date = max(
+            [datetime.strptime(interval['endDate'], "%d.%m.%Y").date()
+             for interval in not_none_intervals])
+
+        delta = end_date - start_date
+
+        # первое заполнение таблицы дат
+        if not is_update:
+            # +1 потому start_date тоже суем
+            records, date_ids = self.prepare_dates_records(
+                start_date, delta.days + 1, 0)
+            date_tables.update(date_ids)
+            self.local_insert(time_table_name, DATE_TABLE_COLS_LEN, records)
+            return date_tables
+
+        # update таблицы дат
+        db_exists_dates = self.date_select(time_table_name)
+
+        exists_dates = {x[0].strftime("%d.%m.%Y"): x[1] for x in db_exists_dates}
+
+        date_tables = exists_dates
+
+        # если в таблице дат имелся только 1 запись с id = 0
+        if not exists_dates:
+            # +1 потому start_date тоже суем
+            records, date_ids = self.prepare_dates_records(
+                start_date, delta.days + 1, 0)
+            date_tables.update(date_ids)
+            self.local_insert(time_table_name, DATE_TABLE_COLS_LEN, records)
+            return date_tables
+
+        # если в таблице дат имелись записи кроме id = 0
+        max_id = max(exists_dates.itervalues())
+        dates_list = [x[0] for x in db_exists_dates]
+        exist_min_date = min(dates_list)
+        exist_max_date = max(dates_list)
+
+        min_delta = (exist_min_date - start_date).days
+
+        if min_delta > 0:
+            records, date_ids = self.prepare_dates_records(
+                start_date, min_delta, max_id)
+            date_tables.update(date_ids)
+            self.local_insert(
+                time_table_name, DATE_TABLE_COLS_LEN, records)
+
+            max_id += min_delta
+
+        max_delta = (end_date - exist_max_date).days
+
+        if max_delta > 0:
+            records, date_ids = self.prepare_dates_records(
+                exist_max_date+timedelta(days=1), max_delta, max_id)
+            date_tables.update(date_ids)
+            self.local_insert(
+                time_table_name, DATE_TABLE_COLS_LEN, records)
+
+            max_id += max_delta
+
+        # если в таблице дат имелся только 1 запись с id = 0
+        else:
+            # +1 потому start_date тоже суем
+            records, date_ids = self.prepare_dates_records(
+                start_date, delta.days + 1, 0)
+            date_tables.update(date_ids)
+            self.local_insert(time_table_name, DATE_TABLE_COLS_LEN, records)
+
+    def prepare_dates_records(self, start_date, days_count, max_id):
+        # список рекордов для таблицы дат
+        date_ids = {}
+        records = []
+        for day_delta in range(days_count):
+            current_day = start_date + timedelta(days=day_delta)
+            current_day_str = current_day.isoformat()
+            month = current_day.month
+            records.append({
+                    '0': max_id + day_delta + 1,
+                    '1': current_day_str,
+                    '2': calendar.day_name[current_day.weekday()],
+                    '3': current_day.year,
+                    '4': month,
+                    '5': current_day.strftime('%B'),
+                    '6': current_day.day,
+                    '7': current_day.isocalendar()[1],
+                    '8': int(math.ceil(float(month) / 3)),
+
+                 })
+            date_ids.update(
+                {current_day.strftime("%d.%m.%Y"): max_id + day_delta + 1})
+
+        return records, date_ids
