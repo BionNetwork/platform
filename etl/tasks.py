@@ -569,12 +569,17 @@ class LoadDimensions(TaskProcessing):
             'meta__collection_name', 'meta__fields', 'meta__stats')
         self.actual_fields = self.get_actual_fields(meta_data)
 
+        local_db_service = LocalDatabaseService()
+
         if not self.context['db_update']:
 
-            create_col_names = DataSourceService.get_table_create_col_names(
-                self.actual_fields, self.key)
-            LocalDbConnect(DataSourceService.get_table_create_query(
-                self.get_table(self.table_prefix), ', '.join(create_col_names)))
+            # create_col_names = DataSourceService.get_table_create_col_names(
+            #     self.actual_fields, self.key)
+            # LocalDbConnect(DataSourceService.get_table_create_query(
+            #     self.get_table(self.table_prefix), ', '.join(create_col_names)))
+
+            local_db_service.create_sttm_table(
+                self.table_prefix, self.get_table(TIME_TABLE), self.actual_fields)
 
             try:
                 self.save_fields()
@@ -702,6 +707,8 @@ class LoadDimensions(TaskProcessing):
             self.get_table(STTM_DATASOURCE), column_names), execute=False)
 
         while True:
+            # local_db_service.get_source_rows(
+            #     structure, cols, limit=limit, offset=(page-1)*limit)
             rows = source_connect.fetchall(limit=step, offset=offset)
             if not rows:
                 break
@@ -1005,9 +1012,9 @@ class DeleteRedundant(TaskProcessing):
         self.key = self.context['checksum']
         del_collection = MongodbConnection(
             self.get_table(STTM_DATASOURCE_KEYSALL)).collection
-
-        delete_connect = LocalDbConnect(DataSourceService.cdc_key_delete_query(
-            self.get_table(STTM_DATASOURCE)), execute=False)
+        local_db_service = LocalDatabaseService()
+        # delete_connect = LocalDbConnect(DataSourceService.cdc_key_delete_query(
+        #     self.get_table(STTM_DATASOURCE)), execute=False)
 
         limit = 100
         page = 1
@@ -1018,7 +1025,9 @@ class DeleteRedundant(TaskProcessing):
             if not delete_records:
                 break
             try:
-                delete_connect.execute((delete_records,))
+                local_db_service.delete(
+                    self.get_table(STTM_DATASOURCE), delete_records)
+                # delete_connect.execute((delete_records,))
             except Exception as e:
                 self.error_handling(e.message)
             page += 1
