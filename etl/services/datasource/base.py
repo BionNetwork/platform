@@ -114,15 +114,15 @@ class DataSourceService(object):
         Database
         Проверяет подключение
         """
-        conn_type = int(get_utf8_string(post.get('conn_type')))
         conn_info = {
             'host': get_utf8_string(post.get('host')),
             'login': get_utf8_string(post.get('login')),
             'password': get_utf8_string(post.get('password')),
             'db': get_utf8_string(post.get('db')),
             'port': get_utf8_string(post.get('port')),
+            'conn_type': int(get_utf8_string(post.get('conn_type')))
         }
-        return DatabaseService.get_connection_by_dict(conn_type, conn_info)
+        return DatabaseService.get_connection_by_dict(conn_info)
 
     @classmethod
     def get_columns_info(cls, source, tables):
@@ -525,7 +525,7 @@ class DataSourceService(object):
         """
         # FIXME: Описать
         service = get_datasource(source)
-        return service.get_rows_query(source, cols, structure)
+        return service.get_rows_query(cols, structure)
 
     @classmethod
     def check_existing_table(cls, table_name):

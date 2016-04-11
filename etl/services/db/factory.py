@@ -108,7 +108,7 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_rows_query(cols, structure)
 
-    def get_rows(self, source, cols, structure):
+    def get_rows(self, cols, structure):
         """
         Получение значений выбранных колонок из указанных таблиц и выбранного источника
         :type structure: dict
@@ -137,12 +137,14 @@ class DatabaseService(DatasourceApi):
         return cls.get_connection_by_dict(conn_info)
 
     @classmethod
-    def get_connection_by_dict(cls, con_type, conn_info):
+    def get_connection_by_dict(cls, conn_info):
         """
         Получение соединения источника
         :type conn_info: dict
         """
-        instance = cls.factory(con_type, conn_info)
+        conn_type = conn_info['conn_type']
+        del conn_info['conn_type']
+        instance = cls.factory(conn_type, conn_info)
 
         conn_info['port'] = int(conn_info['port'])
 

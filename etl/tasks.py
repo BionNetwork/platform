@@ -235,9 +235,6 @@ class LoadDb(TaskProcessing):
         processed_cols, clear_col_names, date_fields = self.get_processed_cols(
             cols, col_types)
 
-        col_names = DataSourceService.get_table_create_col_names(
-                processed_cols, self.key)
-
         source_table_name = self.get_table(STTM_DATASOURCE)
         source_collection = MongodbConnection(source_table_name).collection
 
@@ -246,6 +243,8 @@ class LoadDb(TaskProcessing):
 
         if not self.db_update:
             # создаем таблицу sttm_datasource_
+            col_names = DataSourceService.get_table_create_col_names(
+                processed_cols, self.key)
             LocalDbConnect(DataSourceService.get_table_create_query(
                 source_table_name, ', '.join(col_names)))
 
