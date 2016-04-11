@@ -5,7 +5,7 @@ from etl.services.db.factory import DatabaseService
 from etl.services.file.factory import FileService
 
 
-def get_datasource(source):
+def get_source_service(source):
     """
     Определение типа источника данных
 

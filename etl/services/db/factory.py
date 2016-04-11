@@ -10,7 +10,6 @@ from etl.services.source import DatasourceApi
 class DatabaseService(DatasourceApi):
     """Сервис для источников данных"""
 
-
     @staticmethod
     def factory(conn_type, connection):
         """
@@ -54,15 +53,6 @@ class DatabaseService(DatasourceApi):
         return {'db': self.source.db, 'host': self.source.host,
                 'port': self.source.port, 'login': self.source.login,
                 'password': self.source.password}
-
-    def get_tables(self):
-        """
-        Возвращает таблицы источника
-
-        Returns:
-            list: список таблиц
-        """
-        return self.datasource.get_tables(self.source)
 
     def get_columns_info(self, tables):
         """

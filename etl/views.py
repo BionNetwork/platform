@@ -243,11 +243,11 @@ class GetConnectionDataView(BaseView):
         helpers.DataSourceService.tree_full_clean(source)
 
         try:
-            db = helpers.DataSourceService.get_source_tables(source)
+            db_tables = helpers.DataSourceService.get_source_tables(source)
         except ValueError as err:
             return self.json_response({'status': ERROR, 'message': err.message})
 
-        return self.json_response({'data': db, 'status': SUCCESS})
+        return self.json_response({'data': db_tables, 'status': SUCCESS})
 
 
 class BaseEtlView(BaseView):

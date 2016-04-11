@@ -8,7 +8,7 @@ from django.conf import settings
 
 from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
                          DatasourcesJournal, ConnectionChoices)
-from etl.services import get_datasource
+from etl.services import get_source_service
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.datasource.repository.storage import RedisSourceService
@@ -90,7 +90,7 @@ class DataSourceService(object):
         """
         # FIXME: Описать ответ
 
-        service = get_datasource(source)
+        service = get_source_service(source)
         tables = service.get_tables()
 
         trigger_tables = DatasourcesJournal.objects.filter(
@@ -141,7 +141,7 @@ class DataSourceService(object):
 
         if not settings.USE_REDIS_CACHE:
                 return []
-        service = get_datasource(source)
+        service = get_source_service(source)
         new_tables, old_tables = RedisSourceService.filter_exists_tables(
             source, tables)
 
@@ -218,7 +218,7 @@ class DataSourceService(object):
             list Описать
         """
         structure = RedisSourceService.get_active_tree_structure(source)
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_rows(cols, structure)
 
     @classmethod
@@ -465,7 +465,7 @@ class DataSourceService(object):
         Returns:
             Описать
         """
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_separator()
 
     @classmethod
@@ -524,7 +524,7 @@ class DataSourceService(object):
         :return:
         """
         # FIXME: Описать
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_rows_query(cols, structure)
 
     @classmethod
@@ -545,7 +545,7 @@ class DataSourceService(object):
         :type source: Datasource
         """
         # FIXME: Описать
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_connection(source)
 
     @classmethod
@@ -697,7 +697,7 @@ class DataSourceService(object):
         """
 
         # FIXME: Описать
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_structure_rows_number(structure,  cols)
 
     @classmethod
@@ -712,7 +712,7 @@ class DataSourceService(object):
         Returns:
             str: Строка запроса
         """
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_remote_table_create_query()
 
     @classmethod
@@ -728,7 +728,7 @@ class DataSourceService(object):
             str: Строка запроса
         """
         # FIXME: Описать
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_remote_triggers_create_query()
 
     @staticmethod
@@ -799,6 +799,6 @@ class DataSourceService(object):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
-        service = get_datasource(source)
+        service = get_source_service(source)
         return service.get_fetchall_result(
             connection, query, *args, **kwargs)
