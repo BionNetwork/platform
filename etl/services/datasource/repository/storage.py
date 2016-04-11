@@ -10,14 +10,6 @@ from core.helpers import CustomJsonEncoder
 
 class RedisCacheKeys(object):
     """Ключи для редиса"""
-    @staticmethod
-    def get_user_databases(user_id):
-        """
-        бд юзера
-        :param user_id:
-        :return:
-        """
-        return 'user_datasources:{0}'.format(user_id)
 
     @staticmethod
     def get_user_datasource(user_id, datasource_id):
@@ -27,8 +19,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return '{0}:{1}'.format(
-            RedisCacheKeys.get_user_databases(user_id), datasource_id)
+        return 'user_datasource:{0}:{1}'.format(user_id, datasource_id)
 
     @staticmethod
     def get_user_collection_counter(user_id, datasource_id):
@@ -148,40 +139,25 @@ class RedisSourceService(object):
         :param cls:
         :param source: Datasource
         """
-        user_db_key = RedisCacheKeys.get_user_databases(source.user_id)
         user_datasource_key = RedisCacheKeys.get_user_datasource(
             source.user_id, source.id)
 
-        r_server.lrem(user_db_key, 1, source.id)
         r_server.delete(user_datasource_key)
 
     @classmethod
-    def get_tables(cls, source, tables):
+    def set_tables(cls, source, tables):
         """
-        достает информацию о таблицах из редиса
+        кладем информацию о таблицах в редис
         :param source: Datasource
         :param tables: list
         :return: list
         """
-        user_db_key = RedisCacheKeys.get_user_databases(source.user_id)
-        user_datasource_key = RedisCacheKeys.get_user_datasource(source.user_id, source.id)
+        user_datasource_key = RedisCacheKeys.get_user_datasource(
+            source.user_id, source.id)
 
-        def inner_save_tables():
-            new_db = {
-                "db": source.db,
-                "host": source.host,
-                "tables": tables
-            }
-            if str(source.id) not in r_server.lrange(user_db_key, 0, -1):
-                r_server.rpush(user_db_key, source.id)
-            r_server.set(user_datasource_key, json.dumps(new_db))
-            r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
-            return new_db
-
-        if not r_server.exists(user_datasource_key):
-            return inner_save_tables()
-
-        return json.loads(r_server.get(user_datasource_key))
+        r_server.set(user_datasource_key,
+                     json.dumps({'tables': tables}))
+        r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
     @classmethod
     def delete_tables(cls, source, tables):

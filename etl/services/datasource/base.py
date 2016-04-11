@@ -7,7 +7,7 @@ from django.db import transaction
 from django.conf import settings
 
 from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
-                         DatasourcesJournal, ConnectionChoices)
+                         ConnectionChoices)
 from etl.services import get_source_service
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
@@ -71,8 +71,7 @@ class DataSourceService(object):
     @classmethod
     def get_source_tables(cls, source):
         """
-        Возвращает таблицы истоника данных
-        Фильтрация таблиц по факту создания раннее триггеров
+        Возвращает информацию об источнике + таблицы истоника
 
         :type source: Datasource
 
@@ -83,30 +82,22 @@ class DataSourceService(object):
             dict: {
                 db: <str>,
                 host: <str>,
+                source_id:
+                user_id:
+                .........
                 tables: [{'name': <table_name_1>, 'name': <table_name_2>}]
             }
 
-
         """
-        # FIXME: Описать ответ
-
         service = get_source_service(source)
         tables = service.get_tables()
+        # кладем список таблиц в редис
+        RedisSourceService.set_tables(source, tables)
 
-        trigger_tables = DatasourcesJournal.objects.filter(
-            trigger__datasource=source).values_list('name', flat=True)
+        source_info = source.get_source_info()
+        source_info["tables"] = tables
 
-        # фильтруем, не показываем таблицы триггеров
-        tables = filter(lambda x: x['name'] not in trigger_tables, tables)
-
-        if settings.USE_REDIS_CACHE:
-            return RedisSourceService.get_tables(source, tables)
-        else:
-            return {
-                "db": source.db,
-                "host": source.host,
-                "tables": tables
-            }
+        return source_info
 
     @staticmethod
     def check_connection(post):

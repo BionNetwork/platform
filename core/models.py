@@ -30,6 +30,8 @@ class ConnectionChoices(DjangoChoices):
     CSV = ChoiceItem(6, 'Csv')
     TXT = ChoiceItem(7, 'Text')
 
+CC = ConnectionChoices
+
 
 class Datasource(models.Model):
     """Источники данных содержат список всех подключений
@@ -82,23 +84,36 @@ class Datasource(models.Model):
             'user_id': self.user_id,
         }
 
-    @classmethod
-    def get_source_info(cls, source_id):
+    @property
+    def is_file(self):
+        # признак источника-файла
+        return self.conn_type in [CC.EXCEL, CC.CSV, CC.TXT, ]
+
+    def get_source_info(self):
         """
         Инфа соурса
         """
-        instance = cls.objects.get(id=source_id)
-        return {
-            'name': get_utf8_string(instance.name or ''),
-            'host': get_utf8_string(instance.host or ''),
-            'login': get_utf8_string(instance.login or ''),
-            'password': get_utf8_string(instance.password or ''),
-            'db': get_utf8_string(instance.db or ''),
-            'port': instance.port or '',
-            'conn_type': instance.conn_type,
-            'source_id': instance.id,
-            'user_id': instance.user_id,
-        }
+        if not self.is_file:
+            return {
+                'name': get_utf8_string(self.name or ''),
+                'host': get_utf8_string(self.host or ''),
+                'login': get_utf8_string(self.login or ''),
+                'password': get_utf8_string(self.password or ''),
+                'db': get_utf8_string(self.db or ''),
+                'port': self.port or '',
+                'conn_type': self.conn_type,
+                'source_id': self.id,
+                'user_id': self.user_id,
+                'is_file': False,
+            }
+        else:
+            return {
+                'name': get_utf8_string(self.name or self.file.name),
+                'conn_type': self.conn_type,
+                'source_id': self.id,
+                'user_id': self.user_id,
+                'is_file': True,
+            }
 
     def set_from_dict(self, **data):
         """Заполнение объекта из словаря"""

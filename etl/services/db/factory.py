@@ -1,7 +1,7 @@
 # coding: utf-8
 from django.conf import settings
 
-from core.models import ConnectionChoices
+from core.models import (ConnectionChoices, DatasourcesJournal)
 
 from etl.services.db import mysql, postgresql
 from etl.services.source import DatasourceApi
@@ -53,6 +53,23 @@ class DatabaseService(DatasourceApi):
         return {'db': self.source.db, 'host': self.source.host,
                 'port': self.source.port, 'login': self.source.login,
                 'password': self.source.password}
+
+    def get_tables(self):
+        """
+        Возвращает таблицы источника
+        Фильтрация таблиц по факту созданных раннее триггеров
+        Returns:
+            list: список таблиц
+        """
+        source = self.source
+        tables = self.datasource.get_tables(source)
+
+        trigger_tables = DatasourcesJournal.objects.filter(
+            trigger__datasource=source).values_list('name', flat=True)
+
+        # фильтруем, не показываем таблицы триггеров
+        tables = filter(lambda x: x['name'] not in trigger_tables, tables)
+        return tables
 
     def get_columns_info(self, tables):
         """
