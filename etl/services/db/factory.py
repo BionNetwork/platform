@@ -10,7 +10,7 @@ from django.conf import settings
 from core.models import (ConnectionChoices, DatasourcesJournal)
 from etl.constants import DATE_TABLE_COLS_LEN
 from etl.services.db import mysql, postgresql
-from etl.services.queue.base import DTCN
+# from etl.services.queue.base import DTCN
 from etl.services.source import DatasourceApi
 
 

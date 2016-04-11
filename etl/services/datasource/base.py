@@ -8,9 +8,9 @@ from django.conf import settings
 
 from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
                          ConnectionChoices)
-from etl.services import get_source_service
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
+from etl.services.file.factory import FileService
 from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TablesTree, TableTreeRepository
 from core.helpers import get_utf8_string
@@ -32,19 +32,19 @@ class DataSourceService(object):
         ConnectionChoices.TXT,
     ]
 
-    # @classmethod
-    # def service_factory(cls, source):
-    #     """
-    #     В зависимости от типа источника перенаправляет на нужный сервис
-    #     """
-    #     conn_type = source.conn_type
-    #
-    #     if conn_type in cls.DB_TYPES:
-    #         return DatabaseService
-    #     elif conn_type in cls.FILE_TYPES:
-    #         return FileService
-    #     else:
-    #         raise ValueError("Неизвестный тип подключения!")
+    @classmethod
+    def get_source_service(cls, source):
+        """
+        В зависимости от типа источника перенаправляет на нужный сервис
+        """
+        conn_type = source.conn_type
+
+        if conn_type in cls.DB_TYPES:
+            return DatabaseService
+        elif conn_type in cls.FILE_TYPES:
+            return FileService
+        else:
+            raise ValueError("Неизвестный тип подключения!")
 
     @classmethod
     def delete_datasource(cls, source):
@@ -89,7 +89,7 @@ class DataSourceService(object):
             }
 
         """
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         tables = service.get_tables()
         # кладем список таблиц в редис
         RedisSourceService.set_tables(source, tables)
@@ -132,7 +132,7 @@ class DataSourceService(object):
 
         if not settings.USE_REDIS_CACHE:
                 return []
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         new_tables, old_tables = RedisSourceService.filter_exists_tables(
             source, tables)
 
@@ -209,7 +209,7 @@ class DataSourceService(object):
             list Описать
         """
         structure = RedisSourceService.get_active_tree_structure(source)
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_rows(cols, structure)
 
     @classmethod
@@ -456,7 +456,7 @@ class DataSourceService(object):
         Returns:
             Описать
         """
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_separator()
 
     @classmethod
@@ -517,7 +517,7 @@ class DataSourceService(object):
         :return:
         """
         # FIXME: Описать
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_rows_query(cols, structure)
 
     @classmethod
@@ -538,7 +538,7 @@ class DataSourceService(object):
         :type source: Datasource
         """
         # FIXME: Описать
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_connection(source)
 
     @classmethod
@@ -690,7 +690,7 @@ class DataSourceService(object):
         """
 
         # FIXME: Описать
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_structure_rows_number(structure,  cols)
 
     @classmethod
@@ -705,7 +705,7 @@ class DataSourceService(object):
         Returns:
             str: Строка запроса
         """
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_remote_table_create_query()
 
     @classmethod
@@ -721,7 +721,7 @@ class DataSourceService(object):
             str: Строка запроса
         """
         # FIXME: Описать
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_remote_triggers_create_query()
 
     @staticmethod
@@ -789,11 +789,11 @@ class DataSourceService(object):
         service = LocalDatabaseService()
         return service.cdc_key_delete_query(table_name)
 
-    @staticmethod
-    def get_fetchall_result(connection, source, query, *args, **kwargs):
+    @classmethod
+    def get_fetchall_result(cls, connection, source, query, *args, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
-        service = get_source_service(source)
+        service = cls.get_source_service(source)
         return service.get_fetchall_result(
             connection, query, *args, **kwargs)

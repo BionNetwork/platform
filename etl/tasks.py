@@ -13,7 +13,6 @@ import math
 import requests
 from psycopg2 import errorcodes
 from etl.constants import *
-from etl.services import get_source_service
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.middleware.base import EtlEncoder
 from pymondrian.schema import (
@@ -132,7 +131,7 @@ class LoadMongodb(TaskProcessing):
         source = Datasource.objects.get(**self.context['source'])
         meta_info = json.loads(self.context['meta_info'])
 
-        source_service = get_source_service(source)
+        source_service = DataSourceService.get_source_service(source)
 
         page = 1
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
@@ -232,7 +231,7 @@ class LoadDb(TaskProcessing):
         self.publisher.rows_count = self.context['rows_count']
         self.publisher.publish(TLSE.START)
 
-        source_service = get_source_service(source)
+        source_service = DataSourceService.get_source_service(source)
         local_db_service = LocalDatabaseService()
 
         processed_cols, clear_col_names, date_fields = self.get_processed_cols(
@@ -848,7 +847,7 @@ class UpdateMongodb(TaskProcessing):
 
         rows_count, loaded_count = DataSourceService.get_structure_rows_number(
             source, structure,  cols), 0
-        source_service = get_source_service(source)
+        source_service = DataSourceService.get_source_service(source)
 
         # общее количество строк в запросе
         self.publisher.rows_count = rows_count
@@ -1046,7 +1045,7 @@ class CreateTriggers(TaskProcessing):
 
         source = Datasource.objects.get(id=self.context['source_id'])
 
-        service = get_source_service(source)
+        service = DataSourceService.get_source_service(source)
         db_instance = service.datasource
 
         sep = db_instance.get_separator()
