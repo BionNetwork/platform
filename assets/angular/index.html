@@ -565,18 +565,22 @@
     <!-- строки таблиц БД-->
 
     <script type="text/html" id="database-rows">
-            <div class="panel panel-default width150" data-host="<%= data.host%>" data-db="<%= data.db %>">
+            <div class="panel panel-default width150" data-source="<%= data.source_id %>">
                 <div class="panel-heading">
                     <a class="collapsed fa fa-database" data-toggle="collapse"
                         href="#dbTables"
-                       aria-controls="dbTables">
-                        <%= data.host%>: <%= data.db%><br>
+                        aria-controls="dbTables">
+                        <% if(data.is_file){ %>
+                            <%= data.file_name%><br>
+                        <%  } else { %>
+                            <%= data.host%>: <%= data.db%><br>
+                        <% } %>
                     </a>
                 </div>
                 <div id="dbTables" class="panel-collapse collapse">
                     <% _.each(data.tables, function(table) { %>
                         <div class="col-sm-offset-1" id="<%= table.name %>"
-                                data-host="<%= data.host%>" data-db="<%= data.db %>" data-table="<%= table.name %>">
+                                data-source="<%= data.source_id %>" data-table="<%= table.name %>">
                             <input type="checkbox" class="checkbox-table"
                                    onclick="checkTable('<%= table.name %>')">&nbsp;&nbsp;
                                 <a class="collapsed fa fa-table" data-toggle="collapse"
@@ -686,6 +690,7 @@
     </script>
 
     <script>
+/*
 function refreshData(url){
 
     if(hasWithoutBinds()){
@@ -731,6 +736,7 @@ function refreshData(url){
         });
     }
 }
+*/
     </script>
 </body>
 </html>

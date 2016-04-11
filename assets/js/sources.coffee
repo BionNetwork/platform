@@ -221,8 +221,7 @@ tableToRight = (url) ->
     dataWorkspace.find('.result-col').remove()
     getColumns url,
       csrfmiddlewaretoken: csrftoken
-      host: selectedTable.attr('data-host')
-      db: selectedTable.attr('data-db')
+      sourceId: getSourceId()
       tables: JSON.stringify([ selectedTable.attr('data-table') ])
   return
 
@@ -234,8 +233,7 @@ tablesToRight = (url) ->
   divs = $('.checkbox-table:checked').closest('div')
   dict =
     csrfmiddlewaretoken: csrftoken
-    host: divs.attr('data-host')
-    db: divs.attr('data-db')
+    sourceId: getSourceId()
   tables = divs.map(->
     el = $(this)
     id = el.attr('id')
@@ -282,12 +280,12 @@ delCol = (id) ->
       return
   return
 
-getSourceInfo = ->
+getSourceId = ->
   source = $('#databases>div')
-  {
-    'host': source.data('host')
-    'db': source.data('db')
-  }
+  source.data 'source'
+
+getSourceInfo = ->
+  { sourceId: getSourceId() }
 
 tableToLeft = (url) ->
   if $('#button-toLeft').hasClass('disabled')
@@ -358,9 +356,7 @@ refreshData = (url) ->
   if hasWithoutBinds()
     return
   source = $('#databases>div')
-  colsInfo =
-    'host': source.data('host')
-    'db': source.data('db')
+  colsInfo = sourceId: getSourceId()
   cols = dataWorkspace.find('.data-table-column-header')
   array = cols.map(->
     el = $(this)

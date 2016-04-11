@@ -97,11 +97,7 @@ class Datasource(models.Model):
             return {
                 'name': get_utf8_string(self.name or ''),
                 'host': get_utf8_string(self.host or ''),
-                'login': get_utf8_string(self.login or ''),
-                'password': get_utf8_string(self.password or ''),
                 'db': get_utf8_string(self.db or ''),
-                'port': self.port or '',
-                'conn_type': self.conn_type,
                 'source_id': self.id,
                 'user_id': self.user_id,
                 'is_file': False,
@@ -109,9 +105,9 @@ class Datasource(models.Model):
         else:
             return {
                 'name': get_utf8_string(self.name or self.file.name),
-                'conn_type': self.conn_type,
                 'source_id': self.id,
                 'user_id': self.user_id,
+                'file_name': self.file.name,
                 'is_file': True,
             }
 

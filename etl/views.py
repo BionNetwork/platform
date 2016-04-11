@@ -257,8 +257,7 @@ class BaseEtlView(BaseView):
         method = request.GET if request.method == 'GET' else request.POST
         d = {
             "user_id": request.user.id,
-            "host": method.get('host', ''),
-            "db": method.get('db', '')
+            "id": method.get('sourceId'),
         }
         return Datasource.objects.get(**d)
 
