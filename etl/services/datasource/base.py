@@ -40,9 +40,9 @@ class DataSourceService(object):
         conn_type = source.conn_type
 
         if conn_type in cls.DB_TYPES:
-            return DatabaseService
+            return DatabaseService(source)
         elif conn_type in cls.FILE_TYPES:
-            return FileService
+            return FileService(source)
         else:
             raise ValueError("Неизвестный тип подключения!")
 
@@ -94,6 +94,7 @@ class DataSourceService(object):
         # кладем список таблиц в редис
         RedisSourceService.set_tables(source, tables)
 
+        # информация о источнике для фронта
         source_info = source.get_source_info()
         source_info["tables"] = tables
 
@@ -131,33 +132,33 @@ class DataSourceService(object):
         """
 
         if not settings.USE_REDIS_CACHE:
-                return []
+            return []
+
         service = cls.get_source_service(source)
+
+        # если информация о таблице уже есть в редисе, то просто достаем,
+        # иначе достаем новые таблицы и спрашиваем инфу по ним у источника
         new_tables, old_tables = RedisSourceService.filter_exists_tables(
             source, tables)
 
         if new_tables:
-            col_records, index_records, const_records = (
+            columns, indexes, foreigns, statistics, date_intervals = (
                 service.get_columns_info(new_tables))
 
-            stat_records = service.get_stats_info(new_tables)
-
-            new_tables_intervals = service.get_date_intervals(col_records)
-
-            cols, indexes, foreigns = service.processing_records(
-                col_records, index_records, const_records)
-
             RedisSourceService.insert_columns_info(
-                source, new_tables, cols, indexes,
-                foreigns, stat_records, new_tables_intervals)
+                source, new_tables, columns, indexes,
+                foreigns, statistics, date_intervals)
 
-        if old_tables:
-            # берем колонки старых таблиц
-            all_columns = service.fetch_tables_columns(tables)
-            old_tables_intervals = service.get_date_intervals(all_columns)
-            # актуализируем интервалы дат (min, max) для таблиц с датами
-            RedisSourceService.insert_date_intervals(
-                source, old_tables, old_tables_intervals)
+        # FIXME для старых таблиц, которые уже лежат в редисе,
+        # FIXME нужно ли актуализировать интервалы дат каждый раз
+
+        # if old_tables:
+        #     # берем колонки старых таблиц
+        #     all_columns = service.fetch_tables_columns(tables)
+        #     old_tables_intervals = service.get_date_intervals(all_columns)
+        #     # актуализируем интервалы дат (min, max) для таблиц с датами
+        #     RedisSourceService.insert_date_intervals(
+        #         source, old_tables, old_tables_intervals)
 
         # существование дерева
         tree_exists = RedisSourceService.check_tree_exists(
@@ -165,7 +166,8 @@ class DataSourceService(object):
 
         # работа с деревьями
         if not tree_exists:
-            trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
+            trees, without_bind = TableTreeRepository.build_trees(
+                tuple(tables), source)
             sel_tree = TablesTree.select_tree(trees)
 
             remains = without_bind[sel_tree.root.val]

@@ -17,61 +17,36 @@ from etl.services.source import DatasourceApi
 class DatabaseService(DatasourceApi):
     """Сервис для источников данных"""
 
-    def __init__(self, source):
-        super(DatabaseService, self).__init__(source=source)
-        self.connection = self.get_connection(source)
-
     def execute(self, query, args=None, many=False):
-        with self.connection:
-            with closing(self.connection.cursor()) as cursor:
+        with self.datasource.connection:
+            with closing(self.datasource.connection.cursor()) as cursor:
                 if not many:
                     cursor.execute(query, args)
                 else:
                     cursor.executemany(query, args)
 
-    @staticmethod
-    def factory(conn_type, connection):
+    def get_source_instance(self):
         """
         фабрика для инстанса бд
 
         Returns:
             etl.services.db.interfaces.Database
         """
+        source = self.source
+        conn_type = source.conn_type
 
         if conn_type == ConnectionChoices.POSTGRESQL:
-            return postgresql.Postgresql(connection)
+            return postgresql.Postgresql(source)
         elif conn_type == ConnectionChoices.MYSQL:
-            return mysql.Mysql(connection)
+            return mysql.Mysql(source)
         elif conn_type == ConnectionChoices.MS_SQL:
             import mssql
-            return mssql.MsSql(connection)
+            return mssql.MsSql(source)
         elif conn_type == ConnectionChoices.ORACLE:
             import oracle
-            return oracle.Oracle(connection)
+            return oracle.Oracle(source)
         else:
             raise ValueError("Неизвестный тип подключения!")
-
-    def get_source_instance(self):
-        """
-        инстанс бд соурса
-
-        Returns:
-            etl.services.db.interfaces.Database
-        """
-        connection = self.get_source_data()
-        conn_type = self.source.conn_type
-
-        return self.factory(conn_type, connection)
-
-    def get_source_data(self):
-        """
-        Возвращает список модели источника данных
-        Returns:
-            dict: словарь с информацией подключения
-        """
-        return {'db': self.source.db, 'host': self.source.host,
-                'port': self.source.port, 'login': self.source.login,
-                'password': self.source.password}
 
     def get_tables(self):
         """
@@ -81,7 +56,7 @@ class DatabaseService(DatasourceApi):
             list: список таблиц
         """
         source = self.source
-        tables = self.datasource.get_tables(source)
+        tables = self.datasource.get_tables()
 
         trigger_tables = DatasourcesJournal.objects.filter(
             trigger__datasource=source).values_list('name', flat=True)
@@ -92,29 +67,32 @@ class DatabaseService(DatasourceApi):
 
     def get_columns_info(self, tables):
         """
-            Получение списка колонок
+            Получение полной информации о колонках таблиц
         Args:
             source(core.models.Datasource): источник
             tables(list): список таблиц
 
         Returns:
-            list: список колонок, ограничений и индекксов таблицы
+            list: список колонок, индексов, FK-ограничений,
+            статистики, интервалов дат таблиц
         """
-        return self.datasource.get_columns_info(self.source, tables)
+        instance = self.datasource
+        source = self.source
+
+        col_records, index_records, const_records = (
+                instance.get_columns_info(source, tables))
+        statistics = instance.get_statistic(source, tables)
+        date_intervals = instance.get_intervals(source, col_records)
+
+        columns, indexes, foreigns = instance.processing_records(
+                col_records, index_records, const_records)
+
+        return columns, indexes, foreigns, statistics, date_intervals
 
     def fetch_tables_columns(self, tables):
         # возвращает список колонок таблиц
 
         return self.datasource.get_columns(self.source, tables)
-
-    def get_stats_info(self, tables):
-        """
-        Получение списка размера и кол-ва строк таблиц
-        :param source: Datasource
-        :param tables:
-        :return:
-        """
-        return self.datasource.get_statistic(self.source, tables)
 
     def get_date_intervals(self, cols_info):
         """

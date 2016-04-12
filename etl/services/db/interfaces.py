@@ -61,8 +61,23 @@ class Database(object):
     """
     db_map = None
 
-    def __init__(self, connection):
+    def __init__(self, source):
+        """
+        Присваиваем источник и устанавливаем подключение
+        """
+        self.source = source
+        connection = self.get_source_data()
         self.connection = self.get_connection(connection)
+
+    def get_source_data(self):
+        """
+        Возвращает список модели источника данных
+        Returns:
+            dict: словарь с информацией подключения
+        """
+        return {'db': self.source.db, 'host': self.source.host,
+                'port': self.source.port, 'login': self.source.login,
+                'password': self.source.password}
 
     @staticmethod
     def get_connection(conn_info):
@@ -330,7 +345,7 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
-    def get_tables(self, source):
+    def get_tables(self):
         """
         Получение списка таблиц
 
@@ -346,7 +361,7 @@ class Database(object):
                     ...
                 ]
         """
-        query = self.db_map.table_query.format(source.db)
+        query = self.db_map.table_query.format(self.source.db)
 
         records = self.get_query_result(query)
         return map(lambda x: {'name': x[0], }, records)
@@ -480,7 +495,7 @@ class Database(object):
         return {x[0].lower(): ({'count': int(x[1]), 'size': x[2]}
                 if (x[1] and x[2]) else None) for x in records}
 
-    def get_columns_info(self, source, tables):
+    def get_columns_info(self, tables):
         """
         Получение списка колонок в таблицах
 
@@ -500,8 +515,9 @@ class Database(object):
                 )
 
         """
+
         columns_query, consts_query, indexes_query = self._get_columns_query(
-            source, tables)
+            self.source, tables)
 
         col_records = self.get_query_result(columns_query)
         index_records = self.get_query_result(indexes_query)

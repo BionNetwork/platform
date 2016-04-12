@@ -17,8 +17,7 @@ class FileService(DatasourceApi):
 
         super(FileService, self).__init__(source)
 
-    @staticmethod
-    def factory(conn_type):
+    def get_source_instance(self):
         """
         Фабрика для инстанса файлов
 
@@ -29,8 +28,11 @@ class FileService(DatasourceApi):
             etl.services.files.interfaces.File
         """
 
+        source = self.source
+        conn_type = source.conn_type
+
         if conn_type == ConnectionChoices.EXCEL:
-            return Excel()
+            return Excel(source)
         elif conn_type == ConnectionChoices.CSV:
             return
         elif conn_type == ConnectionChoices.TXT:
@@ -38,13 +40,35 @@ class FileService(DatasourceApi):
         else:
             raise ValueError("Нефайловый тип подключения!")
 
-    def get_source_instance(self):
+    def get_tables(self):
         """
-        Инстанс файлового соурса
+        Возвращает таблицы источника
 
         Returns:
-            etl.services.db.interfaces.File
+            list: список таблиц
         """
-        conn_type = self.source.conn_type
+        return self.datasource.get_tables()
 
-        return self.factory(conn_type)
+    def get_columns_info(self, tables):
+        """
+            Получение полной информации о колонках таблиц
+        Args:
+            source(core.models.Datasource): источник
+            tables(list): список таблиц
+
+        Returns:
+            list: список колонок, индексов нет, FK-ограничений нет,
+            статистики, интервалов дат таблиц
+        """
+        instance = self.datasource
+        source = self.source
+
+        col_records, index_records, const_records = (
+                instance.get_columns_info(tables))
+        statistics = instance.get_statistic(source, tables)
+        date_intervals = instance.get_intervals(source, tables)
+
+        columns, indexes, foreigns = instance.processing_records(
+                col_records, index_records, const_records)
+
+        return columns, [], [], statistics, date_intervals

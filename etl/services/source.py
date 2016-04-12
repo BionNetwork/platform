@@ -16,15 +16,6 @@ class DatasourceApi(object):
         """
         raise NotImplementedError
 
-    def get_tables(self):
-        """
-        Возвращает таблицы источника
-
-        Returns:
-            list: список таблиц
-        """
-        return self.datasource.get_tables(self.source)
-
     def get_separator(self):
         raise NotImplementedError
 

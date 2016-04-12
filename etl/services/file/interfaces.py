@@ -7,7 +7,13 @@ class File(object):
     Базовый класс для источников файлового типа
     """
 
-    def get_tables(self, source):
+    def __init__(self, source):
+        """
+        Присваиваем источник
+        """
+        self.source = source
+
+    def get_tables(self):
         """
         Возвращает таблицы источника
 

@@ -16,15 +16,28 @@ class Excel(File):
     Класс для работы с Excel файлами
     """
 
-    def get_tables(self, source):
+    def get_tables(self):
         """
         Возвращает таблицы источника
 
         Returns:
             list: список таблиц
         """
-        file_path = source.file.path
+        file_path = self.source.file.path
         excel = xlrd.open_workbook(file_path)
 
         sheet_names = excel.sheet_names()
         return map(lambda x: {'name': x, }, sheet_names)
+
+    def get_columns_info(self, source, tables):
+        """
+        Получение списка колонок в таблицах
+
+        Args:
+            source(`Datasource`): источник
+            tables(list): список названий таблиц
+
+        Returns:
+            Кортеж из списков, в первом списке возвращаются колонки таблиц
+            вида [(table_name, col_name, type, length), ]
+        """
