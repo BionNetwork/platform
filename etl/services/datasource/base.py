@@ -742,6 +742,7 @@ class DataSourceService(object):
         service = LocalDatabaseService()
         return service.reload_datasource_trigger_query(params)
 
+    # FIXME: Удалить
     @staticmethod
     def get_date_table_names(col_type):
         """

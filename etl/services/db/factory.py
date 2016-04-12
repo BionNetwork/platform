@@ -290,6 +290,7 @@ class LocalDatabaseService(object):
         """
         return self.datasource.reload_datasource_trigger_query(params)
 
+    # FIXME удалить
     def get_date_table_names(self, col_type):
         """
         Получене запроса на создание таблицы даты
@@ -368,6 +369,10 @@ class LocalDatabaseService(object):
     def date_select(self, table_name):
         query = self.datasource.get_select_dates_query(table_name)
         return self.fetchall(query)
+
+    def delete(self, table_name, records):
+        query = self.datasource.cdc_key_delete_query(table_name)
+        self.execute(query, records)
 
     def create_date_tables(self, time_table_name, meta_info, is_update):
         """
