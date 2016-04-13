@@ -79,12 +79,11 @@ class DatabaseService(DatasourceApi):
             статистики, интервалов дат таблиц
         """
         instance = self.datasource
-        source = self.source
 
         col_records, index_records, const_records = (
-                instance.get_columns_info(source, tables))
-        statistics = instance.get_statistic(source, tables)
-        date_intervals = instance.get_intervals(source, col_records)
+                instance.get_columns_info(tables))
+        statistics = instance.get_statistic(tables)
+        date_intervals = instance.get_intervals(col_records)
 
         columns, indexes, foreigns = instance.processing_records(
                 col_records, index_records, const_records)

@@ -49,11 +49,10 @@ class FileService(DatasourceApi):
         """
         return self.datasource.get_tables()
 
-    def get_columns_info(self, tables):
+    def get_columns_info(self, sheets):
         """
             Получение полной информации о колонках таблиц
         Args:
-            source(core.models.Datasource): источник
             tables(list): список таблиц
 
         Returns:
@@ -63,12 +62,15 @@ class FileService(DatasourceApi):
         instance = self.datasource
         source = self.source
 
-        col_records, index_records, const_records = (
-                instance.get_columns_info(tables))
-        statistics = instance.get_statistic(source, tables)
-        date_intervals = instance.get_intervals(source, tables)
+        columns = instance.get_columns_info(sheets)
 
-        columns, indexes, foreigns = instance.processing_records(
-                col_records, index_records, const_records)
+        statistics = instance.get_statistic(sheets)
 
-        return columns, [], [], statistics, date_intervals
+        date_intervals = instance.get_intervals(sheets)
+
+        print date_intervals
+
+        # columns, indexes, foreigns = instance.processing_records(
+        #         col_records, index_records, const_records)
+        #
+        # return columns, [], [], statistics, date_intervals

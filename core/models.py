@@ -89,6 +89,11 @@ class Datasource(models.Model):
         # признак источника-файла
         return self.conn_type in [CC.EXCEL, CC.CSV, CC.TXT, ]
 
+    def get_file_path(self):
+        # возвращает полный путь файла
+        if self.is_file:
+            return self.file.path
+
     def get_source_info(self):
         """
         Инфа соурса

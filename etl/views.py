@@ -262,18 +262,18 @@ class BaseEtlView(BaseView):
         return Datasource.objects.get(**d)
 
     def get(self, request, *args, **kwargs):
-        try:
+        # try:
             return self.request_method(request, *args, **kwargs)
-        # TODO: Надо убрать Exception
-        except Exception as e:
-            return self.json_response({'status': 'error', 'message': e.message})
+        # # TODO: Надо убрать Exception
+        # except Exception as e:
+        #     return self.json_response({'status': 'error', 'message': e.message})
 
     def post(self, request, *args, **kwargs):
-        try:
+        # try:
             return self.request_method(request, *args, **kwargs)
-        # TODO: Надо убрать Exception
-        except Exception as e:
-            return self.json_response({'status': 'error', 'message': e.message})
+        # # TODO: Надо убрать Exception
+        # except Exception as e:
+        #     return self.json_response({'status': 'error', 'message': e.message})
 
     def request_method(self, request, *args, **kwargs):
         """
@@ -283,22 +283,22 @@ class BaseEtlView(BaseView):
         :param kwargs: dict
         :return: string
         """
-        try:
-            source = self.try_to_get_source(request)
-            if request.method == 'GET':
-                data = self.start_get_action(request, source)
-            else:
-                data = self.start_post_action(request, source)
-            return self.json_response(
-                    {'status': SUCCESS, 'data': data, 'message': ''})
-        except (Datasource.DoesNotExist, ResponseError) as err:
-            return self.json_response(
-                {'status': ERROR, 'code': err.code, 'message': err.message})
-        except Exception as e:
-            logger.exception(e.message)
-            return self.json_response({
-                'status': ERROR,
-                'message': 'Произошла непредвиденная ошибка'})
+        # try:
+        source = self.try_to_get_source(request)
+        if request.method == 'GET':
+            data = self.start_get_action(request, source)
+        else:
+            data = self.start_post_action(request, source)
+        return self.json_response(
+                {'status': SUCCESS, 'data': data, 'message': ''})
+        # except (Datasource.DoesNotExist, ResponseError) as err:
+        #     return self.json_response(
+        #         {'status': ERROR, 'code': err.code, 'message': err.message})
+        # except Exception as e:
+        #     logger.exception(e.message)
+        #     return self.json_response({
+        #         'status': ERROR,
+        #         'message': 'Произошла непредвиденная ошибка'})
 
     def start_get_action(self, request, source):
         """

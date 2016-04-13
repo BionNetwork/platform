@@ -366,21 +366,6 @@ class Database(object):
         records = self.get_query_result(query)
         return map(lambda x: {'name': x[0], }, records)
 
-    @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        строка для статистики таблицы
-
-        Args:
-             source(`Datasource`): источник
-             tables(list): Список таблиц
-
-        Returns:
-            str: Строка запроса для получения статистичеких данных
-        """
-        tables_str = cls.get_tables_str(tables)
-        return cls.db_map.stat_query.format(tables_str, source.db)
-
     @staticmethod
     def remote_table_create_query():
         """
@@ -402,23 +387,26 @@ class Database(object):
 
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
-    def get_statistic(self, source, tables):
+    def get_statistic(self, tables):
         """
         возвращает статистику таблиц
 
         Args:
-            source('Datasource'): источник
             tables(list): Список таблиц
 
         Returns:
-            dict: Статистические данные. Формат ответа см.`processing_statistic`
+            dict: Статистические данные
+            {'table_name': ({'count': кол-во строк, 'size': объем памяти строк)}
         """
-        stats_query = self.get_statistic_query(source, tables)
+
+        tables_str = self.get_tables_str(tables)
+        stats_query = self.db_map.stat_query.format(tables_str, self.source.db)
         stat_records = self.get_query_result(stats_query)
+
         return self.processing_statistic(stat_records)
 
     @classmethod
-    def get_interval_query(cls, source, cols_info):
+    def get_interval_query(cls, cols_info):
         """
         список запросов на min max значений для колонок с датами
 
@@ -435,7 +423,7 @@ class Database(object):
                 intervals_query.append([table, col_name, query])
         return intervals_query
 
-    def get_intervals(self, source, cols_info):
+    def get_intervals(self, cols_info):
         """
         Возращается список интервалов для полей типа Дата
 
@@ -446,25 +434,17 @@ class Database(object):
         Returns:
             dict: Информация о крайних значениях дат
         """
-        res = {}
-        interval_queries = self.get_interval_query(source, cols_info)
+        res = defaultdict(list)
+        interval_queries = self.get_interval_query(cols_info)
         now = time.mktime(datetime.datetime.now().timetuple())
         for table, col, query in interval_queries:
             start_date, end_date = self.get_query_result(query)[0]
-            if res.get(table, None):
-                res[table].append({
-                    'last_updated': now,
-                    'name': col,
-                    'startDate': start_date,
-                    'endDate': end_date,
-                })
-            else:
-                res[table] = [{
-                    'last_updated': now,
-                    'name': col,
-                    'startDate': start_date,
-                    'endDate': end_date,
-                }]
+            res[table].append({
+                'last_updated': now,
+                'name': col,
+                'startDate': start_date,
+                'endDate': end_date,
+            })
         return res
 
     @staticmethod
