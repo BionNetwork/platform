@@ -6,8 +6,10 @@ import math
 
 from datetime import timedelta, datetime
 from django.conf import settings
+from django.db import transaction
 
-from core.models import (ConnectionChoices, DatasourcesJournal)
+from core.models import (ConnectionChoices, DatasourcesJournal, Datasource,
+                         DatasourcesTrigger)
 from etl.constants import DATE_TABLE_COLS_LEN
 from etl.services.db import mysql, postgresql
 # from etl.services.queue.base import DTCN
@@ -104,15 +106,6 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_intervals(self.source, cols_info)
 
-    # FIXME: Удалить
-    def get_rows_query(self, cols, structure):
-        """
-        Получение запроса выбранных колонок из указанных таблиц выбранного источника
-        :param source: Datasource
-        :return:
-        """
-        return self.datasource.get_rows_query(cols, structure)
-
     def get_rows(self, cols, structure):
         """
         Получение значений выбранных колонок из указанных таблиц и выбранного источника
@@ -122,15 +115,6 @@ class DatabaseService(DatasourceApi):
         :return:
         """
         return self.datasource.get_rows(cols, structure)
-
-    def get_generated_joins(self, source, structure):
-        """
-        связи таблиц
-        :param source: Datasource
-        :param structure: dict
-        :return: str
-        """
-        return self.datasource.generate_join(structure)
 
     @classmethod
     def get_connection(cls, source):
@@ -158,48 +142,6 @@ class DatabaseService(DatasourceApi):
             raise ValueError("Сбой при подключении!")
         return conn
 
-    def processing_records(self, col_records, index_records, const_records):
-        """
-        обработка колонок, констраинтов, индексов соурса
-        :param col_records: str
-        :param index_records: str
-        :param const_records: str
-        :return: tuple
-        """
-        return self.datasource.processing_records(col_records, index_records, const_records)
-
-    @classmethod
-    def get_local_connection_dict(cls):
-        """
-        возвращает словарь параметров подключения
-        к локальному хранилищу данных(Postgresql)
-        :rtype : dict
-        :return:
-        """
-        db_info = settings.DATABASES['default']
-        return {
-            'host': db_info['HOST'], 'db': db_info['NAME'],
-            'login': db_info['USER'], 'password': db_info['PASSWORD'],
-            'port': str(db_info['PORT']),
-            # жестко постгрес
-            'conn_type': ConnectionChoices.POSTGRESQL,
-        }
-
-    @classmethod
-    def get_local_instance(cls):
-        """
-        возвращает инстанс локального хранилища данных(Postgresql)
-        :rtype : object Postgresql()
-        :return:
-        """
-        local_data = cls.get_local_connection_dict()
-        instance = cls.factory(**local_data)
-        return instance
-
-    # fixme: не использутеся
-    def get_separator(self):
-        return self.datasource.get_separator()
-
     def get_structure_rows_number(self, structure, cols):
         """
         возвращает примерное кол-во строк в запросе селекта для планирования
@@ -210,40 +152,11 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_structure_rows_number(structure, cols)
 
-    def get_remote_table_create_query(self):
-        """
-        возвращает запрос на создание таблицы в БД клиента
-        """
-        return self.datasource.remote_table_create_query()
-
-    def get_remote_triggers_create_query(self):
-        """
-        возвращает запрос на создание григгеров в БД клиента
-        """
-        return self.datasource.remote_triggers_create_query()
-
     def get_fetchall_result(self, connection, query, *args, **kwargs):
         """
         возвращает результат fetchall преобразованного запроса с аргументами
         """
         return self.datasource.get_fetchall_result(connection, query, *args, **kwargs)
-
-    def get_processed_for_triggers(self, source, columns):
-        """
-        Получает инфу о колонках, возвращает преобразованную инфу
-        для создания триггеров
-        """
-        return self.datasource.get_processed_for_triggers(columns)
-
-    def get_processed_indexes(self, source, indexes):
-        """
-        Получает инфу об индексах, возвращает преобразованную инфу
-        для создания триггеров
-        """
-        return self.datasource.get_processed_indexes(indexes)
-
-    def get_required_indexes(self, source):
-        return self.datasource.get_required_indexes()
 
     def get_source_rows(self, structure, cols, limit=None, offset=None):
         """
@@ -251,7 +164,211 @@ class DatabaseService(DatasourceApi):
         """
 
         query = self.datasource.get_rows_query(cols, structure)
-        return self.get_fetchall_result(self.connection, query, limit=limit, offset=offset)
+        return self.get_fetchall_result(
+            self.datasource.connection, query, limit=limit, offset=offset)
+
+    def create_triggers(self, tables_info):
+        sep = self.datasource.get_separator()
+
+        remote_table_create_query = self.datasource.remote_table_create_query()
+        remote_triggers_create_query = self.datasource.remote_triggers_create_query()
+
+        connection = self.datasource.connection
+        cursor = connection.cursor()
+
+        for table, columns in tables_info.iteritems():
+
+            table_name = '_etl_{0}'.format(table)
+            tables_str = "('{0}')".format(table_name)
+
+            cdc_cols_query = self.datasource.db_map.cdc_cols_query.format(
+                tables_str, self.source.db, 'public')
+
+            cursor.execute(cdc_cols_query)
+            fetched_cols = cursor.fetchall()
+
+            existing_cols = {k: v for (k, v) in fetched_cols}
+
+            REQUIRED_INDEXES = self.datasource.get_required_indexes()
+
+            required_indexes = {k.format(table_name): v
+                                for k, v in REQUIRED_INDEXES.iteritems()}
+
+            for_triggers = self.datasource.get_processed_for_triggers(columns)
+            cols_str = for_triggers['cols_str']
+
+            # если таблица существует
+            if existing_cols:
+                # удаление primary key, если он есть
+                primary_query = self.datasource.get_primary_key(
+                    table_name, self.source.db)
+                cursor.execute(primary_query)
+                primary = cursor.fetchall()
+
+                if primary:
+                    primary_name = primary[0][0]
+                    del_pr_query = self.datasource.delete_primary_query(
+                        table_name, primary_name)
+                    cursor.execute(del_pr_query)
+
+                # добавление недостающих колонок, не учитывая cdc-колонки
+                new_came_cols = [
+                    {
+                        'col_name': x['name'],
+                        'col_type': x["type"],
+                        'max_length': '({0})'.format(x['max_length'])
+                            if x['max_length'] is not None else '',
+                        'nullable': 'not null' if x['is_nullable'] == 'NO' else ''
+                    }
+                    for x in columns]
+
+                diff_cols = [x for x in new_came_cols
+                             if x['col_name'] not in existing_cols]
+
+                add_col_q = self.datasource.db_map.add_column_query
+                del_col_q = self.datasource.db_map.del_column_query
+
+                for d_col in diff_cols:
+                    cursor.execute(add_col_q.format(
+                        table_name,
+                        d_col['col_name'],
+                        d_col['col_type'],
+                        d_col['max_length'],
+                        d_col['nullable']
+                    ))
+                    connection.commit()
+
+                # проверка cdc-колонок на существование и типы
+                cdc_required_types = self.datasource.db_map.cdc_required_types
+
+                for cdc_k, v in cdc_required_types.iteritems():
+                    if cdc_k not in existing_cols:
+                        cursor.execute(add_col_q.format(
+                            table_name, cdc_k, v["type"], "", v["nullable"]))
+                    else:
+                        # если типы не совпадают
+                        if not existing_cols[cdc_k].startswith(v["type"]):
+                            cursor.execute(del_col_q.format(table_name, cdc_k))
+                            cursor.execute(add_col_q.format(
+                                table_name, cdc_k, v["type"], "", v["nullable"]))
+
+                connection.commit()
+
+                # проверяем индексы на колонки и существование,
+                # лишние индексы удаляем
+
+                indexes_query = self.datasource.db_map.indexes_query.format(
+                    tables_str, self.source.db)
+                cursor.execute(indexes_query)
+                exist_indexes = cursor.fetchall()
+
+                exist_indexes = self.datasource.get_processed_indexes(
+                    exist_indexes)
+
+                index_cols_i, index_name_i = 0, 1
+
+                create_index_q = self.datasource.db_map.create_index_query
+                drop_index_q = self.datasource.db_map.drop_index_query
+
+                allright_index_names = []
+
+                for index in exist_indexes:
+                    index_name = index[index_name_i]
+
+                    if index_name not in required_indexes:
+                        cursor.execute(drop_index_q.format(index_name, table_name))
+                    else:
+                        index_cols = sorted(index[index_cols_i].split(','))
+                        if index_cols != required_indexes[index_name]:
+
+                            cursor.execute(drop_index_q.format(index_name, table_name))
+                            cursor.execute(create_index_q.format(
+                                index_name, table_name,
+                                ','.join(
+                                    ['{0}{1}{0}'.format(sep, x)
+                                     for x in required_indexes[index_name]]),
+                                self.source.db))
+
+                        allright_index_names.append(index_name)
+
+                diff_indexes_names = [
+                    x for x in required_indexes if x not in allright_index_names]
+
+                for d_index in diff_indexes_names:
+                    cursor.execute(
+                        create_index_q.format(
+                            d_index, table_name,
+                            ','.join(['{0}{1}{0}'.format(sep, x)
+                                      for x in required_indexes[d_index]])))
+
+                connection.commit()
+
+            # если таблица не существует
+            else:
+                # создание таблицы у юзера
+                cursor.execute(remote_table_create_query.format(
+                    table_name, cols_str))
+
+                # создание индексов
+                create_index_q = self.datasource.db_map.create_index_query
+
+                for index_name, index_cols in required_indexes.iteritems():
+
+                    index_cols = [
+                        '{0}{1}{0}'.format(sep, x) for x in index_cols]
+
+                    cursor.execute(create_index_q.format(
+                        index_name, table_name,
+                        ','.join(index_cols), self.source.db))
+
+                connection.commit()
+
+            trigger_names = self.datasource.get_remote_trigger_names(table)
+            drop_trigger_query = self.datasource.db_map.drop_remote_trigger
+
+            trigger_commands = remote_triggers_create_query.format(
+                orig_table=table, new_table=table_name,
+                new=for_triggers['new'],
+                old=for_triggers['old'],
+                cols=for_triggers['cols'])
+
+            # multi queries of mysql, delimiter $$
+            for i, create_trigger_query in enumerate(trigger_commands.split('$$')):
+
+                trigger_name = trigger_names.get("trigger_name_{0}".format(i))
+
+                trigger = DatasourcesTrigger.objects.filter(
+                    name=trigger_name, collection_name=table,
+                    datasource=self.source)
+
+                if not trigger.exists():
+
+                    # удаляем старый триггер
+                    cursor.execute(drop_trigger_query.format(
+                        trigger_name=trigger_name, orig_table=table,
+                    ))
+
+                    # создаем новый триггер
+                    cursor.execute(create_trigger_query)
+
+                    with transaction.atomic():
+                        # создаем запись о триггере
+                        source_trigger = DatasourcesTrigger(
+                            name=trigger_name, collection_name=table,
+                            datasource=self.source,
+                        )
+                        source_trigger.src = create_trigger_query
+                        source_trigger.save()
+
+                        # создаем запись о триггере для remote источника
+                        DatasourcesJournal.objects.create(
+                            name=table_name, collection_name=table,
+                            trigger=source_trigger,
+                        )
+
+                    connection.commit()
+        cursor.close()
+        connection.close()
 
 
 class LocalDatabaseService(object):
@@ -267,8 +384,9 @@ class LocalDatabaseService(object):
             'login': db_info['USER'], 'password': db_info['PASSWORD'],
             'port': str(db_info['PORT']),
         }
-
-        return postgresql.Postgresql(params)
+        source = Datasource()
+        source.set_from_dict(**params)
+        return postgresql.Postgresql(source)
 
     def execute(self, query, args=None, many=False):
         with self.datasource.connection:
@@ -284,76 +402,17 @@ class LocalDatabaseService(object):
                 cursor.execute(query, kwargs)
                 return cursor.fetchall()
 
-    def reload_datasource_trigger_query(self, params):
-        """
-        запрос на создание триггеров в БД локально для размерностей и мер
-        """
-        return self.datasource.reload_datasource_trigger_query(params)
-
-    # FIXME удалить
-    def get_date_table_names(self, col_type):
-        """
-        Получене запроса на создание таблицы даты
-        """
-        return self.datasource.get_date_table_names(col_type)
-
-    # FIXME удалить
-    def get_table_create_col_names(self, fields, time_table_name):
-        return self.datasource.get_table_create_col_names(fields, time_table_name)
-
-    def cdc_key_delete_query(self, table_name):
-        return self.datasource.cdc_key_delete_query(table_name)
-
-    def get_table_create_query(self, table_name, cols_str):
-        """
-        Получение запроса на создание новой таблицы
-        для локального хранилища данных
-        :param table_name: str
-        :param cols_str: str
-        :return: str
-        """
-        return self.datasource.local_table_create_query(table_name, cols_str)
-
     def check_table_exists_query(self, local_instance, table, db):
         """
         Проверка на существование таблицы
         """
         return self.datasource.check_table_exists_query(table, db)
 
-    def get_page_select_query(self, table_name, cols):
-        """
-        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
-
-        Args:
-            table_name(unicode): Название таблицы
-            cols(list): Список получаемых колонок
-        """
-        return self.datasource.get_page_select_query(table_name, cols)
-
-    # FIXME Удалить
-    def get_select_dates_query(self, date_table):
-        """
-        Получение всех дат из таблицы дат
-        """
-        return self.datasource.get_select_dates_query(date_table)
-
-    # FIXME Удалить
-    def get_table_insert_query(self, table_name, cols_num):
-        """
-        Запрос на добавление в новую таблицу локал хранилища
-
-        Args:
-            table_name(str): Название таблиц
-            cols_num(int): Число столбцов
-        Returns:
-            str: Строка на выполнение
-        """
-        return self.datasource.local_table_insert_query(table_name, cols_num)
-
     def create_time_table(self, time_table_name):
+        from etl.services.queue.base import DTCN
         cols = ', '.join(self.datasource.get_date_table_names(DTCN.types))
         query = self.datasource.local_table_create_query(time_table_name, cols)
-        self.execute(query, many=True)
+        self.execute(query)
 
     def create_sttm_table(self, sttm_table_name, time_table_name, processed_cols):
         col_names = self.datasource.get_table_create_col_names(
@@ -370,9 +429,29 @@ class LocalDatabaseService(object):
         query = self.datasource.get_select_dates_query(table_name)
         return self.fetchall(query)
 
+    def page_select(self, table_name, col_names, limit, offset):
+        query = self.datasource.get_page_select_query(table_name, col_names)
+        return self.fetchall(query, limit=limit, offset=offset)
+
     def delete(self, table_name, records):
         query = self.datasource.cdc_key_delete_query(table_name)
         self.execute(query, records)
+
+    def reload_trigger(self, trigger_name, orig_name, new_table, column_names):
+        sep = self.datasource.get_separator()
+        insert_cols = ['NEW.{1}{0}{1}'.format(col, sep) for col in column_names]
+        select_cols = ['{1}{0}{1}'.format(col, sep) for col in column_names]
+        query_params = dict(
+            trigger_name=trigger_name,
+            new_table=new_table,
+            orig_table=orig_name,
+            del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
+            insert_cols=','.join(insert_cols),
+            cols="({0})".format(','.join(select_cols)),
+        )
+        query = self.datasource.reload_datasource_trigger_query(query_params)
+        self.execute(query)
+        return query
 
     def create_date_tables(self, time_table_name, meta_info, is_update):
         """
@@ -481,6 +560,8 @@ class LocalDatabaseService(object):
                 start_date, delta.days + 1, 0)
             date_tables.update(date_ids)
             self.local_insert(time_table_name, DATE_TABLE_COLS_LEN, records)
+
+        return date_ids
 
     def prepare_dates_records(self, start_date, days_count, max_id):
         # список рекордов для таблицы дат

@@ -13,7 +13,6 @@ import math
 import requests
 from psycopg2 import errorcodes
 from etl.constants import *
-from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.middleware.base import EtlEncoder
 from pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema,
@@ -28,7 +27,6 @@ from core.models import (
     DatasetStateChoices, DatasourcesTrigger, DatasourcesJournal)
 from django.conf import settings
 from django.core.urlresolvers import reverse
-from django.db import transaction
 from djcelery import celery
 from itertools import groupby, izip
 from etl.services.queue.base import *
@@ -137,8 +135,8 @@ class LoadMongodb(TaskProcessing):
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
         # общее количество строк в запросе
-        rows_count, loaded_count = DataSourceService.get_structure_rows_number(
-            source, structure,  cols), 0
+        rows_count, loaded_count = source_service.get_structure_rows_number(
+            structure,  cols), 0
         self.publisher.rows_count = rows_count
         self.publisher.publish(TLSE.START)
 
@@ -231,8 +229,7 @@ class LoadDb(TaskProcessing):
         self.publisher.rows_count = self.context['rows_count']
         self.publisher.publish(TLSE.START)
 
-        source_service = DataSourceService.get_source_service(source)
-        local_db_service = LocalDatabaseService()
+        local_db_service = DataSourceService.get_local_instance()
 
         processed_cols, clear_col_names, date_fields = self.get_processed_cols(
             cols, col_types)
@@ -243,7 +240,7 @@ class LoadDb(TaskProcessing):
 
         # работа с таблицей дат
         date_tables = local_db_service.create_date_tables(
-            time_table_name, self.context['meta_info'], self.db_update)
+            time_table_name, json.loads(self.context['meta_info']), self.db_update)
 
         if not self.db_update:
             # создаем таблицу sttm_datasource_
@@ -368,152 +365,6 @@ class LoadDb(TaskProcessing):
 
         return processed_cols, clear_col_names, date_fields
 
-    # def create_date_tables(self):
-    #     """
-    #     Создание таблиц дат
-    #
-    #     Args:
-    #         date_intervals_info(list):
-    #             Список данных об интервалах дат в таблицах
-    #         ::
-    #             [
-    #                 (
-    #                     <table_name1>,
-    #                     [
-    #                         {'startDate': <start_date1>, 'endDate': <end_date1>,
-    #                         'name': <col_name1>},
-    #                         ...
-    #                     ]
-    #                 )
-    #                 ...
-    #             ]
-    #     """
-    #
-    #     self.date_tables = {}
-    #
-    #     date_intervals_info = fetch_date_intervals(
-    #             json.loads(self.context['meta_info']))
-    #     # список всех интервалов
-    #     intervals = reduce(
-    #         lambda x, y: x[1]+y[1], date_intervals_info, ['', []])
-    #
-    #     if not intervals:
-    #         return
-    #
-    #     # если имеются колонки с типом дата
-    #     insert_query = DataSourceService.get_table_insert_query(
-    #         self.get_table(TIME_TABLE), DATE_TABLE_COLS_LEN)
-    #     insert_db_connect = LocalDbConnect(insert_query, execute=False)
-    #
-    #     # как минимум создадим таблицу с 1 записью c id = 0
-    #     # для пустых значений, если новая закачка
-    #     if not self.db_update:
-    #         LocalDbConnect(DataSourceService.get_table_create_query(
-    #             self.get_table(TIME_TABLE),
-    #             ', '.join(DataSourceService.get_date_table_names(DTCN.types))))
-    #
-    #         none_row = {'0': 0}
-    #         none_row.update({str(x): None for x in range(1, DATE_TABLE_COLS_LEN)})
-    #         insert_db_connect.execute([none_row], many=True)
-    #
-    #     # если в таблице в колонке все значения дат пустые, то
-    #     # startDate и endDate = None, отфильтруем
-    #     not_none_intervals = [
-    #         i for i in intervals if i['startDate'] is not None and
-    #         i['endDate'] is not None
-    #     ]
-    #
-    #     if not not_none_intervals:
-    #         return
-    #     # если имеются численные интервалы
-    #     # новые границы дат, пришедшие с пользователя
-    #     start_date = min(
-    #         [datetime.strptime(interval['startDate'], "%d.%m.%Y").date()
-    #          for interval in not_none_intervals])
-    #     end_date = max(
-    #         [datetime.strptime(interval['endDate'], "%d.%m.%Y").date()
-    #          for interval in not_none_intervals])
-    #
-    #     delta = end_date - start_date
-    #
-    #     # первое заполнение таблицы дат
-    #     if not self.db_update:
-    #         # +1 потому start_date тоже суем
-    #         records = self.prepare_dates_records(
-    #             start_date, delta.days + 1, 0)
-    #
-    #         insert_db_connect.execute(records, many=True)
-    #
-    #     # update таблицы дат
-    #     else:
-    #         select_dates_query = DatabaseService.get_select_dates_query(
-    #             self.get_table(TIME_TABLE))
-    #         dates_db_connect = LocalDbConnect(select_dates_query, execute=False)
-    #         db_exists_dates = dates_db_connect.fetchall()
-    #
-    #         exists_dates = {x[0].strftime("%d.%m.%Y"): x[1] for x in db_exists_dates}
-    #
-    #         self.date_tables = exists_dates
-    #
-    #         # если в таблице дат имелись записи кроме id = 0
-    #         if exists_dates:
-    #             max_id = max(exists_dates.itervalues())
-    #             dates_list = [x[0] for x in db_exists_dates]
-    #             exist_min_date = min(dates_list)
-    #             exist_max_date = max(dates_list)
-    #
-    #             min_delta = (exist_min_date - start_date).days
-    #
-    #             if min_delta > 0:
-    #                 records = self.prepare_dates_records(
-    #                     start_date, min_delta, max_id)
-    #
-    #                 insert_db_connect.execute(records, many=True)
-    #
-    #                 max_id += min_delta
-    #
-    #             max_delta = (end_date - exist_max_date).days
-    #
-    #             if max_delta > 0:
-    #                 records = self.prepare_dates_records(
-    #                     exist_max_date+timedelta(days=1), max_delta, max_id)
-    #
-    #                 insert_db_connect.execute(records, many=True)
-    #
-    #                 max_id += max_delta
-    #
-    #         # если в таблице дат имелся только 1 запись с id = 0
-    #         else:
-    #             # +1 потому start_date тоже суем
-    #             records = self.prepare_dates_records(
-    #                 start_date, delta.days + 1, 0)
-    #
-    #             insert_db_connect.execute(records, many=True)
-    #
-    # def prepare_dates_records(self, start_date, days_count, max_id):
-    #     # список рекордов для таблицы дат
-    #     records = []
-    #     for day_delta in range(days_count):
-    #         current_day = start_date + timedelta(days=day_delta)
-    #         current_day_str = current_day.isoformat()
-    #         month = current_day.month
-    #         records.append({
-    #                 '0': max_id + day_delta + 1,
-    #                 '1': current_day_str,
-    #                 '2': calendar.day_name[current_day.weekday()],
-    #                 '3': current_day.year,
-    #                 '4': month,
-    #                 '5': current_day.strftime('%B'),
-    #                 '6': current_day.day,
-    #                 '7': current_day.isocalendar()[1],
-    #                 '8': int(math.ceil(float(month) / 3)),
-    #
-    #              })
-    #         self.date_tables.update(
-    #             {current_day.strftime("%d.%m.%Y"): max_id + day_delta + 1})
-    #
-    #     return records
-
 
 class LoadDimensions(TaskProcessing):
     """
@@ -554,7 +405,7 @@ class LoadDimensions(TaskProcessing):
 
     def processing(self):
 
-        self.update_dataset()
+        # self.update_dataset()
 
         self.key = self.context['checksum']
         # Наполняем контекст
@@ -568,17 +419,12 @@ class LoadDimensions(TaskProcessing):
             'meta__collection_name', 'meta__fields', 'meta__stats')
         self.actual_fields = self.get_actual_fields(meta_data)
 
-        local_db_service = LocalDatabaseService()
+        self.local_db_service = DataSourceService.get_local_instance()
 
         if not self.context['db_update']:
 
-            # create_col_names = DataSourceService.get_table_create_col_names(
-            #     self.actual_fields, self.key)
-            # LocalDbConnect(DataSourceService.get_table_create_query(
-            #     self.get_table(self.table_prefix), ', '.join(create_col_names)))
-
-            local_db_service.create_sttm_table(
-                self.table_prefix, self.get_table(TIME_TABLE), self.actual_fields)
+            self.local_db_service.create_sttm_table(
+                self.get_table(self.table_prefix), self.get_table(TIME_TABLE), self.actual_fields)
 
             try:
                 self.save_fields()
@@ -698,17 +544,13 @@ class LoadDimensions(TaskProcessing):
         # инфа о бинарных данных для инсерта в постгрес
         binary_types_dict = get_binary_types_dict(dim_meas_cols, col_types)
 
-        local_insert = LocalDbConnect(DataSourceService.get_table_insert_query(
-            self.get_table(self.table_prefix), col_nums), execute=False)
-
-        step, offset = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT, 0
-        source_connect = LocalDbConnect(DataSourceService.get_page_select_query(
-            self.get_table(STTM_DATASOURCE), column_names), execute=False)
+        limit, offset = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT, 0
 
         while True:
-            # local_db_service.get_source_rows(
-            #     structure, cols, limit=limit, offset=(page-1)*limit)
-            rows = source_connect.fetchall(limit=step, offset=offset)
+            rows = self.local_db_service.page_select(
+                self.get_table(STTM_DATASOURCE), column_names,
+                limit=limit, offset=offset)
+
             if not rows:
                 break
             rows_dict = []
@@ -718,13 +560,14 @@ class LoadDimensions(TaskProcessing):
                     temp_dict.update({str(ind): record[ind]})
 
                 rows_dict.append(temp_dict)
-            local_insert.execute(self.binary_wrap(
-                rows_dict, binary_types_dict), many=True)
+            rows = self.binary_wrap(rows_dict, binary_types_dict)
+            self.local_db_service.local_insert(
+                self.get_table(self.table_prefix), col_nums, rows)
             loaded_count += len(rows_dict)
             print ('inserted %d %s to database. '
                    'Total inserted %s/%s.' % (
                     len(rows_dict), self.table_prefix, loaded_count, rows_count))
-            offset += step
+            offset += limit
 
             self.queue_storage.update()
 
@@ -745,28 +588,12 @@ class LoadDimensions(TaskProcessing):
         if not trigger.exists():
 
             local_instance = DataSourceService.get_local_instance()
-            sep = local_instance.get_separator()
 
             column_names = ['cdc_key'] + self.get_splitted_table_column_names()
-            insert_cols = []
-            select_cols = []
-            for col in column_names:
-                insert_cols.append('NEW.{1}{0}{1}'.format(col, sep))
-                select_cols.append('{1}{0}{1}'.format(col, sep))
 
-            query_params = dict(
-                trigger_name=trigger_name,
-                new_table=self.get_table(self.table_prefix),
-                orig_table=orig_table_name,
-                del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
-                insert_cols=','.join(insert_cols),
-                cols="({0})".format(','.join(select_cols)),
-            )
-
-            reload_trigger_query = (
-                DataSourceService.reload_datasource_trigger_query(query_params))
-
-            LocalDbConnect(reload_trigger_query).execute()
+            reload_trigger_query = local_instance.reload_trigger(
+                trigger_name=trigger_name, orig_table=orig_table_name,
+                new_table=self.get_table(self.table_prefix), column_names=column_names)
 
             # создаем запись о триггере
             DatasourcesTrigger.objects.create(
@@ -845,9 +672,9 @@ class UpdateMongodb(TaskProcessing):
         source = Datasource.objects.get(**self.context['source'])
         meta_info = json.loads(self.context['meta_info'])
 
-        rows_count, loaded_count = DataSourceService.get_structure_rows_number(
-            source, structure,  cols), 0
         source_service = DataSourceService.get_source_service(source)
+        rows_count, loaded_count = source_service.get_structure_rows_number(
+            structure,  cols), 0
 
         # общее количество строк в запросе
         self.publisher.rows_count = rows_count
@@ -1011,9 +838,7 @@ class DeleteRedundant(TaskProcessing):
         self.key = self.context['checksum']
         del_collection = MongodbConnection(
             self.get_table(STTM_DATASOURCE_KEYSALL)).collection
-        local_db_service = LocalDatabaseService()
-        # delete_connect = LocalDbConnect(DataSourceService.cdc_key_delete_query(
-        #     self.get_table(STTM_DATASOURCE)), execute=False)
+        local_db_service = DataSourceService.get_local_instance()
 
         limit = 100
         page = 1
@@ -1026,7 +851,6 @@ class DeleteRedundant(TaskProcessing):
             try:
                 local_db_service.delete(
                     self.get_table(STTM_DATASOURCE), delete_records)
-                # delete_connect.execute((delete_records,))
             except Exception as e:
                 self.error_handling(e.message)
             page += 1
@@ -1046,208 +870,7 @@ class CreateTriggers(TaskProcessing):
         source = Datasource.objects.get(id=self.context['source_id'])
 
         service = DataSourceService.get_source_service(source)
-        db_instance = service.datasource
-
-        sep = db_instance.get_separator()
-
-        remote_table_create_query = db_instance.remote_table_create_query()
-        remote_triggers_create_query = db_instance.remote_triggers_create_query()
-
-        connection = db_instance.connection
-        cursor = connection.cursor()
-
-        for table, columns in tables_info.iteritems():
-
-            table_name = '_etl_{0}'.format(table)
-            tables_str = "('{0}')".format(table_name)
-
-            cdc_cols_query = db_instance.db_map.cdc_cols_query.format(
-                tables_str, source.db, 'public')
-
-            cursor.execute(cdc_cols_query)
-            fetched_cols = cursor.fetchall()
-
-            existing_cols = {k: v for (k, v) in fetched_cols}
-
-            REQUIRED_INDEXES = DatabaseService.get_required_indexes(source)
-
-            required_indexes = {k.format(table_name): v
-                                for k, v in REQUIRED_INDEXES.iteritems()}
-
-            for_triggers = DatabaseService.get_processed_for_triggers(
-                source, columns)
-            cols_str = for_triggers['cols_str']
-
-            # если таблица существует
-            if existing_cols:
-                # удаление primary key, если он есть
-                primary_query = db_instance.get_primary_key(table_name, source.db)
-                cursor.execute(primary_query)
-                primary = cursor.fetchall()
-
-                if primary:
-                    primary_name = primary[0][0]
-                    del_pr_query = db_instance.delete_primary_query(
-                        table_name, primary_name)
-                    cursor.execute(del_pr_query)
-
-                # добавление недостающих колонок, не учитывая cdc-колонки
-                new_came_cols = [
-                    {
-                        'col_name': x['name'],
-                        'col_type': x["type"],
-                        'max_length': '({0})'.format(x['max_length'])
-                            if x['max_length'] is not None else '',
-                        'nullable': 'not null' if x['is_nullable'] == 'NO' else ''
-                    }
-                    for x in columns]
-
-                diff_cols = [x for x in new_came_cols
-                             if x['col_name'] not in existing_cols]
-
-                add_col_q = db_instance.db_map.add_column_query
-                del_col_q = db_instance.db_map.del_column_query
-
-                for d_col in diff_cols:
-                    cursor.execute(add_col_q.format(
-                        table_name,
-                        d_col['col_name'],
-                        d_col['col_type'],
-                        d_col['max_length'],
-                        d_col['nullable']
-                    ))
-                    connection.commit()
-
-                # проверка cdc-колонок на существование и типы
-                cdc_required_types = db_instance.db_map.cdc_required_types
-
-                for cdc_k, v in cdc_required_types.iteritems():
-                    if cdc_k not in existing_cols:
-                        cursor.execute(add_col_q.format(
-                            table_name, cdc_k, v["type"], "", v["nullable"]))
-                    else:
-                        # если типы не совпадают
-                        if not existing_cols[cdc_k].startswith(v["type"]):
-                            cursor.execute(del_col_q.format(table_name, cdc_k))
-                            cursor.execute(add_col_q.format(
-                                table_name, cdc_k, v["type"], "", v["nullable"]))
-
-                connection.commit()
-
-                # проверяем индексы на колонки и существование,
-                # лишние индексы удаляем
-
-                indexes_query = db_instance.db_map.indexes_query.format(
-                    tables_str, source.db)
-                cursor.execute(indexes_query)
-                exist_indexes = cursor.fetchall()
-
-                exist_indexes = DatabaseService.get_processed_indexes(
-                    source, exist_indexes)
-
-                index_cols_i, index_name_i = 0, 1
-
-                create_index_q = db_instance.db_map.create_index_query
-                drop_index_q = db_instance.db_map.drop_index_query
-
-                allright_index_names = []
-
-                for index in exist_indexes:
-                    index_name = index[index_name_i]
-
-                    if index_name not in required_indexes:
-                        cursor.execute(drop_index_q.format(index_name, table_name))
-                    else:
-                        index_cols = sorted(index[index_cols_i].split(','))
-                        if index_cols != required_indexes[index_name]:
-
-                            cursor.execute(drop_index_q.format(index_name, table_name))
-                            cursor.execute(create_index_q.format(
-                                index_name, table_name,
-                                ','.join(
-                                    ['{0}{1}{0}'.format(sep, x)
-                                     for x in required_indexes[index_name]]),
-                                source.db))
-
-                        allright_index_names.append(index_name)
-
-                diff_indexes_names = [
-                    x for x in required_indexes if x not in allright_index_names]
-
-                for d_index in diff_indexes_names:
-                    cursor.execute(
-                        create_index_q.format(
-                            d_index, table_name,
-                            ','.join(['{0}{1}{0}'.format(sep, x)
-                                      for x in required_indexes[d_index]])))
-
-                connection.commit()
-
-            # если таблица не существует
-            else:
-                # создание таблицы у юзера
-                cursor.execute(remote_table_create_query.format(
-                    table_name, cols_str))
-
-                # создание индексов
-                create_index_q = db_instance.db_map.create_index_query
-
-                for index_name, index_cols in required_indexes.iteritems():
-
-                    index_cols = [
-                        '{0}{1}{0}'.format(sep, x) for x in index_cols]
-
-                    cursor.execute(create_index_q.format(
-                        index_name, table_name,
-                        ','.join(index_cols), source.db))
-
-                connection.commit()
-
-            trigger_names = db_instance.get_remote_trigger_names(table)
-            drop_trigger_query = db_instance.db_map.drop_remote_trigger
-
-            trigger_commands = remote_triggers_create_query.format(
-                orig_table=table, new_table=table_name,
-                new=for_triggers['new'],
-                old=for_triggers['old'],
-                cols=for_triggers['cols'])
-
-            # multi queries of mysql, delimiter $$
-            for i, create_trigger_query in enumerate(trigger_commands.split('$$')):
-
-                trigger_name = trigger_names.get("trigger_name_{0}".format(i))
-
-                trigger = DatasourcesTrigger.objects.filter(
-                    name=trigger_name, collection_name=table, datasource=source)
-
-                if not trigger.exists():
-
-                    # удаляем старый триггер
-                    cursor.execute(drop_trigger_query.format(
-                        trigger_name=trigger_name, orig_table=table,
-                    ))
-
-                    # создаем новый триггер
-                    cursor.execute(create_trigger_query)
-
-                    with transaction.atomic():
-                        # создаем запись о триггере
-                        source_trigger = DatasourcesTrigger(
-                            name=trigger_name, collection_name=table, datasource=source,
-                        )
-                        source_trigger.src = create_trigger_query
-                        source_trigger.save()
-
-                        # создаем запись о триггере для remote источника
-                        DatasourcesJournal.objects.create(
-                            name=table_name, collection_name=table,
-                            trigger=source_trigger,
-                        )
-
-                    connection.commit()
-
-        cursor.close()
-        connection.close()
+        service.create_triggers(tables_info)
 
         self.next_task_params = (
             GENERATE_DIMENSIONS, load_dimensions, {

@@ -16,9 +16,6 @@ class DatasourceApi(object):
         """
         raise NotImplementedError
 
-    def get_separator(self):
-        raise NotImplementedError
-
     def get_source_rows(self, structure, cols, limit=None, offset=None):
         """
         Получение постраничных данных из базы пользователя

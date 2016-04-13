@@ -199,7 +199,6 @@ class DataSourceService(object):
     @classmethod
     def get_rows_info(cls, source, cols):
         """
-        redis
         Получение списка значений указанных колонок и таблиц в выбранном источнике данных
 
 
@@ -240,6 +239,9 @@ class DataSourceService(object):
 
     @classmethod
     def check_is_binding_remain(cls, source, child_table):
+        """
+        Redis
+        """
         # FIXME: Описать
         remain = RedisSourceService.get_last_remain(
             source.user_id, source.id)
@@ -447,80 +449,13 @@ class DataSourceService(object):
 
         r_server.set(collection_name, json.dumps(table_info))
 
-    # fixme: не используется?
-    @classmethod
-    def get_separator(cls, source):
-        """
-        Database
-        Args:
-            source(core.models.Datasource): Источник
-
-        Returns:
-            Описать
-        """
-        service = cls.get_source_service(source)
-        return service.get_separator()
-
-    @classmethod
-    def get_table_create_query(cls, table_name, cols_str):
-        """
-        local db
-        Запрос на создание таблицы
-
-        Args:
-            table_name(unicode): Название таблицы
-            cols_str(unicode):
-
-        Returns:
-            str: Строка запроса
-        """
-        service = LocalDatabaseService()
-        return service.get_table_create_query(table_name, cols_str)
-
+    # FIXME Удалить
     @classmethod
     def check_table_exists_query(cls, local_instance, table_name, db):
         # FIXME: Описать
         service = LocalDatabaseService()
         return service.check_table_exists_query(
             local_instance, table_name, db)
-
-    @classmethod
-    def get_page_select_query(cls, table_name, cols):
-        """
-        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
-
-        Args:
-            table_name(unicode): Название таблицы
-            cols(list): Список получаемых колонок
-
-        Returns:
-            str: Строка запроса
-        """
-        service = LocalDatabaseService()
-        return service.get_page_select_query(table_name, cols)
-
-    # FIXME Удалить
-    @classmethod
-    def get_table_insert_query(cls, source_table_name, cols_num):
-        service = LocalDatabaseService()
-        return service.get_table_insert_query(
-            source_table_name, cols_num)
-
-    # FIXME Удалить
-    @classmethod
-    def get_source_rows_query(cls, source, structure, cols):
-        """
-        source db
-        Получение предзапроса данных указанных
-        колонок и таблиц для селери задачи
-        :param source:
-        :param structure:
-        :param cols:
-        :return:
-        """
-        # FIXME: Описать
-        service = cls.get_source_service(source)
-        return service.get_rows_query(cols, structure)
 
     @classmethod
     def check_existing_table(cls, table_name):
@@ -541,7 +476,7 @@ class DataSourceService(object):
         """
         # FIXME: Описать
         service = cls.get_source_service(source)
-        return service.get_connection(source)
+        return service.datasource.connection
 
     @classmethod
     def get_local_instance(cls):
@@ -551,7 +486,7 @@ class DataSourceService(object):
         Returns:
 
         """
-        return LocalDatabaseService().datasource
+        return LocalDatabaseService()
 
     @classmethod
     def tables_info_for_metasource(cls, source, tables):
@@ -675,127 +610,3 @@ class DataSourceService(object):
                     table: source_meta.id
                 })
         return res
-
-    @classmethod
-    def get_structure_rows_number(cls, source, structure,  cols):
-        """
-        Source db
-        Возвращает примерное кол-во строк в запросе селекта для планирования
-
-        Args:
-            source(core.models.Datasource): Источник данных
-            structure():
-            cols():
-
-        Returns:
-            Описать
-        """
-
-        # FIXME: Описать
-        service = cls.get_source_service(source)
-        return service.get_structure_rows_number(structure,  cols)
-
-    @classmethod
-    def get_remote_table_create_query(cls, source):
-        """
-        Source db
-        Возвращает запрос на создание таблицы в БД клиента
-
-        Args:
-            source(core.models.Datasource): Источник данных
-
-        Returns:
-            str: Строка запроса
-        """
-        service = cls.get_source_service(source)
-        return service.get_remote_table_create_query()
-
-    @classmethod
-    def get_remote_triggers_create_query(cls, source):
-        """
-        Source db
-        Возвращает запрос на создание триггеров в БД клиента
-
-        Args:
-            source(core.models.Datasource): Источник данных
-
-        Returns:
-            str: Строка запроса
-        """
-        # FIXME: Описать
-        service = cls.get_source_service(source)
-        return service.get_remote_triggers_create_query()
-
-    @staticmethod
-    def reload_datasource_trigger_query(params):
-        """
-        Local db
-        Запрос на создание триггеров в БД локально для размерностей и мер
-
-        Args:
-            params(dict): Параметры, необходимые для запроса
-
-        Returns:
-            str: Строка запроса
-        """
-        # FIXME: Описать "Параметры, необходимые для запроса"
-        service = LocalDatabaseService()
-        return service.reload_datasource_trigger_query(params)
-
-    # FIXME: Удалить
-    @staticmethod
-    def get_date_table_names(col_type):
-        """
-        Local db
-        Получение запроса на создание колонок таблицы дат
-
-        Args:
-            col_type(dict): Соответсвие название поля и типа
-
-        Returns:
-            list: Список строк с названием и типом колонок для таблицы дат
-        """
-        service = LocalDatabaseService()
-        return service.get_date_table_names(col_type)
-
-    # FIXME: Удалить
-    @staticmethod
-    def get_table_create_col_names(fields, time_table_name):
-        """
-        Список строк запроса для создания колонок
-        таблицы sttm_, мер и размерностей
-
-        Args:
-            fields(): Информация о колонках таблицы
-            time_table_name(str): Название таблицы времени
-
-        Returns:
-            list: Список строк с названием и типом колонок
-            для таблицы мер и размерности
-        """
-        service = LocalDatabaseService()
-        return service.get_table_create_col_names(fields, time_table_name)
-
-    @staticmethod
-    def cdc_key_delete_query(table_name):
-        """
-        Local db
-        Запрос на удаление записей по cdc-ключу
-
-        Args:
-            table_name(unicode): Название таблицы
-
-        Returns:
-            str: Строка запроса
-        """
-        service = LocalDatabaseService()
-        return service.cdc_key_delete_query(table_name)
-
-    @classmethod
-    def get_fetchall_result(cls, connection, source, query, *args, **kwargs):
-        """
-        возвращает результат fetchall преобразованного запроса с аргументами
-        """
-        service = cls.get_source_service(source)
-        return service.get_fetchall_result(
-            connection, query, *args, **kwargs)
