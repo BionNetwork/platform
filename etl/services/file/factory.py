@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+from collections import defaultdict
+
 from core.models import ConnectionChoices
 
 from etl.services.source import DatasourceApi
@@ -60,17 +62,13 @@ class FileService(DatasourceApi):
             статистики, интервалов дат таблиц
         """
         instance = self.datasource
-        source = self.source
 
         columns = instance.get_columns_info(sheets)
-
         statistics = instance.get_statistic(sheets)
-
         date_intervals = instance.get_intervals(sheets)
 
-        print date_intervals
+        # заглушки
+        indexes = defaultdict(list)
+        foreigns = defaultdict(list)
 
-        # columns, indexes, foreigns = instance.processing_records(
-        #         col_records, index_records, const_records)
-        #
-        # return columns, [], [], statistics, date_intervals
+        return columns, indexes, foreigns, statistics, date_intervals

@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import time
+import datetime
 import pandas
 from collections import defaultdict
 
@@ -58,10 +60,12 @@ class Excel(File):
             tables(list): список названий таблиц
 
         Returns:
-            Кортеж из списков, в первом списке возвращаются колонки таблиц
-            вида [(table_name, col_name, type), ]
+            dict вида {'sheet_name': [{
+            "name": col_name,
+            "type": col_type,
+            "origin_type": origin_type,}, ]
         """
-        columns = []
+        columns = defaultdict(list)
 
         excel_path = self.source.get_file_path()
 
@@ -69,8 +73,15 @@ class Excel(File):
             sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
             col_names = sheet_df.columns
             for col_name in col_names:
-                col_type = process_type(sheet_df[col_name].dtype.name)
-                columns.append((sheet_name, col_name, col_type))
+                origin_type = sheet_df[col_name].dtype.name
+                col_type = process_type(origin_type)
+                columns[sheet_name].append({
+                    "name": col_name,
+                    "type": col_type,
+                    "origin_type": origin_type,
+                    "extra": None,
+                    "max_length": None,
+                })
 
         return columns
 
@@ -108,35 +119,34 @@ class Excel(File):
 
         Returns:
             dict: Информация о крайних значениях дат
+            {'sheet_name': [{'last_updated': now,
+                   'name': col_name,
+                   'startDate': start_date,
+                   'endDate': end_date,}]}
         """
 
         intervals = defaultdict(list)
-
+        now = time.mktime(datetime.datetime.now().timetuple())
         excel_path = self.source.get_file_path()
 
         for sheet_name in sheets:
             sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+            col_names = sheet_df.columns
+            for col_name in col_names:
+                col_df = sheet_df[col_name]
+                col_type = process_type(col_df.dtype.name)
+                if col_type in ["datetime"]:
 
+                    start_date = col_df.min().strftime("%d.%m.%Y")
+                    end_date = col_df.max().strftime("%d.%m.%Y")
 
-
-        for table, col, query in interval_queries:
-            start_date, end_date = self.get_query_result(query)[0]
-            if res.get(table, None):
-                res[table].append({
-                    'last_updated': now,
-                    'name': col,
-                    'startDate': start_date,
-                    'endDate': end_date,
-                })
-            else:
-                res[table] = [{
-                    'last_updated': now,
-                    'name': col,
-                    'startDate': start_date,
-                    'endDate': end_date,
-                }]
-        print res
-        return res
+                    intervals[sheet_name].append({
+                        'last_updated': now,
+                        'name': col_name,
+                        'startDate': start_date,
+                        'endDate': end_date,
+                    })
+        return intervals
 
 
 

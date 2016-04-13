@@ -19,7 +19,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return 'user_datasource:{0}:{1}'.format(user_id, datasource_id)
+        return u'user_datasource:{0}:{1}'.format(user_id, datasource_id)
 
     @staticmethod
     def get_user_collection_counter(user_id, datasource_id):
@@ -29,7 +29,7 @@ class RedisCacheKeys(object):
         :param datasource_id: int
         :return: str
         """
-        return '{0}:{1}'.format(RedisCacheKeys.get_user_datasource(
+        return u'{0}:{1}'.format(RedisCacheKeys.get_user_datasource(
             user_id, datasource_id), 'counter')
 
     @staticmethod
@@ -41,7 +41,7 @@ class RedisCacheKeys(object):
         :param number:
         :return:
         """
-        return '{0}:collection:{1}'.format(
+        return u'{0}:collection:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
 
     @staticmethod
@@ -53,7 +53,7 @@ class RedisCacheKeys(object):
         :param number:
         :return:
         """
-        return '{0}:ddl:{1}'.format(
+        return u'{0}:ddl:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), number)
 
     @staticmethod
@@ -64,7 +64,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return '{0}:active_collections'.format(
+        return u'{0}:active_collections'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
@@ -76,7 +76,7 @@ class RedisCacheKeys(object):
         :param table:
         :return:
         """
-        return '{0}:collection:{1}'.format(
+        return u'{0}:collection:{1}'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id), table)
 
     @staticmethod
@@ -87,7 +87,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return '{0}:joins'.format(
+        return u'{0}:joins'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
@@ -98,7 +98,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return '{0}:remain'.format(
+        return u'{0}:remain'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
@@ -109,7 +109,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return '{0}:active:tree'.format(
+        return u'{0}:active:tree'.format(
             RedisCacheKeys.get_user_datasource(user_id, datasource_id))
 
     @staticmethod
@@ -117,14 +117,14 @@ class RedisCacheKeys(object):
         """
         ключ каналов юзера для сокетов
         """
-        return 'user_channels:{0}'.format(user_id)
+        return u'user_channels:{0}'.format(user_id)
 
     @staticmethod
     def get_queue(task_id):
         """
         ключ информации о ходе работы таска
         """
-        return 'queue:{0}'.format(task_id)
+        return u'queue:{0}'.format(task_id)
 
 
 class RedisSourceService(object):
@@ -679,13 +679,18 @@ class RedisSourceService(object):
 
         pipe = r_server.pipeline()
 
+        print stats.keys()
+
         for t_name in tables:
+            print t_name
+            print str_table_by_name.format(t_name)
+
             pipe.set(str_table_by_name.format(t_name), json.dumps(
                 {
-                    "columns": columns[t_name.lower()],
-                    "indexes": indexes[t_name.lower()],
-                    "foreigns": foreigns[t_name.lower()],
-                    "stats": stats[t_name.lower()],
+                    "columns": columns[t_name],
+                    "indexes": indexes[t_name],
+                    "foreigns": foreigns[t_name],
+                    "stats": stats[t_name],
                     "date_intervals": intervals.get(t_name, [])
                 }, cls=CustomJsonEncoder
             ))
