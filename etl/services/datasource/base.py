@@ -136,8 +136,9 @@ class DataSourceService(object):
 
         service = cls.get_source_service(source)
 
-        # если информация о таблице уже есть в редисе, то просто достаем,
-        # иначе достаем новые таблицы и спрашиваем инфу по ним у источника
+        # если информация о таблице уже есть в редисе, то просто получаем их,
+        # иначе получаем новые таблицы
+        #  и спрашиваем информацию по ним у источника
         new_tables, old_tables = RedisSourceService.filter_exists_tables(
             source, tables)
 
@@ -161,37 +162,39 @@ class DataSourceService(object):
         #         source, old_tables, old_tables_intervals)
 
         # существование дерева
-        tree_exists = RedisSourceService.check_tree_exists(
-            source.user_id, source.id)
+        tree_exists = RedisSourceService.check_tree_exists(source)
 
         # работа с деревьями
         if not tree_exists:
+            tables_info = RedisSourceService.info_for_tree_building(
+                (), tables, source)
+
             trees, without_bind = TableTreeRepository.build_trees(
-                tuple(tables), source)
-            sel_tree = TablesTree.select_tree(trees)
+                tuple(tables), tables_info)
+            sel_tree = TableTreeRepository.select_tree(trees)
 
             remains = without_bind[sel_tree.root.val]
         else:
             # достаем структуру дерева из редиса
             structure = RedisSourceService.get_active_tree_structure(source)
             # строим дерево
-            sel_tree = TablesTree.build_tree_by_structure(structure)
+            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
 
-            ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
+            ordered_nodes = sel_tree.ordered_nodes
 
             tables_info = RedisSourceService.info_for_tree_building(
                 ordered_nodes, tables, source)
 
             # перестраиваем дерево
-            remains = TablesTree.build_tree(
-                [sel_tree.root, ], tuple(tables), tables_info)
+            sel_tree.build(tuple(tables), tables_info)
+            remains = sel_tree.no_bind_tables
 
         # таблица без связи
         last = RedisSourceService.insert_remains(source, remains)
 
         # сохраняем дерево
-        structure = TablesTree.get_tree_structure(sel_tree.root)
-        ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
+        structure = sel_tree.structure
+        ordered_nodes = sel_tree.ordered_nodes
         RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
         return RedisSourceService.get_final_info(ordered_nodes, source, last)
@@ -223,18 +226,23 @@ class DataSourceService(object):
             source(core.models.Datasource): Источник
             tables(): Описать
         """
-        # FIXME: Описать аргумент tables
         # достаем структуру дерева из редиса
         structure = RedisSourceService.get_active_tree_structure(source)
         # строим дерево
-        sel_tree = TablesTree.build_tree_by_structure(structure)
-        TableTreeRepository.delete_nodes_from_tree(sel_tree, source, tables)
+        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+
+        r_val = sel_tree.root.val
+        if r_val in tables:
+            RedisSourceService.tree_full_clean(source)
+            sel_tree.root = None
+        else:
+            sel_tree.delete_nodes(tables)
 
         if sel_tree.root:
             RedisSourceService.delete_tables(source, tables)
 
-            ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
-            structure = TablesTree.get_tree_structure(sel_tree.root)
+            ordered_nodes = sel_tree.ordered_nodes
+            structure = sel_tree.structure
             RedisSourceService.insert_tree(structure, ordered_nodes, source, update_joins=False)
 
     @classmethod
@@ -244,7 +252,7 @@ class DataSourceService(object):
         """
         # FIXME: Описать
         remain = RedisSourceService.get_last_remain(
-            source.user_id, source.id)
+            source)
         return remain == child_table
 
     @classmethod
@@ -356,14 +364,14 @@ class DataSourceService(object):
             # достаем структуру дерева из редиса
             structure = RedisSourceService.get_active_tree_structure(source)
             # строим дерево
-            sel_tree = TablesTree.build_tree_by_structure(structure)
+            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
 
-            TablesTree.update_node_joins(
-                sel_tree, left_table, right_table, join_type, joins_set)
+            sel_tree.update_node_joins(
+                left_table, right_table, join_type, joins_set)
 
             # сохраняем дерево
-            ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
-            structure = TablesTree.get_tree_structure(sel_tree.root)
+            ordered_nodes = sel_tree.ordered_nodes
+            structure = sel_tree.structure
             RedisSourceService.insert_tree(
                 structure, ordered_nodes, source, update_joins=False)
 
@@ -373,8 +381,7 @@ class DataSourceService(object):
                 ordered_nodes, source)
 
             # работа с последней таблицей
-            remain = RedisSourceService.get_last_remain(
-                source.user_id, source.id)
+            remain = RedisSourceService.get_last_remain(source)
             if remain == right_table:
                 # удаляем инфу о таблице без связи, если она есть
                 RedisSourceService.delete_last_remain(source)

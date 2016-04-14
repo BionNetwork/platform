@@ -212,8 +212,7 @@ class TablesTreeTest(BaseCoreTest):
         #                       datasources
 
         self.tree = TablesTree('auth_group_permissions')
-        remains = TablesTree.build_tree(
-            [self.tree.root, ], self.tables, self.tables_info)
+        remains = self.tree.build(self.tables, self.tables_info)
 
         self.assertEqual(remains, ['datasources'],
                          'Должна быть 1 таблица без связей datasources!')
@@ -222,10 +221,9 @@ class TablesTreeTest(BaseCoreTest):
     def test_tree_nodes_order_and_count(self):
 
         self.tree = TablesTree('auth_group_permissions')
-        TablesTree.build_tree(
-            [self.tree.root, ], self.tables, self.tables_info)
+        self.tree.build(self.tables, self.tables_info)
 
-        ordered_nodes = TablesTree.get_tree_ordered_nodes([self.tree.root, ])
+        ordered_nodes = self.tree.ordered_nodes
         self.assertEqual(len(ordered_nodes), 3, 'Количество нодов в дереве не 3!')
 
         ordered_nodes_vals = [x.val for x in ordered_nodes]
@@ -233,17 +231,16 @@ class TablesTreeTest(BaseCoreTest):
                          ['auth_group_permissions', 'auth_group', 'auth_permission'],
                          'Cбит порядок нодов в дереве!')
 
-        counts = TablesTree.get_nodes_count_by_level([self.tree.root, ])
+        counts = self.tree.nodes_count_for_levels
         self.assertEqual(counts, [1, 2], 'Дерево построено неправильно!')
 
     # тест построения структуры дерева
     def test_tree_structure(self):
 
         self.tree = TablesTree('auth_group_permissions')
-        TablesTree.build_tree(
-            [self.tree.root, ], self.tables, self.tables_info)
+        self.tree.build(self.tables, self.tables_info)
 
-        structure = TablesTree.get_tree_structure(self.tree.root)
+        structure = self.tree.structure
 
         expected_structure = {
             'childs': [
@@ -274,14 +271,13 @@ class TablesTreeTest(BaseCoreTest):
     def test_build_new_tree(self):
 
         self.tree = TablesTree('auth_group_permissions')
-        TablesTree.build_tree(
-            [self.tree.root, ], self.tables, self.tables_info)
+        self.tree.build(self.tables, self.tables_info)
 
-        structure = TablesTree.get_tree_structure(self.tree.root)
+        structure = self.tree.structure
 
-        new_tree = TablesTree.build_tree_by_structure(structure)
+        new_tree = TableTreeRepository.build_tree_by_structure(structure)
 
-        ordered_nodes = TablesTree.get_tree_ordered_nodes([new_tree.root, ])
+        ordered_nodes = new_tree.ordered_nodes
         self.assertEqual(len(ordered_nodes), 3, 'Количество нодов в новом дереве не 3!')
 
         ordered_nodes_vals = [x.val for x in ordered_nodes]
@@ -289,15 +285,15 @@ class TablesTreeTest(BaseCoreTest):
                          ['auth_group_permissions', 'auth_group', 'auth_permission'],
                          'Cбит порядок нодов в новом дереве!')
 
-        new_counts = TablesTree.get_nodes_count_by_level([new_tree.root, ])
+        new_counts = new_tree.nodes_count_for_levels
         self.assertEqual(new_counts, [1, 2], 'Новое дерево построено неправильно!')
 
         # связываем таблицу datasources, добавляем новые джойны
 
-        TablesTree.update_node_joins(
-            self.tree, 'auth_permission', 'datasources', 'inner', [['codename', 'eq', 'db'], ])
+        self.tree.update_node_joins(
+            'auth_permission', 'datasources', 'inner', [['codename', 'eq', 'db'], ])
 
-        ordered_nodes = TablesTree.get_tree_ordered_nodes([self.tree.root, ])
+        ordered_nodes = self.tree.ordered_nodes
         self.assertEqual(len(ordered_nodes), 4, 'Количество нодов в новом дереве не 4!')
 
         ordered_nodes_vals = [x.val for x in ordered_nodes]
@@ -305,18 +301,17 @@ class TablesTreeTest(BaseCoreTest):
                          ['auth_group_permissions', 'auth_group', 'auth_permission', 'datasources'],
                          'Cбит порядок нодов в дереве после добавления datasources!')
 
-        counts = TablesTree.get_nodes_count_by_level([self.tree.root, ])
+        counts = TablesTree.nodes_count_for_levels
         self.assertEqual(counts, [1, 2, 1], 'Дерево построено неправильно!')
 
     # тест на добавление новых джойнов таблиц
     def test_update_joins(self):
 
         self.tree = TablesTree('auth_group_permissions')
-        TablesTree.build_tree(
-            [self.tree.root, ], self.tables, self.tables_info)
+        self.tree.build(self.tables, self.tables_info)
 
-        TablesTree.update_node_joins(
-            self.tree, 'auth_group_permissions', 'auth_group', 'right',
+        self.tree.update_node_joins(
+            'auth_group_permissions', 'auth_group', 'right',
             [['group_id', 'eq', 'id'], ['id', 'lt', 'name']]
         )
         expected_structure = {
@@ -345,7 +340,7 @@ class TablesTreeTest(BaseCoreTest):
             'val': 'auth_group_permissions'
         }
 
-        structure = TablesTree.get_tree_structure(self.tree.root)
+        structure = self.tree.structure
         self.assertEqual(structure, expected_structure, 'Структура дерева построена неправильно!')
 
 
