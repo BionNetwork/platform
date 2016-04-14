@@ -21,3 +21,13 @@ class DatasourceApi(object):
         Получение постраничных данных из базы пользователя
         """
         raise NotImplementedError
+
+    def get_rows(self, cols, structure):
+        """
+        Получение значений выбранных колонок из указанных таблиц и
+        выбранного источника
+        :type structure: dict
+        :param cols: list
+        :return:
+        """
+        return self.datasource.get_rows(cols, structure)

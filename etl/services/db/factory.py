@@ -1,10 +1,10 @@
 # coding: utf-8
+
 import calendar
 from contextlib import closing
-
 import math
-
 from datetime import timedelta, datetime
+
 from django.conf import settings
 from django.db import transaction
 
@@ -12,7 +12,6 @@ from core.models import (ConnectionChoices, DatasourcesJournal, Datasource,
                          DatasourcesTrigger)
 from etl.constants import DATE_TABLE_COLS_LEN
 from etl.services.db import mysql, postgresql
-# from etl.services.queue.base import DTCN
 from etl.services.source import DatasourceApi
 
 
@@ -104,16 +103,6 @@ class DatabaseService(DatasourceApi):
 
         """
         return self.datasource.get_intervals(self.source, cols_info)
-
-    def get_rows(self, cols, structure):
-        """
-        Получение значений выбранных колонок из указанных таблиц и выбранного источника
-        :type structure: dict
-        :param source: Datasource
-        :param cols: list
-        :return:
-        """
-        return self.datasource.get_rows(cols, structure)
 
     @classmethod
     def get_connection(cls, source):

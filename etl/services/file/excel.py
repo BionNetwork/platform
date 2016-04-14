@@ -5,13 +5,9 @@ import time
 import datetime
 import pandas
 from collections import defaultdict
-
-from django.conf import settings
+from itertools import groupby
 
 from etl.services.file.interfaces import File
-
-
-MEDIA_ROOT = settings.MEDIA_ROOT
 
 
 TYPES_MAP = {
@@ -19,6 +15,7 @@ TYPES_MAP = {
     "float": "double precision",
     "datetime": "datetime",
     "object": "text",
+    "boolean": "boolean"
 }
 
 
@@ -148,19 +145,16 @@ class Excel(File):
                     })
         return intervals
 
+    def get_rows(self, columns, structure):
 
+        dfs = []
+        excel_path = self.source.get_file_path()
 
-
-
-
-
-
-
-
-
-
-
-
+        for sheet_name, col_group in groupby(columns, lambda x: x['table']):
+            sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+            col_names = [x['col'] for x in col_group]
+            dfs.append(sheet_df[col_names])
+            return sheet_df.fillna('').values.tolist()
 
 
 

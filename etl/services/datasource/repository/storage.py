@@ -679,12 +679,7 @@ class RedisSourceService(object):
 
         pipe = r_server.pipeline()
 
-        print stats.keys()
-
         for t_name in tables:
-            print t_name
-            print str_table_by_name.format(t_name)
-
             pipe.set(str_table_by_name.format(t_name), json.dumps(
                 {
                     "columns": columns[t_name],

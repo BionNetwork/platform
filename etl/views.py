@@ -277,7 +277,8 @@ class BaseEtlView(BaseView):
 
     def request_method(self, request, *args, **kwargs):
         """
-        Выполнение запроса с проверкой на существование источника и обработкой ошибок при действии
+        Выполнение запроса с проверкой на существование источника и
+        обработкой ошибок при действии
         :param request: WSGIRequest
         :param args: list
         :param kwargs: dict
