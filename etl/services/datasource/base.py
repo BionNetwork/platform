@@ -248,16 +248,16 @@ class DataSourceService(object):
     @classmethod
     def check_is_binding_remain(cls, source, child_table):
         """
-        Redis
+        Проверяем является ли таблица child_table остаточной таблицей,
+        то есть последней в дереве без связей
         """
-        # FIXME: Описать
         remain = RedisSourceService.get_last_remain(
             source)
         return remain == child_table
 
     @classmethod
     def get_columns_and_joins_for_join_window(
-        cls, source, parent_table, child_table, has_warning):
+            cls, source, parent_table, child_table, has_warning):
         """
         Redis
         список колонок и джойнов таблиц для окна связей таблиц
@@ -326,8 +326,8 @@ class DataSourceService(object):
 
         for j in joins_set:
             l_c, j_val, r_c = j
-            if (cols_types['{0}.{1}'.format(left_table, l_c)] !=
-                    cols_types['{0}.{1}'.format(right_table, r_c)]):
+            if (cols_types[u'{0}.{1}'.format(left_table, l_c)] !=
+                    cols_types[u'{0}.{1}'.format(right_table, r_c)]):
                 error_joins.append(j)
             else:
                 good_joins.append(j)
@@ -425,7 +425,7 @@ class DataSourceService(object):
             t_cols = json.loads(
                 RedisSourceService.get_table_full_info(source, table))['columns']
             for col in t_cols:
-                cols_types['{0}.{1}'.format(table, col['name'])] = col['type']
+                cols_types[u'{0}.{1}'.format(table, col['name'])] = col['type']
 
         return cols_types
 

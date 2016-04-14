@@ -6,7 +6,6 @@ from django.conf import settings
 from collections import defaultdict
 from redis_collections import Dict as RedisDict, List as RedisList
 from core.helpers import CustomJsonEncoder
-from core.models import Datasource
 
 
 class RedisCacheKeys(object):
@@ -795,7 +794,7 @@ class RedisSourceService(object):
         tables_info_for_meta = {}
         source_key = cls.get_user_source(source)
         str_table = RedisCacheKeys.get_active_table(
-            source_key, '{0}')
+            source.user_id, source.id, '{0}')
 
         actives_list = cls.get_active_table_list(source_key)
 
@@ -992,10 +991,11 @@ class RedisSourceService(object):
         return json.loads(r_server.get(str_joins))
 
     @classmethod
-    def get_last_remain(cls, source):
-        source_key = cls.get_user_source(source)
-        tables_remain_key = RedisCacheKeys.get_source_remain(source_key)
-        return (r_server.get(tables_remain_key)
+    def get_last_remain(cls, user_id, source_id):
+        tables_remain_key = RedisCacheKeys.get_source_remain(
+            user_id, source_id)
+        # если имя таблицы кириллица, то в юникод преобразуем
+        return (r_server.get(tables_remain_key).decode('utf8')
                 if r_server.exists(tables_remain_key) else None)
 
 
