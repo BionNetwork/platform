@@ -519,7 +519,7 @@ showJoinWindow = function(url, parent, child, isWithoutBind) {
 
 addNewJoin = function() {
   var childCols, joinRows, parOptions, parentCols, wobOptions;
-  joinRows = $('#joinRows');
+  joinRows = joinWin.find('#joinRows');
   parentCols = [];
   childCols = [];
   parOptions = joinWin.find('select[name="parent"]').first().find('option');
@@ -544,7 +544,7 @@ deleteJoins = function() {
 
 saveJoins = function(url) {
   var info, joinRows, joins, joinsArray, joinsSet;
-  joins = $('.join-row');
+  joins = joinWin.find('.join-row');
   joinsArray = [];
   if (!joins.length) {
     confirmAlert('Пожалуйста, выберите связь!');
@@ -554,25 +554,20 @@ saveJoins = function(url) {
     var selects, vals;
     selects = $(row).find('select');
     vals = [];
-    console.log(selects)
     $.each(selects, function(j, sel) {
       vals.push($(sel).val());
     });
     joinsArray.push(vals);
   });
-
-  console.log(joinsArray)
-
   joinsSet = new Set;
   $.each(joinsArray, function(i, row) {
     joinsSet.add(row[0] + row[2]);
   });
-  console.log(joinsSet)
   if (joinsArray.length !== joinsSet.size) {
     confirmAlert('Имеются дубли среди связей, пожалуйста удалите лишнее!');
     return;
   }
-  joinRows = $('#joinRows');
+  joinRows = joinWin.find('#joinRows');
   info = getSourceInfo();
   info['joins'] = JSON.stringify(joinsArray);
   info['left'] = joinRows.data('table-left');

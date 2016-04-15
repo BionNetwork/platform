@@ -442,7 +442,7 @@ showJoinWindow = (url, parent, child, isWithoutBind) ->
   return
 
 addNewJoin = ->
-  joinRows = $('#joinRows')
+  joinRows = joinWin.find('#joinRows')
   parentCols = []
   childCols = []
   parOptions = joinWin.find('select[name="parent"]').first().find('option')
@@ -465,7 +465,7 @@ deleteJoins = ->
   return
 
 saveJoins = (url) ->
-  joins = $('.join-row')
+  joins = joinWin.find('.join-row')
   joinsArray = []
   if !joins.length
     confirmAlert 'Пожалуйста, выберите связь!'
@@ -486,7 +486,7 @@ saveJoins = (url) ->
   if joinsArray.length != joinsSet.size
     confirmAlert 'Имеются дубли среди связей, пожалуйста удалите лишнее!'
     return
-  joinRows = $('#joinRows')
+  joinRows = joinWin.find('#joinRows')
   info = getSourceInfo()
   info['joins'] = JSON.stringify(joinsArray)
   info['left'] = joinRows.data('table-left')
