@@ -67,7 +67,7 @@ class TablesTree(object):
     @property
     def ordered_nodes(self):
         root = self.root
-        return self._get_tree_ordered_nodes([root])
+        return self._get_tree_ordered_nodes([root, ])
 
     @classmethod
     def _get_tree_ordered_nodes(cls, nodes):
@@ -87,7 +87,7 @@ class TablesTree(object):
     @property
     def nodes_count_for_levels(self):
         root = self.root
-        return self._get_nodes_count_for_levels(root)
+        return self._get_nodes_count_for_levels([root, ])
 
     @classmethod
     def _get_nodes_count_for_levels(cls, nodes):
@@ -95,6 +95,7 @@ class TablesTree(object):
         Cписок количества нодов на каждом уровне дерева
         :param nodes: list
         :return: list
+        Пример [1, 3, 2, ...]
         """
         counts = [len(nodes)]
 
@@ -168,9 +169,8 @@ class TablesTree(object):
         # таблицы без связей
         return tables
 
-    def build_by_structure(self):
-        root, children = self.root, self.root.childs
-        self._build_by_structure(root, children)
+    def build_by_structure(self, children):
+        self._build_by_structure(self.root, children)
 
     @classmethod
     def _build_by_structure(cls, root, children):
@@ -238,7 +238,7 @@ class TablesTree(object):
         for l_c in l_cols:
             l_str = u'{0}_{1}'.format(l_t, l_c['name'])
             for r_c in r_cols:
-                r_str = '{0}_{1}'.format(r_t, r_c['name'])
+                r_str = u'{0}_{1}'.format(r_t, r_c['name'])
                 if l_c['name'] == r_str and l_c['type'] == r_c['type']:
                     j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
                     sort_j_tuple = tuple(sorted(j_tuple))
@@ -347,7 +347,7 @@ class TableTreeRepository(object):
     @staticmethod
     def build_tree_by_structure(structure):
         sel_tree = TablesTree(structure['val'])
-        sel_tree.build_by_structure()
+        sel_tree.build_by_structure(structure['childs'])
         return sel_tree
 
     @staticmethod

@@ -554,15 +554,20 @@ saveJoins = function(url) {
     var selects, vals;
     selects = $(row).find('select');
     vals = [];
+    console.log(selects)
     $.each(selects, function(j, sel) {
       vals.push($(sel).val());
     });
     joinsArray.push(vals);
   });
+
+  console.log(joinsArray)
+
   joinsSet = new Set;
   $.each(joinsArray, function(i, row) {
     joinsSet.add(row[0] + row[2]);
   });
+  console.log(joinsSet)
   if (joinsArray.length !== joinsSet.size) {
     confirmAlert('Имеются дубли среди связей, пожалуйста удалите лишнее!');
     return;

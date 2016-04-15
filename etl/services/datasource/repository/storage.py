@@ -1,4 +1,6 @@
 # coding: utf-8
+from __future__ import unicode_literals
+
 from . import r_server
 import json
 from copy import deepcopy
@@ -29,7 +31,7 @@ class RedisCacheKeys(object):
         :param datasource_id: int
         :return: str
         """
-        return '{0}:counter'.format(source_key)
+        return u'{0}:counter'.format(source_key)
 
     @staticmethod
     def get_active_table(source_key, number):
@@ -449,7 +451,8 @@ class RedisSourceService(object):
 
         # delete keys in redis
         pipe = r_server.pipeline()
-        pipe.delete(table_by_name_key.format(r_server.get(tables_remain_key)))
+        remain = cls.get_last_remain(source_key)
+        pipe.delete(table_by_name_key.format(remain))
         pipe.delete(tables_remain_key)
 
         # actives = cls.get_active_list(source.user_id, source.id)
@@ -473,11 +476,25 @@ class RedisSourceService(object):
         """
         source_key = cls.get_user_source(source)
         str_remain = RedisCacheKeys.get_source_remain(source_key)
+        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
+            source_key, '{0}')
+        str_table = RedisCacheKeys.get_active_table(
+            source_key, '{0}')
         if remains:
             # первая таблица без связей
             last = remains[0]
             # таблица без связей
             r_server.set(str_remain, last)
+
+            # если таблицу ранее уже выбирали, ее инфа лежит в
+            # счетчике коллекций и достать ее оттуда, иначе болтается
+            # отдельно и доставать по имени
+            if not r_server.exists(str_table_by_name.format(last)):
+                actives = cls.get_active_table_list(source_key)
+                order = cls.get_order_from_actives(last, actives)
+                r_server.set(
+                    str_table_by_name.format(last),
+                    r_server.get(str_table.format(order)))
 
             # удаляем таблицы без связей, кроме первой
             cls.delete_unneeded_remains(source, remains[1:])
@@ -502,18 +519,17 @@ class RedisSourceService(object):
             r_server.delete(str_table_by_name.format(t_name))
 
     @classmethod
-    def delete_last_remain(cls, source):
+    def delete_last_remain(cls, source_key):
         """
         удаляет единственную таблицу без связей
         :param source: Datasource
         """
-        source_key = cls.get_user_source(source)
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source_key, '{0}')
         str_remain = RedisCacheKeys.get_source_remain(
             source_key)
         if r_server.exists(str_remain):
-            last = r_server.get(str_remain)
+            last = cls.get_last_remain(source_key)
             r_server.delete(str_table_by_name.format(last))
             r_server.delete(str_remain)
 
@@ -991,9 +1007,8 @@ class RedisSourceService(object):
         return json.loads(r_server.get(str_joins))
 
     @classmethod
-    def get_last_remain(cls, user_id, source_id):
-        tables_remain_key = RedisCacheKeys.get_source_remain(
-            user_id, source_id)
+    def get_last_remain(cls, source_key):
+        tables_remain_key = RedisCacheKeys.get_source_remain(source_key)
         # если имя таблицы кириллица, то в юникод преобразуем
         return (r_server.get(tables_remain_key).decode('utf8')
                 if r_server.exists(tables_remain_key) else None)

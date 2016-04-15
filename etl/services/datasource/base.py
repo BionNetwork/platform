@@ -251,8 +251,8 @@ class DataSourceService(object):
         Проверяем является ли таблица child_table остаточной таблицей,
         то есть последней в дереве без связей
         """
-        remain = RedisSourceService.get_last_remain(
-            source)
+        source_key = RedisSourceService.get_user_source(source)
+        remain = RedisSourceService.get_last_remain(source_key)
         return remain == child_table
 
     @classmethod
@@ -351,6 +351,8 @@ class DataSourceService(object):
             Описать
         """
 
+        source_key = RedisSourceService.get_user_source(source)
+
         # FIXME: Описать
         # joins_set избавляет от дублей
         good_joins, error_joins, joins_set = cls.check_new_joins(
@@ -381,10 +383,10 @@ class DataSourceService(object):
                 ordered_nodes, source)
 
             # работа с последней таблицей
-            remain = RedisSourceService.get_last_remain(source)
+            remain = RedisSourceService.get_last_remain(source_key)
             if remain == right_table:
                 # удаляем инфу о таблице без связи, если она есть
-                RedisSourceService.delete_last_remain(source)
+                RedisSourceService.delete_last_remain(source_key)
 
         return data
 
