@@ -296,7 +296,7 @@ tableToLeft = (url) ->
   indexes = []
   ths = $('#data-table-headers').find('th').not(':hidden')
   $.each divs, (i, el) ->
-    header = $('#col-' + $(this).data('table') + '-' + $(this).data('col'))
+    header = $('#head-' + $(this).data('table') + '-' + $(this).data('col'))
     indexes.push ths.index(header)
     header.remove()
     return
