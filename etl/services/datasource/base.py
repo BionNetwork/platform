@@ -7,12 +7,12 @@ from django.db import transaction
 from django.conf import settings
 
 from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
-                         ConnectionChoices)
+                         ConnectionChoices, Datasource)
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
 from etl.services.datasource.repository.storage import RedisSourceService
-from etl.models import TablesTree, TableTreeRepository
+from etl.models import TableTreeRepository
 from core.helpers import get_utf8_string
 
 
@@ -131,9 +131,6 @@ class DataSourceService(object):
             ответа см. RedisSourceService.get_final_info
         """
 
-        if not settings.USE_REDIS_CACHE:
-            return []
-
         service = cls.get_source_service(source)
 
         # если информация о таблице уже есть в редисе, то просто получаем их,
@@ -198,6 +195,64 @@ class DataSourceService(object):
         RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
         return RedisSourceService.get_final_info(ordered_nodes, source, last)
+
+    @classmethod
+    def get_tree_info(cls, post_sources):
+        """
+        """
+        cls.cache_columns(post_sources)
+        sel_tree, remains = cls.get_tree(post_sources)
+        # таблица без связи
+        source = Datasource.objects.get(id=post_sources[0]['source_id'])
+        last = RedisSourceService.insert_remains(source, remains)
+        last = None
+
+        # сохраняем дерево
+        structure = sel_tree.structure
+        ordered_nodes = sel_tree.ordered_nodes
+        RedisSourceService.insert_tree(structure, ordered_nodes, source)
+
+        return RedisSourceService.get_final_info(ordered_nodes, source, last)
+
+    @classmethod
+    def get_tree(cls, post_sources):
+        concat_tables_info = {}
+        concat_tables = []
+        for each in post_sources:
+            source = Datasource.objects.get(id=each['source_id'])
+            tables = each['tables']
+            concat_tables_info.update(RedisSourceService.info_for_tree_building(
+                (), tables, source))
+            concat_tables.extend(each['tables'])
+
+        trees, without_bind = TableTreeRepository.build_trees(
+            tuple(concat_tables), concat_tables_info)
+
+        sel_tree = TableTreeRepository.select_tree(trees)
+        remains = without_bind[sel_tree.root.val]
+        return sel_tree, remains
+
+    @classmethod
+    def cache_columns(cls, post_sources):
+        for each in post_sources:
+            source = Datasource.objects.get(id=each['source_id'])
+            tables = each['tables']
+            service = cls.get_source_service(source)
+
+            # если информация о таблице уже есть в редисе,
+            # то просто получаем их,
+            # иначе получаем новые таблицы
+            #  и спрашиваем информацию по ним у источника
+            new_tables, old_tables = RedisSourceService.filter_exists_tables(
+                source, tables)
+
+            if new_tables:
+                columns, indexes, foreigns, statistics, date_intervals = (
+                    service.get_columns_info(new_tables))
+
+                RedisSourceService.insert_columns_info(
+                    source, new_tables, columns, indexes,
+                    foreigns, statistics, date_intervals)
 
     @classmethod
     def get_rows_info(cls, source, cols):
