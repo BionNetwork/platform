@@ -9,15 +9,17 @@ class Node(object):
     """
         Узел дерева таблиц
     """
-    def __init__(self, t_name, parent=None, joins=None, join_type='inner'):
+    def __init__(self, t_name, source_id, parent=None, joins=None, join_type='inner'):
         self.val = t_name
+        self.source_id = source_id
         self.parent = parent
         self.childs = []
         self.joins = joins or []
         self.join_type = join_type
 
     def __str__(self):
-        return u'Узел %s(%s)' % (self.val, self.parent)
+        return u'Node: %s, parent=%s, sid=%s' % (
+            self.val, self.parent, self.source_id)
 
     def get_node_joins_info(self):
         """
@@ -49,20 +51,20 @@ class TablesTree(object):
         Дерево Таблиц
     """
 
-    def __init__(self, t_name):
-        self.root = Node(t_name)
+    def __init__(self, t_name, source_id):
+        self.root = Node(t_name, source_id)
         self.no_bind_tables = None
 
-    # def display(self):
-    #     if self.root:
-    #         print self.root.val, self.root.joins
-    #         r_chs = [x for x in self.root.childs]
-    #         print [(x.val, x.joins) for x in r_chs]
-    #         for c in r_chs:
-    #             print [x.val for x in c.childs]
-    #         print 80*'*'
-    #     else:
-    #         print 'Empty Tree!!!'
+    def display(self):
+        if self.root:
+            print self.root.val, self.root.joins
+            r_chs = [x for x in self.root.childs]
+            print [(x.val, x.joins) for x in r_chs]
+            for c in r_chs:
+                print [x.val for x in c.childs]
+            print 80*'*'
+        else:
+            print 'Empty Tree!!!'
 
     @property
     def ordered_nodes(self):
@@ -117,7 +119,8 @@ class TablesTree(object):
         :param root: Node
         :return: dict
         """
-        root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins), }
+        root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
+                     'source_id': root.source_id, }
 
         root_info['join_type'] = (
             None if not root_info['joins'] else root.join_type)
@@ -159,7 +162,7 @@ class TablesTree(object):
 
                 if joins:
                     tables.remove(t_name)
-                    new_node = Node(t_name, child, joins)
+                    new_node = Node(t_name, 1, child, joins)
                     child.childs.append(new_node)
                     new_children.append(new_node)
 
@@ -337,7 +340,7 @@ class TableTreeRepository(object):
         without_bind = {}
 
         for t_name in tables:
-            tree = TablesTree(t_name)
+            tree = TablesTree(t_name, 1)
             tree.build(tables, tables_info)
             trees[t_name] = tree
             without_bind[t_name] = tree.no_bind_tables
@@ -345,8 +348,16 @@ class TableTreeRepository(object):
         return trees, without_bind
 
     @staticmethod
+    def build_single_root(table, source_id):
+        """
+        Строит дерево из 1 элемента
+        """
+        tree = TablesTree(table, source_id)
+        return tree
+
+    @staticmethod
     def build_tree_by_structure(structure):
-        sel_tree = TablesTree(structure['val'])
+        sel_tree = TablesTree(structure['val'], structure['source_id'])
         sel_tree.build_by_structure(structure['childs'])
         return sel_tree
 

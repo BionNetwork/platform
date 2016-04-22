@@ -325,6 +325,18 @@ class GetColumnsView(BaseEtlView):
         return info
 
 
+class GetColumnsViewNew(BaseEtlView):
+
+    def start_get_action(self, request, source):
+        tables = json.loads(request.GET.get('tables', ''))
+
+        table = tables[0]
+
+        info = helpers.DataSourceService.get_tree_info(
+            source, table)
+        return info
+
+
 class RetitleColumnView(BaseEtlView):
 
     def start_post_action(self, request, source):

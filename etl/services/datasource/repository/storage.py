@@ -10,6 +10,9 @@ from redis_collections import Dict as RedisDict, List as RedisList
 from core.helpers import CustomJsonEncoder
 
 
+S = "S{0}"
+
+
 class RedisCacheKeys(object):
     """Ключи для редиса"""
 
@@ -24,6 +27,16 @@ class RedisCacheKeys(object):
         return u'user_datasource:{0}:{1}'.format(user_id, datasource_id)
 
     @staticmethod
+    def get_user_card_key(user_id, card_id=1):
+        """
+        соурс юзера
+        :param user_id:
+        :param datasource_id:
+        :return:
+        """
+        return u'user_card:{0}:{1}'.format(user_id, card_id)
+
+    @staticmethod
     def get_user_collection_counter(source_key):
         """
         Счетчик для коллекций пользователя (автоинкрементное значение)
@@ -32,6 +45,15 @@ class RedisCacheKeys(object):
         :return: str
         """
         return u'{0}:counter'.format(source_key)
+
+    @staticmethod
+    def get_user_card_builder(card_key):
+        """
+        Счетчик для коллекций пользователя (автоинкрементное значение)
+        :param card_key: str
+        :return: str
+        """
+        return u'{0}:builder'.format(card_key)
 
     @staticmethod
     def get_active_table(source_key, number):
@@ -121,6 +143,9 @@ class RedisCacheKeys(object):
         return u'queue:{0}'.format(task_id)
 
 
+RKeys = RedisCacheKeys
+
+
 class RedisSourceService(object):
     """
         Сервис по работе с редисом
@@ -132,6 +157,14 @@ class RedisSourceService(object):
             return json.loads(r_server.get(template.format(*params)))
         else:
             return json.loads(r_server.get(template))
+
+    @staticmethod
+    def r_set(name, structure):
+        r_server.set(name, json.dumps(structure))
+
+    @staticmethod
+    def r_del(name):
+        r_server.delete(name)
 
     @staticmethod
     def get_user_source(source):
@@ -284,6 +317,24 @@ class RedisSourceService(object):
         return r_server.get(cls.get_collection_name(source_key, table))
 
     @classmethod
+    def get_table_info(cls, table_id_or_name, user_id, source_id):
+        source_key = RKeys.get_user_datasource(user_id, source_id)
+        str_table = RKeys.get_active_table(source_key, table_id_or_name)
+        return cls.r_get(str_table)
+
+    @classmethod
+    def set_table_info(cls, table_id_or_name, user_id, source_id, table_info):
+        source_key = RKeys.get_user_datasource(user_id, source_id)
+        str_table = RKeys.get_active_table(source_key, table_id_or_name)
+        return cls.r_set(str_table, table_info)
+
+    @classmethod
+    def del_table_info(cls, table_id_or_name, user_id, source_id):
+        source_key = RKeys.get_user_datasource(user_id, source_id)
+        str_table = RKeys.get_active_table(source_key, table_id_or_name)
+        return cls.r_del(str_table)
+
+    @classmethod
     def filter_exists_tables(cls, source, tables):
         """
         Возвращает таблицы, которых нет в редисе в ранее выбранных коллекциях
@@ -304,6 +355,29 @@ class RedisSourceService(object):
         return not_exists, actives_names
 
     @classmethod
+    def already_table_in_redis(cls, source, table):
+        """
+        Проверяет таблица в редисе или нет
+        Args:
+            source(Datasource): объект источника
+            table(str): таблица
+        Returns:
+            bool
+        """
+        card_key = RKeys.get_user_card_key(source.user_id)
+        actives = cls.get_card_actives_data(card_key)
+
+        s_id = S.format(source.id)
+
+        if s_id in actives:
+            source_colls = actives[s_id]
+            # таблица уже в дереве или в остатках
+            return (table in source_colls['actives'] or
+                    table in source_colls['remains'])
+
+        return False
+
+    @classmethod
     def check_tree_exists(cls, source):
         """
         Проверяет существование дерева
@@ -320,16 +394,32 @@ class RedisSourceService(object):
         return r_server.exists(str_active_tree)
 
     @classmethod
-    def save_active_tree(cls, tree_structure, source):
+    def check_tree_exists_NEW(cls, user_id):
+        """
+        Проверяет существование дерева
+
+        Args:
+            source(Datasource): источник
+
+        Returns:
+            bool: Наличие 'user_datasource:<user_id>:<source_id>:active:tree'
+        """
+        user_card_key = RedisCacheKeys.get_user_card_key(user_id)
+        str_active_tree = RedisCacheKeys.get_active_tree(user_card_key)
+
+        return r_server.exists(str_active_tree)
+
+    @classmethod
+    def save_active_tree(cls, tree_structure, user_id):
         """
         сохраняем структуру дерева
         :param tree_structure: string
         :param source: Datasource
         """
-        source_key = cls.get_user_source(source)
-        str_active_tree = RedisCacheKeys.get_active_tree(source_key)
+        card_key = RKeys.get_user_card_key(user_id)
+        str_active_tree = RedisCacheKeys.get_active_tree(card_key)
 
-        r_server.set(str_active_tree, json.dumps(tree_structure))
+        cls.r_set(str_active_tree, tree_structure)
 
     # достаем структуру дерева из редиса
     @classmethod
@@ -343,6 +433,18 @@ class RedisSourceService(object):
         str_active_tree = RedisCacheKeys.get_active_tree(source_key)
 
         return json.loads(r_server.get(str_active_tree))
+
+    @classmethod
+    def get_active_tree_structure_NEW(cls, user_id):
+        """
+        Получение текущей структуры дерева источника
+        :param source: Datasource
+        :return:
+        """
+        card_key = RKeys.get_user_card_key(user_id)
+        str_active_tree = RKeys.get_active_tree(card_key)
+
+        return cls.r_get(str_active_tree)
 
     @classmethod
     def insert_tree(cls, structure, ordered_nodes, source, update_joins=True):
@@ -431,6 +533,75 @@ class RedisSourceService(object):
 
         # сохраняем само дерево
         cls.save_active_tree(structure, source)
+
+    @classmethod
+    def insert_tree_NEW(cls, structure, ordered_nodes,
+                        user_id, update_joins=True):
+        """
+        сохраняем полную инфу о дереве
+        :param structure:
+        :param ordered_nodes:
+        :param source:
+        """
+
+        card_key = RKeys.get_user_card_key(user_id)
+        builder_str = RKeys.get_user_card_builder(card_key)
+        str_joins = RKeys.get_source_joins(card_key)
+
+        # список коллекций
+        coll_counter = cls.get_card_actives(card_key)
+        actives = coll_counter['data']
+        # порядковый номер cчетчика коллекций пользователя
+        sequence_id = coll_counter['next_sequence_id']
+
+        joins_in_redis = defaultdict(list)
+
+        for node in ordered_nodes:
+            n_val = node.val
+            n_sid = node.source_id
+            f_n_sid = S.format(n_sid)
+
+            if f_n_sid not in actives:
+                actives[f_n_sid] = {
+                    'actives': {},
+                    'remains': [],
+                }
+
+            s_actives = actives[f_n_sid]
+
+            # суем в активные
+            if n_val not in s_actives['actives']:
+                n_table_info = cls.get_table_info(n_val, user_id, n_sid)
+
+                cls.set_table_info(sequence_id, user_id, n_sid, n_table_info)
+
+                cls.del_table_info(n_val, user_id, n_sid)
+
+                # добавляем новую таблциу в карту активных таблиц
+                s_actives['actives'][n_val] = sequence_id
+
+                # увеличиваем счетчик
+                sequence_id += 1
+
+            # убираем из остатков
+            if n_val in s_actives['remains']:
+                s_actives['remains'].remove(n_val)
+
+            # добавляем инфу новых джойнов
+            if update_joins:
+                joins = node.get_node_joins_info()
+                for k, v in joins.iteritems():
+                    joins_in_redis[k] += v
+
+        coll_counter['next_sequence_id'] = sequence_id
+
+        r_server.set(builder_str, json.dumps(coll_counter))
+
+        if update_joins:
+            r_server.set(str_joins, json.dumps(joins_in_redis))
+
+        # сохраняем само дерево
+        cls.save_active_tree(structure, user_id)
 
     @classmethod
     def tree_full_clean(cls, source, delete_ddl=True):
@@ -677,6 +848,49 @@ class RedisSourceService(object):
         return result
 
     @classmethod
+    def get_final_info_NEW(cls, ordered_nodes, user_id, last=None):
+        """
+        Информация о дереве для передачи на клиент
+        """
+        result = []
+        card_key = RKeys.get_user_card_key(user_id)
+
+
+
+        actives = cls.get_card_actives_data(card_key)
+
+        for ind, node in enumerate(ordered_nodes):
+            n_val = node.val
+            n_sid = node.source_id
+            f_n_sid = S.format(n_sid)
+
+            n_info = {'tname': n_val,
+                      'source_id': n_sid,
+                      'dest': getattr(node.parent, 'val', None),
+                      'is_root': not ind, 'without_bind': False,
+                      }
+            table_id = actives[f_n_sid]['actives'][n_val]
+            table_info = cls.get_table_info(table_id, user_id, n_sid)
+
+            n_info['cols'] = [{'col_name': x['name'],
+                               'col_title': x.get('title', None), }
+                              for x in table_info['columns']]
+            result.append(n_info)
+
+        # if last:
+        #     table_info = json.loads(
+        #                   r_server.get(str_table_by_name.format(last)))
+        #     l_info = {'tname': last,
+        #               'dest': n_val, 'without_bind': True,
+        #               'cols': [{'col_name': x['name'],
+        #                         'col_title': x.get('title', None), }
+        #                        for x in table_info['columns']]
+        #               }
+        #     result.append(l_info)
+        return result
+
+
+    @classmethod
     def insert_columns_info(cls, source, tables, columns,
                             indexes, foreigns, stats, intervals):
         """
@@ -784,6 +998,70 @@ class RedisSourceService(object):
                 final_info[t_name] = cls.r_get(str_table_by_name, (t_name,))
             else:
                 raise Exception(u'Информация о таблцие не найдена!')
+
+        return final_info
+
+    @classmethod
+    def info_for_tree_building_NEW(cls, ordered_nodes, table, source):
+        """
+        информация для построения дерева
+        :param ordered_nodes:
+        :param table:
+        :param source:
+        :return:
+        """
+
+        final_info = {}
+
+        u_id = source.user_id
+        card_key = RedisCacheKeys.get_user_card_key(u_id)
+        actives = cls.get_card_actives_data(card_key)
+
+        sid_name = u'{0}_{1}'
+
+        # FIXME пока в нодах нет source_ID
+        # инфа таблиц из существующего дерева
+        for child in ordered_nodes:
+            ch_name = child.val
+            ch_sid = child.source_id
+            sid_format = S.format(ch_sid)
+
+            if sid_format in actives:
+                collections = actives[sid_format]
+                # коллекция, участвует в дереве
+                if ch_name in collections['actives']:
+                    # FIXME можно обойтись без пор номеров
+                    # достаем по порядковому номеру
+                    ch_source_key = RKeys.get_user_datasource(u_id, ch_sid)
+                    ch_str_table = RKeys.get_active_table(
+                        ch_source_key, collections['actives'][ch_name])
+                    final_info[sid_name.format(ch_sid, ch_name)] = cls.r_get(ch_str_table)
+                elif ch_name in collections['remains']:
+                    # достаем по имени
+                    ch_source_key = RKeys.get_user_datasource(u_id, ch_sid)
+                    ch_str_table = RKeys.get_active_table(
+                        ch_source_key, ch_name)
+                    final_info[sid_name.format(ch_sid, ch_name)] = cls.r_get(ch_str_table)
+                else:
+                    raise Exception(u'Информация о таблцие не найдена!')
+            else:
+                raise Exception(u'Информация о таблцие не найдена!')
+
+        source_id = source.id
+
+        source_key = RKeys.get_user_datasource(u_id, source_id)
+        str_table = RedisCacheKeys.get_active_table(
+            source_key, '{0}')
+
+        # либо валяется по имени
+        if r_server.exists(str_table.format(table)):
+            final_info[sid_name.format(source_id, table)] = (
+                cls.r_get(str_table.format(table)))
+        # либо обязан быть в коллекциях карточки
+        else:
+            collections = actives[S.format(source_id)]
+            final_info[sid_name.format(source_id, table)] = (
+                cls.r_get(str_table.format(collections[table])))
 
         return final_info
 
@@ -920,6 +1198,35 @@ class RedisSourceService(object):
                 'next_sequence_id': 1,
             }))
         return cls.r_get(counter_str)
+
+    @classmethod
+    def get_card_actives(cls, card_key):
+        """
+        порядковый номер коллекции юзера
+
+        Args:
+            source_key(str): Базовая часть ключа
+
+        Returns:
+            dict:
+        """
+        card_builder = RKeys.get_user_card_builder(card_key)
+        if not r_server.exists(card_builder):
+            builder = {
+                'data': {},
+                'next_sequence_id': 1,
+            }
+            cls.r_set(card_builder, builder)
+            return builder
+        return cls.r_get(card_builder)
+
+    @classmethod
+    def get_card_actives_data(cls, card_key):
+        """
+        """
+        builder = cls.get_card_actives(card_key)
+
+        return builder['data']
 
     @classmethod
     def get_active_table_list(cls, source_key):

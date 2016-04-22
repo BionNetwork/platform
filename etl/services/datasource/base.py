@@ -16,6 +16,9 @@ from etl.models import TableTreeRepository
 from core.helpers import get_utf8_string
 
 
+RedisSS = RedisSourceService
+
+
 class DataSourceService(object):
     """
         Сервис управляет сервисами БД, Файлов и Редиса!
@@ -197,62 +200,78 @@ class DataSourceService(object):
         return RedisSourceService.get_final_info(ordered_nodes, source, last)
 
     @classmethod
-    def get_tree_info(cls, post_sources):
+    def get_tree_info(cls, source, table):
         """
         """
-        cls.cache_columns(post_sources)
-        sel_tree, remains = cls.get_tree(post_sources)
+        cls.cache_columns(source, table)
+        sel_tree, remains = cls.get_tree(source, table)
+
         # таблица без связи
-        source = Datasource.objects.get(id=post_sources[0]['source_id'])
-        last = RedisSourceService.insert_remains(source, remains)
+        # last = RedisSourceService.insert_remains(source, remains)
         last = None
 
         # сохраняем дерево
         structure = sel_tree.structure
         ordered_nodes = sel_tree.ordered_nodes
-        RedisSourceService.insert_tree(structure, ordered_nodes, source)
+        RedisSS.insert_tree_NEW(structure, ordered_nodes, source.user_id)
 
-        return RedisSourceService.get_final_info(ordered_nodes, source, last)
+        return RedisSourceService.get_final_info_NEW(
+            ordered_nodes, source.user_id, last)
 
     @classmethod
-    def get_tree(cls, post_sources):
-        concat_tables_info = {}
-        concat_tables = []
-        for each in post_sources:
-            source = Datasource.objects.get(id=each['source_id'])
-            tables = each['tables']
-            concat_tables_info.update(RedisSourceService.info_for_tree_building(
-                (), tables, source))
-            concat_tables.extend(each['tables'])
+    def get_tree(cls, source, table):
+        """
+        Строит дерево, если его нет, иначе перестраивает
+        """
+        u_id = source.user_id
 
-        trees, without_bind = TableTreeRepository.build_trees(
-            tuple(concat_tables), concat_tables_info)
+        tree_exists = RedisSS.check_tree_exists_NEW(u_id)
 
-        sel_tree = TableTreeRepository.select_tree(trees)
-        remains = without_bind[sel_tree.root.val]
+        # дерева еще нет
+        if not tree_exists:
+            RedisSS.info_for_tree_building_NEW(
+                (), table, source)
+            sel_tree = TableTreeRepository.build_single_root(table, source.id)
+            # остатков нет
+            remains = []
+
+        # иначе достраиваем дерево, если можем, если не можем вернем остаток
+        else:
+
+            # достаем структуру дерева из редиса
+            structure = RedisSourceService.get_active_tree_structure_NEW(u_id)
+            # строим дерево
+            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+
+            ordered_nodes = sel_tree.ordered_nodes
+
+            tables_info = RedisSourceService.info_for_tree_building(
+                ordered_nodes, tables, source)
+
+            # перестраиваем дерево
+            sel_tree.build(tuple(tables), tables_info)
+            remains = sel_tree.no_bind_tables
+
         return sel_tree, remains
 
     @classmethod
-    def cache_columns(cls, post_sources):
-        for each in post_sources:
-            source = Datasource.objects.get(id=each['source_id'])
-            tables = each['tables']
-            service = cls.get_source_service(source)
+    def cache_columns(cls, source, table):
 
-            # если информация о таблице уже есть в редисе,
-            # то просто получаем их,
-            # иначе получаем новые таблицы
-            #  и спрашиваем информацию по ним у источника
-            new_tables, old_tables = RedisSourceService.filter_exists_tables(
-                source, tables)
+        service = cls.get_source_service(source)
 
-            if new_tables:
-                columns, indexes, foreigns, statistics, date_intervals = (
-                    service.get_columns_info(new_tables))
+        # если информация о таблице уже есть в редисе,
+        # то просто получаем их,
+        # иначе спрашиваем информацию по нему у источника
+        already = RedisSS.already_table_in_redis(source, table)
 
-                RedisSourceService.insert_columns_info(
-                    source, new_tables, columns, indexes,
-                    foreigns, statistics, date_intervals)
+        if not already:
+            columns, indexes, foreigns, statistics, date_intervals = (
+                service.get_columns_info([table, ]))
+
+            # кладем в редис по имени просто
+            RedisSS.insert_columns_info(
+                source, [table, ], columns, indexes,
+                foreigns, statistics, date_intervals)
 
     @classmethod
     def get_rows_info(cls, source, cols):
