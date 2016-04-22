@@ -132,6 +132,10 @@ class TablesTree(object):
     def build(self, tables, tables_info):
         self.no_bind_tables = self._build([self.root], tables, tables_info)
 
+    def build_NEW(self, table, tables_info, source_id):
+        self.no_bind_tables = self._build_NEW(
+            [self.root, ], table, tables_info, source_id)
+
     @classmethod
     def _build(cls, children, tables, tables_info):
         """
@@ -172,6 +176,51 @@ class TablesTree(object):
         # таблицы без связей
         return tables
 
+    @classmethod
+    def _build_NEW(cls, children, table, tables_info, source_id):
+        """
+        строит дерево таблиц, возвращает таблицы без связей
+
+        Args:
+            children(list of Node):
+            tables
+            tables_info
+
+        Returns:
+            list: Список не связанных таблиц
+        """
+        table_tuple = (table, source_id)
+        child_vals = [(x.val, x.source_id) for x in children]
+
+        s = u"{0}_{1}"
+
+        if table_tuple not in child_vals:
+
+            new_children = []
+
+            for child in children:
+                new_children += child.childs
+                l_val = child.val
+                l_source = child.source_id
+                l_info = tables_info[s.format(l_source, l_val)]
+
+                r_info = tables_info[s.format(source_id, table)]
+                joins = cls.get_joins(l_val, table, l_info, r_info)
+
+                if joins:
+                    new_node = Node(table, source_id, child, joins)
+                    child.childs.append(new_node)
+                    new_children.append(new_node)
+
+                    table = None
+
+                if new_children and table is not None:
+                    table = cls._build_NEW(
+                        new_children, table, tables_info, source_id)
+
+        # таблицы без связей
+        return table
+
     def build_by_structure(self, children):
         self._build_by_structure(self.root, children)
 
@@ -184,7 +233,7 @@ class TablesTree(object):
         """
 
         for ch in children:
-            new_node = Node(ch['val'], root, ch['joins'],
+            new_node = Node(ch['val'], ch['source_id'], root, ch['joins'],
                             ch['join_type'])
             root.childs.append(new_node)
             cls._build_by_structure(new_node, ch['childs'])

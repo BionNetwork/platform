@@ -204,11 +204,11 @@ class DataSourceService(object):
         """
         """
         cls.cache_columns(source, table)
-        sel_tree, remains = cls.get_tree(source, table)
+        sel_tree, last = cls.get_tree(source, table)
 
         # таблица без связи
-        # last = RedisSourceService.insert_remains(source, remains)
-        last = None
+        if last is not None:
+            RedisSourceService.insert_last(last, source.user_id, source.id)
 
         # сохраняем дерево
         structure = sel_tree.structure
@@ -233,26 +233,31 @@ class DataSourceService(object):
                 (), table, source)
             sel_tree = TableTreeRepository.build_single_root(table, source.id)
             # остатков нет
-            remains = []
+            last = None
 
         # иначе достраиваем дерево, если можем, если не можем вернем остаток
         else:
-
             # достаем структуру дерева из редиса
             structure = RedisSourceService.get_active_tree_structure_NEW(u_id)
+
+            print 'stru', structure
             # строим дерево
             sel_tree = TableTreeRepository.build_tree_by_structure(structure)
-
             ordered_nodes = sel_tree.ordered_nodes
 
-            tables_info = RedisSourceService.info_for_tree_building(
-                ordered_nodes, tables, source)
+            print 'nodes', ordered_nodes
+
+            tables_info = RedisSS.info_for_tree_building_NEW(
+                ordered_nodes, table, source)
+
+            print 'tables_info', tables_info
 
             # перестраиваем дерево
-            sel_tree.build(tuple(tables), tables_info)
-            remains = sel_tree.no_bind_tables
+            sel_tree.build_NEW(table, tables_info, source.id)
+            print 'last', sel_tree.no_bind_tables
+            last = sel_tree.no_bind_tables
 
-        return sel_tree, remains
+        return sel_tree, last
 
     @classmethod
     def cache_columns(cls, source, table):

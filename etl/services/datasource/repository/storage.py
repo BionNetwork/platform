@@ -6,10 +6,11 @@ import json
 from copy import deepcopy
 from django.conf import settings
 from collections import defaultdict
-from redis_collections import Dict as RedisDict, List as RedisList
+from redis_collections import Dict as RedisDict
 from core.helpers import CustomJsonEncoder
 
 
+# FIXME описать
 S = "S{0}"
 
 
@@ -676,6 +677,24 @@ class RedisSourceService(object):
         return last
 
     @classmethod
+    def insert_last(cls, last, user_id, source_id):
+        """
+        сохраняет таблицу без связей
+        :return:
+        """
+        card_key = RKeys.get_user_card_key(user_id)
+        card_collections = cls.get_card_actives(card_key)
+        actives = card_collections['data']
+
+        f_sid = S.format(source_id)
+        if f_sid not in actives:
+            actives[f_sid] = {'actives': {}, 'remains': [last, ], }
+        else:
+            actives[f_sid]['remains'].append(last)
+
+        cls.set_card_actives(card_key, card_collections)
+
+    @classmethod
     def delete_unneeded_remains(cls, source, remains):
         """
         удаляет таблицы без связей,(все кроме первой)
@@ -854,9 +873,6 @@ class RedisSourceService(object):
         """
         result = []
         card_key = RKeys.get_user_card_key(user_id)
-
-
-
         actives = cls.get_card_actives_data(card_key)
 
         for ind, node in enumerate(ordered_nodes):
@@ -1219,6 +1235,13 @@ class RedisSourceService(object):
             cls.r_set(card_builder, builder)
             return builder
         return cls.r_get(card_builder)
+
+    @classmethod
+    def set_card_actives(cls, card_key, collections):
+        """
+        """
+        card_builder = RKeys.get_user_card_builder(card_key)
+        return cls.r_set(card_builder, collections)
 
     @classmethod
     def get_card_actives_data(cls, card_key):
