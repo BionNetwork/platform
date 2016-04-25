@@ -205,7 +205,8 @@ class TablesTree(object):
                 l_info = tables_info[s.format(l_source, l_val)]
 
                 r_info = tables_info[s.format(source_id, table)]
-                joins = cls.get_joins(l_val, table, l_info, r_info)
+                joins = cls.get_joins_NEW(
+                    l_val, table, l_info, r_info)
 
                 if joins:
                     new_node = Node(table, source_id, child, joins)
@@ -343,6 +344,93 @@ class TablesTree(object):
             dict_joins.append({
                 'left': {'table': join[0], 'column': join[1]},
                 'right': {'table': join[2], 'column': join[3]},
+                'join': {"type": JoinTypes.INNER, "value": Operations.EQ},
+            })
+
+        return dict_joins
+
+    @staticmethod
+    def get_joins_NEW(l_t, r_t, l_info, r_info):
+        """
+        Функция выявляет связи между таблицами
+        :param l_t:
+        :param r_t:
+        :param l_info:
+        :param r_info:
+        :return: list
+        """
+        l_sid = l_info['source_id']
+        r_sid = r_info['source_id']
+
+        l_cols = l_info['columns']
+        r_cols = r_info['columns']
+
+        joins = set()
+        # избавляет от дублей
+        unique_set = set()
+
+        for l_c in l_cols:
+            l_str = u'{0}_{1}'.format(l_t, l_c['name'])
+            for r_c in r_cols:
+                r_str = u'{0}_{1}'.format(r_t, r_c['name'])
+                if l_c['name'] == r_str and l_c['type'] == r_c['type']:
+                    j_tuple = (l_t, l_c["name"], l_sid, r_t, r_c["name"], r_sid)
+                    sort_j_tuple = tuple(sorted(j_tuple))
+                    if sort_j_tuple not in unique_set:
+                        joins.add(j_tuple)
+                        unique_set.add(sort_j_tuple)
+                        break
+                if l_str == r_c["name"] and l_c['type'] == r_c['type']:
+                    j_tuple = (l_t, l_c["name"], l_sid, r_t, r_c["name"], r_sid)
+                    sort_j_tuple = tuple(sorted(j_tuple))
+                    if sort_j_tuple not in unique_set:
+                        joins.add(j_tuple)
+                        unique_set.add(sort_j_tuple)
+                        break
+
+        l_foreign = l_info['foreigns']
+        r_foreign = r_info['foreigns']
+
+        for f in l_foreign:
+            if f['destination']['table'] == r_t:
+                j_tuple = (
+                    f['source']['table'],
+                    f['source']['column'],
+                    l_sid,
+                    f['destination']['table'],
+                    f['destination']['column'],
+                    r_sid,
+                )
+                sort_j_tuple = tuple(sorted(j_tuple))
+                if sort_j_tuple not in unique_set:
+                    joins.add(j_tuple)
+                    unique_set.add(sort_j_tuple)
+                    break
+
+        for f in r_foreign:
+            if f['destination']['table'] == l_t:
+                j_tuple = (
+                    f['source']['table'],
+                    f['source']['column'],
+                    r_sid,
+                    f['destination']['table'],
+                    f['destination']['column'],
+                    l_sid,
+                )
+                sort_j_tuple = tuple(sorted(j_tuple))
+                if sort_j_tuple not in unique_set:
+                    joins.add(j_tuple)
+                    unique_set.add(sort_j_tuple)
+                    break
+
+        dict_joins = []
+
+        for join in joins:
+            dict_joins.append({
+                'left': {'table': join[0], 'column': join[1],
+                         'source_id': join[2], },
+                'right': {'table': join[3], 'column': join[4],
+                          'source_id': join[5], },
                 'join': {"type": JoinTypes.INNER, "value": Operations.EQ},
             })
 

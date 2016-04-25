@@ -928,6 +928,7 @@ class RedisSourceService(object):
         for t_name in tables:
             pipe.set(str_table_by_name.format(t_name), json.dumps(
                 {
+                    "source_id": source.id,
                     "columns": columns[t_name],
                     "indexes": indexes[t_name],
                     "foreigns": foreigns[t_name],
