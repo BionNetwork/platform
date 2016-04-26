@@ -807,6 +807,38 @@ class RedisSourceService(object):
         }
 
     @classmethod
+    def get_columns_for_joins(cls, user_id, parent_table, parent_sid,
+                              child_table, child_sid):
+        """
+        """
+        card_key = RKeys.get_user_card_key(user_id)
+        actives = cls.get_card_actives_data(card_key)
+
+        of_parent = actives[S.format(parent_sid)]
+        of_child = actives[S.format(child_sid)]
+
+        # определяем инфа по таблице в дереве или в остатках
+        if parent_table in of_parent['actives']:
+            par_table_id = of_parent['actives'][parent_table]
+        else:
+            par_table_id = parent_table
+
+        if child_table in of_child['actives']:
+            ch_table_id = of_child['actives'][child_table]
+        else:
+            ch_table_id = child_table
+
+        par_cols = cls.get_table_info(
+            par_table_id, user_id, parent_sid)['columns']
+        ch_cols = cls.get_table_info(
+            ch_table_id, user_id, child_sid)['columns']
+
+        return {
+            parent_table: [x['name'] for x in par_cols],
+            child_table: [x['name'] for x in ch_cols],
+        }
+
+    @classmethod
     def get_final_info(cls, ordered_nodes, source, last=None):
         """
         Информация о дереве для передачи на клиент
@@ -928,7 +960,7 @@ class RedisSourceService(object):
         for t_name in tables:
             pipe.set(str_table_by_name.format(t_name), json.dumps(
                 {
-                    "source_id": source.id,
+                    "sid": source.id,
                     "columns": columns[t_name],
                     "indexes": indexes[t_name],
                     "foreigns": foreigns[t_name],
@@ -1249,8 +1281,23 @@ class RedisSourceService(object):
         """
         """
         builder = cls.get_card_actives(card_key)
-
         return builder['data']
+
+    @classmethod
+    def get_table_name_or_id(cls, table, user_id, sid):
+        """
+        """
+        card_key = RKeys.get_user_card_key(user_id)
+        actives = cls.get_card_actives_data(card_key)
+        s_actives = actives[S.format(sid)]
+
+        if table in s_actives['actives']:
+            return s_actives['actives'][table]
+
+        elif table not in s_actives['remains']:
+            raise Exception(u'Отсутствует информация по таблице!')
+
+        return table
 
     @classmethod
     def get_active_table_list(cls, source_key):
@@ -1311,6 +1358,61 @@ class RedisSourceService(object):
         return {'has_error_joins': bool(error_joins), }
 
     @classmethod
+    def save_good_error_joins_NEW(
+            cls, user_id, left_table, left_sid, right_table,
+            right_sid, good_joins, error_joins, join_type):
+        """
+        Сохраняет временные ошибочные и нормальные джойны таблиц
+        :param source: Datasource
+        :param joins: list
+        :param error_joins: list
+        """
+        card_key = RKeys.get_user_card_key(user_id)
+        builder_str = RKeys.get_user_card_builder(card_key)
+        str_joins = RKeys.get_source_joins(card_key)
+
+        r_joins = cls.r_get(str_joins)
+
+        if left_table in r_joins:
+            # старые связи таблицы папы
+            old_left_joins = r_joins[left_table]
+            # меняем связи с right_table, а остальное оставляем
+            r_joins[left_table] = [j for j in old_left_joins
+                                   if j['right']['table'] != right_table and
+                                   int(j['right']['sid']) != right_sid]
+        else:
+            r_joins[left_table] = []
+
+        for j in good_joins:
+            l_c, j_val, r_c = j
+            r_joins[left_table].append(
+                {
+                    'left': {'table': left_table, 'column': l_c,
+                             'sid': left_sid, },
+                    'right': {'table': right_table, 'column': r_c,
+                              'sid': right_sid, },
+                    'join': {'type': join_type, 'value': j_val},
+                }
+            )
+
+        if error_joins:
+            for j in error_joins:
+                l_c, j_val, r_c = j
+                r_joins[left_table].append(
+                    {
+                        'left': {'table': left_table, 'column': l_c,
+                                 'sid': left_sid, },
+                        'right': {'table': right_table, 'column': r_c,
+                                  'sid': right_sid, },
+                        'join': {'type': join_type, 'value': j_val},
+                        'error': 'types mismatch'
+                    }
+                )
+        r_server.set(str_joins, json.dumps(r_joins))
+
+        return {'has_error_joins': bool(error_joins), }
+
+    @classmethod
     def get_good_error_joins(cls, source, parent_table, child_table):
         source_key = cls.get_user_source(source)
         r_joins = cls.get_source_joins(source_key)
@@ -1329,6 +1431,31 @@ class RedisSourceService(object):
             error_joins = [
                 j for j in par_joins if j['right']['table'] == child_table
                 and 'error' in j and j['error'] == 'types mismatch']
+
+        return good_joins, error_joins
+
+    @classmethod
+    def get_good_error_joins_NEW(cls, user_id, parent_table, parent_sid,
+                                 child_table, child_sid):
+
+        card_key = RKeys.get_user_card_key(user_id)
+        r_joins = cls.get_source_joins(card_key)
+
+        good_joins = []
+        error_joins = []
+
+        # если 2 таблицы выбраны без связей, то r_joins пустой,
+        # если биндим таблицу без связи,то parent_table not in r_joins
+        if r_joins and parent_table in r_joins:
+            par_joins = r_joins[parent_table]
+            good_joins = [
+                j for j in par_joins if j['right']['table'] == child_table and
+                int(j['right']['sid']) == child_sid and 'error' not in j]
+
+            error_joins = [
+                j for j in par_joins if j['right']['table'] == child_table and
+                int(j['right']['sid']) == child_sid and
+                'error' in j and j['error'] == 'types mismatch']
 
         return good_joins, error_joins
 

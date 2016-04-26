@@ -332,6 +332,9 @@ class GetColumnsViewNew(BaseEtlView):
 
         table = tables[0]
 
+        # source = Datasource.objects.get(id=32)
+        # table = u'Лист1'
+
         info = helpers.DataSourceService.get_tree_info(
             source, table)
         return info
@@ -415,12 +418,25 @@ class RemoveAllTablesView(BaseEtlView):
 class GetColumnsForChoicesView(BaseEtlView):
 
     def start_get_action(self, request, source):
+
+        parent_sid = int(request.GET.get('parent_source_id'))
+        child_sid = int(request.GET.get('child_source_id'))
+
+        # parent_sid = 17
+        # child_sid = 32#17
+
+        # parent_table = u'auth_group'
+        # child_table = u'Лист1'
+
         parent_table = request.GET.get('parent')
         child_table = request.GET.get('child_bind')
-        has_warning = json.loads(request.GET.get('has_warning'))
+        # has_warning = json.loads(request.GET.get('has_warning'))
+        #
+        # data = helpers.DataSourceService.get_columns_and_joins_for_join_window(
+        #     source, parent_table, child_table, has_warning)
 
-        data = helpers.DataSourceService.get_columns_and_joins_for_join_window(
-            source, parent_table, child_table, has_warning)
+        data = helpers.DataSourceService.get_columns_and_joins(
+            request.user.id, parent_table, parent_sid, child_table, child_sid)
 
         return data
 
@@ -434,8 +450,20 @@ class SaveNewJoinsView(BaseEtlView):
         join_type = get.get('joinType')
         joins = json.loads(get.get('joins'))
 
-        data = helpers.DataSourceService.save_new_joins(
-            source, left_table, right_table, join_type, joins)
+        left_sid = int(request.GET.get('parent_source_id'))
+        right_sid = int(request.GET.get('child_source_id'))
+
+        # left_sid = 17
+        # right_sid = 32#17
+
+        # data = helpers.DataSourceService.save_new_joins(
+        #     source, left_table, right_table, join_type, joins)
+
+        u_id = request.user.id
+
+        data = helpers.DataSourceService.save_new_joins_NEW(
+            u_id, left_table, left_sid, right_table,
+            right_sid, join_type, joins)
 
         return data
 

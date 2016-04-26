@@ -1,8 +1,10 @@
 # coding: utf-8
-from collections import defaultdict
-from etl.services.db.interfaces import JoinTypes, Operations
-from etl.services.datasource.repository.storage import RedisSourceService
+from __future__ import unicode_literals
+
 import operator
+from collections import defaultdict
+
+from etl.services.db.interfaces import JoinTypes, Operations
 
 
 class Node(object):
@@ -120,7 +122,7 @@ class TablesTree(object):
         :return: dict
         """
         root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
-                     'source_id': root.source_id, }
+                     'sid': root.source_id, }
 
         root_info['join_type'] = (
             None if not root_info['joins'] else root.join_type)
@@ -234,7 +236,7 @@ class TablesTree(object):
         """
 
         for ch in children:
-            new_node = Node(ch['val'], ch['source_id'], root, ch['joins'],
+            new_node = Node(ch['val'], ch['sid'], root, ch['joins'],
                             ch['join_type'])
             root.childs.append(new_node)
             cls._build_by_structure(new_node, ch['childs'])
@@ -268,6 +270,42 @@ class TablesTree(object):
             node.joins.append({
                 'left': {'table': left_table, 'column': parent_col},
                 'right': {'table': right_table, 'column': child_col},
+                'join': {"type": join_type, "value": oper},
+            })
+
+    def update_node_joins_NEW(self, left_table, left_sid, right_table,
+                              right_sid, join_type, joins):
+        """
+        добавляет/меняет связи между таблицами
+        :param sel_tree: TablesTree
+        :param left_table: str
+        :param right_table: str
+        :param join_type: str
+        :param joins: list
+        """
+        nodes = self.ordered_nodes
+        parent = [x for x in nodes if x.val == left_table and
+                  int(x.source_id) == int(left_sid)][0]
+        childs = [x for x in parent.childs if x.val == right_table and
+                  int(x.source_id) == int(right_sid)]
+
+        # случай, когда две таблицы не имели связей
+        if not childs:
+            node = Node(right_table, right_sid, parent, [], join_type)
+            parent.childs.append(node)
+        else:
+            # меняем существующие связи
+            node = childs[0]
+            node.joins = []
+            node.join_type = join_type
+
+        for came_join in joins:
+            parent_col, oper, child_col = came_join
+            node.joins.append({
+                'left': {'table': left_table, 'column': parent_col,
+                         'sid': left_sid, },
+                'right': {'table': right_table, 'column': child_col,
+                          'sid': right_sid, },
                 'join': {"type": join_type, "value": oper},
             })
 
@@ -359,8 +397,8 @@ class TablesTree(object):
         :param r_info:
         :return: list
         """
-        l_sid = l_info['source_id']
-        r_sid = r_info['source_id']
+        l_sid = l_info['sid']
+        r_sid = r_info['sid']
 
         l_cols = l_info['columns']
         r_cols = r_info['columns']
@@ -428,9 +466,9 @@ class TablesTree(object):
         for join in joins:
             dict_joins.append({
                 'left': {'table': join[0], 'column': join[1],
-                         'source_id': join[2], },
+                         'sid': join[2], },
                 'right': {'table': join[3], 'column': join[4],
-                          'source_id': join[5], },
+                          'sid': join[5], },
                 'join': {"type": JoinTypes.INNER, "value": Operations.EQ},
             })
 
@@ -494,7 +532,7 @@ class TableTreeRepository(object):
 
     @staticmethod
     def build_tree_by_structure(structure):
-        sel_tree = TablesTree(structure['val'], structure['source_id'])
+        sel_tree = TablesTree(structure['val'], structure['sid'])
         sel_tree.build_by_structure(structure['childs'])
         return sel_tree
 

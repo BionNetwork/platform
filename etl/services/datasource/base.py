@@ -215,8 +215,7 @@ class DataSourceService(object):
         ordered_nodes = sel_tree.ordered_nodes
         RedisSS.insert_tree_NEW(structure, ordered_nodes, source.user_id)
 
-        return RedisSourceService.get_final_info_NEW(
-            ordered_nodes, source.user_id, last)
+        return RedisSS.get_final_info_NEW(ordered_nodes, source.user_id, last)
 
     @classmethod
     def get_tree(cls, source, table):
@@ -238,23 +237,18 @@ class DataSourceService(object):
         # иначе достраиваем дерево, если можем, если не можем вернем остаток
         else:
             # достаем структуру дерева из редиса
-            structure = RedisSourceService.get_active_tree_structure_NEW(u_id)
+            structure = RedisSS.get_active_tree_structure_NEW(u_id)
 
-            print 'stru', structure
             # строим дерево
             sel_tree = TableTreeRepository.build_tree_by_structure(structure)
             ordered_nodes = sel_tree.ordered_nodes
 
-            print 'nodes', ordered_nodes
-
             tables_info = RedisSS.info_for_tree_building_NEW(
                 ordered_nodes, table, source)
 
-            print 'tables_info', tables_info
-
             # перестраиваем дерево
             sel_tree.build_NEW(table, tables_info, source.id)
-            print 'last', sel_tree.no_bind_tables
+
             last = sel_tree.no_bind_tables
 
         return sel_tree, last
@@ -281,9 +275,8 @@ class DataSourceService(object):
     @classmethod
     def get_rows_info(cls, source, cols):
         """
-        Получение списка значений указанных колонок и таблиц в выбранном источнике данных
-
-
+        Получение списка значений указанных колонок и таблиц
+        в выбранном источнике данных
         Args:
             source(core.models.Datasource): Источник
             cols(list): Описать
@@ -376,6 +369,23 @@ class DataSourceService(object):
         return result
 
     @classmethod
+    def get_columns_and_joins(cls, user_id, parent_table, parent_sid,
+                              child_table, child_sid):
+        """
+        """
+        columns = RedisSS.get_columns_for_joins(
+            user_id, parent_table, parent_sid, child_table, child_sid)
+
+        good_joins, error_joins = RedisSS.get_good_error_joins_NEW(
+            user_id, parent_table, parent_sid, child_table, child_sid)
+
+        result = {'columns': columns,
+                  'good_joins': good_joins,
+                  'error_joins': error_joins,
+                  }
+        return result
+
+    @classmethod
     def check_new_joins(cls, source, left_table, right_table, joins):
         # избавление от дублей
         """
@@ -407,6 +417,42 @@ class DataSourceService(object):
             l_c, j_val, r_c = j
             if (cols_types[u'{0}.{1}'.format(left_table, l_c)] !=
                     cols_types[u'{0}.{1}'.format(right_table, r_c)]):
+                error_joins.append(j)
+            else:
+                good_joins.append(j)
+
+        return good_joins, error_joins, joins_set
+
+    @classmethod
+    def check_new_joins_NEW(cls, user_id, left_table, left_sid, right_table,
+                            right_sid, joins):
+        """
+        Redis
+        Проверяет пришедшие джойны на совпадение типов
+        Args:
+            left_table(): Описать
+            right_table(): Описать
+            joins(): Описать
+        Returns:
+            Описать
+        """
+        # FIXME: Описать
+        joins_set = set()
+        for j in joins:
+            joins_set.add(tuple(j))
+
+        ts_info = [(left_table, left_sid), (right_table, right_sid), ]
+        cols_types = cls.get_columns_types_NEW(user_id, ts_info)
+
+        # список джойнов с неверными типами
+        error_joins = list()
+        good_joins = list()
+
+        for j in joins_set:
+            l_c, j_val, r_c = j
+            if (cols_types[u'{0}.{1}.{2}'.format(left_table, l_c, left_sid)] !=
+                    cols_types[u'{0}.{1}.{2}'.format(
+                        right_table, r_c, right_sid)]):
                 error_joins.append(j)
             else:
                 good_joins.append(j)
@@ -469,6 +515,60 @@ class DataSourceService(object):
 
         return data
 
+    @classmethod
+    def save_new_joins_NEW(cls, user_id, left_table, left_sid, right_table,
+                           right_sid, join_type, joins):
+        """
+        Redis
+        Cохранение новых джойнов
+
+        Args:
+            source(core.models.Datasource): Источник
+            left_table(): Описать
+            right_table(): Описать
+            join_type(): Описать
+            joins(): Описать
+
+        Returns:
+            Описать
+        """
+
+        # FIXME: Описать
+        good_joins, error_joins, joins_set = cls.check_new_joins_NEW(
+            user_id, left_table, left_sid, right_table, right_sid, joins)
+
+        data = RedisSourceService.save_good_error_joins_NEW(
+            user_id, left_table, left_sid, right_table, right_sid,
+            good_joins, error_joins, join_type)
+
+        if not error_joins:
+            # достаем структуру дерева из редиса
+            structure = RedisSS.get_active_tree_structure_NEW(user_id)
+            # строим дерево
+            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+
+            sel_tree.update_node_joins_NEW(left_table, left_sid, right_table,
+                                           right_sid, join_type, joins_set)
+            # сохраняем дерево
+            ordered_nodes = sel_tree.ordered_nodes
+            structure = sel_tree.structure
+
+            RedisSS.insert_tree_NEW(
+                structure, ordered_nodes, user_id, update_joins=False)
+
+            # если совсем нет ошибок ни у кого, то на клиенте перерисуем дерево,
+            # на всякий пожарный
+            data['draw_table'] = RedisSS.get_final_info_NEW(
+                ordered_nodes, user_id)
+
+            # # работа с последней таблицей
+            # remain = RedisSourceService.get_last_remain(source_key)
+            # if remain == right_table:
+            #     # удаляем инфу о таблице без связи, если она есть
+            #     RedisSourceService.delete_last_remain(source_key)
+
+        return data
+
     @staticmethod
     def get_collections_names(source, tables):
         """
@@ -507,6 +607,29 @@ class DataSourceService(object):
                 RedisSourceService.get_table_full_info(source, table))['columns']
             for col in t_cols:
                 cols_types[u'{0}.{1}'.format(table, col['name'])] = col['type']
+
+        return cols_types
+
+    @classmethod
+    def get_columns_types_NEW(cls, user_id, tables_info):
+        """
+        Redis
+        Получение типов колонок таблиц
+        Args:
+            tables(): Описать
+        Returns:
+            Описать
+        """
+        # FIXME: Описать
+        cols_types = {}
+
+        for (t_name, sid) in tables_info:
+            t_id = RedisSS.get_table_name_or_id(t_name, user_id, sid)
+            t_cols = RedisSS.get_table_info(t_id, user_id, sid)['columns']
+
+            for col in t_cols:
+                cols_types[u'{0}.{1}.{2}'.format(
+                    t_name, col['name'], sid)] = col['type']
 
         return cols_types
 
