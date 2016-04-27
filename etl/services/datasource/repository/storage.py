@@ -12,6 +12,7 @@ from core.helpers import CustomJsonEncoder
 
 # FIXME описать
 S = "S{0}"
+T_S = "T{0}_S{1}"
 
 
 class RedisCacheKeys(object):
@@ -238,6 +239,48 @@ class RedisSourceService(object):
         # r_server.set(counter_str, json.dumps(coll_counter))
 
     @classmethod
+    def delete_tables_NEW(cls, user_id, tables):
+        """
+        удаляет информацию о таблицах
+
+        Args:
+            source(Datasource): объект Источника
+            tables(list): Список названий таблиц
+        """
+        card_key = RKeys.get_user_card_key(user_id)
+        str_actives = RKeys.get_user_card_builder(card_key)
+        str_joins = RKeys.get_source_joins(card_key)
+
+        actives = cls.get_card_actives(card_key)
+        actives_data = actives['data']
+
+        # если есть, то удаляем таблицу без связей
+        for (t_name, sid) in tables:
+            f_sid = S.format(sid)
+            source_key = RKeys.get_user_datasource(user_id, sid)
+            if t_name in actives_data[f_sid]['actives']:
+                table_str = RedisCacheKeys.get_active_table(
+                    source_key, actives_data[f_sid]['actives'][t_name])
+                del actives_data[f_sid]['actives'][t_name]
+            else:
+                table_str = RedisCacheKeys.get_active_table(
+                    source_key, t_name)
+                actives_data[f_sid]['remains'].remove(t_name)
+            r_server.delete(table_str)
+
+        joins = json.loads(r_server.get(str_joins))
+
+        # удаляем все джоины пришедших таблиц
+        cls.initial_delete_joins_NEW(tables, joins)
+        child_tables = cls.delete_joins_NEW(tables, joins)
+
+        # добавляем к основным таблицам, их дочерние для дальнейшего удаления
+        tables += child_tables
+
+        r_server.set(str_joins, json.dumps(joins))
+        r_server.set(str_actives, json.dumps(actives))
+
+    @classmethod
     def initial_delete_joins(cls, tables, joins):
         """
         Удаляем связи таблиц, из таблиц, стоящих левее выбранных
@@ -246,6 +289,18 @@ class RedisSourceService(object):
             for j in v[:]:
                 if j['right']['table'] in tables:
                     v.remove(j)
+
+    @classmethod
+    def initial_delete_joins_NEW(cls, tables, joins):
+        """
+        Удаляем связи таблиц, из таблиц, стоящих левее выбранных
+        """
+        for k, v in joins.items():
+            for j in v[:]:
+                if (j['right']['table'], j['right']['sid']) in tables:
+                    v.remove(j)
+            if not joins[k]:
+                del joins[k]
 
     @classmethod
     def delete_joins(cls, tables, joins):
@@ -258,6 +313,24 @@ class RedisSourceService(object):
             if table in joins:
                 destinations += [x['right']['table'] for x in joins[table]]
                 del joins[table]
+                if destinations:
+                    destinations += cls.delete_joins(destinations, joins)
+        return destinations
+
+    @classmethod
+    def delete_joins_NEW(cls, tables, joins):
+        """
+            удаляем связи таблиц, плюс связи таблиц, стоящих правее выбранных!
+            возвращает имена дочерних таблиц на удаление
+        """
+        destinations = []
+        for (table, sid) in tables:
+            s_t = T_S.format(sid, table)
+            if s_t in joins:
+                destinations += [
+                    (x['right']['table'], x['right']['sid'])
+                    for x in joins[table]]
+                del joins[s_t]
                 if destinations:
                     destinations += cls.delete_joins(destinations, joins)
         return destinations
@@ -444,7 +517,7 @@ class RedisSourceService(object):
         """
         card_key = RKeys.get_user_card_key(user_id)
         str_active_tree = RKeys.get_active_tree(card_key)
-
+        print 'str_active_tree', str_active_tree
         return cls.r_get(str_active_tree)
 
     @classmethod
@@ -590,9 +663,9 @@ class RedisSourceService(object):
 
             # добавляем инфу новых джойнов
             if update_joins:
-                joins = node.get_node_joins_info()
+                joins = node.get_node_joins_info_NEW()
                 for k, v in joins.iteritems():
-                    joins_in_redis[k] += v
+                    joins_in_redis[T_S.format(k, n_sid)] += v
 
         coll_counter['next_sequence_id'] = sequence_id
 
@@ -636,6 +709,36 @@ class RedisSourceService(object):
         pipe.delete(active_tables_key)
         pipe.delete(tables_joins_key)
         pipe.delete(active_tree_key)
+        pipe.execute()
+
+    @classmethod
+    def tree_full_clean_NEW(cls, user_id):
+        """ удаляет информацию о таблицах, джоинах, дереве
+            из редиса
+        """
+        card_key = RKeys.get_user_card_key(user_id)
+        str_actives = RKeys.get_user_card_builder(card_key)
+        str_joins = RKeys.get_source_joins(card_key)
+        str_active_tree = RKeys.get_active_tree(card_key)
+
+        # delete keys in redis
+        pipe = r_server.pipeline()
+
+        actives = cls.get_card_actives_data(card_key)
+        for f_sid in actives:
+            sid = f_sid[1:]
+            t_names = (actives[f_sid]['actives'].values() +
+                       actives[f_sid]['remains'])
+
+            for t_id in t_names:
+                source_key = RKeys.get_user_datasource(user_id, sid)
+                table_str = RedisCacheKeys.get_active_table(
+                    source_key, t_id)
+                pipe.delete(table_str)
+
+        pipe.delete(str_actives)
+        pipe.delete(str_joins)
+        pipe.delete(str_active_tree)
         pipe.execute()
 
     @classmethod

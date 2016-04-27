@@ -373,8 +373,12 @@ class GetDataRowsView(BaseEtlView):
             table_names.append(t_name)
             col_names += col_group
 
-        data = helpers.DataSourceService.get_rows_info(
+        # data = helpers.DataSourceService.get_rows_info(
+        #     source, col_names)
+
+        data = helpers.DataSourceService.get_rows_info_NEW(
             source, col_names)
+
         return data
 
     def json_response(self, context, **response_kwargs):
@@ -401,9 +405,20 @@ class GetDataRowsView(BaseEtlView):
 class RemoveTablesView(BaseEtlView):
 
     def start_get_action(self, request, source):
-        tables = json.loads(request.GET.get('tables'))
-        helpers.DataSourceService.remove_tables_from_tree(
-            source, tables)
+        tables_info = json.loads(request.GET.get('tables'))
+        # helpers.DataSourceService.remove_tables_from_tree(
+        #     source, tables)
+
+        tables_info = [(t, 17) for t in tables_info]
+        tables_info = [
+            # ('auth_group_permissions', 17),
+            # ('auth_permission', 17),
+            # ('auth_group', 17),
+        ]
+
+        helpers.DataSourceService.remove_tables_from_tree_NEW(
+            source.user_id, tables_info)
+
         return []
 
 

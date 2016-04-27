@@ -289,6 +289,23 @@ class DataSourceService(object):
         return service.get_rows(cols, structure)
 
     @classmethod
+    def get_rows_info_NEW(cls, source, cols):
+        """
+        Получение списка значений указанных колонок и таблиц
+        в выбранном источнике данных
+        Args:
+            source(core.models.Datasource): Источник
+            cols(list): Описать
+
+        Returns:
+            list Описать
+        """
+        structure = RedisSourceService.get_active_tree_structure_NEW(
+            source.user_id)
+        service = cls.get_source_service(source)
+        return service.get_rows(cols, structure)
+
+    @classmethod
     def remove_tables_from_tree(cls, source, tables):
         """
         Redis
@@ -316,6 +333,39 @@ class DataSourceService(object):
             ordered_nodes = sel_tree.ordered_nodes
             structure = sel_tree.structure
             RedisSourceService.insert_tree(structure, ordered_nodes, source, update_joins=False)
+
+    @classmethod
+    def remove_tables_from_tree_NEW(cls, user_id, tables):
+        """
+        Redis
+        удаление таблиц из дерева
+
+        Args:
+            source(core.models.Datasource): Источник
+            tables(): Описать
+        """
+        # достаем структуру дерева из редиса
+        structure = RedisSS.get_active_tree_structure_NEW(user_id)
+
+        # строим дерево
+        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+
+        r_val = sel_tree.root.val
+        source_id = sel_tree.root.source_id
+
+        if (r_val, source_id) in tables:
+            RedisSS.tree_full_clean_NEW(user_id)
+            sel_tree.root = None
+        else:
+            sel_tree.delete_nodes_NEW(tables)
+
+        if sel_tree.root:
+            RedisSS.delete_tables_NEW(user_id, tables)
+
+            ordered_nodes = sel_tree.ordered_nodes
+            structure = sel_tree.structure
+            RedisSS.insert_tree_NEW(structure, ordered_nodes,
+                                    user_id, update_joins=False)
 
     @classmethod
     def check_is_binding_remain(cls, source, child_table):

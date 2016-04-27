@@ -47,6 +47,31 @@ class Node(object):
                 })
         return node_joins
 
+    def get_node_joins_info_NEW(self):
+        """
+        связи узла
+        :return: defaultdict
+        """
+        node_joins = defaultdict(list)
+
+        n_val = self.val
+        for join in self.joins:
+            left = join['left']
+            right = join['right']
+            operation = join['join']
+            if n_val == right['table']:
+                node_joins[left['table']].append({
+                    "left": left, "right": right,
+                    "join": operation
+                })
+            else:
+                node_joins[right['table']].append({
+                    "left": right, "right": left,
+                    "join": operation,
+                })
+        return node_joins
+
+
 
 class TablesTree(object):
     """
@@ -492,6 +517,24 @@ class TablesTree(object):
                 node.childs.remove(child)
             else:
                 cls._delete_nodes_from_tree(child, tables)
+
+    def delete_nodes_NEW(self, tables):
+        root = self.root
+        self._delete_nodes_from_tree_NEW(root, tables)
+
+    @classmethod
+    def _delete_nodes_from_tree_NEW(cls, node, tables):
+        """
+        удаляет узлы дерева
+        :param node: Node
+        :param tables: list
+        """
+        for child in node.childs[:]:
+            if (child.val, child.source_id) in tables:
+                child.parent = None
+                node.childs.remove(child)
+            else:
+                cls._delete_nodes_from_tree_NEW(child, tables)
 
 
 class TableTreeRepository(object):
