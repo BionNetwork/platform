@@ -129,6 +129,16 @@ class DatasourceMetaKeys(models.Model):
         unique_together = ('meta', 'value')
 
 
+class CardDatasource(models.Model):
+    """
+    Источник карточки
+    """
+    card = models.ForeignKey(
+        'card.Card', verbose_name=u'Карточка',  related_name='card_datasource')
+    source = models.ForeignKey(
+        'core.Datasource', verbose_name=u'Источник', related_name='source')
+
+
 class User(AbstractUser):
     """
     Модель пользователей, унаследованная от Django User
