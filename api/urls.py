@@ -20,4 +20,5 @@ urlpatterns = [
     url(r'^schema/(?P<id>\d+)/dimensions$', views.GetDimensionDataView.as_view(),
         name='dimension_data'),
     url(r'^', include(router.urls)),
+    url(r'^tables_data/(?P<source_id>\d+)/(?P<table_name>\w+)/$', views.TablesDataView.as_view(), name='tables_data')
 ]

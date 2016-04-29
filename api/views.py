@@ -1,8 +1,10 @@
 # coding: utf-8
 from __future__ import unicode_literals
+from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
 
 import logging
+from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, CardDatasourceSerializer)
@@ -99,6 +101,9 @@ class DatasourceViewSet(viewsets.ModelViewSet):
 
 
 class CardDataSourceViewSet(viewsets.ModelViewSet):
+    """
+    Источкник в карточке
+    """
     model = CardDatasource
     serializer_class = CardDatasourceSerializer
 
@@ -107,6 +112,19 @@ class CardDataSourceViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         pass
+
+
+class TablesDataView(APIView):
+
+    def get(self, request, source_id, table_name):
+        """
+        Получение данных о таблице
+        """
+        source = Datasource.objects.get(id=source_id)
+
+        service = DataSourceService.get_source_service(source)
+        data = service.fetch_tables_columns([table_name])
+        return Response(data)
 
 
 class SchemasListView(mixins.ListModelMixin,
