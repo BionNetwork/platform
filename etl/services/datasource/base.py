@@ -1,21 +1,50 @@
 # coding: utf-8
-from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
-                         DatasourcesJournal)
-from etl.services.datasource.repository import r_server
-from etl.services.db.factory import DatabaseService
-from etl.services.datasource.repository.storage import RedisSourceService
-from etl.models import TablesTree, TableTreeRepository
-from core.helpers import get_utf8_string
-from django.conf import settings
-from itertools import groupby
-from django.db import transaction
+
 import json
+from itertools import groupby
+
+from django.db import transaction
+from django.conf import settings
+
+from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
+                         ConnectionChoices, Datasource)
+from etl.services.datasource.repository import r_server
+from etl.services.db.factory import DatabaseService, LocalDatabaseService
+from etl.services.file.factory import FileService
+from etl.services.datasource.repository.storage import RedisSourceService
+from etl.models import TableTreeRepository
+from core.helpers import get_utf8_string
 
 
 class DataSourceService(object):
     """
-    Сервис управляет сервисами БД и Редиса
+        Сервис управляет сервисами БД, Файлов и Редиса!
     """
+    DB_TYPES = [
+        ConnectionChoices.POSTGRESQL,
+        ConnectionChoices.MYSQL,
+        ConnectionChoices.MS_SQL,
+        ConnectionChoices.ORACLE,
+    ]
+    FILE_TYPES = [
+        ConnectionChoices.EXCEL,
+        ConnectionChoices.CSV,
+        ConnectionChoices.TXT,
+    ]
+
+    @classmethod
+    def get_source_service(cls, source):
+        """
+        В зависимости от типа источника перенаправляет на нужный сервис
+        """
+        conn_type = source.conn_type
+
+        if conn_type in cls.DB_TYPES:
+            return DatabaseService(source)
+        elif conn_type in cls.FILE_TYPES:
+            return FileService(source)
+        else:
+            raise ValueError("Неизвестный тип подключения!")
 
     @classmethod
     def delete_datasource(cls, source):
@@ -39,11 +68,12 @@ class DataSourceService(object):
         """
         RedisSourceService.tree_full_clean(source)
 
-    @staticmethod
-    def get_database_info(source):
+    @classmethod
+    def get_source_tables(cls, source):
         """
-        Возвращает таблицы истоника данных.
-        Фильтрация таблиц по факту создания раннее триггеров
+        Возвращает информацию об источнике + таблицы истоника
+
+        :type source: Datasource
 
         Args:
             source(core.models.Datasource): Источник данных
@@ -52,28 +82,23 @@ class DataSourceService(object):
             dict: {
                 db: <str>,
                 host: <str>,
+                source_id:
+                user_id:
+                .........
                 tables: [{'name': <table_name_1>, 'name': <table_name_2>}]
             }
 
-
         """
-        # FIXME: Описать ответ
-        tables = DatabaseService.get_tables(source)
+        service = cls.get_source_service(source)
+        tables = service.get_tables()
+        # кладем список таблиц в редис
+        RedisSourceService.set_tables(source, tables)
 
-        trigger_tables = DatasourcesJournal.objects.filter(
-            trigger__datasource=source).values_list('name', flat=True)
+        # информация о источнике для фронта
+        source_info = source.get_source_info()
+        source_info["tables"] = tables
 
-        # фильтруем, не показываем таблицы триггеров
-        tables = filter(lambda x: x['name'] not in trigger_tables, tables)
-
-        if settings.USE_REDIS_CACHE:
-            return RedisSourceService.get_tables(source, tables)
-        else:
-            return {
-                "db": source.db,
-                "host": source.host,
-                "tables": tables
-            }
+        return source_info
 
     @staticmethod
     def check_connection(post):
@@ -87,9 +112,8 @@ class DataSourceService(object):
             'password': get_utf8_string(post.get('password')),
             'db': get_utf8_string(post.get('db')),
             'port': get_utf8_string(post.get('port')),
-            'conn_type': get_utf8_string(post.get('conn_type')),
+            'conn_type': int(get_utf8_string(post.get('conn_type')))
         }
-
         return DatabaseService.get_connection_by_dict(conn_info)
 
     @classmethod
@@ -107,75 +131,132 @@ class DataSourceService(object):
             ответа см. RedisSourceService.get_final_info
         """
 
-        if not settings.USE_REDIS_CACHE:
-                return []
+        service = cls.get_source_service(source)
 
+        # если информация о таблице уже есть в редисе, то просто получаем их,
+        # иначе получаем новые таблицы
+        #  и спрашиваем информацию по ним у источника
         new_tables, old_tables = RedisSourceService.filter_exists_tables(
             source, tables)
 
         if new_tables:
-            col_records, index_records, const_records = (
-                DatabaseService.get_columns_info(source, new_tables))
-
-            stat_records = DatabaseService.get_stats_info(source, new_tables)
-
-            new_tables_intervals = DatabaseService.get_date_intervals(
-                source, col_records)
-
-            cols, indexes, foreigns = DatabaseService.processing_records(
-                source, col_records, index_records, const_records)
+            columns, indexes, foreigns, statistics, date_intervals = (
+                service.get_columns_info(new_tables))
 
             RedisSourceService.insert_columns_info(
-                source, new_tables, cols, indexes,
-                foreigns, stat_records, new_tables_intervals)
+                source, new_tables, columns, indexes,
+                foreigns, statistics, date_intervals)
 
-        if old_tables:
-            # берем колонки старых таблиц
-            all_columns = DatabaseService.fetch_tables_columns(source, tables)
-            old_tables_intervals = DatabaseService.get_date_intervals(source, all_columns)
-            # актуализируем интервалы дат (min, max) для таблиц с датами
-            RedisSourceService.insert_date_intervals(
-                source, old_tables, old_tables_intervals)
+        # FIXME для старых таблиц, которые уже лежат в редисе,
+        # FIXME нужно ли актуализировать интервалы дат каждый раз
+
+        # if old_tables:
+        #     # берем колонки старых таблиц
+        #     all_columns = service.fetch_tables_columns(tables)
+        #     old_tables_intervals = service.get_date_intervals(all_columns)
+        #     # актуализируем интервалы дат (min, max) для таблиц с датами
+        #     RedisSourceService.insert_date_intervals(
+        #         source, old_tables, old_tables_intervals)
 
         # существование дерева
-        tree_exists = RedisSourceService.check_tree_exists(
-            source.user_id, source.id)
+        tree_exists = RedisSourceService.check_tree_exists(source)
 
         # работа с деревьями
         if not tree_exists:
-            trees, without_bind = TableTreeRepository.build_trees(tuple(tables), source)
-            sel_tree = TablesTree.select_tree(trees)
+            tables_info = RedisSourceService.info_for_tree_building(
+                (), tables, source)
+
+            trees, without_bind = TableTreeRepository.build_trees(
+                tuple(tables), tables_info)
+            sel_tree = TableTreeRepository.select_tree(trees)
 
             remains = without_bind[sel_tree.root.val]
         else:
             # достаем структуру дерева из редиса
             structure = RedisSourceService.get_active_tree_structure(source)
             # строим дерево
-            sel_tree = TablesTree.build_tree_by_structure(structure)
+            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
 
-            ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
+            ordered_nodes = sel_tree.ordered_nodes
 
             tables_info = RedisSourceService.info_for_tree_building(
                 ordered_nodes, tables, source)
 
             # перестраиваем дерево
-            remains = TablesTree.build_tree(
-                [sel_tree.root, ], tuple(tables), tables_info)
+            sel_tree.build(tuple(tables), tables_info)
+            remains = sel_tree.no_bind_tables
 
         # таблица без связи
         last = RedisSourceService.insert_remains(source, remains)
 
         # сохраняем дерево
-        structure = TablesTree.get_tree_structure(sel_tree.root)
-        ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
+        structure = sel_tree.structure
+        ordered_nodes = sel_tree.ordered_nodes
         RedisSourceService.insert_tree(structure, ordered_nodes, source)
 
         return RedisSourceService.get_final_info(ordered_nodes, source, last)
 
     @classmethod
+    def get_tree_info(cls, post_sources):
+        """
+        """
+        cls.cache_columns(post_sources)
+        sel_tree, remains = cls.get_tree(post_sources)
+        # таблица без связи
+        source = Datasource.objects.get(id=post_sources[0]['source_id'])
+        last = RedisSourceService.insert_remains(source, remains)
+        last = None
+
+        # сохраняем дерево
+        structure = sel_tree.structure
+        ordered_nodes = sel_tree.ordered_nodes
+        RedisSourceService.insert_tree(structure, ordered_nodes, source)
+
+        return RedisSourceService.get_final_info(ordered_nodes, source, last)
+
+    @classmethod
+    def get_tree(cls, post_sources):
+        concat_tables_info = {}
+        concat_tables = []
+        for each in post_sources:
+            source = Datasource.objects.get(id=each['source_id'])
+            tables = each['tables']
+            concat_tables_info.update(RedisSourceService.info_for_tree_building(
+                (), tables, source))
+            concat_tables.extend(each['tables'])
+
+        trees, without_bind = TableTreeRepository.build_trees(
+            tuple(concat_tables), concat_tables_info)
+
+        sel_tree = TableTreeRepository.select_tree(trees)
+        remains = without_bind[sel_tree.root.val]
+        return sel_tree, remains
+
+    @classmethod
+    def cache_columns(cls, post_sources):
+        for each in post_sources:
+            source = Datasource.objects.get(id=each['source_id'])
+            tables = each['tables']
+            service = cls.get_source_service(source)
+
+            # если информация о таблице уже есть в редисе,
+            # то просто получаем их,
+            # иначе получаем новые таблицы
+            #  и спрашиваем информацию по ним у источника
+            new_tables, old_tables = RedisSourceService.filter_exists_tables(
+                source, tables)
+
+            if new_tables:
+                columns, indexes, foreigns, statistics, date_intervals = (
+                    service.get_columns_info(new_tables))
+
+                RedisSourceService.insert_columns_info(
+                    source, new_tables, columns, indexes,
+                    foreigns, statistics, date_intervals)
+
+    @classmethod
     def get_rows_info(cls, source, cols):
         """
-        redis
         Получение списка значений указанных колонок и таблиц в выбранном источнике данных
 
 
@@ -187,7 +268,8 @@ class DataSourceService(object):
             list Описать
         """
         structure = RedisSourceService.get_active_tree_structure(source)
-        return DatabaseService.get_rows(source, cols, structure)
+        service = cls.get_source_service(source)
+        return service.get_rows(cols, structure)
 
     @classmethod
     def remove_tables_from_tree(cls, source, tables):
@@ -199,30 +281,38 @@ class DataSourceService(object):
             source(core.models.Datasource): Источник
             tables(): Описать
         """
-        # FIXME: Описать аргумент tables
         # достаем структуру дерева из редиса
         structure = RedisSourceService.get_active_tree_structure(source)
         # строим дерево
-        sel_tree = TablesTree.build_tree_by_structure(structure)
-        TableTreeRepository.delete_nodes_from_tree(sel_tree, source, tables)
+        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+
+        r_val = sel_tree.root.val
+        if r_val in tables:
+            RedisSourceService.tree_full_clean(source)
+            sel_tree.root = None
+        else:
+            sel_tree.delete_nodes(tables)
 
         if sel_tree.root:
             RedisSourceService.delete_tables(source, tables)
 
-            ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
-            structure = TablesTree.get_tree_structure(sel_tree.root)
+            ordered_nodes = sel_tree.ordered_nodes
+            structure = sel_tree.structure
             RedisSourceService.insert_tree(structure, ordered_nodes, source, update_joins=False)
 
     @classmethod
     def check_is_binding_remain(cls, source, child_table):
-        # FIXME: Описать
-        remain = RedisSourceService.get_last_remain(
-            source.user_id, source.id)
+        """
+        Проверяем является ли таблица child_table остаточной таблицей,
+        то есть последней в дереве без связей
+        """
+        source_key = RedisSourceService.get_user_source(source)
+        remain = RedisSourceService.get_last_remain(source_key)
         return remain == child_table
 
     @classmethod
     def get_columns_and_joins_for_join_window(
-        cls, source, parent_table, child_table, has_warning):
+            cls, source, parent_table, child_table, has_warning):
         """
         Redis
         список колонок и джойнов таблиц для окна связей таблиц
@@ -291,8 +381,8 @@ class DataSourceService(object):
 
         for j in joins_set:
             l_c, j_val, r_c = j
-            if (cols_types['{0}.{1}'.format(left_table, l_c)] !=
-                    cols_types['{0}.{1}'.format(right_table, r_c)]):
+            if (cols_types[u'{0}.{1}'.format(left_table, l_c)] !=
+                    cols_types[u'{0}.{1}'.format(right_table, r_c)]):
                 error_joins.append(j)
             else:
                 good_joins.append(j)
@@ -316,6 +406,8 @@ class DataSourceService(object):
             Описать
         """
 
+        source_key = RedisSourceService.get_user_source(source)
+
         # FIXME: Описать
         # joins_set избавляет от дублей
         good_joins, error_joins, joins_set = cls.check_new_joins(
@@ -329,14 +421,14 @@ class DataSourceService(object):
             # достаем структуру дерева из редиса
             structure = RedisSourceService.get_active_tree_structure(source)
             # строим дерево
-            sel_tree = TablesTree.build_tree_by_structure(structure)
+            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
 
-            TablesTree.update_node_joins(
-                sel_tree, left_table, right_table, join_type, joins_set)
+            sel_tree.update_node_joins(
+                left_table, right_table, join_type, joins_set)
 
             # сохраняем дерево
-            ordered_nodes = TablesTree.get_tree_ordered_nodes([sel_tree.root, ])
-            structure = TablesTree.get_tree_structure(sel_tree.root)
+            ordered_nodes = sel_tree.ordered_nodes
+            structure = sel_tree.structure
             RedisSourceService.insert_tree(
                 structure, ordered_nodes, source, update_joins=False)
 
@@ -346,11 +438,10 @@ class DataSourceService(object):
                 ordered_nodes, source)
 
             # работа с последней таблицей
-            remain = RedisSourceService.get_last_remain(
-                source.user_id, source.id)
+            remain = RedisSourceService.get_last_remain(source_key)
             if remain == right_table:
                 # удаляем инфу о таблице без связи, если она есть
-                RedisSourceService.delete_last_remain(source)
+                RedisSourceService.delete_last_remain(source_key)
 
         return data
 
@@ -391,7 +482,7 @@ class DataSourceService(object):
             t_cols = json.loads(
                 RedisSourceService.get_table_full_info(source, table))['columns']
             for col in t_cols:
-                cols_types['{0}.{1}'.format(table, col['name'])] = col['type']
+                cols_types[u'{0}.{1}'.format(table, col['name'])] = col['type']
 
         return cols_types
 
@@ -422,74 +513,13 @@ class DataSourceService(object):
 
         r_server.set(collection_name, json.dumps(table_info))
 
-    # fixme: не используется?
-    @classmethod
-    def get_separator(cls, source):
-        """
-        Database
-        Args:
-            source(core.models.Datasource): Источник
-
-        Returns:
-            Описать
-        """
-        return DatabaseService.get_separator(source)
-
-    @classmethod
-    def get_table_create_query(cls, table_name, cols_str):
-        """
-        local db
-        Запрос на создание таблицы
-
-        Args:
-            table_name(unicode): Название таблицы
-            cols_str(unicode):
-
-        Returns:
-            str: Строка запроса
-        """
-        return DatabaseService.get_table_create_query(table_name, cols_str)
-
+    # FIXME Удалить
     @classmethod
     def check_table_exists_query(cls, local_instance, table_name, db):
         # FIXME: Описать
-        return DatabaseService.check_table_exists_query(
+        service = LocalDatabaseService()
+        return service.check_table_exists_query(
             local_instance, table_name, db)
-
-    @classmethod
-    def get_page_select_query(cls, table_name, cols):
-        """
-        Формирование строки запроса на получение данных (с дальнейшей пагинацией)
-
-        Args:
-            table_name(unicode): Название таблицы
-            cols(list): Список получаемых колонок
-
-        Returns:
-            str: Строка запроса
-        """
-
-        return DatabaseService.get_page_select_query(table_name, cols)
-
-    @classmethod
-    def get_table_insert_query(cls, source_table_name, cols_num):
-        return DatabaseService.get_table_insert_query(
-            source_table_name, cols_num)
-
-    @classmethod
-    def get_source_rows_query(cls, source, structure, cols):
-        """
-        source db
-        Получение предзапроса данных указанных
-        колонок и таблиц для селери задачи
-        :param source:
-        :param structure:
-        :param cols:
-        :return:
-        """
-        # FIXME: Описать
-        rows_query = DatabaseService.get_rows_query(source, cols, structure)
-        return rows_query
 
     @classmethod
     def check_existing_table(cls, table_name):
@@ -509,7 +539,8 @@ class DataSourceService(object):
         :type source: Datasource
         """
         # FIXME: Описать
-        return DatabaseService.get_connection(source)
+        service = cls.get_source_service(source)
+        return service.datasource.connection
 
     @classmethod
     def get_local_instance(cls):
@@ -519,7 +550,7 @@ class DataSourceService(object):
         Returns:
 
         """
-        return DatabaseService.get_local_instance()
+        return LocalDatabaseService()
 
     @classmethod
     def tables_info_for_metasource(cls, source, tables):
@@ -561,8 +592,8 @@ class DataSourceService(object):
                         }
                     })
 
-                pipe.set(collection, json.dumps(table_info))
-        pipe.execute()
+                    pipe.set(collection, json.dumps(table_info))
+            pipe.execute()
 
     @staticmethod
     def update_datasource_meta(key, source, cols,
@@ -643,120 +674,3 @@ class DataSourceService(object):
                     table: source_meta.id
                 })
         return res
-
-    @classmethod
-    def get_structure_rows_number(cls, source, structure,  cols):
-        """
-        Source db
-        Возвращает примерное кол-во строк в запросе селекта для планирования
-
-        Args:
-            source(core.models.Datasource): Источник данных
-            structure():
-            cols():
-
-        Returns:
-            Описать
-        """
-
-        # FIXME: Описать
-        return DatabaseService.get_structure_rows_number(
-            source, structure,  cols)
-
-    @classmethod
-    def get_remote_table_create_query(cls, source):
-        """
-        Source db
-        Возвращает запрос на создание таблицы в БД клиента
-
-        Args:
-            source(core.models.Datasource): Источник данных
-
-        Returns:
-            str: Строка запроса
-        """
-
-        return DatabaseService.get_remote_table_create_query(source)
-
-    @classmethod
-    def get_remote_triggers_create_query(cls, source):
-        """
-        Source db
-        Возвращает запрос на создание триггеров в БД клиента
-
-        Args:
-            source(core.models.Datasource): Источник данных
-
-        Returns:
-            str: Строка запроса
-        """
-        # FIXME: Описать
-        return DatabaseService.get_remote_triggers_create_query(source)
-
-    @staticmethod
-    def reload_datasource_trigger_query(params):
-        """
-        Local db
-        Запрос на создание триггеров в БД локально для размерностей и мер
-
-        Args:
-            params(dict): Параметры, необходимые для запроса
-
-        Returns:
-            str: Строка запроса
-        """
-        # FIXME: Описать "Параметры, необходимые для запроса"
-
-        return DatabaseService.reload_datasource_trigger_query(params)
-
-    @staticmethod
-    def get_date_table_names(col_type):
-        """
-        Local db
-        Получение запроса на создание колонок таблицы дат
-
-        Args:
-            col_type(dict): Соответсвие название поля и типа
-
-        Returns:
-            list: Список строк с названием и типом колонок для таблицы дат
-        """
-        return DatabaseService.get_date_table_names(col_type)
-
-    @staticmethod
-    def get_table_create_col_names(fields, ref_key):
-        """
-        Список строк запроса для создания колонок
-        таблицы sttm_, мер и размерностей
-
-        Args:
-            fields(): Информация о колонках таблицы
-            ref_key(str): идентификатор для создания внешнего ключа
-
-        Returns:
-            list: Список строк с названием и типом колонок
-            для таблицы мер и размерности
-        """
-        return DatabaseService.get_table_create_col_names(fields, ref_key)
-
-    @staticmethod
-    def cdc_key_delete_query(table_name):
-        """
-        Local db
-        Запрос на удаление записей по cdc-ключу
-
-        Args:
-            table_name(unicode): Название таблицы
-
-        Returns:
-            str: Строка запроса
-        """
-        return DatabaseService.cdc_key_delete_query(table_name)
-
-    @staticmethod
-    def get_fetchall_result(connection, source, query, *args, **kwargs):
-        """
-        возвращает результат fetchall преобразованного запроса с аргументами
-        """
-        return DatabaseService.get_fetchall_result(
-            connection, source, query, *args, **kwargs)

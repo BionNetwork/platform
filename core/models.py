@@ -12,7 +12,8 @@ from djchoices import ChoiceItem, DjangoChoices
 from core.model_helpers import MultiPrimaryKeyModel
 
 from .db.services import RetryQueryset
-from .helpers import get_utf8_string, users_avatar_upload_path
+from .helpers import (get_utf8_string, users_avatar_upload_path,
+                      users_file_upload_path)
 
 """
 Базовые модели приложения
@@ -25,6 +26,11 @@ class ConnectionChoices(DjangoChoices):
     MYSQL = ChoiceItem(2, 'Mysql')
     MS_SQL = ChoiceItem(3, 'MsSql')
     ORACLE = ChoiceItem(4, 'Oracle')
+    EXCEL = ChoiceItem(5, 'Excel')
+    CSV = ChoiceItem(6, 'Csv')
+    TXT = ChoiceItem(7, 'Text')
+
+CC = ConnectionChoices
 
 
 class Datasource(models.Model):
@@ -33,21 +39,35 @@ class Datasource(models.Model):
     """
 
     def __str__(self):
-        return "<Datasource object> " + self.host + " " + self.db
+        return ' '.join(
+            ["Datasource:", self.get_source_type(),
+             self.name or '', self.host or '', self.db or '']
+        )
+
+    def get_source_type(self):
+        # Название типа соурса
+        return ConnectionChoices.values.get(self.conn_type)
 
     def was_created_recently(self):
         return self.create_date >= timezone.now() - datetime.timedelta(days=1)
 
-    db = models.CharField(max_length=255, help_text="База данных", null=False)
-    host = models.CharField(max_length=255, help_text="имя хоста", db_index=True)
-    port = models.IntegerField(help_text="Порт подключения")
+    name = models.CharField(
+        verbose_name='Название источника', max_length=255, null=True)
+    db = models.CharField(max_length=255, help_text="База данных", null=True)
+    host = models.CharField(
+        max_length=255, help_text="имя хоста", db_index=True, null=True)
+    port = models.IntegerField(help_text="Порт подключения", null=True)
     login = models.CharField(max_length=1024, null=True, help_text="логин")
     password = models.CharField(max_length=255, null=True, help_text="пароль")
-    create_date = models.DateTimeField('create_date', help_text="дата создания", auto_now_add=True, db_index=True)
+    create_date = models.DateTimeField(
+        'create_date', help_text="дата создания", auto_now_add=True, db_index=True)
     user_id = models.IntegerField(help_text='идентификатор пользователя')
     conn_type = models.SmallIntegerField(
         verbose_name='Тип подключения', choices=ConnectionChoices.choices,
         default=ConnectionChoices.POSTGRESQL)
+    file = models.FileField(
+        verbose_name='Файл', upload_to=users_file_upload_path,
+        null=True, max_length=500)
 
     objects = models.Manager.from_queryset(RetryQueryset)()
 
@@ -63,6 +83,38 @@ class Datasource(models.Model):
             'id': self.id,
             'user_id': self.user_id,
         }
+
+    @property
+    def is_file(self):
+        # признак источника-файла
+        return self.conn_type in [CC.EXCEL, CC.CSV, CC.TXT, ]
+
+    def get_file_path(self):
+        # возвращает полный путь файла
+        if self.is_file:
+            return self.file.path
+
+    def get_source_info(self):
+        """
+        Инфа соурса
+        """
+        if not self.is_file:
+            return {
+                'name': get_utf8_string(self.name or ''),
+                'host': get_utf8_string(self.host or ''),
+                'db': get_utf8_string(self.db or ''),
+                'source_id': self.id,
+                'user_id': self.user_id,
+                'is_file': False,
+            }
+        else:
+            return {
+                'name': get_utf8_string(self.name or self.file.name),
+                'source_id': self.id,
+                'user_id': self.user_id,
+                'file_name': self.file.name,
+                'is_file': True,
+            }
 
     def set_from_dict(self, **data):
         """Заполнение объекта из словаря"""

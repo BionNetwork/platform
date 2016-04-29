@@ -100,6 +100,17 @@ def users_avatar_upload_path(user, filename):
         'users', 'photos', 'user', str(user.id), filename)
 
 
+def users_file_upload_path(user, filename):
+    """
+    Путь сохранения файла-источника пользователя
+
+    Args:
+        filename(str): путь до файла загрузки
+        user(core.models.User): объект пользователь
+    """
+    return os.path.join('users', 'files', str(user.id), filename)
+
+
 class HashEncoder(object):
     """
     Базовый класс для хэширования данных

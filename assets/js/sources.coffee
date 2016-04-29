@@ -221,8 +221,7 @@ tableToRight = (url) ->
     dataWorkspace.find('.result-col').remove()
     getColumns url,
       csrfmiddlewaretoken: csrftoken
-      host: selectedTable.attr('data-host')
-      db: selectedTable.attr('data-db')
+      sourceId: getSourceId()
       tables: JSON.stringify([ selectedTable.attr('data-table') ])
   return
 
@@ -234,8 +233,7 @@ tablesToRight = (url) ->
   divs = $('.checkbox-table:checked').closest('div')
   dict =
     csrfmiddlewaretoken: csrftoken
-    host: divs.attr('data-host')
-    db: divs.attr('data-db')
+    sourceId: getSourceId()
   tables = divs.map(->
     el = $(this)
     id = el.attr('id')
@@ -282,12 +280,12 @@ delCol = (id) ->
       return
   return
 
-getSourceInfo = ->
+getSourceId = ->
   source = $('#databases>div')
-  {
-    'host': source.data('host')
-    'db': source.data('db')
-  }
+  source.data 'source'
+
+getSourceInfo = ->
+  { sourceId: getSourceId() }
 
 tableToLeft = (url) ->
   if $('#button-toLeft').hasClass('disabled')
@@ -298,7 +296,7 @@ tableToLeft = (url) ->
   indexes = []
   ths = $('#data-table-headers').find('th').not(':hidden')
   $.each divs, (i, el) ->
-    header = $('#col-' + $(this).data('table') + '-' + $(this).data('col'))
+    header = $('#head-' + $(this).data('table') + '-' + $(this).data('col'))
     indexes.push ths.index(header)
     header.remove()
     return
@@ -358,9 +356,7 @@ refreshData = (url) ->
   if hasWithoutBinds()
     return
   source = $('#databases>div')
-  colsInfo =
-    'host': source.data('host')
-    'db': source.data('db')
+  colsInfo = sourceId: getSourceId()
   cols = dataWorkspace.find('.data-table-column-header')
   array = cols.map(->
     el = $(this)
@@ -446,7 +442,7 @@ showJoinWindow = (url, parent, child, isWithoutBind) ->
   return
 
 addNewJoin = ->
-  joinRows = $('#joinRows')
+  joinRows = joinWin.find('#joinRows')
   parentCols = []
   childCols = []
   parOptions = joinWin.find('select[name="parent"]').first().find('option')
@@ -469,7 +465,7 @@ deleteJoins = ->
   return
 
 saveJoins = (url) ->
-  joins = $('.join-row')
+  joins = joinWin.find('.join-row')
   joinsArray = []
   if !joins.length
     confirmAlert 'Пожалуйста, выберите связь!'
@@ -490,7 +486,7 @@ saveJoins = (url) ->
   if joinsArray.length != joinsSet.size
     confirmAlert 'Имеются дубли среди связей, пожалуйста удалите лишнее!'
     return
-  joinRows = $('#joinRows')
+  joinRows = joinWin.find('#joinRows')
   info = getSourceInfo()
   info['joins'] = JSON.stringify(joinsArray)
   info['left'] = joinRows.data('table-left')

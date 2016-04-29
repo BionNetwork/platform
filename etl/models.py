@@ -9,12 +9,15 @@ class Node(object):
     """
         Узел дерева таблиц
     """
-    def __init__(self, t_name, parent=None, joins=[], join_type='inner'):
+    def __init__(self, t_name, parent=None, joins=None, join_type='inner'):
         self.val = t_name
         self.parent = parent
         self.childs = []
-        self.joins = joins
+        self.joins = joins or []
         self.join_type = join_type
+
+    def __str__(self):
+        return u'Узел %s(%s)' % (self.val, self.parent)
 
     def get_node_joins_info(self):
         """
@@ -48,6 +51,7 @@ class TablesTree(object):
 
     def __init__(self, t_name):
         self.root = Node(t_name)
+        self.no_bind_tables = None
 
     # def display(self):
     #     if self.root:
@@ -60,8 +64,13 @@ class TablesTree(object):
     #     else:
     #         print 'Empty Tree!!!'
 
+    @property
+    def ordered_nodes(self):
+        root = self.root
+        return self._get_tree_ordered_nodes([root, ])
+
     @classmethod
-    def get_tree_ordered_nodes(cls, nodes):
+    def _get_tree_ordered_nodes(cls, nodes):
         """
         узлы дерева по порядку от корня вниз слева направо
         :param nodes: list
@@ -72,26 +81,37 @@ class TablesTree(object):
         child_nodes = reduce(
             list.__add__, [x.childs for x in nodes], [])
         if child_nodes:
-            all_nodes += cls.get_tree_ordered_nodes(child_nodes)
+            all_nodes += cls._get_tree_ordered_nodes(child_nodes)
         return all_nodes
 
+    @property
+    def nodes_count_for_levels(self):
+        root = self.root
+        return self._get_nodes_count_for_levels([root, ])
+
     @classmethod
-    def get_nodes_count_by_level(cls, nodes):
+    def _get_nodes_count_for_levels(cls, nodes):
         """
-        список количества нодов на каждом уровне дерева
+        Cписок количества нодов на каждом уровне дерева
         :param nodes: list
         :return: list
+        Пример [1, 3, 2, ...]
         """
         counts = [len(nodes)]
 
         child_nodes = reduce(
             list.__add__, [x.childs for x in nodes], [])
         if child_nodes:
-            counts += cls.get_nodes_count_by_level(child_nodes)
+            counts += cls._get_nodes_count_for_levels(child_nodes)
         return counts
 
+    @property
+    def structure(self):
+        root = self.root
+        return self._get_tree_structure(root)
+
     @classmethod
-    def get_tree_structure(cls, root):
+    def _get_tree_structure(cls, root):
         """
         структура дерева
         :param root: Node
@@ -103,86 +123,70 @@ class TablesTree(object):
             None if not root_info['joins'] else root.join_type)
 
         for ch in root.childs:
-            root_info['childs'].append(cls.get_tree_structure(ch))
+            root_info['childs'].append(cls._get_tree_structure(ch))
         return root_info
 
+    def build(self, tables, tables_info):
+        self.no_bind_tables = self._build([self.root], tables, tables_info)
+
     @classmethod
-    def build_tree(cls, childs, tables, tables_info):
+    def _build(cls, children, tables, tables_info):
         """
-        строит дерево таблиц, возвращает таблицы без свяезй
-        :param childs:
-        :param tables:
-        :param tables_info:
-        :return: list
+        строит дерево таблиц, возвращает таблицы без связей
+
+        Args:
+            children(list of Node):
+            tables
+            tables_info
+
+        Returns:
+            list: Список не связанных таблиц
         """
 
-        def inner_build_tree(childs, tables):
-            child_vals = [x.val for x in childs]
-            tables = [x for x in tables if x not in child_vals]
+        child_vals = [x.val for x in children]
+        tables = [x for x in tables if x not in child_vals]
 
-            new_childs = []
+        new_children = []
 
-            for child in childs:
-                new_childs += child.childs
-                r_val = child.val
-                l_info = tables_info[r_val]
+        for child in children:
+            new_children += child.childs
+            l_val = child.val
+            l_info = tables_info[l_val]
 
-                for t_name in tables[:]:
-                    r_info = tables_info[t_name]
-                    joins = cls.get_joins(r_val, t_name, l_info, r_info)
+            for t_name in tables[:]:
+                r_info = tables_info[t_name]
+                joins = cls.get_joins(l_val, t_name, l_info, r_info)
 
-                    if joins:
-                        tables.remove(t_name)
-                        new_node = Node(t_name, child, joins)
-                        child.childs.append(new_node)
-                        new_childs.append(new_node)
+                if joins:
+                    tables.remove(t_name)
+                    new_node = Node(t_name, child, joins)
+                    child.childs.append(new_node)
+                    new_children.append(new_node)
 
-            if new_childs and tables:
-                tables = inner_build_tree(new_childs, tables)
+        if new_children and tables:
+            tables = cls._build(new_children, tables, tables_info)
 
-            # таблицы без связей
-            return tables
-
-        tables = inner_build_tree(childs, tables)
-
+        # таблицы без связей
         return tables
 
-    @classmethod
-    def select_tree(cls, trees):
-        """
-        возвращает из списка деревьев лучшее дерево по насыщенности
-        детей сверху вниз
-        :param trees: list
-        :return: list
-        """
-        counts = {}
-        for tr_name, tree in trees.iteritems():
-            counts[tr_name] = cls.get_nodes_count_by_level([tree.root])
-        root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
-        return trees[root_table]
+    def build_by_structure(self, children):
+        self._build_by_structure(self.root, children)
 
     @classmethod
-    def build_tree_by_structure(cls, structure):
+    def _build_by_structure(cls, root, children):
         """
         строит дерево по структуре дерева
         :param structure: dict
         :return: TablesTree
         """
-        tree = TablesTree(structure['val'])
 
-        def inner_build(root, childs):
-            for ch in childs:
-                new_node = Node(ch['val'], root, ch['joins'],
-                                ch['join_type'])
-                root.childs.append(new_node)
-                inner_build(new_node, ch['childs'])
+        for ch in children:
+            new_node = Node(ch['val'], root, ch['joins'],
+                            ch['join_type'])
+            root.childs.append(new_node)
+            cls._build_by_structure(new_node, ch['childs'])
 
-        inner_build(tree.root, structure['childs'])
-
-        return tree
-
-    @classmethod
-    def update_node_joins(cls, sel_tree, left_table,
+    def update_node_joins(self, left_table,
                           right_table, join_type, joins):
         """
         добавляет/меняет связи между таблицами
@@ -192,7 +196,7 @@ class TablesTree(object):
         :param join_type: str
         :param joins: list
         """
-        nodes = cls.get_tree_ordered_nodes([sel_tree.root, ])
+        nodes = self.ordered_nodes
         parent = [x for x in nodes if x.val == left_table][0]
         childs = [x for x in parent.childs if x.val == right_table]
 
@@ -214,8 +218,8 @@ class TablesTree(object):
                 'join': {"type": join_type, "value": oper},
             })
 
-    @classmethod
-    def get_joins(cls, l_t, r_t, l_info, r_info):
+    @staticmethod
+    def get_joins(l_t, r_t, l_info, r_info):
         """
         Функция выявляет связи между таблицами
         :param l_t:
@@ -232,9 +236,9 @@ class TablesTree(object):
         unique_set = set()
 
         for l_c in l_cols:
-            l_str = '{0}_{1}'.format(l_t, l_c['name'])
+            l_str = u'{0}_{1}'.format(l_t, l_c['name'])
             for r_c in r_cols:
-                r_str = '{0}_{1}'.format(r_t, r_c['name'])
+                r_str = u'{0}_{1}'.format(r_t, r_c['name'])
                 if l_c['name'] == r_str and l_c['type'] == r_c['type']:
                     j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
                     sort_j_tuple = tuple(sorted(j_tuple))
@@ -292,55 +296,70 @@ class TablesTree(object):
 
         return dict_joins
 
+    def delete_nodes(self, tables):
+        root = self.root
+        self._delete_nodes_from_tree(root, tables)
+
+    @classmethod
+    def _delete_nodes_from_tree(cls, node, tables):
+        """
+        удаляет узлы дерева
+        :param node: Node
+        :param tables: list
+        """
+
+        for child in node.childs[:]:
+            if child.val in tables:
+                child.parent = None
+                node.childs.remove(child)
+            else:
+                cls._delete_nodes_from_tree(child, tables)
+
 
 class TableTreeRepository(object):
     """
         Обработчик деревьев TablesTree
     """
 
-    @classmethod
-    def build_trees(cls, tables, source):
+    @staticmethod
+    def build_trees(tables, tables_info):
         """
-        строит всевозможные деревья
-        :param tables: list
-        :param source: Datasource
-        :return:
+        Построение всевозможных деревьев
+
+        Args:
+            tables(tuple): Список таблиц
+            tables_info(dict): Информация от таблицах
+
+        Returns:
+
         """
         trees = {}
         without_bind = {}
 
-        tables_info = RedisSourceService.info_for_tree_building(
-            (), tables, source)
-
         for t_name in tables:
             tree = TablesTree(t_name)
-
-            without_bind[t_name] = TablesTree.build_tree(
-                [tree.root, ], tables, tables_info)
+            tree.build(tables, tables_info)
             trees[t_name] = tree
+            without_bind[t_name] = tree.no_bind_tables
 
         return trees, without_bind
 
-    @classmethod
-    def delete_nodes_from_tree(cls, tree, source, tables):
-        """
-        удаляет узлы дерева
-        :param tree: TablesTree
-        :param source: Datasource
-        :param tables: list
-        """
+    @staticmethod
+    def build_tree_by_structure(structure):
+        sel_tree = TablesTree(structure['val'])
+        sel_tree.build_by_structure(structure['childs'])
+        return sel_tree
 
-        def inner_delete(node):
-            for child in node.childs[:]:
-                if child.val in tables:
-                    child.parent = None
-                    node.childs.remove(child)
-                else:
-                    inner_delete(child)
-
-        r_val = tree.root.val
-        if r_val in tables:
-            RedisSourceService.tree_full_clean(source)
-            tree.root = None
-        else:
-            inner_delete(tree.root)
+    @staticmethod
+    def select_tree(trees):
+        """
+        возвращает из списка деревьев лучшее дерево по насыщенности
+        детей сверху вниз
+        :param trees: list
+        :return: list
+        """
+        counts = {}
+        for tr_name, tree in trees.iteritems():
+            counts[tr_name] = tree.nodes_count_for_levels
+        root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
+        return trees[root_table]

@@ -61,8 +61,23 @@ class Database(object):
     """
     db_map = None
 
-    def __init__(self, connection):
+    def __init__(self, source):
+        """
+        Присваиваем источник и устанавливаем подключение
+        """
+        self.source = source
+        connection = self.get_source_data()
         self.connection = self.get_connection(connection)
+
+    def get_source_data(self):
+        """
+        Возвращает список модели источника данных
+        Returns:
+            dict: словарь с информацией подключения
+        """
+        return {'db': self.source.db, 'host': self.source.host,
+                'port': self.source.port, 'login': self.source.login,
+                'password': self.source.password}
 
     @staticmethod
     def get_connection(conn_info):
@@ -330,7 +345,7 @@ class Database(object):
         """
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
-    def get_tables(self, source):
+    def get_tables(self):
         """
         Получение списка таблиц
 
@@ -346,25 +361,10 @@ class Database(object):
                     ...
                 ]
         """
-        query = self.db_map.table_query.format(source.db)
+        query = self.db_map.table_query.format(self.source.db)
 
         records = self.get_query_result(query)
         return map(lambda x: {'name': x[0], }, records)
-
-    @classmethod
-    def get_statistic_query(cls, source, tables):
-        """
-        строка для статистики таблицы
-
-        Args:
-             source(`Datasource`): источник
-             tables(list): Список таблиц
-
-        Returns:
-            str: Строка запроса для получения статистичеких данных
-        """
-        tables_str = cls.get_tables_str(tables)
-        return cls.db_map.stat_query.format(tables_str, source.db)
 
     @staticmethod
     def remote_table_create_query():
@@ -387,23 +387,26 @@ class Database(object):
 
         raise NotImplementedError("Method %s is not implemented" % __name__)
 
-    def get_statistic(self, source, tables):
+    def get_statistic(self, tables):
         """
         возвращает статистику таблиц
 
         Args:
-            source('Datasource'): источник
             tables(list): Список таблиц
 
         Returns:
-            dict: Статистические данные. Формат ответа см.`processing_statistic`
+            dict: Статистические данные
+            {'table_name': ({'count': кол-во строк, 'size': объем памяти строк)}
         """
-        stats_query = self.get_statistic_query(source, tables)
+
+        tables_str = self.get_tables_str(tables)
+        stats_query = self.db_map.stat_query.format(tables_str, self.source.db)
         stat_records = self.get_query_result(stats_query)
+
         return self.processing_statistic(stat_records)
 
     @classmethod
-    def get_interval_query(cls, source, cols_info):
+    def get_interval_query(cls, cols_info):
         """
         список запросов на min max значений для колонок с датами
 
@@ -420,7 +423,7 @@ class Database(object):
                 intervals_query.append([table, col_name, query])
         return intervals_query
 
-    def get_intervals(self, source, cols_info):
+    def get_intervals(self, cols_info):
         """
         Возращается список интервалов для полей типа Дата
 
@@ -431,25 +434,17 @@ class Database(object):
         Returns:
             dict: Информация о крайних значениях дат
         """
-        res = {}
-        interval_queries = self.get_interval_query(source, cols_info)
+        res = defaultdict(list)
+        interval_queries = self.get_interval_query(cols_info)
         now = time.mktime(datetime.datetime.now().timetuple())
         for table, col, query in interval_queries:
             start_date, end_date = self.get_query_result(query)[0]
-            if res.get(table, None):
-                res[table].append({
-                    'last_updated': now,
-                    'name': col,
-                    'startDate': start_date,
-                    'endDate': end_date,
-                })
-            else:
-                res[table] = [{
-                    'last_updated': now,
-                    'name': col,
-                    'startDate': start_date,
-                    'endDate': end_date,
-                }]
+            res[table].append({
+                'last_updated': now,
+                'name': col,
+                'startDate': start_date,
+                'endDate': end_date,
+            })
         return res
 
     @staticmethod
@@ -480,7 +475,7 @@ class Database(object):
         return {x[0].lower(): ({'count': int(x[1]), 'size': x[2]}
                 if (x[1] and x[2]) else None) for x in records}
 
-    def get_columns_info(self, source, tables):
+    def get_columns_info(self, tables):
         """
         Получение списка колонок в таблицах
 
@@ -500,8 +495,9 @@ class Database(object):
                 )
 
         """
+
         columns_query, consts_query, indexes_query = self._get_columns_query(
-            source, tables)
+            self.source, tables)
 
         col_records = self.get_query_result(columns_query)
         index_records = self.get_query_result(indexes_query)
@@ -620,7 +616,7 @@ class Database(object):
         return date_table_col_names
 
     @staticmethod
-    def get_table_create_col_names(fields, ref_key):
+    def get_table_create_col_names(fields, time_table_name):
         col_names = ['"cdc_key" text PRIMARY KEY']
         for table, field in fields:
             field_name = "{0}{1}{2}".format(table, FIELD_NAME_SEP, field['name'])
@@ -629,8 +625,8 @@ class Database(object):
                 col_names.append('"{0}" {1}'.format(
                     field_name, field['type']))
             else:
-                col_names.append('"{0}" integer REFERENCES time_by_day_{1} (time_id)'.format(
-                    field_name, ref_key))
+                col_names.append('"{0}" integer REFERENCES {1} (time_id)'.format(
+                    field_name, time_table_name))
 
         return col_names
 

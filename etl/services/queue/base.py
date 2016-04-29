@@ -8,9 +8,11 @@ from psycopg2 import Binary
 
 from etl.constants import TYPES_MAP
 from etl.services.datasource.base import DataSourceService
+from etl.services.db.factory import LocalDatabaseService
 from etl.services.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
-from core.models import (QueueList, Queue, QueueStatus)
+from core.models import (QueueList, Queue, QueueStatus, Datasource,
+                         DatasourceSettings)
 from etl.services.middleware.base import get_table_name
 from core.exceptions import TaskError
 from core.helpers import HashEncoder
@@ -30,6 +32,52 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+class Context(object):
+
+    __builder = None
+
+    def setBuilder(self, builder):
+        self.__builder = builder
+        return self
+
+
+class ContextBuilder(object):
+
+
+    def get_cols(self):
+        pass
+
+
+class RedisContextBuilder(ContextBuilder):
+
+    def __init__(self, source_id, cols, tables):
+        self.tables = tables
+        self.source = Datasource.objects.get(id=source_id)
+        self.cols = cols
+
+    def get_tree(self):
+        return RedisSourceService.get_active_tree_structure(self.source)
+
+    def get_meta(self):
+        return DataSourceService.tables_info_for_metasource(
+            self.source, self.tables)
+
+    def get_cdc_type(self):
+        return DatasourceSettings.objects.get(
+            datasource_id=self.source.id, name=DatasourceSettings.SETTING_CDC_NAME).value
+
+    def get_cols_types(self):
+        return DataSourceService.get_columns_types(self.source, self.tables)
+
+    def get_collection_names(self):
+        return DataSourceService.get_collections_names(
+            self.source, self.tables)
+
+    def get_tables_info(self):
+        return RedisSourceService.get_ddl_tables_info(
+                    self.source, self.tables)
 
 
 class TaskProcessing(object):
@@ -308,8 +356,8 @@ def get_single_task(task_name, task_def, params):
         return
     task_id, channel = TaskService(task_name).add_task(
         arguments=params)
-    return task_def.apply_async((task_id, channel),), [channel]
-    # return task_def(task_id, channel), [channel]
+    # return task_def.apply_async((task_id, channel),), [channel]
+    return task_def(task_id, channel), [channel]
 
 
 class RowKeysCreator(object):
@@ -455,7 +503,7 @@ class LocalDbConnect(object):
 
     @staticmethod
     def get_connection(source=None):
-        return DataSourceService.get_local_instance().connection
+        return LocalDatabaseService().datasource.connection
 
     def __init__(self, query, source=None, execute=True):
 

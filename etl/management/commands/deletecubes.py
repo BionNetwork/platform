@@ -18,7 +18,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
 
-        instance = DataSourceService.get_local_instance()
+        instance = DataSourceService.get_local_instance().datasource
         connection = instance.connection
         cursor = connection.cursor()
 
