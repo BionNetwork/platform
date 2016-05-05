@@ -1213,7 +1213,7 @@ class RedisSourceService(object):
         else:
             collections = actives[S.format(source_id)]
             final_info[sid_name.format(source_id, table)] = (
-                cls.r_get(str_table.format(collections[table])))
+                cls.r_get(str_table.format(collections['actives'][table])))
 
         return final_info
 

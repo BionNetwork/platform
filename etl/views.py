@@ -493,9 +493,9 @@ class LoadDataView(BaseEtlView):
         """
 
         # подключение к источнику данных
-        source_conn = helpers.DataSourceService.get_source_connection(source)
-        if not source_conn:
-            raise ResponseError(u'Не удалось подключиться к источнику данных!', ExceptionCode.ERR_CONNECT_TO_DATASOURCE)
+        # source_conn = helpers.DataSourceService.get_source_connection(source)
+        # if not source_conn:
+        #     raise ResponseError(u'Не удалось подключиться к источнику данных!', ExceptionCode.ERR_CONNECT_TO_DATASOURCE)
 
         # копия, чтобы могли добавлять
         data = request.POST
