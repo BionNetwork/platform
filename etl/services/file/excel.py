@@ -7,27 +7,7 @@ import pandas
 from collections import defaultdict
 from itertools import groupby
 
-from etl.services.file.interfaces import File
-
-
-TYPES_MAP = {
-    "int": "integer",
-    "float": "double precision",
-    "datetime": "datetime",
-    "object": "text",
-    "boolean": "boolean"
-}
-
-
-def process_type(type_):
-    """
-    # FIXME надо для Mongo, а не для Postgresql
-    Отображение типов Excel в типы Postgresql
-    """
-    for k, v in TYPES_MAP.items():
-        if type_.startswith(k):
-            return v
-    raise ValueError("Необработанный тип для Excel!")
+from etl.services.file.interfaces import File, process_type
 
 
 class Excel(File):

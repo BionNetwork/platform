@@ -7,6 +7,7 @@ from core.models import ConnectionChoices
 
 from etl.services.source import DatasourceApi
 from etl.services.file.excel import Excel
+from etl.services.file.csv_file import CSV
 
 
 class FileService(DatasourceApi):
@@ -36,7 +37,7 @@ class FileService(DatasourceApi):
         if conn_type == ConnectionChoices.EXCEL:
             return Excel(source)
         elif conn_type == ConnectionChoices.CSV:
-            return
+            return CSV(source)
         elif conn_type == ConnectionChoices.TXT:
             return
         else:
