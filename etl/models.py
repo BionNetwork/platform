@@ -433,18 +433,15 @@ class TablesTree(object):
         unique_set = set()
 
         for l_c in l_cols:
-            l_str = u'{0}_{1}'.format(l_t, l_c['name'])
+            l_name = l_c['name']
+            l_set = {l_name, "{0}_id".format(l_name)}
+
             for r_c in r_cols:
-                r_str = u'{0}_{1}'.format(r_t, r_c['name'])
-                if l_c['name'] == r_str and l_c['type'] == r_c['type']:
-                    j_tuple = (l_t, l_c["name"], l_sid, r_t, r_c["name"], r_sid)
-                    sort_j_tuple = tuple(sorted(j_tuple))
-                    if sort_j_tuple not in unique_set:
-                        joins.add(j_tuple)
-                        unique_set.add(sort_j_tuple)
-                        break
-                if l_str == r_c["name"] and l_c['type'] == r_c['type']:
-                    j_tuple = (l_t, l_c["name"], l_sid, r_t, r_c["name"], r_sid)
+                r_name = r_c['name']
+                r_set = {r_name, "{0}_id".format(r_name)}
+
+                if l_set.intersection(r_set) and l_c['type'] == r_c['type']:
+                    j_tuple = (l_t, l_name, l_sid, r_t, r_name, r_sid)
                     sort_j_tuple = tuple(sorted(j_tuple))
                     if sort_j_tuple not in unique_set:
                         joins.add(j_tuple)
