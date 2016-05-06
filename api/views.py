@@ -1,14 +1,16 @@
 # coding: utf-8
 from __future__ import unicode_literals
+from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
 
 import logging
+from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
-    SchemasRetreviewSerializer)
+    SchemasRetreviewSerializer, CardDatasourceSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
-                         DatasourceMetaKeys)
+                         DatasourceMetaKeys, CardDatasource)
 from core.views import BaseViewNoLogin
 from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
@@ -81,8 +83,11 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class DatasourceViewSet(viewsets.ModelViewSet):
-    queryset = Datasource.objects.all()
+    model = Datasource
     serializer_class = DatasourceSerializer
+
+    def get_queryset(self):
+        return self.model.objects.filter(user_id=self.request.user.id)
 
     def create(self, request, *args, **kwargs):
         request.data.update({'user_id': request.user.id})
@@ -93,6 +98,33 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         DataSourceService.delete_datasource(source)
         DataSourceService.tree_full_clean(source)
         return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
+
+
+class CardDataSourceViewSet(viewsets.ModelViewSet):
+    """
+    Источкник в карточке
+    """
+    model = CardDatasource
+    serializer_class = CardDatasourceSerializer
+
+    def get_queryset(self):
+        return self.model.objects.filter(source__user_id=self.request.user.id)
+
+    def create(self, request, *args, **kwargs):
+        pass
+
+
+class TablesDataView(APIView):
+
+    def get(self, request, source_id, table_name):
+        """
+        Получение данных о таблице
+        """
+        source = Datasource.objects.get(id=source_id)
+
+        service = DataSourceService.get_source_service(source)
+        data = service.fetch_tables_columns([table_name])
+        return Response(data)
 
 
 class SchemasListView(mixins.ListModelMixin,
@@ -115,8 +147,6 @@ class GetSchemaView(mixins.RetrieveModelMixin,
 
     def get(self, request, *args, **kwargs):
         return self.retrieve(request, *args, **kwargs)
-
-
 
 
 class GetMeasureDataView(BaseViewNoLogin):
