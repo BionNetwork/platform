@@ -433,12 +433,22 @@ class TablesTree(object):
         unique_set = set()
 
         for l_c in l_cols:
+            # имя колонки
             l_name = l_c['name']
-            l_set = {l_name, "{0}_id".format(l_name)}
+            # имя колонки с таблицей
+            l_t_c_name = "{0}_{1}".format(l_t, l_name)
+            # имя колонки с _id
+            l_c_id = "{0}_id".format(l_name)
+            l_set = {l_name, l_t_c_name, l_c_id, }
 
             for r_c in r_cols:
+                # имя колонки
                 r_name = r_c['name']
-                r_set = {r_name, "{0}_id".format(r_name)}
+                # имя колонки с таблицей
+                r_t_c_name = "{0}_{1}".format(r_t, r_name)
+                # имя колонки с _id
+                r_c_id = "{0}_id".format(r_name)
+                r_set = {r_name, r_t_c_name, r_c_id, }
 
                 if l_set.intersection(r_set) and l_c['type'] == r_c['type']:
                     j_tuple = (l_t, l_name, l_sid, r_t, r_name, r_sid)

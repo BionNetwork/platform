@@ -484,7 +484,19 @@ class RedisSourceService(object):
         return r_server.exists(str_active_tree)
 
     @classmethod
-    def save_active_tree(cls, tree_structure, user_id):
+    def save_active_tree(cls, tree_structure, source):
+        """
+        сохраняем структуру дерева
+        :param tree_structure: string
+        :param source: Datasource
+        """
+        source_key = cls.get_user_source(source)
+        str_active_tree = RedisCacheKeys.get_active_tree(source_key)
+
+        cls.r_set(str_active_tree, tree_structure)
+
+    @classmethod
+    def save_active_tree_NEW(cls, tree_structure, user_id):
         """
         сохраняем структуру дерева
         :param tree_structure: string
@@ -517,7 +529,6 @@ class RedisSourceService(object):
         """
         card_key = RKeys.get_user_card_key(user_id)
         str_active_tree = RKeys.get_active_tree(card_key)
-        print 'str_active_tree', str_active_tree
         return cls.r_get(str_active_tree)
 
     @classmethod
@@ -675,7 +686,7 @@ class RedisSourceService(object):
             r_server.set(str_joins, json.dumps(joins_in_redis))
 
         # сохраняем само дерево
-        cls.save_active_tree(structure, user_id)
+        cls.save_active_tree_NEW(structure, user_id)
 
     @classmethod
     def tree_full_clean(cls, source, delete_ddl=True):
