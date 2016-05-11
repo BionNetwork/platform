@@ -24,7 +24,9 @@ import logging
 
 from . import helpers
 from etl.constants import *
+from etl.models import TableTreeRepository
 from etl.tasks import create_dataset
+from etl.multitask import create_dataset_multi
 from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (generate_columns_string,
                                        generate_table_name_key)
@@ -331,12 +333,24 @@ class GetColumnsViewNew(BaseEtlView):
         tables = json.loads(request.GET.get('tables', ''))
 
         table = tables[0]
-
-        # source = Datasource.objects.get(id=32)
-        # table = u'Лист1'
-
+        # table = u'auth_group_permissions'
+        # info = helpers.DataSourceService.get_tree_info(
+        #     source, table)
+        #
+        # table = u'auth_group'
         info = helpers.DataSourceService.get_tree_info(
             source, table)
+        #
+        # source32 = Datasource.objects.get(id=32)
+        #
+        # table = u'Лист1'
+        # info = helpers.DataSourceService.get_tree_info(
+        #     source32, table)
+        #
+        # table = u'Лист2'
+        # info = helpers.DataSourceService.get_tree_info(
+        #     source32, table)
+
         return info
 
 
@@ -483,7 +497,7 @@ class SaveNewJoinsView(BaseEtlView):
         return data
 
 
-class LoadDataView(BaseEtlView):
+class LoadDataViewMono(BaseEtlView):
 
     def start_post_action(self, request, source):
         """
@@ -491,11 +505,6 @@ class LoadDataView(BaseEtlView):
         :type request: WSGIRequest
         :type source: Datasource
         """
-
-        # подключение к источнику данных
-        # source_conn = helpers.DataSourceService.get_source_connection(source)
-        # if not source_conn:
-        #     raise ResponseError(u'Не удалось подключиться к источнику данных!', ExceptionCode.ERR_CONNECT_TO_DATASOURCE)
 
         # копия, чтобы могли добавлять
         data = request.POST
@@ -576,6 +585,39 @@ class LoadDataView(BaseEtlView):
             raise ResponseError(e.message)
 
         return {'channels': channels}
+
+
+class LoadDataView(BaseEtlView):
+
+    def start_post_action(self, request, source):
+        """
+        Постановка задачи в очередь на загрузку данных в хранилище
+        """
+        # копия, чтобы могли добавлять
+        # data = request.POST
+
+        # в будущем card_id, пока user_id
+        user_id = request.user.id
+
+        tree_structure = (
+            helpers.RedisSourceService.get_active_tree_structure_NEW(user_id))
+
+        sub_trees = TableTreeRepository.split_nodes_by_sources(tree_structure)
+
+        # print sub_trees
+        # print len(sub_trees)
+
+        # Параметры для задач
+        load_args = {
+            'card_id': user_id,
+            'user_id': user_id,
+            'is_update': False,
+            'tree_structure': tree_structure,
+            'sub_trees': sub_trees,
+        }
+
+        get_single_task(
+            CREATE_DATASET_MULTI, create_dataset_multi, load_args)
 
 
 class GetUserTasksView(BaseView):

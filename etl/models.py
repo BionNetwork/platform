@@ -599,3 +599,47 @@ class TableTreeRepository(object):
             counts[tr_name] = tree.nodes_count_for_levels
         root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
         return trees[root_table]
+
+    @classmethod
+    def split_nodes_by_sources(cls, structure):
+        """
+        Разделяет мультисоурсное дерево по группам джойнов одного источника
+        """
+        remains = [structure, ]
+        result = []
+
+        while remains:
+            child = remains[0]
+            rems = cls.process_sub_tree(child)
+
+            result.append(child)
+
+            remains.pop(0)
+            remains.extend(rems)
+
+        return result
+
+    @classmethod
+    def process_sub_tree(cls, child):
+        """
+        Обрезает до поддерева 1 источника
+        """
+        sid = child['sid']
+        differents = []
+        childs = child['childs']
+
+        while childs:
+            new_childs = []
+            for ch in childs[:]:
+                if ch['sid'] == sid:
+                    new_childs.extend(ch['childs'])
+                    for c in ch['childs'][:]:
+                        if c['sid'] != sid:
+                            ch['childs'].remove(c)
+                else:
+                    differents.append(ch)
+                    childs.remove(ch)
+
+            childs = new_childs
+
+        return differents
