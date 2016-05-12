@@ -352,7 +352,7 @@ class RedisSourceService(object):
                 actives.remove(found)
 
     @classmethod
-    def get_collection_name(cls, source_key, table):
+    def get_collection_name(cls, source, table):
         """
         Получение название коллекции для таблицы
 
@@ -364,6 +364,7 @@ class RedisSourceService(object):
             str: Название коллекции
         """
 
+        source_key = cls.get_user_source(source)
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source_key, table)
 
@@ -387,8 +388,7 @@ class RedisSourceService(object):
         Returns:
             str: Данные по коллекции
         """
-        source_key = cls.get_user_source(source)
-        return r_server.get(cls.get_collection_name(source_key, table))
+        return r_server.get(cls.get_collection_name(source, table))
 
     @classmethod
     def get_table_info(cls, table_id_or_name, user_id, source_id):
@@ -503,7 +503,7 @@ class RedisSourceService(object):
         :param source: Datasource
         """
         card_key = RKeys.get_user_card_key(user_id)
-        str_active_tree = RedisCacheKeys.get_active_tree(card_key)
+        str_active_tree = RKeys.get_active_tree(card_key)
 
         cls.r_set(str_active_tree, tree_structure)
 
@@ -516,7 +516,7 @@ class RedisSourceService(object):
         :return:
         """
         source_key = cls.get_user_source(source)
-        str_active_tree = RedisCacheKeys.get_active_tree(source_key)
+        str_active_tree = RKeys.get_active_tree(source_key)
 
         return json.loads(r_server.get(str_active_tree))
 
@@ -1250,8 +1250,7 @@ class RedisSourceService(object):
 
         tables_info_for_meta = {}
         source_key = cls.get_user_source(source)
-        str_table = RedisCacheKeys.get_active_table(
-            source.user_id, source.id, '{0}')
+        str_table = RedisCacheKeys.get_active_table(source_key, '{0}')
 
         actives_list = cls.get_active_table_list(source_key)
 

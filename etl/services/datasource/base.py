@@ -843,7 +843,7 @@ class DataSourceService(object):
                             fields['columns'].append(col)
 
                             # primary keys
-                            if col['is_primary']:
+                            if hasattr(col, 'is_primary') and col['is_primary']:
                                 stats['row_key'].append(col['name'])
 
                 if last_row and stats['row_key']:

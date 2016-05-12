@@ -425,14 +425,14 @@ class LocalDatabaseService(object):
         query = self.datasource.cdc_key_delete_query(table_name)
         self.execute(query, records)
 
-    def reload_trigger(self, trigger_name, orig_name, new_table, column_names):
+    def reload_trigger(self, trigger_name, orig_table, new_table, column_names):
         sep = self.datasource.get_separator()
         insert_cols = ['NEW.{1}{0}{1}'.format(col, sep) for col in column_names]
         select_cols = ['{1}{0}{1}'.format(col, sep) for col in column_names]
         query_params = dict(
             trigger_name=trigger_name,
             new_table=new_table,
-            orig_table=orig_name,
+            orig_table=orig_table,
             del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
             insert_cols=','.join(insert_cols),
             cols="({0})".format(','.join(select_cols)),
