@@ -58,6 +58,8 @@ class Excel(File):
                     "origin_type": origin_type,
                     "extra": None,
                     "max_length": None,
+                    "is_unique": None,
+                    "is_primary": None,
                 })
 
         return columns
