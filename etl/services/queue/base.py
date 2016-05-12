@@ -437,7 +437,7 @@ def process_binary_data(record, binary_types_list, process_func=None):
     return new_record
 
 
-def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
+def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list=None):
     """
     Расчет ключа для отдельно взятой строки
 
@@ -451,7 +451,8 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
         int: Ключ для строки
     """
     # преобразуем бинары в строку, если они есть
-    row = process_binary_data(row, binary_types_list, binascii.b2a_base64)
+    if binary_types_list:
+        row = process_binary_data(row, binary_types_list, binascii.b2a_base64)
 
     if len(tables_key_creators) > 1:
         row_values_for_calc = [

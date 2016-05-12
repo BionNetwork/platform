@@ -332,24 +332,24 @@ class GetColumnsViewNew(BaseEtlView):
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
 
-        table = tables[0]
-        # table = u'auth_group_permissions'
-        # info = helpers.DataSourceService.get_tree_info(
-        #     source, table)
-        #
-        # table = u'auth_group'
+        # table = tables[0]
+        table = u'auth_group_permissions'
         info = helpers.DataSourceService.get_tree_info(
             source, table)
-        #
-        # source32 = Datasource.objects.get(id=32)
-        #
-        # table = u'Лист1'
-        # info = helpers.DataSourceService.get_tree_info(
-        #     source32, table)
-        #
-        # table = u'Лист2'
-        # info = helpers.DataSourceService.get_tree_info(
-        #     source32, table)
+
+        table = u'auth_group'
+        info = helpers.DataSourceService.get_tree_info(
+            source, table)
+
+        source32 = Datasource.objects.get(id=32)
+
+        table = u'Лист1'
+        info = helpers.DataSourceService.get_tree_info(
+            source32, table)
+
+        table = u'Лист2'
+        info = helpers.DataSourceService.get_tree_info(
+            source32, table)
 
         return info
 

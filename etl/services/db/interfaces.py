@@ -307,15 +307,19 @@ class Database(object):
         Returns:
             str: Строка запроса на получения данных без пагинации
         """
+        print 'structure', structure
         query_join = self.generate_join(structure,)
+
+        print 'query_join', query_join
 
         separator = self.get_separator()
 
         pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
             '{table}', '{col}', sep=separator)
 
+        # FIXME временно ставим *, берем все столбы
         cols_str = ', '.join(
-            [pre_cols_str.format(**x) for x in cols])
+            [pre_cols_str.format(**x) for x in cols]) if cols else ' * '
 
         return self.db_map.row_query.format(
             cols_str, query_join,
