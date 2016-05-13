@@ -22,9 +22,10 @@ from core.models import (
 from . import forms as etl_forms
 import logging
 
-from . import helpers
 from etl.constants import *
 from etl.models import TableTreeRepository
+from etl.services.datasource.base import DataSourceService
+from etl.services.datasource.repository.storage import RedisSourceService
 from etl.tasks import create_dataset
 from etl.multitask import create_dataset_multi
 from .services.queue.base import TaskStatusEnum, get_single_task
@@ -185,9 +186,9 @@ class EditSourceView(BaseTemplateView):
 
         if form.has_changed() and settings.USE_REDIS_CACHE:
             # если что-то изменилось, то удаляем инфу о датасорсе
-            helpers.DataSourceService.delete_datasource(source)
+            DataSourceService.delete_datasource(source)
             # дополнительно удаляем инфу о таблицах, джоинах, дереве
-            helpers.DataSourceService.tree_full_clean(source)
+            DataSourceService.tree_full_clean(source)
         form.save()
 
         return self.json_response(
@@ -209,9 +210,9 @@ class RemoveSourceView(BaseView):
         source.delete()
 
         # удаляем инфу о датасорсе
-        helpers.DataSourceService.delete_datasource(source)
+        DataSourceService.delete_datasource(source)
         # дополнительно удаляем инфу о таблицах, джоинах, дереве
-        helpers.DataSourceService.tree_full_clean(source)
+        DataSourceService.tree_full_clean(source)
 
         return self.json_response({'redirect_url': reverse('etl:datasources.index')})
 
@@ -221,7 +222,7 @@ class CheckConnectionView(BaseView):
     def post(self, request, *args, **kwargs):
 
         try:
-            helpers.DataSourceService.check_connection(request.POST)
+            DataSourceService.check_connection(request.POST)
             return self.json_response(
                 {'status': SUCCESS,
                  'message': 'Проверка соединения прошла успешно'})
@@ -242,10 +243,10 @@ class GetConnectionDataView(BaseView):
 
         # FIXME в зависимости от типа источника, определить как очищать редис
         # очищаем из редиса инфу дерева перед созданием нового
-        helpers.DataSourceService.tree_full_clean(source)
+        DataSourceService.tree_full_clean(source)
 
         try:
-            db_tables = helpers.DataSourceService.get_source_tables(source)
+            db_tables = DataSourceService.get_source_tables(source)
         except ValueError as err:
             return self.json_response({'status': ERROR, 'message': err.message})
 
@@ -322,7 +323,7 @@ class GetColumnsView(BaseEtlView):
 
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
-        info = helpers.DataSourceService.get_columns_info(
+        info = DataSourceService.get_columns_info(
             source, tables)
         return info
 
@@ -334,21 +335,21 @@ class GetColumnsViewNew(BaseEtlView):
 
         # table = tables[0]
         table = u'auth_group_permissions'
-        info = helpers.DataSourceService.get_tree_info(
+        info = DataSourceService.get_tree_info(
             source, table)
 
         table = u'auth_group'
-        info = helpers.DataSourceService.get_tree_info(
+        info = DataSourceService.get_tree_info(
             source, table)
 
         source32 = Datasource.objects.get(id=32)
 
         table = u'Лист1'
-        info = helpers.DataSourceService.get_tree_info(
+        info = DataSourceService.get_tree_info(
             source32, table)
 
         table = u'Лист2'
-        info = helpers.DataSourceService.get_tree_info(
+        info = DataSourceService.get_tree_info(
             source32, table)
 
         return info
@@ -362,7 +363,7 @@ class RetitleColumnView(BaseEtlView):
         column = post.get('column')
         title = post.get('title')
 
-        helpers.DataSourceService.retitle_table_column(
+        DataSourceService.retitle_table_column(
             source, table, column, title)
         return []
 
@@ -387,10 +388,10 @@ class GetDataRowsView(BaseEtlView):
             table_names.append(t_name)
             col_names += col_group
 
-        # data = helpers.DataSourceService.get_rows_info(
+        # data = DataSourceService.get_rows_info(
         #     source, col_names)
 
-        data = helpers.DataSourceService.get_rows_info_NEW(
+        data = DataSourceService.get_rows_info_NEW(
             source, col_names)
 
         return data
@@ -420,7 +421,7 @@ class RemoveTablesView(BaseEtlView):
 
     def start_get_action(self, request, source):
         tables_info = json.loads(request.GET.get('tables'))
-        # helpers.DataSourceService.remove_tables_from_tree(
+        # DataSourceService.remove_tables_from_tree(
         #     source, tables)
 
         tables_info = [(t, 17) for t in tables_info]
@@ -430,7 +431,7 @@ class RemoveTablesView(BaseEtlView):
             # ('auth_group', 17),
         ]
 
-        helpers.DataSourceService.remove_tables_from_tree_NEW(
+        DataSourceService.remove_tables_from_tree_NEW(
             source.user_id, tables_info)
 
         return []
@@ -440,7 +441,7 @@ class RemoveAllTablesView(BaseEtlView):
 
     def start_get_action(self, request, source):
         delete_ddl = request.GET.get('delete_ddl') == 'true'
-        helpers.RedisSourceService.tree_full_clean(source, delete_ddl)
+        RedisSourceService.tree_full_clean(source, delete_ddl)
         return []
 
 
@@ -461,10 +462,10 @@ class GetColumnsForChoicesView(BaseEtlView):
         child_table = request.GET.get('child_bind')
         # has_warning = json.loads(request.GET.get('has_warning'))
         #
-        # data = helpers.DataSourceService.get_columns_and_joins_for_join_window(
+        # data = DataSourceService.get_columns_and_joins_for_join_window(
         #     source, parent_table, child_table, has_warning)
 
-        data = helpers.DataSourceService.get_columns_and_joins(
+        data = DataSourceService.get_columns_and_joins(
             request.user.id, parent_table, parent_sid, child_table, child_sid)
 
         return data
@@ -485,12 +486,12 @@ class SaveNewJoinsView(BaseEtlView):
         # left_sid = 17
         # right_sid = 32#17
 
-        # data = helpers.DataSourceService.save_new_joins(
+        # data = DataSourceService.save_new_joins(
         #     source, left_table, right_table, join_type, joins)
 
         u_id = request.user.id
 
-        data = helpers.DataSourceService.save_new_joins_NEW(
+        data = DataSourceService.save_new_joins_NEW(
             u_id, left_table, left_sid, right_table,
             right_sid, join_type, joins)
 
@@ -536,11 +537,11 @@ class LoadDataViewMono(BaseEtlView):
 
         tables = json.loads(data.get('tables'))
 
-        collections_names = helpers.DataSourceService.get_collections_names(
+        collections_names = DataSourceService.get_collections_names(
             source, tables)
 
         # достаем инфу колонок (статистика, типы, )
-        tables_info_for_meta = helpers.DataSourceService.tables_info_for_metasource(
+        tables_info_for_meta = DataSourceService.tables_info_for_metasource(
             source, tables)
 
         try:
@@ -556,15 +557,15 @@ class LoadDataViewMono(BaseEtlView):
             'cols': data.get('cols'),
             'tables': data.get('tables'),
             'col_types': json.dumps(
-                helpers.DataSourceService.get_columns_types(source, tables)),
+                DataSourceService.get_columns_types(source, tables)),
             'meta_info': json.dumps(tables_info_for_meta),
-            'tree': helpers.RedisSourceService.get_active_tree_structure(source),
+            'tree': RedisSourceService.get_active_tree_structure(source),
             'source': source.get_connection_dict(),
             'user_id': user_id,
             'db_update': False,
             'collections_names': collections_names,
             'checksum': table_key,
-            'tables_info': helpers.RedisSourceService.get_ddl_tables_info(
+            'tables_info': RedisSourceService.get_ddl_tables_info(
                     source, tables),
         }
         db_update = False
@@ -600,7 +601,7 @@ class LoadDataView(BaseEtlView):
         user_id = request.user.id
 
         tree_structure = (
-            helpers.RedisSourceService.get_active_tree_structure_NEW(user_id))
+            RedisSourceService.get_active_tree_structure_NEW(user_id))
 
         sub_trees = TableTreeRepository.split_nodes_by_sources(tree_structure)
 
@@ -626,10 +627,10 @@ class GetUserTasksView(BaseView):
     """
     def get(self, request, *args, **kwargs):
         # берем 10 последних инфо каналов юзера
-        subscribes = helpers.RedisSourceService.get_user_subscribers(
+        subscribes = RedisSourceService.get_user_subscribers(
             request.user.id)
         if subscribes:
-            user_subscribes = json.loads(helpers.RedisSourceService.get_user_subscribers(
+            user_subscribes = json.loads(RedisSourceService.get_user_subscribers(
                 request.user.id))[-10:]
         else:
             user_subscribes = []

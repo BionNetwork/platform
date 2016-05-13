@@ -1,4 +1,6 @@
 # coding: utf-8
+from __future__ import unicode_literals
+
 import binascii
 from contextlib import closing
 import pymongo
@@ -485,6 +487,7 @@ def get_binary_types_dict(cols, col_types):
         str(i): k for i, k in enumerate(binary_types_list, start=1)}
 
     return binary_types_dict
+
 
 def fetch_date_intervals(meta_info):
     """

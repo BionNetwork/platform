@@ -1,4 +1,5 @@
 # coding: utf-8
+from __future__ import unicode_literals
 
 import decimal
 import datetime
@@ -60,7 +61,8 @@ def get_table_name(prefix, key):
     Returns:
         str: Название новой наблицы
     """
-    return '{0}_{1}'.format(
+    print prefix, key
+    return u'{0}_{1}'.format(
         prefix, key)
 
 

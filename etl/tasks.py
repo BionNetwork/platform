@@ -13,6 +13,7 @@ import math
 import requests
 from psycopg2 import errorcodes
 from etl.constants import *
+from etl.services.datasource.base import DataSourceService
 from etl.services.middleware.base import EtlEncoder
 from pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema,
@@ -20,7 +21,6 @@ from pymondrian.schema import (
     Hierarchy, MeasureGroup, Measure as MeasureSchema,
     Key, Name, ForeignKeyLink, ReferenceLink)
 from pymondrian.generator import generate
-from etl.helpers import DataSourceService
 from core.models import (
     Datasource, Dimension, Measure, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,

@@ -11,10 +11,11 @@ from djcelery import celery
 from django.conf import settings
 
 from etl.constants import *
+from etl.services.datasource.base import DataSourceService
 from etl.services.queue.base import *
 from etl.services.db.factory import DatabaseService
 from etl.services.file.factory import FileService
-from etl.helpers import DataSourceService
+from etl.helpers import *
 from core.models import (
     Datasource, Dimension, Measure, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
@@ -30,10 +31,10 @@ ASC = 1
 
 @celery.task(name=CREATE_DATASET_MULTI)
 def create_dataset_multi(task_id, channel):
-    return CreateDatasetMulti(task_id, channel).load_data()
+    return LoadMongodbMulti(task_id, channel).load_data()
 
 
-class CreateDatasetMulti(TaskProcessing):
+class LoadMongodbMulti(TaskProcessing):
     """
     Создание Dataset
     """
@@ -55,14 +56,30 @@ class CreateDatasetMulti(TaskProcessing):
 
             if isinstance(source_service, DatabaseService):
                 print sid, sub_tree
+                items = [sub_tree, ]
 
-                col_names = ['_id', '_state', '_date', '1', '2', '3', '4', '5', '6']
+            elif isinstance(source_service, FileService):
+                print 'file'
+                items = split_file_sub_tree(sub_tree)
+                print items
+            else:
+                raise Exception(u"Неизсестный тип!")
+
+            # FIXME need multiprocessing
+            for item in items:
+
+                col_names = ['_id', '_state', '_date']
+                # FIXME temporary
+                cols_updated = False
+
+                # FIXME temporary
+                self.key = table
 
                 # создаем коллекцию и индексы в Mongodb
                 collection = MongodbConnection(
                     self.get_table(STTM_DATASOURCE), indexes=[
                         ('_id', ASC), ('_state', ASC), ('_date', ASC)]
-                ).collection
+                    ).collection
 
                 # Коллекция с текущими данными
                 current_collection_name = self.get_table(STTM_DATASOURCE_KEYS)
@@ -77,7 +94,7 @@ class CreateDatasetMulti(TaskProcessing):
 
                 while True:
                     rows = source_service.get_source_rows(
-                        sub_tree, cols=[], limit=limit, offset=(page-1)*limit)
+                        item, cols=[], limit=limit, offset=(page-1)*limit)
 
                     if not rows:
                         break
@@ -91,6 +108,12 @@ class CreateDatasetMulti(TaskProcessing):
                         # # FIXME binary
                         # бинарные данные оборачиваем в Binary(), если они имеются
                         # new_record = process_binary_data(record, binary_types_list)
+
+                        # FIXME temporary
+                        if not cols_updated:
+                            cols_updated = True
+                            col_names += map(str, range(len(record)))
+
                         new_record = record
 
                         row_key = '%.6f' % random.random()
@@ -100,6 +123,8 @@ class CreateDatasetMulti(TaskProcessing):
                             [EtlEncoder.encode(rec_field) for rec_field in new_record])
 
                         print 'record', record_normalized
+
+
 
                         data_to_insert.append(dict(izip(col_names, record_normalized)))
                         data_to_current_insert.append(dict(_id=row_key))
@@ -115,8 +140,9 @@ class CreateDatasetMulti(TaskProcessing):
 
                     page += 1
 
-            elif isinstance(source_service, FileService):
-                print 'file'
+                    # FIXME у файлов прогон 1 раз
+                    if isinstance(source_service, FileService):
+                        break
 
         # self.next_task_params = (
         #     MONGODB_DATA_LOAD, load_mongo_db, self.context)

@@ -154,12 +154,16 @@ class Excel(File):
         dfs = {}
         excel_path = self.source.get_file_path()
 
-        for sheet_name, col_group in groupby(columns, lambda x: x['table']):
-            sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
-            col_names = [x['col'] for x in col_group]
-            dfs[sheet_name] = sheet_df[col_names]
+        if columns:
+            for sheet_name, col_group in groupby(columns, lambda x: x['table']):
+                sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+                col_names = [x['col'] for x in col_group]
+                dfs[sheet_name] = sheet_df[col_names]
 
-        left_df = dfs[left_sheet]
+            left_df = dfs[left_sheet]
+        else:
+            # качаем в бд постранично
+            left_df = pandas.read_excel(excel_path, sheetname=left_sheet)
 
         new_name = "new_name_{0}"
         merge_columns = []
