@@ -15,7 +15,7 @@ from etl.services.db import mysql, postgresql
 from etl.services.source import DatasourceApi
 
 
-class DatabaseService(DatasourceApi):
+class даваDatabaseService(DatasourceApi):
     """Сервис для источников данных"""
 
     def execute(self, query, args=None, many=False):
@@ -360,12 +360,18 @@ class DatabaseService(DatasourceApi):
 
 
 class LocalDatabaseService(object):
+    """
+    Сервис для работы с локальной базой данных
+    """
 
     def __init__(self):
         self.datasource = self.get_local_connection()
 
     @staticmethod
     def get_local_connection():
+        """
+        Получение экземпляра класса `postgresql.Postgresql`
+        """
         db_info = settings.DATABASES['default']
         params = {
             'host': db_info['HOST'], 'db': db_info['NAME'],
@@ -377,6 +383,14 @@ class LocalDatabaseService(object):
         return postgresql.Postgresql(source)
 
     def execute(self, query, args=None, many=False):
+        """
+        Выполнение запросов
+
+        Args:
+            query(str): Строка запроса
+            args(list): Список аргументов запроса
+            many(bool): Флаг множественного запроса
+        """
         with self.datasource.connection:
             with closing(self.datasource.connection.cursor()) as cursor:
                 if not many:
@@ -389,6 +403,29 @@ class LocalDatabaseService(object):
             with closing(self.datasource.connection.cursor()) as cursor:
                 cursor.execute(query, kwargs)
                 return cursor.fetchall()
+
+    def create_mongo_server(self):
+        """
+        Создание mongodb-расширения
+        с соответсвущим сервером и картой пользователя
+        """
+        query = self.datasource.create_mongo_server()
+        self.execute(query)
+
+    def create_foreign_table(self, name, cols, ):
+        """
+        Создание удаленную таблицу к MongoDB
+        """
+        query = """
+        CREATE FOREIGN TABLE {name} (
+         _id NAME,
+         Sheet1_name text,
+         Sheet1_quantity int
+         ) SERVER mongo_server
+         OPTIONS (database 'etl', collection {name});
+        """.format(name=name)
+
+        self.execute(query)
 
     def check_table_exists_query(self, local_instance, table, db):
         """
@@ -424,6 +461,8 @@ class LocalDatabaseService(object):
     def delete(self, table_name, records):
         query = self.datasource.cdc_key_delete_query(table_name)
         self.execute(query, records)
+
+
 
     def reload_trigger(self, trigger_name, orig_table, new_table, column_names):
         sep = self.datasource.get_separator()

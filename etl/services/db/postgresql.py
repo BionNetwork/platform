@@ -128,3 +128,11 @@ class Postgresql(Database):
         return {
             "trigger_name_0": "cdc_{0}_audit".format(table_name),
         }
+
+    @staticmethod
+    def create_mongo_server():
+        """
+        Создание mongodb-расширения
+        с соответсвущим сервером и картой пользователя
+        """
+        return pgsql_map.create_mongo_server

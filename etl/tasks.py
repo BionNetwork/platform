@@ -205,11 +205,26 @@ class LoadMongodb(TaskProcessing):
                 else self.publisher.percent)
 
             page += 1
-            break
+            # break
+
+        l_service = DataSourceService.get_local_instance()
+        l_service.create_mongo_foreign_server(current_collection_name)
 
         self.context['rows_count'] = rows_count
         self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
+
+class LoadForeignTable(TaskProcessing):
+
+    def processing(self):
+        """
+        Загрузка в удаленную таблицу
+        """
+
+        self.key = self.context['checksum']
+
+        local_db_service = DataSourceService.get_local_instance()
+        local_db_service.create_foreign_table()
 
 class LoadDb(TaskProcessing):
 

@@ -226,6 +226,18 @@ check_table_exists = """
    );
 """
 
+create_mongo_server = """
+        CREATE EXTENSION mongo_fdw;
+        DROP SERVER IF EXISTS mongo_server CASCADE;
+        CREATE SERVER mongo_server
+        FOREIGN DATA WRAPPER mongo_fdw
+        OPTIONS (address '127.0.0.1', port '27017');
+
+        CREATE USER MAPPING FOR postgres
+        SERVER mongo_server
+        OPTIONS (username 'bi_user', password 'bi_user');
+        """
+
 
 dimension_measure_triggers_query = """CREATE OR REPLACE FUNCTION
     reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$

@@ -34,10 +34,24 @@ def create_dataset_multi(task_id, channel):
     return LoadMongodbMulti(task_id, channel).load_data()
 
 
-class LoadMongodbMulti(TaskProcessing):
+@celery.task(name=LOAD_MONGO_MULTI)
+def load_mongo_multi(task_id, channel):
+    return LoadMongodbMulti(task_id, channel).load_data()
+
+# @celery.task(name=)
+
+
+class CreateDatasetMulti(TaskProcessing):
     """
     Создание Dataset
     """
+
+    def processing(self):
+
+        context = self.context
+        sub_trees = context['sub_trees']
+
+class LoadMongodbMulti(TaskProcessing):
 
     def processing(self):
 
@@ -54,16 +68,18 @@ class LoadMongodbMulti(TaskProcessing):
             source = Datasource.objects.get(id=sid)
             source_service = DataSourceService.get_source_service(source)
 
-            if isinstance(source_service, DatabaseService):
-                print sid, sub_tree
-                items = [sub_tree, ]
+            # items = source_service.get_sub_tree
 
+            # FIXME вынести
+            if isinstance(source_service, DatabaseService):
+                items = [sub_tree, ]
             elif isinstance(source_service, FileService):
-                print 'file'
                 items = split_file_sub_tree(sub_tree)
                 print items
             else:
                 raise Exception(u"Неизсестный тип!")
+
+            local_db_service = DataSourceService.get_local_instance()
 
             # FIXME need multiprocessing
             for item in items:
@@ -144,5 +160,11 @@ class LoadMongodbMulti(TaskProcessing):
                     if isinstance(source_service, FileService):
                         break
 
+                local_db_service.create_foreign_server()
+
+
+
         # self.next_task_params = (
         #     MONGODB_DATA_LOAD, load_mongo_db, self.context)
+
+
