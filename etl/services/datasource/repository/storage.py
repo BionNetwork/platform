@@ -1262,6 +1262,29 @@ class RedisSourceService(object):
         return tables_info_for_meta
 
     @classmethod
+    def tables_info_for_metasource_NEW(cls, tables, user_id):
+        """
+        Достает инфу о колонках, выбранных таблиц,
+        для хранения в DatasourceMeta
+        """
+
+        tables_info = defaultdict(dict)
+        card_key = RKeys.get_user_card_key(user_id)
+
+        actives = cls.get_card_actives(card_key)
+
+        for sid, table_list in tables.iteritems():
+            sid_format = S.format(sid)
+            collections = actives[sid_format]
+
+            for table in table_list:
+                table_id = collections['actives'][table]
+                table_info = cls.get_table_info(table_id, user_id, sid)
+                tables_info[sid][table] = table_info
+
+        return tables_info
+
+    @classmethod
     def get_ddl_tables_info(cls, source, tables):
         """
         Достает инфу о колонках, выбранных таблиц для cdc стратегии

@@ -29,8 +29,9 @@ from etl.services.datasource.repository.storage import RedisSourceService
 from etl.tasks import create_dataset
 from etl.multitask import create_dataset_multi
 from .services.queue.base import TaskStatusEnum, get_single_task
-from .services.middleware.base import (generate_columns_string,
-                                       generate_table_name_key)
+from .services.middleware.base import (
+    generate_columns_string, generate_columns_string_NEW,
+    generate_table_name_key, extract_tables_info, )
 
 logger = logging.getLogger(__name__)
 
@@ -503,11 +504,7 @@ class LoadDataViewMono(BaseEtlView):
     def start_post_action(self, request, source):
         """
         Постановка задачи в очередь на загрузку данных в хранилище
-        :type request: WSGIRequest
-        :type source: Datasource
         """
-
-        # копия, чтобы могли добавлять
         data = request.POST
 
         # генерируем название новой таблицы и
@@ -594,8 +591,23 @@ class LoadDataView(BaseEtlView):
         """
         Постановка задачи в очередь на загрузку данных в хранилище
         """
-        # копия, чтобы могли добавлять
-        # data = request.POST
+        post = request.POST
+
+        # columns = json.loads(post.get('columns'))
+        columns_info = {
+            17: {
+                "auth_group": ["id", "name", ],
+                "auth_group_permissions": ["id", "group_id", ],
+            },
+            32: {
+                "Лист1": ["auth_group_id", "ИМЯ", "пол"],
+                "Лист2": ["auth_group", "Страна производитель яблок"],
+            },
+        }
+
+        # FIXME подумать table_key 1 или много должен быть
+        cols_str = generate_columns_string_NEW(columns_info)
+        table_key = generate_table_name_key(source, cols_str)
 
         # в будущем card_id, пока user_id
         user_id = request.user.id
@@ -605,6 +617,15 @@ class LoadDataView(BaseEtlView):
 
         sub_trees = TableTreeRepository.split_nodes_by_sources(tree_structure)
 
+        # tables = json.loads(post.get('tables'))
+        tables = extract_tables_info(columns_info)
+        print 'tables', tables
+
+        # достаем инфу колонок (статистика, типы, )
+        meta_tables_info = RedisSourceService.tables_info_for_metasource_NEW(
+            tables, user_id)
+
+        print meta_tables_info
         # print sub_trees
         # print len(sub_trees)
 

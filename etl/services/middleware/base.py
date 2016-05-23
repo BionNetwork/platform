@@ -33,6 +33,31 @@ def generate_columns_string(columns):
     return cols_str
 
 
+def generate_columns_string_NEW(sources):
+    """
+        Генерирует строку из имен таблиц и колонок
+    """
+    result = []
+    for sid, tables in sources.iteritems():
+        for table, cols in tables.iteritems():
+            cols.sort()
+            result.append('{0}-{1};'.format(table, ','.join(cols)))
+
+    result.sort()
+    cols_str = ''.join(result)
+
+    return cols_str
+
+
+def extract_tables_info(columns):
+
+    tables_dict = {}
+
+    for sid, tables in columns.iteritems():
+        tables_dict[sid] = tables.keys()
+    return tables_dict
+
+
 def generate_table_name_key(source, cols_str):
     """Генерация ключа для названия промежуточной таблицы
 
@@ -61,7 +86,6 @@ def get_table_name(prefix, key):
     Returns:
         str: Название новой наблицы
     """
-    print prefix, key
     return u'{0}_{1}'.format(
         prefix, key)
 

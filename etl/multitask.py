@@ -55,13 +55,10 @@ class LoadMongodbMulti(TaskProcessing):
             source_service = DataSourceService.get_source_service(source)
 
             if isinstance(source_service, DatabaseService):
-                print sid, sub_tree
                 items = [sub_tree, ]
 
             elif isinstance(source_service, FileService):
-                print 'file'
                 items = split_file_sub_tree(sub_tree)
-                print items
             else:
                 raise Exception(u"Неизсестный тип!")
 
@@ -121,10 +118,6 @@ class LoadMongodbMulti(TaskProcessing):
                         record_normalized = (
                             [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
                             [EtlEncoder.encode(rec_field) for rec_field in new_record])
-
-                        print 'record', record_normalized
-
-
 
                         data_to_insert.append(dict(izip(col_names, record_normalized)))
                         data_to_current_insert.append(dict(_id=row_key))
