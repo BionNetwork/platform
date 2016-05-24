@@ -76,6 +76,16 @@ def generate_table_name_key(source, cols_str):
     return str(key) if key > 0 else '_{0}'.format(abs(key))
 
 
+def generate_cube_key(cols_str, cube_id):
+    """
+    Генерация ключа для куба
+    cols_str(str): Строка с названием столбцов
+    """
+    key = HashEncoder.encode(
+        reduce(operator.add, [str(cube_id), cols_str], ''))
+    return str(key) if key > 0 else '_{0}'.format(abs(key))
+
+
 def get_table_name(prefix, key):
     """
     название новой таблицы

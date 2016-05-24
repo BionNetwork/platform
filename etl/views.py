@@ -31,7 +31,7 @@ from etl.multitask import create_dataset_multi
 from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (
     generate_columns_string, generate_columns_string_NEW,
-    generate_table_name_key, extract_tables_info, )
+    generate_table_name_key, extract_tables_info, generate_cube_key)
 
 logger = logging.getLogger(__name__)
 
@@ -343,7 +343,7 @@ class GetColumnsViewNew(BaseEtlView):
         info = DataSourceService.get_tree_info(
             source, table)
 
-        source32 = Datasource.objects.get(id=32)
+        source32 = Datasource.objects.get(id=1)
 
         table = u'Лист1'
         info = DataSourceService.get_tree_info(
@@ -595,27 +595,32 @@ class LoadDataView(BaseEtlView):
 
         # columns = json.loads(post.get('columns'))
         columns_info = {
-            17: {
+            2: {
                 "auth_group": ["id", "name", ],
                 "auth_group_permissions": ["id", "group_id", ],
             },
-            32: {
+            1: {
                 "Лист1": ["auth_group_id", "ИМЯ", "пол"],
                 "Лист2": ["auth_group", "Страна производитель яблок"],
             },
         }
 
-        # FIXME подумать table_key 1 или много должен быть
-        cols_str = generate_columns_string_NEW(columns_info)
-        table_key = generate_table_name_key(source, cols_str)
-
         # в будущем card_id, пока user_id
         user_id = request.user.id
+        cube_id = user_id
+
+        cols_str = generate_columns_string_NEW(columns_info)
+
+        cube_key = generate_cube_key(cols_str, cube_id)
 
         tree_structure = (
-            RedisSourceService.get_active_tree_structure_NEW(user_id))
+            RedisSourceService.get_active_tree_structure_NEW(cube_id))
 
         sub_trees = TableTreeRepository.split_nodes_by_sources(tree_structure)
+
+        print sub_trees
+
+        sub_trees = DataSourceService.split_nodes_by_source_types(sub_trees)
 
         # tables = json.loads(post.get('tables'))
         tables = extract_tables_info(columns_info)
@@ -638,8 +643,8 @@ class LoadDataView(BaseEtlView):
             'sub_trees': sub_trees,
         }
 
-        get_single_task(
-            CREATE_DATASET_MULTI, create_dataset_multi, load_args)
+        # get_single_task(
+        #     CREATE_DATASET_MULTI, create_dataset_multi, load_args)
 
 
 class GetUserTasksView(BaseView):
