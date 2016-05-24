@@ -13,6 +13,7 @@ import math
 import requests
 from psycopg2 import errorcodes
 from etl.constants import *
+from etl.services.datasource.base import DataSourceService
 from etl.services.middleware.base import EtlEncoder
 from pymondrian.schema import (
     Schema, PhysicalSchema, Table, Cube as CubeSchema,
@@ -20,7 +21,6 @@ from pymondrian.schema import (
     Hierarchy, MeasureGroup, Measure as MeasureSchema,
     Key, Name, ForeignKeyLink, ReferenceLink)
 from pymondrian.generator import generate
-from etl.helpers import DataSourceService
 from core.models import (
     Datasource, Dimension, Measure, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
@@ -126,7 +126,7 @@ class LoadMongodb(TaskProcessing):
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
-        source = Datasource.objects.get(**self.context['source'])
+        source = Datasource.objects.get(id=self.context['source']['id'])
         meta_info = json.loads(self.context['meta_info'])
 
         source_service = DataSourceService.get_source_service(source)
@@ -205,6 +205,7 @@ class LoadMongodb(TaskProcessing):
                 else self.publisher.percent)
 
             page += 1
+            break
 
         self.context['rows_count'] = rows_count
         self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
@@ -669,7 +670,7 @@ class UpdateMongodb(TaskProcessing):
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
         structure = self.context['tree']
-        source = Datasource.objects.get(**self.context['source'])
+        source = Datasource.objects.get(id=self.context['source']['id'])
         meta_info = json.loads(self.context['meta_info'])
 
         source_service = DataSourceService.get_source_service(source)

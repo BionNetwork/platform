@@ -73,3 +73,9 @@ class FileService(DatasourceApi):
         foreigns = defaultdict(list)
 
         return columns, indexes, foreigns, statistics, date_intervals
+
+    def get_structure_rows_number(self, structure,  cols):
+        return 0
+
+    def get_source_rows(self, structure, cols, limit=None, offset=None):
+        return self.datasource.get_rows(cols, structure)

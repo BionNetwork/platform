@@ -632,16 +632,16 @@ startLoading = function(userId, loadUrl) {
     if (response.status === 'error') {
       confirmAlert(response.message);
     } else {
-      dataWindow.data('load', true);
-      dataWindow.modal('hide');
-      dataWindow.data('load', false);
-      channels = response.data['channels'];
-      tasksUl = $('#user_tasks_bar');
-      _.each(channels, function(channel) {
-        var q;
-        q = new Queue2(tasksUl.data('host'), tasksUl.data('port'), '/ws');
-        q.subscribe(channel);
-      });
+//      dataWindow.data('load', true);
+//      dataWindow.modal('hide');
+//      dataWindow.data('load', false);
+//      channels = response.data['channels'];
+//      tasksUl = $('#user_tasks_bar');
+//      _.each(channels, function(channel) {
+//        var q;
+//        q = new Queue2(tasksUl.data('host'), tasksUl.data('port'), '/ws');
+//        q.subscribe(channel);
+//      });
     }
   });
 };

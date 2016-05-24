@@ -1,4 +1,6 @@
 # coding: utf-8
+from __future__ import unicode_literals
+
 import binascii
 from contextlib import closing
 import pymongo
@@ -437,7 +439,7 @@ def process_binary_data(record, binary_types_list, process_func=None):
     return new_record
 
 
-def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
+def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list=None):
     """
     Расчет ключа для отдельно взятой строки
 
@@ -451,7 +453,8 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list):
         int: Ключ для строки
     """
     # преобразуем бинары в строку, если они есть
-    row = process_binary_data(row, binary_types_list, binascii.b2a_base64)
+    if binary_types_list:
+        row = process_binary_data(row, binary_types_list, binascii.b2a_base64)
 
     if len(tables_key_creators) > 1:
         row_values_for_calc = [
@@ -484,6 +487,7 @@ def get_binary_types_dict(cols, col_types):
         str(i): k for i, k in enumerate(binary_types_list, start=1)}
 
     return binary_types_dict
+
 
 def fetch_date_intervals(meta_info):
     """
@@ -628,17 +632,20 @@ class TaskService(object):
             task_id(int): id задачи
             new_channel(str): Название канала для сокетов
         """
-        try:
-            queue = Queue.objects.get(name=self.name)
-        except Queue.DoesNotExist:
-            raise TaskError("Очередь с именем %s не существует" % self.name)
+        # FIXME раскоментить, когда с мультисоурсами разберемся
+        # try:
+        #     queue = Queue.objects.get(name=self.name)
+        # except Queue.DoesNotExist:
+        #     raise TaskError("Очередь с именем %s не существует" % self.name)
 
         task = QueueList.objects.create(
-            queue=queue,
+            queue_id=1,
+            # FIXME раскоментить, когда с мультисоурсами разберемся
+            # queue=queue,
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
             app='etl',
-            checksum=arguments.get('checksum', ''),
+            checksum=arguments.get('checksum', '5555555'),
         )
 
         task_id = task.id

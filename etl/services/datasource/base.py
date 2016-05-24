@@ -843,7 +843,7 @@ class DataSourceService(object):
                             fields['columns'].append(col)
 
                             # primary keys
-                            if col['is_primary']:
+                            if hasattr(col, 'is_primary') and col['is_primary']:
                                 stats['row_key'].append(col['name'])
 
                 if last_row and stats['row_key']:
@@ -871,3 +871,42 @@ class DataSourceService(object):
                     table: source_meta.id
                 })
         return res
+
+    @staticmethod
+    def split_file_sub_tree(sub_tree):
+        """
+        """
+        childs = sub_tree['childs']
+        sub_tree['childs'] = []
+        items = [sub_tree, ]
+
+        while childs:
+            new_childs = []
+            for child in childs:
+                items.append({'val': child['val'], 'childs': [], })
+                new_childs.extend(child['childs'])
+            childs = new_childs
+
+        return items
+
+    @classmethod
+    def split_nodes_by_source_types(cls, sub_trees):
+        """
+        Если связки типа файл, то делим дальше, до примитива,
+        если связка типа бд, то связку таблиц оставляем, как единую сущность
+        """
+
+        new_sub_trees = []
+
+        for sub_tree in sub_trees:
+            sid = sub_tree['sid']
+            source = Datasource.objects.get(id=sid)
+            source_service = DataSourceService.get_source_service(source)
+
+            if isinstance(source_service, DatabaseService):
+                new_sub_trees += [sub_tree, ]
+
+            elif isinstance(source_service, FileService):
+                new_sub_trees += cls.split_file_sub_tree(sub_tree)
+
+        return new_sub_trees

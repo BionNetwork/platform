@@ -314,8 +314,9 @@ class Database(object):
         pre_cols_str = '{sep}{0}{sep}.{sep}{1}{sep}'.format(
             '{table}', '{col}', sep=separator)
 
+        # FIXME временно ставим *, берем все столбы
         cols_str = ', '.join(
-            [pre_cols_str.format(**x) for x in cols])
+            [pre_cols_str.format(**x) for x in cols]) if cols else ' * '
 
         return self.db_map.row_query.format(
             cols_str, query_join,

@@ -352,7 +352,7 @@ class RedisSourceService(object):
                 actives.remove(found)
 
     @classmethod
-    def get_collection_name(cls, source_key, table):
+    def get_collection_name(cls, source, table):
         """
         Получение название коллекции для таблицы
 
@@ -364,6 +364,7 @@ class RedisSourceService(object):
             str: Название коллекции
         """
 
+        source_key = cls.get_user_source(source)
         str_table_by_name = RedisCacheKeys.get_active_table_by_name(
             source_key, table)
 
@@ -387,8 +388,7 @@ class RedisSourceService(object):
         Returns:
             str: Данные по коллекции
         """
-        source_key = cls.get_user_source(source)
-        return r_server.get(cls.get_collection_name(source_key, table))
+        return r_server.get(cls.get_collection_name(source, table))
 
     @classmethod
     def get_table_info(cls, table_id_or_name, user_id, source_id):
@@ -484,14 +484,26 @@ class RedisSourceService(object):
         return r_server.exists(str_active_tree)
 
     @classmethod
-    def save_active_tree(cls, tree_structure, user_id):
+    def save_active_tree(cls, tree_structure, source):
+        """
+        сохраняем структуру дерева
+        :param tree_structure: string
+        :param source: Datasource
+        """
+        source_key = cls.get_user_source(source)
+        str_active_tree = RedisCacheKeys.get_active_tree(source_key)
+
+        cls.r_set(str_active_tree, tree_structure)
+
+    @classmethod
+    def save_active_tree_NEW(cls, tree_structure, user_id):
         """
         сохраняем структуру дерева
         :param tree_structure: string
         :param source: Datasource
         """
         card_key = RKeys.get_user_card_key(user_id)
-        str_active_tree = RedisCacheKeys.get_active_tree(card_key)
+        str_active_tree = RKeys.get_active_tree(card_key)
 
         cls.r_set(str_active_tree, tree_structure)
 
@@ -504,7 +516,7 @@ class RedisSourceService(object):
         :return:
         """
         source_key = cls.get_user_source(source)
-        str_active_tree = RedisCacheKeys.get_active_tree(source_key)
+        str_active_tree = RKeys.get_active_tree(source_key)
 
         return json.loads(r_server.get(str_active_tree))
 
@@ -517,7 +529,6 @@ class RedisSourceService(object):
         """
         card_key = RKeys.get_user_card_key(user_id)
         str_active_tree = RKeys.get_active_tree(card_key)
-        print 'str_active_tree', str_active_tree
         return cls.r_get(str_active_tree)
 
     @classmethod
@@ -675,7 +686,7 @@ class RedisSourceService(object):
             r_server.set(str_joins, json.dumps(joins_in_redis))
 
         # сохраняем само дерево
-        cls.save_active_tree(structure, user_id)
+        cls.save_active_tree_NEW(structure, user_id)
 
     @classmethod
     def tree_full_clean(cls, source, delete_ddl=True):
@@ -1239,8 +1250,7 @@ class RedisSourceService(object):
 
         tables_info_for_meta = {}
         source_key = cls.get_user_source(source)
-        str_table = RedisCacheKeys.get_active_table(
-            source.user_id, source.id, '{0}')
+        str_table = RedisCacheKeys.get_active_table(source_key, '{0}')
 
         actives_list = cls.get_active_table_list(source_key)
 
@@ -1250,6 +1260,29 @@ class RedisSourceService(object):
                     cls.get_order_from_actives(table, actives_list)
                 )))
         return tables_info_for_meta
+
+    @classmethod
+    def tables_info_for_metasource_NEW(cls, tables, user_id):
+        """
+        Достает инфу о колонках, выбранных таблиц,
+        для хранения в DatasourceMeta
+        """
+
+        tables_info = defaultdict(dict)
+        card_key = RKeys.get_user_card_key(user_id)
+
+        actives = cls.get_card_actives(card_key)
+
+        for sid, table_list in tables.iteritems():
+            sid_format = S.format(sid)
+            collections = actives[sid_format]
+
+            for table in table_list:
+                table_id = collections['actives'][table]
+                table_info = cls.get_table_info(table_id, user_id, sid)
+                tables_info[sid][table] = table_info
+
+        return tables_info
 
     @classmethod
     def get_ddl_tables_info(cls, source, tables):
