@@ -632,10 +632,11 @@ class LoadDataView(BaseEtlView):
             'tree_structure': tree_structure,
             'sub_trees': sub_trees,
             'cube_key': cube_key,
+            "meta_tables_info": meta_tables_info,
         }
 
-        # get_single_task(
-        #     CREATE_DATASET_MULTI, create_dataset_multi, load_args)
+        get_single_task(
+            CREATE_DATASET_MULTI, create_dataset_multi, load_args)
 
 
 class GetUserTasksView(BaseView):

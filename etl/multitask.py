@@ -44,6 +44,8 @@ class LoadMongodbMulti(TaskProcessing):
         context = self.context
         sub_trees = context['sub_trees']
 
+        # print 'sub_trees', sub_trees
+
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
         # FIXME need multiprocessing
@@ -54,7 +56,7 @@ class LoadMongodbMulti(TaskProcessing):
             source = Datasource.objects.get(id=sid)
             source_service = DataSourceService.get_source_service(source)
 
-            col_names = ['_id', '_state', '_date']
+            col_names = ['_state', '_date']
             col_names += sub_tree["joined_columns"]
 
             # FIXME temporary
@@ -75,20 +77,23 @@ class LoadMongodbMulti(TaskProcessing):
             current_collection = MongodbConnection(
                 current_collection_name, indexes=[('_id', ASC)]).collection
 
-            # tables_key_creator = [
-            #     RowKeysCreator(table=table, cols=[]), ]
-
             loaded_count = 0
+
+            columns = sub_tree['columns']
 
             while True:
                 rows = source_service.get_source_rows(
-                    sub_tree, cols=[], limit=limit, offset=(page-1)*limit)
+                    sub_tree, cols=columns, limit=limit, offset=(page-1)*limit)
+
+                print 'rows', rows
 
                 if not rows:
                     break
                 data_to_insert = []
                 data_to_current_insert = []
+
                 for ind, record in enumerate(rows, start=1):
+
                     # row_key = calc_key_for_row(
                     #     record, tables_key_creator, (page - 1) * limit + ind,
                     #     # FIXME binary
@@ -107,20 +112,21 @@ class LoadMongodbMulti(TaskProcessing):
                     row_key = '%.6f' % random.random()
 
                     record_normalized = (
-                        [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
-                        [EtlEncoder.encode(rec_field) for rec_field in new_record])
+                        [STSE.IDLE, EtlEncoder.encode(datetime.now())] +
+                        [EtlEncoder.encode(rec_field) for rec_field in record])
 
                     data_to_insert.append(dict(izip(col_names, record_normalized)))
                     data_to_current_insert.append(dict(_id=row_key))
-                # try:
-                collection.insert_many(data_to_insert, ordered=False)
-                current_collection.insert_many(
-                    data_to_current_insert, ordered=False)
-                loaded_count += ind
-                print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-                    ind, loaded_count, 'rows_count')
-                # except Exception as e:
-                #     self.error_handling(e.message)
+                try:
+                    collection.insert_many(data_to_insert, ordered=False)
+                    current_collection.insert_many(
+                        data_to_current_insert, ordered=False)
+                    loaded_count += ind
+                    print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                        ind, loaded_count, 'rows_count')
+                except Exception as e:
+                    print e.message
+                    self.error_handling(e.message)
 
                 page += 1
 

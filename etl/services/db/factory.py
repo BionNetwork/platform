@@ -152,6 +152,7 @@ class DatabaseService(DatasourceApi):
         """
 
         query = self.datasource.get_rows_query(cols, structure)
+        print 'query', query
         return self.get_fetchall_result(
             self.datasource.connection, query, limit=limit, offset=offset)
 

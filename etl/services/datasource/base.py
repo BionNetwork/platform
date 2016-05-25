@@ -956,8 +956,6 @@ class DataSourceService(object):
 
         cls.join_columns(items)
 
-        print items
-
         return items
 
     @staticmethod
@@ -983,5 +981,6 @@ class DataSourceService(object):
         """
         for item in items:
             item['joined_columns'] = [
-                u"{0}__{1}".format(x["table"], x["col"]) for x in item["column"]
-            ]
+                u"{0}__{1}".format(x["table"], x["col"])
+                for x in item["columns"]
+                ]
