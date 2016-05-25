@@ -343,15 +343,15 @@ class GetColumnsViewNew(BaseEtlView):
         info = DataSourceService.get_tree_info(
             source, table)
 
-        source32 = Datasource.objects.get(id=1)
-
-        table = u'Лист1'
-        info = DataSourceService.get_tree_info(
-            source32, table)
-
-        table = u'Лист2'
-        info = DataSourceService.get_tree_info(
-            source32, table)
+        # source32 = Datasource.objects.get(id=1)
+        #
+        # table = u'Лист1'
+        # info = DataSourceService.get_tree_info(
+        #     source32, table)
+        #
+        # table = u'Лист2'
+        # info = DataSourceService.get_tree_info(
+        #     source32, table)
 
         return info
 
@@ -599,10 +599,10 @@ class LoadDataView(BaseEtlView):
                 "auth_group": ["id", "name", ],
                 "auth_group_permissions": ["id", "group_id", ],
             },
-            '1': {
-                "Лист1": ["auth_group_id", "ИМЯ", "пол"],
-                "Лист2": ["auth_group", "Страна производитель яблок"],
-            },
+            # '1': {
+            #     "Лист1": ["auth_group_id", "ИМЯ", "пол"],
+            #     "Лист2": ["auth_group", "Страна производитель яблок"],
+            # },
         }
 
         # в будущем card_id, пока user_id
@@ -615,14 +615,17 @@ class LoadDataView(BaseEtlView):
         tree_structure = (
             RedisSourceService.get_active_tree_structure_NEW(card_id))
 
-        sub_trees = DataSourceService.prepare_sub_trees(
-            tree_structure, columns_info, card_id)
-
         tables = extract_tables_info(columns_info)
-
         # достаем инфу колонок (статистика, типы, )
         meta_tables_info = RedisSourceService.tables_info_for_metasource_NEW(
             tables, card_id)
+
+        sub_trees = DataSourceService.prepare_sub_trees(
+            tree_structure, columns_info, card_id, meta_tables_info)
+
+        print 'meta', meta_tables_info
+
+        print sub_trees
 
         # Параметры для задач
         load_args = {
@@ -632,7 +635,7 @@ class LoadDataView(BaseEtlView):
             'tree_structure': tree_structure,
             'sub_trees': sub_trees,
             'cube_key': cube_key,
-            "meta_tables_info": meta_tables_info,
+            # "meta_tables_info": meta_tables_info,
         }
 
         get_single_task(

@@ -941,7 +941,8 @@ class DataSourceService(object):
         return new_sub_trees
 
     @classmethod
-    def prepare_sub_trees(cls, tree_structure, columns, card_id):
+    def prepare_sub_trees(
+            cls, tree_structure, columns, card_id, meta_tables_info):
         """
         Подготавливает список отдельных сущностей для закачки в монго
         """
@@ -954,7 +955,7 @@ class DataSourceService(object):
 
         items = cls.create_hash_names(items, card_id)
 
-        cls.join_columns(items)
+        cls.build_columns_info(items, meta_tables_info)
 
         return items
 
@@ -975,12 +976,32 @@ class DataSourceService(object):
         return items
 
     @staticmethod
-    def join_columns(items):
+    def build_columns_info(items, meta_tables_info):
         """
-        Образует списки 'table__column'
+        1) Образует списки ['table__column', ]
+        2) Образует списки [{'table__column': {type: , length: }, ]
+        Добавляет эти списки каждому поддереву
         """
         for item in items:
-            item['joined_columns'] = [
-                u"{0}__{1}".format(x["table"], x["col"])
-                for x in item["columns"]
-                ]
+
+            sid = str(item['sid'])
+            joined_columns = []
+            columns_types = {}
+
+            for col_info in item["columns"]:
+                t = col_info['table']
+                c = col_info['col']
+                col_joined = u"{0}__{1}".format(t, c)
+                joined_columns.append(col_joined)
+
+                table_columns = meta_tables_info[sid][t]['columns']
+                for t_col in table_columns:
+                    if t_col["name"] == c:
+                        columns_types[col_joined] = {
+                            'type': t_col['type'],
+                            'max_length': t_col['max_length'],
+                        }
+                        break
+
+            item['joined_columns'] = joined_columns
+            item['columns_types'] = columns_types
