@@ -334,7 +334,7 @@ class GetColumnsViewNew(BaseEtlView):
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
 
-        # table = tables[0]
+        table = tables[0]
         table = u'auth_group_permissions'
         info = DataSourceService.get_tree_info(
             source, table)
@@ -595,11 +595,11 @@ class LoadDataView(BaseEtlView):
 
         # columns = json.loads(post.get('columns'))
         columns_info = {
-            2: {
+            '2': {
                 "auth_group": ["id", "name", ],
                 "auth_group_permissions": ["id", "group_id", ],
             },
-            1: {
+            '1': {
                 "Лист1": ["auth_group_id", "ИМЯ", "пол"],
                 "Лист2": ["auth_group", "Страна производитель яблок"],
             },
@@ -607,32 +607,22 @@ class LoadDataView(BaseEtlView):
 
         # в будущем card_id, пока user_id
         user_id = request.user.id
-        cube_id = user_id
+        card_id = user_id
 
         cols_str = generate_columns_string_NEW(columns_info)
-
-        cube_key = generate_cube_key(cols_str, cube_id)
+        cube_key = generate_cube_key(cols_str, card_id)
 
         tree_structure = (
-            RedisSourceService.get_active_tree_structure_NEW(cube_id))
+            RedisSourceService.get_active_tree_structure_NEW(card_id))
 
-        sub_trees = TableTreeRepository.split_nodes_by_sources(tree_structure)
+        sub_trees = DataSourceService.prepare_sub_trees(
+            tree_structure, columns_info, card_id)
 
-        print sub_trees
-
-        sub_trees = DataSourceService.split_nodes_by_source_types(sub_trees)
-
-        # tables = json.loads(post.get('tables'))
         tables = extract_tables_info(columns_info)
-        print 'tables', tables
 
         # достаем инфу колонок (статистика, типы, )
         meta_tables_info = RedisSourceService.tables_info_for_metasource_NEW(
-            tables, user_id)
-
-        print meta_tables_info
-        # print sub_trees
-        # print len(sub_trees)
+            tables, card_id)
 
         # Параметры для задач
         load_args = {
@@ -641,6 +631,7 @@ class LoadDataView(BaseEtlView):
             'is_update': False,
             'tree_structure': tree_structure,
             'sub_trees': sub_trees,
+            'cube_key': cube_key,
         }
 
         # get_single_task(

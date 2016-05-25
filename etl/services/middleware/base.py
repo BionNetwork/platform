@@ -86,6 +86,20 @@ def generate_cube_key(cols_str, cube_id):
     return str(key) if key > 0 else '_{0}'.format(abs(key))
 
 
+def generate_table_key(cube_id, source_id, cols_str):
+    """
+    Генерация ключа для каждой таблицы в монго
+    cols_str(str): Строка с названием столбцов
+    """
+    key = HashEncoder.encode(
+        reduce(operator.add,
+               [str(cube_id), str(source_id), cols_str],
+               '')
+    )
+    key = str(key) if key > 0 else '_{0}'.format(abs(key))
+    return u"{0}_{1}_{2}".format(cube_id, source_id, key)
+
+
 def get_table_name(prefix, key):
     """
     название новой таблицы

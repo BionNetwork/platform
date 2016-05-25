@@ -1271,7 +1271,7 @@ class RedisSourceService(object):
         tables_info = defaultdict(dict)
         card_key = RKeys.get_user_card_key(user_id)
 
-        actives = cls.get_card_actives(card_key)
+        actives = cls.get_card_actives_data(card_key)
 
         for sid, table_list in tables.iteritems():
             sid_format = S.format(sid)

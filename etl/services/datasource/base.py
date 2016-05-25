@@ -2,6 +2,7 @@
 
 import json
 from itertools import groupby
+import operator
 
 from django.db import transaction
 from django.conf import settings
@@ -14,6 +15,7 @@ from etl.services.file.factory import FileService
 from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TableTreeRepository
 from core.helpers import get_utf8_string
+from etl.services.middleware.base import generate_table_key
 
 
 RedisSS = RedisSourceService
@@ -878,16 +880,42 @@ class DataSourceService(object):
         """
         childs = sub_tree['childs']
         sub_tree['childs'] = []
+        sub_tree['type'] = 'file'
         items = [sub_tree, ]
 
         while childs:
             new_childs = []
             for child in childs:
-                items.append({'val': child['val'], 'childs': [], })
+                items.append({'val': child['val'], 'childs': [],
+                              'sid': child['sid'], 'type': 'file', })
                 new_childs.extend(child['childs'])
             childs = new_childs
 
         return items
+
+    @staticmethod
+    def extract_columns(sub_trees, columns):
+        """
+        Достает список диктов с инфой о таблице/листе и ее колонке
+        """
+        for tree in sub_trees:
+            tables = columns[str(tree['sid'])]
+            t_name = tree['val']
+            columns_info = [{"table": t_name, "col": x} for x in tables[t_name]]
+            childs = tree['childs']
+
+            while childs:
+                new_childs = []
+                for child in childs:
+                    t_name = child['val']
+                    columns_info += [
+                        {"table": t_name, "col": x} for x in tables[t_name]]
+                    new_childs.extend(child['childs'])
+                childs = new_childs
+
+            tree['columns'] = columns_info
+
+        return sub_trees
 
     @classmethod
     def split_nodes_by_source_types(cls, sub_trees):
@@ -904,9 +932,56 @@ class DataSourceService(object):
             source_service = DataSourceService.get_source_service(source)
 
             if isinstance(source_service, DatabaseService):
+                sub_tree['type'] = 'db'
                 new_sub_trees += [sub_tree, ]
 
             elif isinstance(source_service, FileService):
                 new_sub_trees += cls.split_file_sub_tree(sub_tree)
 
         return new_sub_trees
+
+    @classmethod
+    def prepare_sub_trees(cls, tree_structure, columns, card_id):
+        """
+        Подготавливает список отдельных сущностей для закачки в монго
+        """
+        subs_by_sid = TableTreeRepository.split_nodes_by_sources(
+            tree_structure)
+        subs_by_type = cls.split_nodes_by_source_types(
+            subs_by_sid)
+
+        items = cls.extract_columns(subs_by_type, columns)
+
+        items = cls.create_hash_names(items, card_id)
+
+        cls.join_columns(items)
+
+        print items
+
+        return items
+
+    @staticmethod
+    def create_hash_names(items, card_id):
+        """
+        Для каждого набора, учитывая таблы/листы и колонки выщитывает хэш
+        """
+        for item in items:
+            sorted_cols = sorted(
+                item['columns'], key=operator.itemgetter('table', 'col'))
+            cols_str = reduce(operator.add,
+                              [u"{0}-{1}".format(x['table'], x['col'])
+                               for x in sorted_cols], u'')
+            item['collection_hash'] = generate_table_key(
+                card_id, item['sid'], cols_str)
+
+        return items
+
+    @staticmethod
+    def join_columns(items):
+        """
+        Образует списки 'table__column'
+        """
+        for item in items:
+            item['joined_columns'] = [
+                u"{0}__{1}".format(x["table"], x["col"]) for x in item["column"]
+            ]
