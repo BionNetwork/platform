@@ -227,7 +227,7 @@ check_table_exists = """
 """
 
 create_mongo_server = """
-        CREATE EXTENSION mongo_fdw;
+        CREATE EXTENSION IF NOT EXISTS mongo_fdw;
         DROP SERVER IF EXISTS mongo_server CASCADE;
         CREATE SERVER mongo_server
         FOREIGN DATA WRAPPER mongo_fdw

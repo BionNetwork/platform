@@ -136,3 +136,7 @@ class Postgresql(Database):
         с соответсвущим сервером и картой пользователя
         """
         return pgsql_map.create_mongo_server
+
+    @staticmethod
+    def create_foreign_table_query(name, cols):
+        return

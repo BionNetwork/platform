@@ -34,14 +34,7 @@ def create_dataset_multi(task_id, channel):
     return LoadMongodbMulti(task_id, channel).load_data()
 
 
-@celery.task(name=LOAD_MONGO_MULTI)
-def load_mongo_multi(task_id, channel):
-    return LoadMongodbMulti(task_id, channel).load_data()
-
-# @celery.task(name=)
-
-
-class CreateDatasetMulti(TaskProcessing):
+class LoadMongodbMulti(TaskProcessing):
     """
     Создание Dataset
     """
@@ -51,120 +44,95 @@ class CreateDatasetMulti(TaskProcessing):
         context = self.context
         sub_trees = context['sub_trees']
 
-class LoadMongodbMulti(TaskProcessing):
-
-    def processing(self):
-
-        context = self.context
-        sub_trees = context['sub_trees']
+        # print 'sub_trees', sub_trees
 
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
+        # FIXME need multiprocessing
         for sub_tree in sub_trees:
             page = 1
             sid = sub_tree['sid']
-            table = sub_tree['val']
 
             source = Datasource.objects.get(id=sid)
             source_service = DataSourceService.get_source_service(source)
 
-            # items = source_service.get_sub_tree
+            col_names = ['_state', '_date']
+            col_names += sub_tree["joined_columns"]
 
-            # FIXME вынести
-            if isinstance(source_service, DatabaseService):
-                items = [sub_tree, ]
-            elif isinstance(source_service, FileService):
-                items = split_file_sub_tree(sub_tree)
-                print items
-            else:
-                raise Exception(u"Неизсестный тип!")
+            # FIXME temporary
+            cols_updated = False
 
-            local_db_service = DataSourceService.get_local_instance()
+            # FIXME temporary
+            self.key = sub_tree["collection_hash"]
 
-            # FIXME need multiprocessing
-            for item in items:
+            # создаем коллекцию и индексы в Mongodb
+            collection = MongodbConnection(
+                self.get_table(MULTI_STTM), indexes=[
+                    ('_id', ASC), ('_state', ASC), ('_date', ASC)]
+                ).collection
 
-                col_names = ['_id', '_state', '_date']
-                # FIXME temporary
-                cols_updated = False
+            # Коллекция с текущими данными
+            current_collection_name = self.get_table(STTM_DATASOURCE_KEYS)
+            MongodbConnection.drop(current_collection_name)
+            current_collection = MongodbConnection(
+                current_collection_name, indexes=[('_id', ASC)]).collection
 
-                # FIXME temporary
-                self.key = table
+            loaded_count = 0
 
-                # создаем коллекцию и индексы в Mongodb
-                collection = MongodbConnection(
-                    self.get_table(STTM_DATASOURCE), indexes=[
-                        ('_id', ASC), ('_state', ASC), ('_date', ASC)]
-                    ).collection
+            columns = sub_tree['columns']
 
-                # Коллекция с текущими данными
-                current_collection_name = self.get_table(STTM_DATASOURCE_KEYS)
-                MongodbConnection.drop(current_collection_name)
-                current_collection = MongodbConnection(
-                    current_collection_name, indexes=[('_id', ASC)]).collection
+            while True:
+                rows = source_service.get_source_rows(
+                    sub_tree, cols=columns, limit=limit, offset=(page-1)*limit)
 
-                tables_key_creator = [
-                    RowKeysCreator(table=table, cols=[]), ]
+                print 'rows', rows
 
-                loaded_count = 0
+                if not rows:
+                    break
+                data_to_insert = []
+                data_to_current_insert = []
 
-                while True:
-                    rows = source_service.get_source_rows(
-                        item, cols=[], limit=limit, offset=(page-1)*limit)
+                for ind, record in enumerate(rows, start=1):
 
-                    if not rows:
-                        break
-                    data_to_insert = []
-                    data_to_current_insert = []
-                    for ind, record in enumerate(rows, start=1):
-                        # row_key = calc_key_for_row(
-                        #     record, tables_key_creator, (page - 1) * limit + ind,
-                        #     # FIXME binary
-                        #     binary_types_list=None)
-                        # # FIXME binary
-                        # бинарные данные оборачиваем в Binary(), если они имеются
-                        # new_record = process_binary_data(record, binary_types_list)
+                    # row_key = calc_key_for_row(
+                    #     record, tables_key_creator, (page - 1) * limit + ind,
+                    #     # FIXME binary
+                    #     binary_types_list=None)
+                    # # FIXME binary
+                    # бинарные данные оборачиваем в Binary(), если они имеются
+                    # new_record = process_binary_data(record, binary_types_list)
 
-                        # FIXME temporary
-                        if not cols_updated:
-                            cols_updated = True
-                            col_names += map(str, range(len(record)))
+                    # # FIXME temporary
+                    # if not cols_updated:
+                    #     cols_updated = True
+                    #     col_names += map(str, range(len(record)))
 
-                        new_record = record
+                    # new_record = record
 
-                        row_key = '%.6f' % random.random()
+                    row_key = '%.6f' % random.random()
 
-                        record_normalized = (
-                            [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
-                            [EtlEncoder.encode(rec_field) for rec_field in new_record])
+                    record_normalized = (
+                        [STSE.IDLE, EtlEncoder.encode(datetime.now())] +
+                        [EtlEncoder.encode(rec_field) for rec_field in record])
 
-                        print 'record', record_normalized
-
-
-
-                        data_to_insert.append(dict(izip(col_names, record_normalized)))
-                        data_to_current_insert.append(dict(_id=row_key))
-                    # try:
+                    data_to_insert.append(dict(izip(col_names, record_normalized)))
+                    data_to_current_insert.append(dict(_id=row_key))
+                try:
                     collection.insert_many(data_to_insert, ordered=False)
                     current_collection.insert_many(
                         data_to_current_insert, ordered=False)
                     loaded_count += ind
                     print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
                         ind, loaded_count, 'rows_count')
-                    # except Exception as e:
-                    #     self.error_handling(e.message)
+                except Exception as e:
+                    print e.message
+                    self.error_handling(e.message)
 
-                    page += 1
+                page += 1
 
-                    # FIXME у файлов прогон 1 раз
-                    if isinstance(source_service, FileService):
-                        break
-
-                local_db_service.create_foreign_server()
-
-
+                # FIXME у файлов прогон 1 раз
+                if sub_tree['type'] == 'file':
+                    break
 
         # self.next_task_params = (
         #     MONGODB_DATA_LOAD, load_mongo_db, self.context)
-
-

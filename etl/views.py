@@ -29,8 +29,9 @@ from etl.services.datasource.repository.storage import RedisSourceService
 from etl.tasks import create_dataset
 from etl.multitask import create_dataset_multi
 from .services.queue.base import TaskStatusEnum, get_single_task
-from .services.middleware.base import (generate_columns_string,
-                                       generate_table_name_key)
+from .services.middleware.base import (
+    generate_columns_string, generate_columns_string_NEW,
+    generate_table_name_key, extract_tables_info, generate_cube_key)
 
 logger = logging.getLogger(__name__)
 
@@ -334,23 +335,23 @@ class GetColumnsViewNew(BaseEtlView):
         tables = json.loads(request.GET.get('tables', ''))
 
         table = tables[0]
-        # table = u'auth_group_permissions'
+        table = u'auth_group_permissions'
         info = DataSourceService.get_tree_info(
             source, table)
-        #
-        # table = u'auth_group'
-        # info = DataSourceService.get_tree_info(
-        #     source, table)
-        #
-        # source32 = Datasource.objects.get(id=32)
-        #
-        # table = u'Лист1'
-        # info = DataSourceService.get_tree_info(
-        #     source32, table)
-        #
-        # table = u'Лист2'
-        # info = DataSourceService.get_tree_info(
-        #     source32, table)
+
+        table = u'auth_group'
+        info = DataSourceService.get_tree_info(
+            source, table)
+
+        source32 = Datasource.objects.get(id=1)
+
+        table = u'Лист1'
+        info = DataSourceService.get_tree_info(
+            source32, table)
+
+        table = u'Лист2'
+        info = DataSourceService.get_tree_info(
+            source32, table)
 
         return info
 
@@ -503,11 +504,7 @@ class LoadDataViewMono(BaseEtlView):
     def start_post_action(self, request, source):
         """
         Постановка задачи в очередь на загрузку данных в хранилище
-        :type request: WSGIRequest
-        :type source: Datasource
         """
-
-        # копия, чтобы могли добавлять
         data = request.POST
 
         # генерируем название новой таблицы и
@@ -594,19 +591,38 @@ class LoadDataView(BaseEtlView):
         """
         Постановка задачи в очередь на загрузку данных в хранилище
         """
-        # копия, чтобы могли добавлять
-        # data = request.POST
+        post = request.POST
+
+        # columns = json.loads(post.get('columns'))
+        columns_info = {
+            '2': {
+                "auth_group": ["id", "name", ],
+                "auth_group_permissions": ["id", "group_id", ],
+            },
+            '1': {
+                "Лист1": ["auth_group_id", "ИМЯ", "пол"],
+                "Лист2": ["auth_group", "Страна производитель яблок"],
+            },
+        }
 
         # в будущем card_id, пока user_id
         user_id = request.user.id
+        card_id = user_id
+
+        cols_str = generate_columns_string_NEW(columns_info)
+        cube_key = generate_cube_key(cols_str, card_id)
 
         tree_structure = (
-            RedisSourceService.get_active_tree_structure_NEW(user_id))
+            RedisSourceService.get_active_tree_structure_NEW(card_id))
 
-        sub_trees = TableTreeRepository.split_nodes_by_sources(tree_structure)
+        sub_trees = DataSourceService.prepare_sub_trees(
+            tree_structure, columns_info, card_id)
 
-        # print sub_trees
-        # print len(sub_trees)
+        tables = extract_tables_info(columns_info)
+
+        # достаем инфу колонок (статистика, типы, )
+        meta_tables_info = RedisSourceService.tables_info_for_metasource_NEW(
+            tables, card_id)
 
         # Параметры для задач
         load_args = {
@@ -615,6 +631,8 @@ class LoadDataView(BaseEtlView):
             'is_update': False,
             'tree_structure': tree_structure,
             'sub_trees': sub_trees,
+            'cube_key': cube_key,
+            "meta_tables_info": meta_tables_info,
         }
 
         get_single_task(

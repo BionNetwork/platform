@@ -307,10 +307,7 @@ class Database(object):
         Returns:
             str: Строка запроса на получения данных без пагинации
         """
-        print 'structure', structure
         query_join = self.generate_join(structure,)
-
-        print 'query_join', query_join
 
         separator = self.get_separator()
 

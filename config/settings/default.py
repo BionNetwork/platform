@@ -97,7 +97,7 @@ DATABASES = {
         'ENGINE': 'core.db.postgresql_psycopg2',
         'NAME': 'biplatform',
         'USER': 'biplatform',
-        'PASSWORD': '',
+        'PASSWORD': 'biplatform',
         'HOST': 'localhost',
         'PORT': '5432',
     }

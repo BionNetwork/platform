@@ -50,4 +50,7 @@ DATE_TABLE_COLS_LEN = 9
 
 # Название задач MULTI
 CREATE_DATASET_MULTI = 'etl:database:create_dataset_multi'
-LOAD_MONGO_MULTI = 'etl:database:load_mongo_multi'
+
+
+# Префиксы названий таблиц
+MULTI_STTM = 'sttm_'  # Временная загружаемая таблица Mongo

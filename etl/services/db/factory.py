@@ -15,7 +15,7 @@ from etl.services.db import mysql, postgresql
 from etl.services.source import DatasourceApi
 
 
-class даваDatabaseService(DatasourceApi):
+class DatabaseService(DatasourceApi):
     """Сервис для источников данных"""
 
     def execute(self, query, args=None, many=False):
@@ -152,6 +152,7 @@ class даваDatabaseService(DatasourceApi):
         """
 
         query = self.datasource.get_rows_query(cols, structure)
+        print 'query', query
         return self.get_fetchall_result(
             self.datasource.connection, query, limit=limit, offset=offset)
 
@@ -416,6 +417,8 @@ class LocalDatabaseService(object):
         """
         Создание удаленную таблицу к MongoDB
         """
+        query = self.datasource.create_foreign_table_query(name, cols)
+
         query = """
         CREATE FOREIGN TABLE {name} (
          _id NAME,

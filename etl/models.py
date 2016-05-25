@@ -450,7 +450,12 @@ class TablesTree(object):
                 r_c_id = "{0}_id".format(r_name)
                 r_set = {r_name, r_t_c_name, r_c_id, }
 
-                if l_set.intersection(r_set) and l_c['type'] == r_c['type']:
+                inter = l_set.intersection(r_set)
+
+                if (inter and l_c['type'] == r_c['type'] and
+                        # когда сравниваем 2 колонки 'id', то это исключаем
+                        inter != {"id", "id_id"}):
+
                     j_tuple = (l_t, l_name, l_sid, r_t, r_name, r_sid)
                     sort_j_tuple = tuple(sorted(j_tuple))
                     if sort_j_tuple not in unique_set:
