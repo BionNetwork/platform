@@ -85,7 +85,7 @@ class LoadMongodbMulti(TaskProcessing):
                 rows = source_service.get_source_rows(
                     sub_tree, cols=columns, limit=limit, offset=(page-1)*limit)
 
-                print 'rows', rows
+                # print 'rows', rows
 
                 if not rows:
                     break
@@ -109,24 +109,24 @@ class LoadMongodbMulti(TaskProcessing):
 
                     # new_record = record
 
-                    row_key = '%.6f' % random.random()
+                    # row_key = '%.6f' % random.random()
 
                     record_normalized = (
                         [STSE.IDLE, EtlEncoder.encode(datetime.now())] +
                         [EtlEncoder.encode(rec_field) for rec_field in record])
 
                     data_to_insert.append(dict(izip(col_names, record_normalized)))
-                    data_to_current_insert.append(dict(_id=row_key))
-                try:
-                    collection.insert_many(data_to_insert, ordered=False)
-                    current_collection.insert_many(
-                        data_to_current_insert, ordered=False)
-                    loaded_count += ind
-                    print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-                        ind, loaded_count, 'rows_count')
-                except Exception as e:
-                    print e.message
-                    self.error_handling(e.message)
+                    # data_to_current_insert.append(dict(_id=row_key))
+                # try:
+                collection.insert_many(data_to_insert, ordered=False)
+                # current_collection.insert_many(
+                #     data_to_current_insert, ordered=False)
+                loaded_count += ind
+                print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                    ind, loaded_count, 'rows_count')
+                # except Exception as e:
+                #     print e.message
+                #     self.error_handling(e.message)
 
                 page += 1
 
