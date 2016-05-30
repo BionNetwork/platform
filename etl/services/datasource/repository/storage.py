@@ -676,7 +676,7 @@ class RedisSourceService(object):
             if update_joins:
                 joins = node.get_node_joins_info_NEW()
                 for k, v in joins.iteritems():
-                    joins_in_redis[T_S.format(k, n_sid)] += v
+                    joins_in_redis[k] += v
 
         coll_counter['next_sequence_id'] = sequence_id
 
@@ -1577,13 +1577,15 @@ class RedisSourceService(object):
         card_key = RKeys.get_user_card_key(user_id)
         r_joins = cls.get_source_joins(card_key)
 
+        t_s = T_S.format(parent_table, parent_sid)
+
         good_joins = []
         error_joins = []
 
         # если 2 таблицы выбраны без связей, то r_joins пустой,
         # если биндим таблицу без связи,то parent_table not in r_joins
-        if r_joins and parent_table in r_joins:
-            par_joins = r_joins[parent_table]
+        if r_joins and t_s in r_joins:
+            par_joins = r_joins[t_s]
             good_joins = [
                 j for j in par_joins if j['right']['table'] == child_table and
                 int(j['right']['sid']) == child_sid and 'error' not in j]

@@ -333,23 +333,31 @@ class GetColumnsViewNew(BaseEtlView):
 
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
-
-        table = tables[0]
-        table = u'auth_group_permissions'
-        info = DataSourceService.get_tree_info(
-            source, table)
-
-        table = u'auth_group'
-        info = DataSourceService.get_tree_info(
-            source, table)
-
+        # table = tables[0]
+        #
         # source32 = Datasource.objects.get(id=1)
         #
         # table = u'Лист1'
         # info = DataSourceService.get_tree_info(
         #     source32, table)
         #
+        # table = u'auth_group'
+        # info = DataSourceService.get_tree_info(
+        #     source, table)
+        #
+        # table = u'auth_group_permissions'
+        # info = DataSourceService.get_tree_info(
+        #     source, table)
+        #
+        # table = u'auth_permission'
+        # info = DataSourceService.get_tree_info(
+        #     source, table)
+        #
         # table = u'Лист2'
+        # info = DataSourceService.get_tree_info(
+        #     source32, table)
+        #
+        # table = u'List3'
         # info = DataSourceService.get_tree_info(
         #     source32, table)
 
@@ -450,17 +458,20 @@ class GetColumnsForChoicesView(BaseEtlView):
 
     def start_get_action(self, request, source):
 
-        parent_sid = int(request.GET.get('parent_source_id'))
-        child_sid = int(request.GET.get('child_source_id'))
+        # parent_sid = int(request.GET.get('parent_source_id'))
+        # child_sid = int(request.GET.get('child_source_id'))
 
-        # parent_sid = 17
-        # child_sid = 32#17
+        parent_sid = 1
+        # parent_sid = 2
+        child_sid = 1
+        # child_sid = 2
 
-        # parent_table = u'auth_group'
-        # child_table = u'Лист1'
+        parent_table = u'Лист1'
+        # child_table = u'auth_group'
+        child_table = u'Лист2'
 
-        parent_table = request.GET.get('parent')
-        child_table = request.GET.get('child_bind')
+        # parent_table = request.GET.get('parent')
+        # child_table = request.GET.get('child_bind')
         # has_warning = json.loads(request.GET.get('has_warning'))
         #
         # data = DataSourceService.get_columns_and_joins_for_join_window(
@@ -481,11 +492,13 @@ class SaveNewJoinsView(BaseEtlView):
         join_type = get.get('joinType')
         joins = json.loads(get.get('joins'))
 
-        left_sid = int(request.GET.get('parent_source_id'))
-        right_sid = int(request.GET.get('child_source_id'))
+        # left_sid = int(request.GET.get('parent_source_id'))
+        # right_sid = int(request.GET.get('child_source_id'))
 
-        # left_sid = 17
-        # right_sid = 32#17
+        left_sid = 1
+        # left_sid = 2
+        right_sid = 1
+        # right_sid = 2
 
         # data = DataSourceService.save_new_joins(
         #     source, left_table, right_table, join_type, joins)
@@ -594,16 +607,18 @@ class LoadDataView(BaseEtlView):
         post = request.POST
 
         # columns = json.loads(post.get('columns'))
-        columns_info = {
-            '2': {
-                "auth_group": ["id", "name", ],
-                "auth_group_permissions": ["id", "group_id", ],
-            },
-            # '1': {
-            #     "Лист1": ["auth_group_id", "ИМЯ", "пол"],
-            #     "Лист2": ["auth_group", "Страна производитель яблок"],
-            # },
-        }
+        # columns_info = {
+        #     '2': {
+        #         "auth_group": ["id", "name", ],
+        #         "auth_group_permissions": ["id", "group_id", ],
+        #         "auth_permission": ["id", "name", ],
+        #     },
+        #     '1': {
+        #         "Лист1": ["auth_group_id", "name2", "пол"],
+        #         "Лист2": ["name2", "auth_permission1", "Страна производитель яблок"],
+        #         "List3": ["permission_id", "auth_group_id", "name2"],
+        #     },
+        # }
 
         # в будущем card_id, пока user_id
         user_id = request.user.id
@@ -623,9 +638,7 @@ class LoadDataView(BaseEtlView):
         sub_trees = DataSourceService.prepare_sub_trees(
             tree_structure, columns_info, card_id, meta_tables_info)
 
-        print 'meta', meta_tables_info
-
-        print sub_trees
+        relations = DataSourceService.prepare_relations(sub_trees)
 
         # Параметры для задач
         load_args = {
@@ -635,7 +648,7 @@ class LoadDataView(BaseEtlView):
             'tree_structure': tree_structure,
             'sub_trees': sub_trees,
             'cube_key': cube_key,
-            # "meta_tables_info": meta_tables_info,
+            "relations": relations,
         }
 
         get_single_task(
