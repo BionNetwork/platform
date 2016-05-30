@@ -1,6 +1,6 @@
 # coding: utf-8
 from __future__ import unicode_literals, division
-
+import json
 
 import logging
 import random
@@ -47,6 +47,8 @@ class LoadMongodbMulti(TaskProcessing):
         # print 'sub_trees', sub_trees
 
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+        l_service = DataSourceService.get_local_instance()
+        ft_names = []
 
         # FIXME need multiprocessing
         for sub_tree in sub_trees:
@@ -133,6 +135,16 @@ class LoadMongodbMulti(TaskProcessing):
                 # FIXME у файлов прогон 1 раз
                 if sub_tree['type'] == 'file':
                     break
+
+            l_service.create_foreign_table(
+                self.get_table(MULTI_STTM),
+                self.context['sub_trees'][0]['columns_types'])
+
+            ft_names.append(self.get_table(MULTI_STTM))
+        l_service.create_postgres_server()
+        l_service.create_materialized_view('my_view', ft_names)
+
+
 
         # self.next_task_params = (
         #     MONGODB_DATA_LOAD, load_mongo_db, self.context)

@@ -595,14 +595,18 @@ class LoadDataView(BaseEtlView):
 
         # columns = json.loads(post.get('columns'))
         columns_info = {
-            '2': {
-                "auth_group": ["id", "name", ],
-                "auth_group_permissions": ["id", "group_id", ],
-            },
+            # '2': {
+            #     "auth_group": ["id", "name", ],
+            #     "auth_group_permissions": ["id", "group_id", ],
+            # },
             # '1': {
             #     "Лист1": ["auth_group_id", "ИМЯ", "пол"],
             #     "Лист2": ["auth_group", "Страна производитель яблок"],
             # },
+            '1': {
+                "auth_group": ["id", "name", ],
+                "auth_group_permissions": ["id", "group_id", ],
+            },
         }
 
         # в будущем card_id, пока user_id
@@ -627,8 +631,24 @@ class LoadDataView(BaseEtlView):
 
         print sub_trees
 
+        cols_type = {
+            'auth_group__id': {
+                'type': 'int',
+            },
+            'auth_group__name': {
+                'type': 'text',
+                'max_length': 255,
+            },
+            'auth_group_permissions__id': {
+                'type': 'int'
+            },
+            'auth_group_permissions__group_id': {
+                'type': 'int'
+            }
+        }
         # Параметры для задач
         load_args = {
+            'cols_type': json.dumps(cols_type),
             'card_id': user_id,
             'user_id': user_id,
             'is_update': False,

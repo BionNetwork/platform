@@ -238,6 +238,12 @@ create_mongo_server = """
         OPTIONS (username 'bi_user', password 'bi_user');
         """
 
+create_postgres_server = """
+        CREATE USER MAPPING FOR biplatform
+        SERVER mongo_server
+        OPTIONS (username 'bi_user', password 'bi_user');
+"""
+
 
 dimension_measure_triggers_query = """CREATE OR REPLACE FUNCTION
     reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
@@ -263,3 +269,10 @@ AFTER INSERT OR DELETE ON "{orig_table}"
 select_dates_query = """
     select the_date::date, time_id from {0} where time_id <> 0
 """
+
+create_foreign_table_query = """
+        DROP FOREIGN TABLE IF EXISTS {table_name};
+        CREATE FOREIGN TABLE {table_name} ({cols}
+         ) SERVER mongo_server
+         OPTIONS (database 'etl', collection '{table_name}');
+        """

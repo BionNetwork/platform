@@ -129,14 +129,22 @@ class Postgresql(Database):
             "trigger_name_0": "cdc_{0}_audit".format(table_name),
         }
 
-    @staticmethod
-    def create_mongo_server():
+    def create_mongo_server(self):
         """
         Создание mongodb-расширения
         с соответсвущим сервером и картой пользователя
         """
-        return pgsql_map.create_mongo_server
+        return self.db_map.create_mongo_server
 
-    @staticmethod
-    def create_foreign_table_query(name, cols):
-        return
+    def create_postgres_server(self):
+        return self.db_map.create_postgres_server
+
+    def create_foreign_table_query(self, table_name, cols_types):
+
+        col_names = []
+        for field_name, field in cols_types.iteritems():
+            col_names.append('"{0}" {1}'.format(
+                field_name, field['type']))
+        query = self.db_map.create_foreign_table_query
+
+        return query.format(table_name=table_name, cols=','.join(col_names))

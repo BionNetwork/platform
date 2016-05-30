@@ -413,21 +413,28 @@ class LocalDatabaseService(object):
         query = self.datasource.create_mongo_server()
         self.execute(query)
 
+    def create_postgres_server(self):
+        """
+        Создание postgres-расширения
+        """
+        query = self.datasource.create_postgres_server()
+        self.execute(query)
+
     def create_foreign_table(self, name, cols, ):
         """
         Создание удаленную таблицу к MongoDB
         """
         query = self.datasource.create_foreign_table_query(name, cols)
+        self.execute(query)
 
+    def create_materialized_view(self, view_name, tables):
+        """"
+        Создание материализованного представления
+        """
         query = """
-        CREATE FOREIGN TABLE {name} (
-         _id NAME,
-         Sheet1_name text,
-         Sheet1_quantity int
-         ) SERVER mongo_server
-         OPTIONS (database 'etl', collection {name});
-        """.format(name=name)
-
+        DROP MATERIALIZED VIEW IF EXISTS {view_name};
+        CREATE MATERIALIZED VIEW {view_name} AS SELECT * FROM {table_name};
+        """.format(view_name=view_name, table_name=tables[0])
         self.execute(query)
 
     def check_table_exists_query(self, local_instance, table, db):
