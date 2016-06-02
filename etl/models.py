@@ -52,6 +52,7 @@ class Node(object):
         связи узла
         :return: defaultdict
         """
+        T_S = "T{0}_S{1}"
         node_joins = defaultdict(list)
 
         n_val = self.val
@@ -60,17 +61,16 @@ class Node(object):
             right = join['right']
             operation = join['join']
             if n_val == right['table']:
-                node_joins[left['table']].append({
+                node_joins[T_S.format(left['table'], left['sid'])].append({
                     "left": left, "right": right,
                     "join": operation
                 })
             else:
-                node_joins[right['table']].append({
+                node_joins[T_S.format(right['table'], right['sid'])].append({
                     "left": right, "right": left,
                     "join": operation,
                 })
         return node_joins
-
 
 
 class TablesTree(object):
@@ -241,10 +241,11 @@ class TablesTree(object):
                     new_children.append(new_node)
 
                     table = None
+                    break
 
-                if new_children and table is not None:
-                    table = cls._build_NEW(
-                        new_children, table, tables_info, source_id)
+            if new_children and table is not None:
+                table = cls._build_NEW(
+                    new_children, table, tables_info, source_id)
 
         # таблицы без связей
         return table

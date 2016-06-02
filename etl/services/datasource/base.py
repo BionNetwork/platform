@@ -1,11 +1,11 @@
 # coding: utf-8
+from __future__ import unicode_literals
 
 import json
 from itertools import groupby
 import operator
 
 from django.db import transaction
-from django.conf import settings
 
 from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
                          ConnectionChoices, Datasource)
@@ -887,7 +887,9 @@ class DataSourceService(object):
             new_childs = []
             for child in childs:
                 items.append({'val': child['val'], 'childs': [],
-                              'sid': child['sid'], 'type': 'file', })
+                              'sid': child['sid'], 'type': 'file',
+                              'joins': child['joins'],
+                              })
                 new_childs.extend(child['childs'])
             childs = new_childs
 
@@ -1005,3 +1007,63 @@ class DataSourceService(object):
 
             item['joined_columns'] = joined_columns
             item['columns_types'] = columns_types
+
+    @staticmethod
+    def prepare_relations(sub_trees):
+        """
+        Строит список связей таблиц из Postgres
+        """
+
+        tables_hash_map = {}
+        relations = []
+
+        for sub in sub_trees:
+            sid = sub['sid']
+            hash_ = sub['collection_hash']
+
+            for column in sub['joined_columns']:
+                name = u"{0}__{1}".format(sid, column)
+                tables_hash_map[name] = hash_
+
+        # голова дерева без связей
+        main = sub_trees[0]
+        relations.append({
+            "table_hash": main['collection_hash']
+        })
+
+        for sub in sub_trees[1:]:
+
+            join = sub["joins"][0]
+            left_table = join["left"]
+            left_sid = left_table['sid']
+
+            hash_str = "{0}__{1}__{2}".format(
+                left_sid, left_table["table"], left_table["column"])
+
+            table_hash = sub['collection_hash']
+
+            rel = {
+                "table_hash": table_hash,
+                "type": join["join"]["type"],
+                "conditions": [],
+            }
+            # хэш таблицы, с котрой он связан
+            parent_hash = tables_hash_map[hash_str]
+
+            # условия соединений таблиц
+            for join in sub["joins"]:
+
+                left_table = join["left"]
+                right_table = join["right"]
+
+                rel["conditions"].append({
+                    "l": "{0}.{1}__{2}".format(
+                        parent_hash, left_table["table"], left_table["column"]),
+                    "r": "{0}.{1}__{2}".format(
+                        table_hash, right_table["table"], right_table["column"]),
+                    "operation": join["join"]["value"],
+                })
+
+            relations.append(rel)
+
+        return relations
