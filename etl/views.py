@@ -333,33 +333,33 @@ class GetColumnsViewNew(BaseEtlView):
 
     def start_get_action(self, request, source):
         tables = json.loads(request.GET.get('tables', ''))
-        # table = tables[0]
-        #
-        # source32 = Datasource.objects.get(id=1)
-        #
-        # table = u'Лист1'
-        # info = DataSourceService.get_tree_info(
-        #     source32, table)
-        #
-        # table = u'auth_group'
-        # info = DataSourceService.get_tree_info(
-        #     source, table)
-        #
-        # table = u'auth_group_permissions'
-        # info = DataSourceService.get_tree_info(
-        #     source, table)
-        #
-        # table = u'auth_permission'
-        # info = DataSourceService.get_tree_info(
-        #     source, table)
-        #
-        # table = u'Лист2'
-        # info = DataSourceService.get_tree_info(
-        #     source32, table)
-        #
-        # table = u'List3'
-        # info = DataSourceService.get_tree_info(
-        #     source32, table)
+        table = tables[0]
+
+        source2 = Datasource.objects.get(id=4)
+
+        table = u'list1'
+        info = DataSourceService.get_tree_info(
+            source2, table)
+
+        table = u'auth_group'
+        info = DataSourceService.get_tree_info(
+            source, table)
+
+        table = u'auth_group_permissions'
+        info = DataSourceService.get_tree_info(
+            source, table)
+
+        table = u'auth_permission'
+        info = DataSourceService.get_tree_info(
+            source, table)
+
+        table = u'Лист2'
+        info = DataSourceService.get_tree_info(
+            source2, table)
+
+        table = u'List3'
+        info = DataSourceService.get_tree_info(
+            source2, table)
 
         return info
 
@@ -607,18 +607,18 @@ class LoadDataView(BaseEtlView):
         post = request.POST
 
         # columns = json.loads(post.get('columns'))
-        # columns_info = {
-        #     '2': {
-        #         "auth_group": ["id", "name", ],
-        #         "auth_group_permissions": ["id", "group_id", ],
-        #         "auth_permission": ["id", "name", ],
-        #     },
-        #     '1': {
-        #         "Лист1": ["auth_group_id", "name2", "пол"],
-        #         "Лист2": ["name2", "auth_permission1", "Страна производитель яблок"],
-        #         "List3": ["permission_id", "auth_group_id", "name2"],
-        #     },
-        # }
+        columns_info = {
+            '1': {
+                "auth_group": ["id", "name", ],
+                "auth_group_permissions": ["id", "group_id", ],
+                "auth_permission": ["id", "name", ],
+            },
+            '4': {
+                "list1": ["auth_group_id", "name2", "gender"],
+                "Лист2": ["name2", "join_to_list3", "Coutry"],
+                "List3": ["join_to_list3", "some_id", "name"],
+            },
+        }
 
         # в будущем card_id, пока user_id
         user_id = request.user.id
@@ -675,7 +675,7 @@ class LoadDataView(BaseEtlView):
 
 class GetUserTasksView(BaseView):
     """
-        Cписок юзеровских тасков
+        Список юзеровских тасков
     """
     def get(self, request, *args, **kwargs):
         # берем 10 последних инфо каналов юзера

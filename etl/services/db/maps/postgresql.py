@@ -270,7 +270,7 @@ select_dates_query = """
     select the_date::date, time_id from {0} where time_id <> 0
 """
 
-create_foreign_table_query = """
+create_foreign_table_query = u"""
         DROP FOREIGN TABLE IF EXISTS {table_name};
         CREATE FOREIGN TABLE {table_name} ({cols}
          ) SERVER mongo_server

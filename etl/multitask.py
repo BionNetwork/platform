@@ -138,11 +138,11 @@ class LoadMongodbMulti(TaskProcessing):
 
             l_service.create_foreign_table(
                 self.get_table(MULTI_STTM),
-                self.context['sub_trees'][0]['columns_types'])
+                sub_tree['columns_types'])
 
             ft_names.append(self.get_table(MULTI_STTM))
-        l_service.create_postgres_server()
-        l_service.create_materialized_view('my_view', ft_names)
+        # l_service.create_postgres_server()
+        l_service.create_materialized_view('my_view', self.context['relations'])
 
 
 

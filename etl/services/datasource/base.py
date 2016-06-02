@@ -1057,9 +1057,9 @@ class DataSourceService(object):
                 right_table = join["right"]
 
                 rel["conditions"].append({
-                    "l": "{0}.{1}__{2}".format(
+                    "l": '"sttm__{0}"."{1}__{2}"'.format(
                         parent_hash, left_table["table"], left_table["column"]),
-                    "r": "{0}.{1}__{2}".format(
+                    "r": '"sttm__{0}"."{1}__{2}"'.format(
                         table_hash, right_table["table"], right_table["column"]),
                     "operation": join["join"]["value"],
                 })

@@ -1,5 +1,6 @@
 # coding: utf-8
 
+from __future__ import unicode_literals
 import calendar
 from contextlib import closing
 import math
@@ -427,14 +428,12 @@ class LocalDatabaseService(object):
         query = self.datasource.create_foreign_table_query(name, cols)
         self.execute(query)
 
-    def create_materialized_view(self, view_name, tables):
+    def create_materialized_view(self, name, relations):
         """"
         Создание материализованного представления
         """
-        query = """
-        DROP MATERIALIZED VIEW IF EXISTS {view_name};
-        CREATE MATERIALIZED VIEW {view_name} AS SELECT * FROM {table_name};
-        """.format(view_name=view_name, table_name=tables[0])
+
+        query = self.datasource.create_materialized_view_query(name, relations)
         self.execute(query)
 
     def check_table_exists_query(self, local_instance, table, db):

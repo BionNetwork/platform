@@ -1,5 +1,6 @@
 # coding: utf-8
-from .interfaces import Database
+from __future__ import unicode_literals
+from .interfaces import Database, Operations
 from etl.services.db.maps import postgresql as pgsql_map
 from collections import defaultdict
 from itertools import groupby
@@ -143,8 +144,34 @@ class Postgresql(Database):
 
         col_names = []
         for field_name, field in cols_types.iteritems():
-            col_names.append('"{0}" {1}'.format(
+            col_names.append(u'"{0}" {1}'.format(
                 field_name, field['type']))
         query = self.db_map.create_foreign_table_query
 
         return query.format(table_name=table_name, cols=','.join(col_names))
+
+    def create_materialized_view_query(self, name, relations):
+        """
+        Запрос на создание материализованного представления
+
+        Args:
+            name(str): название представления
+            relations(list): Информация об объединяемых таблицах
+        """
+        table_names = [x['table_hash'] for x in relations]
+        query = "CREATE MATERIALIZED VIEW {view_name} AS SELECT {columns} FROM {first_table_name}".format(
+            view_name=name,
+            columns=','.join(['"sttm__%s".*' % x for x in table_names]),
+            first_table_name='"sttm__%s"' % table_names[0])
+
+        for node in relations[1:]:
+            query += u' INNER JOIN "{table_name}" ON {condition}'.format(
+                table_name=u'sttm__%s' % node['table_hash'],
+                condition=u'{l}{operation}{r}'.format(
+                    l=node['conditions'][0]['l'], operation=Operations.values[node['conditions'][0]['operation']], r=node['conditions'][0]['r'])
+            )
+        return query
+
+
+
+
