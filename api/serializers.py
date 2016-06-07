@@ -113,3 +113,53 @@ class SchemasListSerializer(serializers.ModelSerializer):
 class SchemasRetreviewSerializer(serializers.BaseSerializer):
     def to_representation(self, obj):
         return xmltodict.parse(obj.data)
+
+
+# ==========================================
+# TECT
+
+class Task(object):
+    def __init__(self, **kwargs):
+        for field in ('id', 'name', 'owner', 'status'):
+            setattr(self, field, kwargs.get(field, None))
+
+tasks = {
+    1: Task(id=1, name='Demo', owner='xordoquy', status='Done'),
+    2: Task(id=2, name='Model less demo', owner='xordoquy', status='Ongoing'),
+    3: Task(id=3, name='Sleep more', owner='xordoquy', status='New'),
+}
+
+
+class TaskSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(max_length=256)
+    owner = serializers.CharField(max_length=256)
+
+    def update(self, instance, validated_data):
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        return instance
+
+    def create(self, validated_data):
+        return Task(id=None, **validated_data)
+
+# =======================================
+
+
+class TableSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=256)
+    owner = serializers.CharField(max_length=256)
+
+
+class NodeSerializer(serializers.Serializer):
+
+    dist = serializers.CharField(max_length=256)
+    is_root = serializers.BooleanField()
+    source_id = serializers.IntegerField()
+    t_name = serializers.CharField(max_length=256)
+    without_bind = serializers.BooleanField()
+
+
+    def update(self, instance, validated_data):
+        pass
+

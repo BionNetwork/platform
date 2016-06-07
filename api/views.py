@@ -1,5 +1,6 @@
 # coding: utf-8
 from __future__ import unicode_literals
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
 
@@ -7,7 +8,8 @@ import logging
 from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
-    SchemasRetreviewSerializer, CardDatasourceSerializer)
+    SchemasRetreviewSerializer, CardDatasourceSerializer, TaskSerializer, tasks,
+    TableSerializer, NodeSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys, CardDatasource)
@@ -15,6 +17,8 @@ from core.views import BaseViewNoLogin
 from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from django.db import transaction
+
+from rest_framework.decorators import detail_route, list_route
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +103,14 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         DataSourceService.tree_full_clean(source)
         return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
 
+    @detail_route(methods=['get'])
+    def tables(self, request, pk=None):
+        source = Datasource.objects.get(id=pk)
+
+        service = DataSourceService.get_source_service(source)
+        data = service.get_tables()
+        return Response(data)
+
 
 class CardDataSourceViewSet(viewsets.ModelViewSet):
     """
@@ -112,19 +124,6 @@ class CardDataSourceViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         pass
-
-
-class TablesDataView(APIView):
-
-    def get(self, request, source_id, table_name):
-        """
-        Получение данных о таблице
-        """
-        source = Datasource.objects.get(id=source_id)
-
-        service = DataSourceService.get_source_service(source)
-        data = service.fetch_tables_columns([table_name])
-        return Response(data)
 
 
 class SchemasListView(mixins.ListModelMixin,
@@ -219,3 +218,80 @@ class GetDimensionDataView(BaseViewNoLogin):
         }, dimensions)
 
         return self.json_response({'data': data, })
+
+
+@api_view()
+def build_tree(request):
+    return Response({'message': 'Hello, world!'})
+
+
+class TaskViewSet(viewsets.ViewSet):
+    # Required for the Browsable API renderer to have a nice form.
+    serializer_class = TaskSerializer
+
+    def list(self, request):
+        serializer = TaskSerializer(
+            instance=tasks.values(), many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, pk=None):
+        return Response(tasks[int(pk)].__dict__)
+
+    def update(self, request, pk=None):
+        return Response(tasks[int(pk)].__dict__)
+
+    def create(self, request):
+        return Response()
+
+
+class TablesDataView(APIView):
+
+    def get(self, request, source_id, table_name):
+        """
+        Получение данных о таблице
+        """
+        source = Datasource.objects.get(id=source_id)
+
+        service = DataSourceService.get_source_service(source)
+        data = service.fetch_tables_columns([table_name])
+        return Response(data)
+
+
+class Node(object):
+    def __init__(self, **kwargs):
+        for field in ('dist', 'is_root', 'source_id', 't_name', 'without_bind'):
+            setattr(self, field, kwargs.get(field, None))
+
+nodes = {
+    1: Node(id=1, dist='auth_group', is_root=True,
+            source_id=1, t_name='auth_group', without_bind=False),
+    2: Node(id=1, dist='auth_group', is_root=True,
+            source_id=1, t_name='auth_group_permission', without_bind=False),
+}
+
+
+class NodeViewSet(viewsets.ViewSet):
+    """
+    Предстваление для работы с узлами для дерева
+    """
+
+    serializer_class = NodeSerializer
+
+    def list(self, request):
+
+        serializer = NodeSerializer(
+            instance=nodes.values(), many=True)
+        return Response(serializer.data)
+
+    def create(self, request):
+        data = request.POST
+        source = Datasource.objects.get(id=4)
+        table = 'dfdsf'
+        info = DataSourceService.get_tree_info(
+            source, table)
+        return
+
+    def update(self, request, instance):
+        pass
+
+

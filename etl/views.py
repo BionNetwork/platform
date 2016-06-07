@@ -461,14 +461,14 @@ class GetColumnsForChoicesView(BaseEtlView):
         # parent_sid = int(request.GET.get('parent_source_id'))
         # child_sid = int(request.GET.get('child_source_id'))
 
-        parent_sid = 1
+        parent_sid = 4
         # parent_sid = 2
         child_sid = 1
         # child_sid = 2
 
-        parent_table = u'Лист1'
+        parent_table = u'list1'
         # child_table = u'auth_group'
-        child_table = u'Лист2'
+        child_table = u'auth_group'
 
         # parent_table = request.GET.get('parent')
         # child_table = request.GET.get('child_bind')
@@ -495,7 +495,7 @@ class SaveNewJoinsView(BaseEtlView):
         # left_sid = int(request.GET.get('parent_source_id'))
         # right_sid = int(request.GET.get('child_source_id'))
 
-        left_sid = 1
+        left_sid = 4
         # left_sid = 2
         right_sid = 1
         # right_sid = 2
