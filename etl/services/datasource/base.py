@@ -256,6 +256,28 @@ class DataSourceService(object):
         return sel_tree, last
 
     @classmethod
+    def get_tree_api(cls, card_id):
+        """
+        Строит дерево, если его нет, иначе перестраивает
+        """
+        tree_exists = RedisSS.check_tree_exists_NEW(card_id)
+
+        # дерева еще нет
+        if not tree_exists:
+            result = []
+        # иначе достраиваем дерево, если можем, если не можем вернем остаток
+        else:
+            # достаем структуру дерева из редиса
+            structure = RedisSS.get_active_tree_structure_NEW(card_id)
+            # строим дерево
+            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+            ordered_nodes = sel_tree.ordered_nodes
+
+            result = RedisSS.extract_tree_from_storage(card_id, ordered_nodes)
+
+        return result
+
+    @classmethod
     def cache_columns(cls, source, table):
 
         service = cls.get_source_service(source)

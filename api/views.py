@@ -1,10 +1,13 @@
 # coding: utf-8
 from __future__ import unicode_literals
-from rest_framework.response import Response
-from rest_framework import viewsets, generics, mixins
 
 import logging
+
+from django.db import transaction
+from rest_framework.response import Response
+from rest_framework import viewsets, generics, mixins
 from rest_framework.views import APIView
+
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, CardDatasourceSerializer)
@@ -14,7 +17,6 @@ from core.models import (Cube, User, Datasource, Dimension, Measure,
 from core.views import BaseViewNoLogin
 from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
-from django.db import transaction
 
 
 logger = logging.getLogger(__name__)

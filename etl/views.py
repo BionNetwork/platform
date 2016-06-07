@@ -335,9 +335,9 @@ class GetColumnsViewNew(BaseEtlView):
         tables = json.loads(request.GET.get('tables', ''))
         table = tables[0]
 
-        source2 = Datasource.objects.get(id=4)
+        source2 = Datasource.objects.get(id=1)#4
 
-        table = u'list1'
+        table = u'Лист1'#list1
         info = DataSourceService.get_tree_info(
             source2, table)
 
@@ -360,6 +360,8 @@ class GetColumnsViewNew(BaseEtlView):
         table = u'List3'
         info = DataSourceService.get_tree_info(
             source2, table)
+
+        print DataSourceService.get_tree_api(1)
 
         return info
 

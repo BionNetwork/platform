@@ -468,7 +468,7 @@ class RedisSourceService(object):
         return r_server.exists(str_active_tree)
 
     @classmethod
-    def check_tree_exists_NEW(cls, user_id):
+    def check_tree_exists_NEW(cls, card_id):
         """
         Проверяет существование дерева
 
@@ -478,7 +478,7 @@ class RedisSourceService(object):
         Returns:
             bool: Наличие 'user_datasource:<user_id>:<source_id>:active:tree'
         """
-        user_card_key = RedisCacheKeys.get_user_card_key(user_id)
+        user_card_key = RedisCacheKeys.get_user_card_key(card_id)
         str_active_tree = RedisCacheKeys.get_active_tree(user_card_key)
 
         return r_server.exists(str_active_tree)
@@ -1051,6 +1051,37 @@ class RedisSourceService(object):
         #     result.append(l_info)
         return result
 
+    @classmethod
+    def extract_tree_from_storage(cls, card_id, ordered_nodes):
+        """
+        Информация о дереве для передачи на клиент
+        """
+        result = []
+        card_key = RKeys.get_user_card_key(card_id)
+        actives = cls.get_card_actives_data(card_key)
+
+        for ind, node in enumerate(ordered_nodes):
+            n_val = node.val
+            n_sid = node.source_id
+            f_n_sid = S.format(n_sid)
+
+            n_info = {'tname': n_val,
+                      'source_id': n_sid,
+                      'dest': getattr(node.parent, 'val', None),
+                      'is_root': not ind, 'without_bind': False,
+                      }
+            table_id = actives[f_n_sid]['actives'][n_val]
+            table_info = cls.get_table_info(table_id, card_id, n_sid)
+
+            n_info['cols'] = [{'col_name': x['name'],
+                               'col_title': x.get('title', None), }
+                              for x in table_info['columns']]
+            result.append(n_info)
+
+            # FIXME доделать остатки
+            # remains = sel_tree.no_bind_tables
+
+        return result
 
     @classmethod
     def insert_columns_info(cls, source, tables, columns,
