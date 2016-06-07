@@ -1,11 +1,12 @@
 # coding: utf-8
 from __future__ import unicode_literals
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import viewsets, generics, mixins
 
 import logging
+
+from rest_framework.response import Response
+from rest_framework import viewsets, generics, mixins
 from rest_framework.views import APIView
+
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, CardDatasourceSerializer, TaskSerializer, tasks,
