@@ -97,7 +97,7 @@ class DataSourceService(object):
         service = cls.get_source_service(source)
         tables = service.get_tables()
         # кладем список таблиц в редис
-        RedisSourceService.set_tables(source, tables)
+        RedisSourceService.set_tables(source.id, tables)
 
         # информация о источнике для фронта
         source_info = source.get_source_info()
@@ -202,58 +202,69 @@ class DataSourceService(object):
         return RedisSourceService.get_final_info(ordered_nodes, source, last)
 
     @classmethod
-    def get_tree_info(cls, source, table):
+    def process_tree_info(cls, card_id, source, table):
         """
         """
-        cls.cache_columns(source, table)
-        sel_tree, last = cls.get_tree(source, table)
+        cls.cache_columns(card_id, source, table)
+
+        source_id = source.id
+        result = cls.rebuild_tree(card_id, source_id, table)
+        print 'result', result
+        sel_tree = result['sel_tree']
+        without_bind = result['without_bind']
 
         # таблица без связи
-        if last is not None:
-            RedisSourceService.insert_last(last, source.user_id, source.id)
+        if without_bind is not None:
+            RedisSourceService.insert_without_bind(
+                without_bind, card_id, source_id)
 
-        # сохраняем дерево
-        structure = sel_tree.structure
         ordered_nodes = sel_tree.ordered_nodes
-        RedisSS.insert_tree_NEW(structure, ordered_nodes, source.user_id)
 
-        return RedisSS.get_final_info_NEW(ordered_nodes, source.user_id, last)
+        if not result['already_in']:
+            # сохраняем дерево, если таблицы не в дереве
+            structure = sel_tree.structure
+            RedisSS.insert_tree_NEW(structure, ordered_nodes, card_id)
+
+        return RedisSS.get_final_info_NEW(ordered_nodes, card_id)
 
     @classmethod
-    def get_tree(cls, source, table):
+    def rebuild_tree(cls, card_id, source_id, table):
         """
         Строит дерево, если его нет, иначе перестраивает
         """
-        u_id = source.user_id
+        tree_exists = RedisSS.check_tree_exists_NEW(card_id)
 
-        tree_exists = RedisSS.check_tree_exists_NEW(u_id)
+        # признак таблицы без связи
+        without_bind = None
 
         # дерева еще нет
         if not tree_exists:
-            RedisSS.info_for_tree_building_NEW(
-                (), table, source)
-            sel_tree = TableTreeRepository.build_single_root(table, source.id)
-            # остатков нет
-            last = None
+            RedisSS.info_for_tree_building_NEW((), table, card_id, source_id)
+            sel_tree = TableTreeRepository.build_single_root(table, source_id)
+            contains = False
 
         # иначе достраиваем дерево, если можем, если не можем вернем остаток
         else:
             # достаем структуру дерева из редиса
-            structure = RedisSS.get_active_tree_structure_NEW(u_id)
+            structure = RedisSS.get_active_tree_structure_NEW(card_id)
 
             # строим дерево
             sel_tree = TableTreeRepository.build_tree_by_structure(structure)
-            ordered_nodes = sel_tree.ordered_nodes
+            contains = sel_tree.contains(table, source_id)
 
-            tables_info = RedisSS.info_for_tree_building_NEW(
-                ordered_nodes, table, source)
+            if not contains:
+                ordered_nodes = sel_tree.ordered_nodes
+                tables_info = RedisSS.info_for_tree_building_NEW(
+                    ordered_nodes, table, card_id, source_id)
 
-            # перестраиваем дерево
-            sel_tree.build_NEW(table, tables_info, source.id)
+                # перестраиваем дерево
+                without_bind = sel_tree.build_NEW(table, tables_info, source_id)
 
-            last = sel_tree.no_bind_tables
-
-        return sel_tree, last
+        return {
+            'sel_tree': sel_tree,
+            'without_bind': without_bind,
+            'already_in': contains,
+        }
 
     @classmethod
     def get_tree_api(cls, card_id):
@@ -278,14 +289,16 @@ class DataSourceService(object):
         return result
 
     @classmethod
-    def cache_columns(cls, source, table):
+    def cache_columns(cls, card_id, source, table):
 
         service = cls.get_source_service(source)
+
+        source_id = source.id
 
         # если информация о таблице уже есть в редисе,
         # то просто получаем их,
         # иначе спрашиваем информацию по нему у источника
-        already = RedisSS.already_table_in_redis(source, table)
+        already = RedisSS.already_table_in_redis(card_id, source_id, table)
 
         if not already:
             columns, indexes, foreigns, statistics, date_intervals = (
@@ -293,7 +306,7 @@ class DataSourceService(object):
 
             # кладем в редис по имени просто
             RedisSS.insert_columns_info(
-                source, [table, ], columns, indexes,
+                source_id, table, columns, indexes,
                 foreigns, statistics, date_intervals)
 
     @classmethod
