@@ -12,6 +12,7 @@ router.register(r'datasources', views.DatasourceViewSet, 'Datasource')
 router.register(r'card_datasource', views.CardDataSourceViewSet, 'CardDatasource')
 router.register(r'tasks', views.TaskViewSet, 'Task')
 router.register(r'nodes', views.NodeViewSet, 'Node')
+router.register(r'cards', views.CardViewSet, 'cards')
 
 urlpatterns = [
     url(r'^schema/import$', views.ImportSchemaView.as_view(), name='import_schema'),

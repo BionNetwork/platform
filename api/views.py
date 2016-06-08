@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, CardDatasourceSerializer, TaskSerializer, tasks,
-    TableSerializer, NodeSerializer)
+    TableSerializer, NodeSerializer, TreeSerializer, TreeSerializerRequest)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys, CardDatasource)
@@ -221,7 +221,7 @@ class GetDimensionDataView(BaseViewNoLogin):
         return self.json_response({'data': data, })
 
 
-@api_view()
+# @api_view()
 def build_tree(request):
     return Response({'message': 'Hello, world!'})
 
@@ -296,3 +296,36 @@ class NodeViewSet(viewsets.ViewSet):
         pass
 
 
+class CardViewSet(viewsets.ViewSet):
+    """
+    Реализация методов карточки
+    """
+
+    serializer_class = TreeSerializer
+
+    @detail_route(['post'], serializer_class=TreeSerializerRequest)
+    def create_tree(self, request, pk=None):
+        data = request.data
+        serializer = self.serializer_class(data=data, many=True)
+        if serializer.is_valid():
+            for each in data:
+                ds = Datasource.objects.get(id=each['source_id'])
+                info = DataSourceService.get_tree_info(ds, each['table_name'])
+            # FIXME: temp. Ответ из сервиса должен приходить в нужном формате
+            d = []
+            for index, node in enumerate(info):
+                d.append({
+                    'id': index,
+                    'source_id': node['source_id'],
+                    'table_name': node['tname'],
+                    'dest': node['dest'],
+                    'is_root': node['is_root'],
+                    'is_remain': False,
+                    'is_bind': not node['without_bind']
+                })
+            s = TreeSerializer(data=d, many=True)
+            if s.is_valid():
+                return Response(data=d)
+
+
+# [{"source_id":1,"table_name":"cubes"},{"source_id":1,"table_name":"datasets"}]
