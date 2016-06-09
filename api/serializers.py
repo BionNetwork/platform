@@ -153,11 +153,11 @@ class TableSerializer(serializers.Serializer):
 
 class NodeSerializer(serializers.Serializer):
 
-    dest = serializers.CharField(max_length=256)
+    dest = serializers.CharField(max_length=256, allow_null=True)
     is_root = serializers.BooleanField()
     source_id = serializers.IntegerField()
-    t_name = serializers.CharField(max_length=256)
-    without_bind = serializers.BooleanField()
+    table_name = serializers.CharField(max_length=256)
+    is_bind = serializers.BooleanField()
 
 
     def update(self, instance, validated_data):
@@ -165,6 +165,9 @@ class NodeSerializer(serializers.Serializer):
 
 
 class TreeSerializerRequest(serializers.Serializer):
+
+    source_id = serializers.IntegerField()
+    table_name = serializers.CharField(max_length=256)
 
     def create(self, validated_data):
         pass
@@ -181,5 +184,7 @@ class TreeSerializer(serializers.Serializer):
     is_remain = serializers.BooleanField()
 
 
-
+class ChangeDestinationSerializer(serializers.Serializer):
+    """
+    """
 

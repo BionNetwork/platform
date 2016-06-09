@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import logging
+from rest_framework import serializers
 
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
@@ -258,44 +259,6 @@ class TablesDataView(APIView):
         return Response(data)
 
 
-class Node(object):
-    def __init__(self, **kwargs):
-        for field in ('dist', 'is_root', 'source_id', 't_name', 'without_bind'):
-            setattr(self, field, kwargs.get(field, None))
-
-nodes = {
-    1: Node(id=1, dist='auth_group', is_root=True,
-            source_id=1, t_name='auth_group', without_bind=False),
-    2: Node(id=1, dist='auth_group', is_root=True,
-            source_id=1, t_name='auth_group_permission', without_bind=False),
-}
-
-
-class NodeViewSet(viewsets.ViewSet):
-    """
-    Предстваление для работы с узлами для дерева
-    """
-
-    serializer_class = NodeSerializer
-
-    def list(self, request):
-
-        serializer = NodeSerializer(
-            instance=nodes.values(), many=True)
-        return Response(serializer.data)
-
-    def create(self, request):
-        data = request.POST
-        source = Datasource.objects.get(id=4)
-        table = 'dfdsf'
-        info = DataSourceService.get_tree_info(
-            source, table)
-        return
-
-    def update(self, request, instance):
-        pass
-
-
 class CardViewSet(viewsets.ViewSet):
     """
     Реализация методов карточки
@@ -328,4 +291,80 @@ class CardViewSet(viewsets.ViewSet):
                 return Response(data=d)
 
 
+class Node(object):
+    def __init__(self, **kwargs):
+        for field in ('dist', 'is_root', 'source_id', 't_name', 'without_bind'):
+            setattr(self, field, kwargs.get(field, None))
+
+nodes = {
+    1: Node(id=1, dest='auth_group', is_root=True,
+            source_id=1, t_name='auth_group', is_bind=False),
+    2: Node(id=1, dest='auth_group', is_root=True,
+            source_id=1, t_name='auth_group_permission', is_bind=False),
+}
+
+
+class NodeViewSet(viewsets.ViewSet):
+    """
+    Предстваление для работы с узлами для дерева
+    """
+
+    serializer_class = NodeSerializer
+
+    def list(self, request, card_pk):
+
+        data = DataSourceService.get_tree_api(card_pk)
+        d = []
+        for index, node in enumerate(data):
+            d.append({
+                'id': index,
+                'source_id': node['source_id'],
+                'table_name': node['tname'],
+                'dest': node['dest'],
+                'is_root': node['is_root'],
+                'is_remain': False,
+                'is_bind': not node['without_bind']
+            })
+        s = NodeSerializer(data=d, many=True)
+        # raise serializers.ValidationError('This field must be an even number.')
+        if s.is_valid():
+            return Response(data=d)
+
+
+    def create(self, request):
+        data = request.POST
+        source = Datasource.objects.get(id=4)
+        table = 'tname'
+        info = DataSourceService.get_tree_info(
+            source, table)
+        return
+
+    def update(self, request, card_pk=None, pk=None):
+        a = 3
+        return Response(data={
+                'id': 1,
+                'source_id': 1,
+                'table_name': 'cubes',
+                'dest': 'abc',
+                'is_root': True,
+                'is_remain': False,
+                'is_bind': True
+            })
+
+    def retrieve(self, request, card_pk=None, pk=None):
+        return Response(data={
+                'id': 1,
+                'source_id': 1,
+                'table_name': 'cubes',
+                'dest': 'abc',
+                'is_root': True,
+                'is_remain': False,
+                'is_bind': True
+            })
+
+
 # [{"source_id":1,"table_name":"cubes"},{"source_id":1,"table_name":"datasets"}]
+
+    @detail_route(methods=['post'])
+    def change_destination(self):
+        pass
