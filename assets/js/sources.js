@@ -233,7 +233,7 @@ getColumns = function(url, dict) {
     if (res.status === 'error') {
       confirmAlert(res.message);
     } else {
-      drawTables(res.data);
+      drawTables(res.data.tree);
       $('#data-table-headers').html('');
       $('#data-table-headers').append(colsHeaders({
         data: res.data
