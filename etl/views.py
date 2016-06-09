@@ -335,38 +335,24 @@ class GetColumnsViewNew(BaseEtlView):
 
         card_id = 1
 
-        # tables = json.loads(request.GET.get('tables', ''))
-        # table = tables[0]
-
         source2 = Datasource.objects.get(id=1)#4
 
-        table = u'Лист1'#list1
-        info = DataSourceService.process_tree_info(
-            card_id, source2, table)
+        l = [
+            (source, u'auth_group'),
+            (source, u'auth_group_permissions'),
+            (source, u'auth_permission'),
+            (source, u'card_card'),
 
-        table = u'auth_group'
-        info = DataSourceService.process_tree_info(
-            card_id, source, table)
+            (source2, u'Лист1'),
+            (source2, u'Лист2'),
+            (source2, u'List3'),
+        ]
 
-        table = u'auth_group_permissions'
-        info = DataSourceService.process_tree_info(
-            card_id, source, table)
+        info = []
 
-        table = u'auth_permission'
-        info = DataSourceService.process_tree_info(
-            card_id, source, table)
-
-        table = u'card_card'
-        info = DataSourceService.process_tree_info(
-            card_id, source, table)
-
-        table = u'Лист2'
-        info = DataSourceService.process_tree_info(
-            card_id, source2, table)
-
-        table = u'List3'
-        info = DataSourceService.process_tree_info(
-            card_id, source2, table)
+        for li in l:
+            info = DataSourceService.process_tree_info(
+                card_id, li[0], li[1])
 
         return info
 

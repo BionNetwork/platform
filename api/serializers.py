@@ -159,15 +159,14 @@ class NodeSerializer(serializers.Serializer):
     table_name = serializers.CharField(max_length=256)
     is_bind = serializers.BooleanField()
 
-
     def update(self, instance, validated_data):
         pass
 
 
 class TreeSerializerRequest(serializers.Serializer):
 
-    source_id = serializers.IntegerField()
-    table_name = serializers.CharField(max_length=256)
+    source_id = serializers.IntegerField(allow_null=False)
+    table_name = serializers.CharField(max_length=256, allow_null=False)
 
     def create(self, validated_data):
         pass

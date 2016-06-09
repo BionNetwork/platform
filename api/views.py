@@ -268,27 +268,46 @@ class CardViewSet(viewsets.ViewSet):
 
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
     def create_tree(self, request, pk=None):
+
+        card_id = pk
         data = request.data
+
+        data = [
+            {"source_id": 2, "table_name": u'auth_group', },
+            {"source_id": 2, "table_name": u'auth_group_permissions', },
+            {"source_id": 2, "table_name": u'auth_permission', },
+            {"source_id": 2, "table_name": u'card_card', },
+            {"source_id": 1, "table_name": u'Лист1', },
+            {"source_id": 1, "table_name": u'List3', },
+            {"source_id": 1, "table_name": u'Лист2', },
+        ]
+
         serializer = self.serializer_class(data=data, many=True)
+        info = []
+
         if serializer.is_valid():
             for each in data:
                 ds = Datasource.objects.get(id=each['source_id'])
-                info = DataSourceService.get_tree_info(ds, each['table_name'])
-            # FIXME: temp. Ответ из сервиса должен приходить в нужном формате
-            d = []
-            for index, node in enumerate(info):
-                d.append({
-                    'id': index,
-                    'source_id': node['source_id'],
-                    'table_name': node['tname'],
-                    'dest': node['dest'],
-                    'is_root': node['is_root'],
-                    'is_remain': False,
-                    'is_bind': not node['without_bind']
-                })
-            s = TreeSerializer(data=d, many=True)
-            if s.is_valid():
-                return Response(data=d)
+                info = DataSourceService.process_tree_info(
+                    card_id, ds, each['table_name'])
+
+        #     # FIXME: temp. Ответ из сервиса должен приходить в нужном формате
+        #     d = []
+        #     for index, node in enumerate(info):
+        #         d.append({
+        #             'id': index,
+        #             'source_id': node['source_id'],
+        #             'table_name': node['tname'],
+        #             'dest': node['dest'],
+        #             'is_root': node['is_root'],
+        #             'is_remain': False,
+        #             'is_bind': not node['without_bind']
+        #         })
+        #     s = TreeSerializer(data=d, many=True)
+        #     if s.is_valid():
+        #         return Response(data=d)
+
+        return Response(info)
 
 
 class Node(object):
@@ -329,7 +348,6 @@ class NodeViewSet(viewsets.ViewSet):
         # raise serializers.ValidationError('This field must be an even number.')
         if s.is_valid():
             return Response(data=d)
-
 
     def create(self, request):
         data = request.POST

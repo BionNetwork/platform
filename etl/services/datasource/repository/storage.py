@@ -616,7 +616,7 @@ class RedisSourceService(object):
         cls.save_active_tree(structure, source)
 
     @classmethod
-    def insert_tree_NEW(cls, structure, ordered_nodes,
+    def insert_tree_NEW(cls, ordered_nodes,
                         card_id, update_joins=True):
         """
         сохраняем полную инфу о дереве
@@ -653,6 +653,8 @@ class RedisSourceService(object):
                 # перемещеем из остатков в активные
                 if n_val in s_actives['remains']:
                     s_actives['actives'][n_val] = s_actives['remains'][n_val]
+                    # присваиваем id ноде
+                    node.node_id = s_actives['remains'][n_val]
                     del s_actives['remains'][n_val]
 
                 # суем в активные
@@ -663,6 +665,9 @@ class RedisSourceService(object):
 
                     # добавляем новую таблциу в карту активных таблиц
                     s_actives['actives'][n_val] = sequence_id
+
+                    # присваиваем id ноде
+                    node.node_id = sequence_id
                     # увеличиваем счетчик
                     sequence_id += 1
 
@@ -678,9 +683,6 @@ class RedisSourceService(object):
 
         if update_joins:
             r_server.set(str_joins, json.dumps(joins_in_redis))
-
-        # сохраняем само дерево
-        cls.save_active_tree_NEW(structure, card_id)
 
     @classmethod
     def tree_full_clean(cls, source, delete_ddl=True):

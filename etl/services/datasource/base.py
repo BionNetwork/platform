@@ -208,22 +208,22 @@ class DataSourceService(object):
         cls.cache_columns(card_id, source, table)
 
         source_id = source.id
-        result = cls.rebuild_tree(card_id, source_id, table)
-        print 'result', result
-        sel_tree = result['sel_tree']
-        without_bind = result['without_bind']
+        sel_tree = cls.rebuild_tree(card_id, source_id, table)
 
         # таблица без связи
-        if without_bind is not None:
+        if sel_tree.without_bind is not None:
             RedisSourceService.insert_without_bind(
-                without_bind, card_id, source_id)
+                sel_tree.without_bind, card_id, source_id)
 
         ordered_nodes = sel_tree.ordered_nodes
 
-        if not result['already_in']:
+        if not sel_tree.already_in:
             # сохраняем дерево, если таблицы не в дереве
+            RedisSS.insert_tree_NEW(ordered_nodes, card_id)
+
+            # save tree structure
             structure = sel_tree.structure
-            RedisSS.insert_tree_NEW(structure, ordered_nodes, card_id)
+            RedisSS.save_active_tree_NEW(structure, card_id)
 
         return RedisSS.get_final_info_NEW(ordered_nodes, card_id)
 
@@ -241,7 +241,8 @@ class DataSourceService(object):
         if not tree_exists:
             RedisSS.info_for_tree_building_NEW((), table, card_id, source_id)
             sel_tree = TableTreeRepository.build_single_root(table, source_id)
-            contains = False
+            # пытались забиндить таблицу, которая уже в дереве
+            already_in = False
 
         # иначе достраиваем дерево, если можем, если не можем вернем остаток
         else:
@@ -250,21 +251,21 @@ class DataSourceService(object):
 
             # строим дерево
             sel_tree = TableTreeRepository.build_tree_by_structure(structure)
-            contains = sel_tree.contains(table, source_id)
+            already_in = sel_tree.contains(table, source_id)
 
-            if not contains:
+            if not already_in:
                 ordered_nodes = sel_tree.ordered_nodes
+
                 tables_info = RedisSS.info_for_tree_building_NEW(
                     ordered_nodes, table, card_id, source_id)
 
                 # перестраиваем дерево
                 without_bind = sel_tree.build_NEW(table, tables_info, source_id)
 
-        return {
-            'sel_tree': sel_tree,
-            'without_bind': without_bind,
-            'already_in': contains,
-        }
+        sel_tree.without_bind = without_bind
+        sel_tree.already_in = already_in
+
+        return sel_tree
 
     @classmethod
     def get_tree_api(cls, card_id):

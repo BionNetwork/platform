@@ -11,12 +11,14 @@ class Node(object):
     """
         Узел дерева таблиц
     """
-    def __init__(self, t_name, source_id, parent=None, joins=None, join_type='inner'):
+    def __init__(self, t_name, source_id, parent=None, joins=None,
+                 node_id=None, join_type='inner'):
         self.val = t_name
         self.source_id = source_id
         self.parent = parent
         self.childs = []
         self.joins = joins or []
+        self.node_id = node_id
         self.join_type = join_type
 
     def __str__(self):
@@ -78,8 +80,8 @@ class TablesTree(object):
         Дерево Таблиц
     """
 
-    def __init__(self, t_name, source_id):
-        self.root = Node(t_name, source_id)
+    def __init__(self, t_name, source_id, node_id=None):
+        self.root = Node(t_name, source_id, node_id=node_id)
         self.no_bind_tables = None
 
     def display(self):
@@ -147,8 +149,7 @@ class TablesTree(object):
         :return: dict
         """
         root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
-                     'sid': root.source_id, }
-
+                     'sid': root.source_id, 'node_id': root.node_id, }
         root_info['join_type'] = (
             None if not root_info['joins'] else root.join_type)
 
@@ -246,7 +247,7 @@ class TablesTree(object):
                     l_val, table, l_info, r_info)
 
                 if joins:
-                    new_node = Node(table, source_id, child, joins)
+                    new_node = Node(table, source_id, parent=child, joins=joins)
                     child.childs.append(new_node)
                     new_children.append(new_node)
 
@@ -272,8 +273,9 @@ class TablesTree(object):
         """
 
         for ch in children:
-            new_node = Node(ch['val'], ch['sid'], root, ch['joins'],
-                            ch['join_type'])
+            new_node = Node(ch['val'], ch['sid'], parent=root,
+                            joins=ch['joins'], node_id=ch['node_id'],
+                            join_type=ch['join_type'],)
             root.childs.append(new_node)
             cls._build_by_structure(new_node, ch['childs'])
 
@@ -598,7 +600,8 @@ class TableTreeRepository(object):
 
     @staticmethod
     def build_tree_by_structure(structure):
-        sel_tree = TablesTree(structure['val'], structure['sid'])
+        sel_tree = TablesTree(structure['val'], structure['sid'],
+                              node_id=structure['node_id'])
         sel_tree.build_by_structure(structure['childs'])
         return sel_tree
 
