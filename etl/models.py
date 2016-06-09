@@ -160,8 +160,18 @@ class TablesTree(object):
         self.no_bind_tables = self._build([self.root], tables, tables_info)
 
     def build_NEW(self, table, tables_info, source_id):
-        self.no_bind_tables = self._build_NEW(
+        remain = self._build_NEW(
             [self.root, ], table, tables_info, source_id)
+
+        return remain
+
+    def contains(self, table, source_id):
+
+        nodes = self.ordered_nodes
+        for node in nodes:
+            if node.val == table and int(source_id) == int(node.source_id):
+                return True
+        return False
 
     @classmethod
     def _build(cls, children, tables, tables_info):
