@@ -18,7 +18,7 @@ class Node(object):
         self.parent = parent
         self.childs = []
         self.joins = joins or []
-        self.node_id = node_id
+        self.node_id = int(node_id) if node_id else None
         self.join_type = join_type
 
     def __str__(self):
@@ -173,6 +173,14 @@ class TablesTree(object):
             if node.val == table and int(source_id) == int(node.source_id):
                 return True
         return False
+
+    def get_node(self, node_id):
+        node_id = int(node_id)
+        nodes = self.ordered_nodes
+        for node in nodes:
+            if node.node_id == node_id:
+                return node
+        return None
 
     @classmethod
     def _build(cls, children, tables, tables_info):
