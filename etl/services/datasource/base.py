@@ -210,22 +210,37 @@ class DataSourceService(object):
         source_id = source.id
         sel_tree = cls.rebuild_tree(card_id, source_id, table)
 
-        # таблица без связи
-        if sel_tree.without_bind is not None:
+        # новая таблица без связи
+        if sel_tree.without_bind:
             RedisSourceService.insert_without_bind(
                 sel_tree.without_bind, card_id, source_id)
-
-        ordered_nodes = sel_tree.ordered_nodes
-
-        if not sel_tree.already_in:
+        # новой таблицы нет в дереве
+        elif not sel_tree.already_in:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.insert_tree_NEW(ordered_nodes, card_id)
+            RedisSS.insert_tree_NEW(sel_tree, card_id)
 
             # save tree structure
             structure = sel_tree.structure
             RedisSS.save_active_tree_NEW(structure, card_id)
 
-        return RedisSS.get_final_info_NEW(ordered_nodes, card_id)
+        tree_nodes = RedisSS.get_nodes_final_info(sel_tree, card_id)
+
+        remains = RedisSS.get_remains_final_info(card_id)
+
+        remain = None
+        if sel_tree.without_bind:
+            for rem in remains:
+                if (rem["tname"] == table and
+                            str(rem["source_id"]) == str(source_id)):
+                    remain = rem
+                    remains.remove(rem)
+                    break
+
+        return {
+            'tree_nodes': tree_nodes,
+            'remains': remains,
+            'tail': remain,
+        }
 
     @classmethod
     def rebuild_tree(cls, card_id, source_id, table):

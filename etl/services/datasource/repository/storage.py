@@ -11,7 +11,7 @@ from core.helpers import CustomJsonEncoder
 
 
 # FIXME описать
-S = "S{0}"
+# S = "S{0}"
 T_S = "T{0}_S{1}"
 
 
@@ -256,7 +256,7 @@ class RedisSourceService(object):
 
         # если есть, то удаляем таблицу без связей
         for (t_name, sid) in tables:
-            f_sid = S.format(sid)
+            f_sid = str(sid)
             source_key = RKeys.get_user_datasource(sid)
             if t_name in actives_data[f_sid]['actives']:
                 table_str = RedisCacheKeys.get_active_table(
@@ -441,7 +441,7 @@ class RedisSourceService(object):
         card_key = RKeys.get_user_card_key(card_id)
         actives = cls.get_card_actives_data(card_key)
 
-        s_id = S.format(source_id)
+        s_id = str(source_id)
 
         if s_id in actives:
             source_colls = actives[s_id]
@@ -616,7 +616,7 @@ class RedisSourceService(object):
         cls.save_active_tree(structure, source)
 
     @classmethod
-    def insert_tree_NEW(cls, ordered_nodes,
+    def insert_tree_NEW(cls, tree,
                         card_id, update_joins=True):
         """
         сохраняем полную инфу о дереве
@@ -635,10 +635,12 @@ class RedisSourceService(object):
 
         joins_in_redis = defaultdict(list)
 
+        ordered_nodes = tree.ordered_nodes
+
         for node in ordered_nodes:
             n_val = node.val
             n_sid = node.source_id
-            f_n_sid = S.format(n_sid)
+            f_n_sid = str(n_sid)
 
             if f_n_sid not in actives:
                 actives[f_n_sid] = {
@@ -797,7 +799,7 @@ class RedisSourceService(object):
         next_id = int(card_collections['next_sequence_id'])
         actives = card_collections['data']
 
-        f_sid = S.format(source_id)
+        f_sid = str(source_id)
         if f_sid not in actives:
             actives[f_sid] = {
                 'actives': {},
@@ -938,8 +940,8 @@ class RedisSourceService(object):
         card_key = RKeys.get_user_card_key(user_id)
         actives = cls.get_card_actives_data(card_key)
 
-        of_parent = actives[S.format(parent_sid)]
-        of_child = actives[S.format(child_sid)]
+        of_parent = actives[str(parent_sid)]
+        of_child = actives[str(child_sid)]
 
         # определяем инфа по таблице в дереве или в остатках
         if parent_table in of_parent['actives']:
@@ -1023,19 +1025,21 @@ class RedisSourceService(object):
         return result
 
     @classmethod
-    def get_final_info_NEW(cls, ordered_nodes, card_id):
+    def get_nodes_final_info(cls, tree, card_id):
         """
         Информация о дереве для передачи на клиент
         """
-        tree = []
+        tree_nodes = []
 
         card_key = RKeys.get_user_card_key(card_id)
         actives = cls.get_card_actives_data(card_key)
 
+        ordered_nodes = tree.ordered_nodes
+
         for ind, node in enumerate(ordered_nodes):
             n_val = node.val
             n_sid = node.source_id
-            f_n_sid = S.format(n_sid)
+            f_n_sid = str(n_sid)
 
             n_info = {'tname': n_val,
                       'source_id': n_sid,
@@ -1048,27 +1052,30 @@ class RedisSourceService(object):
             n_info['cols'] = [{'col_name': x['name'],
                                'col_title': x.get('title', None), }
                               for x in table_info['columns']]
-            tree.append(n_info)
+            tree_nodes.append(n_info)
 
-        # collect remains
+        return tree_nodes
+
+    @classmethod
+    def get_remains_final_info(cls, card_id):
+        """
+        collect remains nodes info
+        """
         remains = []
+
+        card_key = RKeys.get_user_card_key(card_id)
+        actives = cls.get_card_actives_data(card_key)
+
         for s_info in actives:
-            remains.extend(
-                [{k: v} for k, v in actives[s_info]['remains'].iteritems()]
-            )
-
-        # if last:
-        #     table_info = json.loads(
-        #                   r_server.get(str_table_by_name.format(last)))
-        #     l_info = {'tname': last,
-        #               'dest': n_val, 'without_bind': True,
-        #               'cols': [{'col_name': x['name'],
-        #                         'col_title': x.get('title', None), }
-        #                        for x in table_info['columns']]
-        #               }
-        #     result.append(l_info)
-
-        return {'tree': tree, 'remains': remains, }
+            for remain in actives[s_info]['remains']:
+                remains.append({
+                    'tname': remain,
+                    'source_id': s_info,
+                    'dest': None,
+                    'is_root': False,
+                    'without_bind': True,
+                })
+        return remains
 
     @classmethod
     def extract_tree_from_storage(cls, card_id, ordered_nodes):
@@ -1082,7 +1089,7 @@ class RedisSourceService(object):
         for ind, node in enumerate(ordered_nodes):
             n_val = node.val
             n_sid = node.source_id
-            f_n_sid = S.format(n_sid)
+            f_n_sid = str(n_sid)
 
             n_info = {'tname': n_val,
                       'source_id': n_sid,
@@ -1233,7 +1240,7 @@ class RedisSourceService(object):
         for child in ordered_nodes:
             ch_name = child.val
             ch_sid = child.source_id
-            sid_format = S.format(ch_sid)
+            sid_format = str(ch_sid)
 
             if sid_format in actives:
                 collections = actives[sid_format]
@@ -1267,7 +1274,7 @@ class RedisSourceService(object):
         # либо обязан быть в коллекциях карточки
         else:
             # обязан быть в коллекциях карточки
-            collections = actives[S.format(source_id)]
+            collections = actives[str(source_id)]
 
             if table in collections['actives']:
                 info = cls.get_table_info(collections['actives'][table], source_id)
@@ -1324,7 +1331,7 @@ class RedisSourceService(object):
         actives = cls.get_card_actives_data(card_key)
 
         for sid, table_list in tables.iteritems():
-            sid_format = S.format(sid)
+            sid_format = str(sid)
             collections = actives[sid_format]
 
             for table in table_list:
@@ -1475,7 +1482,7 @@ class RedisSourceService(object):
         """
         card_key = RKeys.get_user_card_key(user_id)
         actives = cls.get_card_actives_data(card_key)
-        s_actives = actives[S.format(sid)]
+        s_actives = actives[str(sid)]
 
         if table in s_actives['actives']:
             return s_actives['actives'][table]
