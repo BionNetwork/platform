@@ -335,7 +335,7 @@ class GetColumnsViewNew(BaseEtlView):
 
         card_id = 1
 
-        source2 = Datasource.objects.get(id=1)#4
+        source2 = Datasource.objects.get(id=4)  # 1
 
         l = [
             (source, u'auth_group'),
@@ -343,7 +343,7 @@ class GetColumnsViewNew(BaseEtlView):
             (source, u'auth_permission'),
             (source, u'card_card'),
 
-            (source2, u'Лист1'),
+            (source2, u'list1'),
             (source2, u'Лист2'),
             (source2, u'List3'),
         ]

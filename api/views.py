@@ -315,6 +315,12 @@ class NodeViewSet(viewsets.ViewSet):
     serializer_class = NodeSerializer
 
     def list(self, request, card_pk):
+        """
+        Cписок узлов дерева
+
+        ---
+        response_serializer: NodeSerializer
+        """
 
         data = DataSourceService.get_tree_api(card_pk)
         d = []
@@ -342,7 +348,6 @@ class NodeViewSet(viewsets.ViewSet):
         return
 
     def update(self, request, card_pk=None, pk=None):
-        a = 3
         return Response(data={
                 'id': 1,
                 'source_id': 1,
@@ -369,4 +374,56 @@ class NodeViewSet(viewsets.ViewSet):
 
     @detail_route(methods=['post'])
     def change_destination(self):
+        """
+        Изменение родительского узла
+        """
+        pass
+
+    @detail_route(methods=['post'])
+    def in_remain(self):
+        """
+        Добавлеине узла дерева в остатки
+        """
+
+    @detail_route(methods=['post'])
+    def change_source(self):
+        """
+        Измение источника для узла
+        """
+
+    @detail_route(methods=['post'])
+    def from_remain(self):
+        """
+        Перенос узла из остатков в основное дерево
+        """
+
+
+class JoinViewSet(viewsets.ViewSet):
+    """
+    Представление для связей таблиц
+    """
+
+    def retrieve(self, request, card_pk=None, right_pk=None, pk=None):
+        """
+        Получение информации о соединение узлов (join)
+        ---
+        Args:
+            card_pk(int): id карточки
+            node_pk(int): id родительского узла (right)
+            pk(int): id дочернего узла (left)
+
+        Returns:
+        """
+        parent_sid = 4
+        child_sid = 1
+
+        parent_table = u'list1'
+        child_table = u'auth_group'
+
+        data = DataSourceService.get_columns_and_joins(
+            request.user.id, parent_table, parent_sid, child_table, child_sid)
+
+        return Response(data=data)
+
+    def update(self, request, card_pk=None, node_pk=None, pk=None):
         pass

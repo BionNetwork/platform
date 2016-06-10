@@ -471,6 +471,9 @@ class RedisSourceService(object):
     def check_tree_exists_NEW(cls, card_id):
         """
         Проверяет существование дерева
+
+        Args:
+            card_id(int): id карточки
         Returns:
             bool: Наличие 'user_datasource:<user_id>:<source_id>:active:tree'
         """
@@ -955,9 +958,9 @@ class RedisSourceService(object):
             ch_table_id = child_table
 
         par_cols = cls.get_table_info(
-            par_table_id, user_id, parent_sid)['columns']
+            par_table_id, parent_sid)['columns']
         ch_cols = cls.get_table_info(
-            ch_table_id, user_id, child_sid)['columns']
+            ch_table_id, child_sid)['columns']
 
         return {
             parent_table: [x['name'] for x in par_cols],
@@ -1684,3 +1687,6 @@ class RedisStorage:
     def get_dict(self, key):
         tasks = RedisDict(key=key, redis=self.client, pickler=json)
         return tasks
+
+
+# r = redis.StrictRedis(host='localhost', port=6379, db=9)
