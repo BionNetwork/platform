@@ -16,7 +16,9 @@ from api.serializers import (
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys, CardDatasource)
 from core.views import BaseViewNoLogin
-from etl.services.datasource.base import DataSourceService
+from etl.models import TableTreeRepository
+from etl.services.datasource.base import DataSourceService, RedisSS
+from etl.services.datasource.repository.storage import RKeys
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from django.db import transaction
 
@@ -359,14 +361,23 @@ class NodeViewSet(viewsets.ViewSet):
             })
 
     def retrieve(self, request, card_pk=None, pk=None):
+                    # достаем структуру дерева из редиса
+        # FIXME: Перенести в сервис Datasource
+        structure = RedisSS.get_active_tree_structure_NEW(card_pk)
+        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+        node = sel_tree.get_node(pk)
+        card_key = RKeys.get_user_card_key(card_pk)
+        actives = RedisSS.get_card_actives_data(card_key)
+        data = RedisSS.get_node_info(actives, node)
+
         return Response(data={
-                'id': 1,
-                'source_id': 1,
-                'table_name': 'cubes',
-                'dest': 'abc',
-                'is_root': True,
+                'id': pk,
+                'source_id': data['source_id'],
+                'table_name': data['tname'],
+                'dest': data['dest'],
+                'is_root': data['is_root'],
                 'is_remain': False,
-                'is_bind': True
+                'is_bind': not data['without_bind']
             })
 
 

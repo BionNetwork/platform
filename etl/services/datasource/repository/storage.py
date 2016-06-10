@@ -1081,6 +1081,26 @@ class RedisSourceService(object):
         return remains
 
     @classmethod
+    def get_node_info(cls, actives, node):
+
+        table, source_id = node.val, node.source_id
+        n_info = {
+            'tname': table,
+            'source_id': source_id,
+            'dest': getattr(node.parent, 'val', None),
+            # FIXME Убрать is_root или что-то около того
+            'is_root': not True,
+            'without_bind': False,
+        }
+        table_id = actives[str(source_id)]['actives'][table]
+        table_info = cls.get_table_info(table_id, source_id)
+
+        n_info['cols'] = [{'col_name': x['name'],
+                           'col_title': x.get('title', None), }
+                          for x in table_info['columns']]
+        return n_info
+
+    @classmethod
     def extract_tree_from_storage(cls, card_id, ordered_nodes):
         """
         Информация о дереве для передачи на клиент
