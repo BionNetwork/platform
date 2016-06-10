@@ -1090,17 +1090,17 @@ class RedisSourceService(object):
         actives = cls.get_card_actives_data(card_key)
 
         for ind, node in enumerate(ordered_nodes):
-            n_val = node.val
-            n_sid = node.source_id
-            f_n_sid = str(n_sid)
+            table, source_id = node.val, node.source_id
 
-            n_info = {'tname': n_val,
-                      'source_id': n_sid,
-                      'dest': getattr(node.parent, 'val', None),
-                      'is_root': not ind, 'without_bind': False,
-                      }
-            table_id = actives[f_n_sid]['actives'][n_val]
-            table_info = cls.get_table_info(table_id, card_id, n_sid)
+            n_info = {
+                'tname': table,
+                'source_id': source_id,
+                'dest': getattr(node.parent, 'val', None),
+                'is_root': not ind,
+                'without_bind': False,
+            }
+            table_id = actives[str(source_id)]['actives'][table]
+            table_info = cls.get_table_info(table_id, source_id)
 
             n_info['cols'] = [{'col_name': x['name'],
                                'col_title': x.get('title', None), }
