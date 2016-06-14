@@ -174,12 +174,20 @@ class TablesTree(object):
                 return True
         return False
 
-    def get_node(self, node_id):
+    def get_node_info(self, node_id):
+        """
+        Node's info by id
+        """
         node_id = int(node_id)
         nodes = self.ordered_nodes
         for node in nodes:
             if node.node_id == node_id:
-                return node
+                return {
+                    'val': node.val,
+                    'sid': node.source_id,
+                    'node_id': node_id,
+                    'parent_id': getattr(node.parent, 'node_id', None),
+                }
         return None
 
     @classmethod

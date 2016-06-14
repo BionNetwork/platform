@@ -351,7 +351,7 @@ class GetColumnsViewNew(BaseEtlView):
         info = []
 
         for li in l:
-            info = DataSourceService.process_tree_info(
+            info = DataSourceService.try_tree_restruct(
                 card_id, li[0], li[1])
 
         return info

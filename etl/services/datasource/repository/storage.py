@@ -619,8 +619,7 @@ class RedisSourceService(object):
         cls.save_active_tree(structure, source)
 
     @classmethod
-    def insert_tree_NEW(cls, tree,
-                        card_id, update_joins=True):
+    def insert_tree_NEW(cls, card_id, ordered_nodes, update_joins=True):
         """
         сохраняем полную инфу о дереве
         :param structure:
@@ -637,8 +636,6 @@ class RedisSourceService(object):
         sequence_id = coll_counter['next_sequence_id']
 
         joins_in_redis = defaultdict(list)
-
-        ordered_nodes = tree.ordered_nodes
 
         for node in ordered_nodes:
             n_val = node.val
@@ -1028,39 +1025,7 @@ class RedisSourceService(object):
         return result
 
     @classmethod
-    def get_nodes_final_info(cls, tree, card_id):
-        """
-        Информация о дереве для передачи на клиент
-        """
-        tree_nodes = []
-
-        card_key = RKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
-
-        ordered_nodes = tree.ordered_nodes
-
-        for ind, node in enumerate(ordered_nodes):
-            n_val = node.val
-            n_sid = node.source_id
-            f_n_sid = str(n_sid)
-
-            n_info = {'tname': n_val,
-                      'source_id': n_sid,
-                      'dest': getattr(node.parent, 'val', None),
-                      'is_root': not ind, 'without_bind': False,
-                      }
-            table_id = actives[f_n_sid]['actives'][n_val]
-            table_info = cls.get_table_info(table_id, n_sid)
-
-            n_info['cols'] = [{'col_name': x['name'],
-                               'col_title': x.get('title', None), }
-                              for x in table_info['columns']]
-            tree_nodes.append(n_info)
-
-        return tree_nodes
-
-    @classmethod
-    def get_remains_final_info(cls, card_id):
+    def extract_card_remains_from_storage(cls, card_id):
         """
         collect remains nodes info
         """
@@ -1070,28 +1035,30 @@ class RedisSourceService(object):
         actives = cls.get_card_actives_data(card_key)
 
         for s_info in actives:
-            for remain in actives[s_info]['remains']:
+            for remain, remain_id in actives[s_info]['remains'].iteritems():
                 remains.append({
                     'tname': remain,
                     'source_id': s_info,
                     'dest': None,
                     'is_root': False,
                     'without_bind': True,
+                    'node_id': remain_id,
                 })
         return remains
 
     @classmethod
-    def get_node_info(cls, actives, node):
+    def get_node_info(cls, actives, node_info):
 
-        table, source_id = node.val, node.source_id
+        table, source_id = node_info['val'], node_info['sid']
         n_info = {
             'tname': table,
             'source_id': source_id,
-            'dest': getattr(node.parent, 'val', None),
+            'dest': node_info['parent_id'],
             # FIXME Убрать is_root или что-то около того
             'is_root': not True,
             'without_bind': False,
         }
+        # FIXME нода дерева может быть тока в активных
         table_id = actives[str(source_id)]['actives'][table]
         table_info = cls.get_table_info(table_id, source_id)
 
@@ -1118,6 +1085,7 @@ class RedisSourceService(object):
                 'dest': getattr(node.parent, 'val', None),
                 'is_root': not ind,
                 'without_bind': False,
+                'node_id': node.node_id,
             }
             table_id = actives[str(source_id)]['actives'][table]
             table_info = cls.get_table_info(table_id, source_id)
@@ -1126,9 +1094,6 @@ class RedisSourceService(object):
                                'col_title': x.get('title', None), }
                               for x in table_info['columns']]
             result.append(n_info)
-
-            # FIXME доделать остатки
-            # remains = sel_tree.no_bind_tables
 
         return result
 
@@ -1241,8 +1206,8 @@ class RedisSourceService(object):
         return final_info
 
     @classmethod
-    def info_for_tree_building_NEW(cls, ordered_nodes, table,
-                                   card_id, source_id):
+    def info_for_tree_building_NEW(cls, ordered_nodes, card_id,
+                                   table, source_id):
         """
         информация для построения дерева
         :param ordered_nodes:
@@ -1296,13 +1261,14 @@ class RedisSourceService(object):
             info = cls.get_table_info(table, source_id)
         # либо обязан быть в коллекциях карточки
         else:
-            # обязан быть в коллекциях карточки
             collections = actives[str(source_id)]
 
             if table in collections['actives']:
-                info = cls.get_table_info(collections['actives'][table], source_id)
+                info = cls.get_table_info(
+                    collections['actives'][table], source_id)
             else:
-                info = cls.get_table_info(collections['remains'][table], source_id)
+                info = cls.get_table_info(
+                    collections['remains'][table], source_id)
 
         final_info[sid_name.format(source_id, table)] = info
 
@@ -1688,6 +1654,48 @@ class RedisSourceService(object):
         # если имя таблицы кириллица, то в юникод преобразуем
         return (r_server.get(tables_remain_key).decode('utf8')
                 if r_server.exists(tables_remain_key) else None)
+
+    @classmethod
+    def get_node_info_from_remain(cls, card_id, node_id):
+        """
+        Информация об остатке
+        """
+        node_id = int(node_id)
+        card_key = RKeys.get_user_card_key(card_id)
+        actives = cls.get_card_actives_data(card_key)
+
+        for sid in actives:
+            for k, v in actives[sid]['remains'].iteritems():
+                if node_id == int(v):
+                    return {
+                        'tname': k,
+                        'source_id': sid,
+                        'dest': None,
+                        'is_root': False,
+                        'without_bind': True,
+                        'node_id': node_id,
+                    }
+        return None
+
+    @classmethod
+    def check_node_id_in(cls, card_id, node_id):
+        """
+        Проверяет есть ли данный id в билдере карты
+        """
+        node_id = int(node_id)
+        card_key = RKeys.get_user_card_key(card_id)
+        actives = cls.get_card_actives_data(card_key)
+
+        for sid in actives:
+            s_actives = actives[sid]
+            for act, act_id in s_actives['actives'].iteritems():
+                if int(act_id) == node_id:
+                    return True
+
+            for rem, rem_id in s_actives['remains'].iteritems():
+                if int(rem_id) == node_id:
+                    return True
+        return False
 
 
 # FIXME не используется на данный момент

@@ -269,9 +269,8 @@ class CardViewSet(viewsets.ViewSet):
     serializer_class = TreeSerializer
 
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
-    def create_tree(self, request, pk=None):
+    def create_tree(self, request, card_id):
 
-        card_id = pk
         data = request.data
 
         data = [
@@ -289,9 +288,13 @@ class CardViewSet(viewsets.ViewSet):
 
         if serializer.is_valid():
             for each in data:
-                ds = Datasource.objects.get(id=each['source_id'])
-                info = DataSourceService.process_tree_info(
-                    card_id, ds, each['table_name'])
+
+                table = each['table_name']
+                source_id = each['source_id']
+                source = Datasource.objects.get(id=source_id)
+
+                info = DataSourceService.try_tree_restruct(
+                    card_id, source, table)
 
         return Response(info)
 
@@ -318,57 +321,43 @@ class NodeViewSet(viewsets.ViewSet):
 
     def list(self, request, card_pk):
         """
-        Cписок узлов дерева
-
-        ---
-        response_serializer: NodeSerializer
+        Cписок узлов дерева и остаткa
         """
-
         data = DataSourceService.get_tree_api(card_pk)
-        d = []
-        for index, node in enumerate(data):
-            d.append({
-                'id': index,
-                'source_id': node['source_id'],
-                'table_name': node['tname'],
-                'dest': node['dest'],
-                'is_root': node['is_root'],
-                'is_remain': False,
-                'is_bind': not node['without_bind']
-            })
-        s = NodeSerializer(data=d, many=True)
-        # raise serializers.ValidationError('This field must be an even number.')
-        if s.is_valid():
-            return Response(data=d)
 
-    def create(self, request):
-        data = request.POST
-        source = Datasource.objects.get(id=4)
-        table = 'tname'
-        info = DataSourceService.get_tree_info(
-            source, table)
-        return
+        # FIXME доделать валидатор
+        # serializer = NodeSerializer(data=data, many=True)
+        # if serializer.is_valid():
+        return Response(data=data)
 
-    def update(self, request, card_pk=None, pk=None):
-        return Response(data={
-                'id': 1,
-                'source_id': 1,
-                'table_name': 'cubes',
-                'dest': 'abc',
-                'is_root': True,
-                'is_remain': False,
-                'is_bind': True
-            })
+    # def create(self, request):
+    #     data = request.POST
+    #     source = Datasource.objects.get(id=4)
+    #     table = 'tname'
+    #     info = DataSourceService.get_tree_info(
+    #         source, table)
+    #     return
+    #
+    # def update(self, request, card_pk=None, pk=None):
+    #     return Response(data={
+    #             'id': 1,
+    #             'source_id': 1,
+    #             'table_name': 'cubes',
+    #             'dest': 'abc',
+    #             'is_root': True,
+    #             'is_remain': False,
+    #             'is_bind': True
+    #         })
 
     def retrieve(self, request, card_pk=None, pk=None):
-                    # достаем структуру дерева из редиса
+        # достаем структуру дерева из редиса
         # FIXME: Перенести в сервис Datasource
         structure = RedisSS.get_active_tree_structure_NEW(card_pk)
         sel_tree = TableTreeRepository.build_tree_by_structure(structure)
-        node = sel_tree.get_node(pk)
+        node_info = sel_tree.get_node_info(pk)
         card_key = RKeys.get_user_card_key(card_pk)
         actives = RedisSS.get_card_actives_data(card_key)
-        data = RedisSS.get_node_info(actives, node)
+        data = RedisSS.get_node_info(actives, node_info)
 
         return Response(data={
                 'id': pk,
@@ -379,9 +368,7 @@ class NodeViewSet(viewsets.ViewSet):
                 'is_remain': False,
                 'is_bind': not data['without_bind']
             })
-
-
-# [{"source_id":1,"table_name":"cubes"},{"source_id":1,"table_name":"datasets"}]
+    # [{"source_id":1,"table_name":"cubes"},{"source_id":1,"table_name":"datasets"}]
 
     @detail_route(methods=['post'])
     def change_destination(self):
@@ -391,7 +378,7 @@ class NodeViewSet(viewsets.ViewSet):
         pass
 
     @detail_route(methods=['post'])
-    def in_remain(self):
+    def to_remain(self):
         """
         Добавлеине узла дерева в остатки
         """
@@ -403,10 +390,27 @@ class NodeViewSet(viewsets.ViewSet):
         """
 
     @detail_route(methods=['post'])
-    def from_remain(self):
+    def remain_whatever(self, request, card_pk, pk):
         """
         Перенос узла из остатков в основное дерево
+        в произвольное место
         """
+        info = DataSourceService.from_remain_to_whatever(card_pk, pk)
+        return Response(info)
+
+    @detail_route(methods=['post'])
+    def remain_current(self, request, card_pk, pk):
+        """
+        Перенос узла из остатков в основное дерево
+        в определенный узел
+        """
+        node_id = pk
+        parent_id = request.data['parent_id']
+
+        info = DataSourceService.try_to_bind_nodes(
+            card_pk, node_id, parent_id)
+
+        return Response(info)
 
 
 class JoinViewSet(viewsets.ViewSet):
