@@ -1459,10 +1459,10 @@ class RedisSourceService(object):
         return builder['data']
 
     @classmethod
-    def get_table_name_or_id(cls, table, user_id, sid):
+    def get_table_name_or_id(cls, table, card_id, sid):
         """
         """
-        card_key = RKeys.get_user_card_key(user_id)
+        card_key = RKeys.get_user_card_key(card_id)
         actives = cls.get_card_actives_data(card_key)
         s_actives = actives[str(sid)]
 
@@ -1534,7 +1534,7 @@ class RedisSourceService(object):
 
     @classmethod
     def save_good_error_joins_NEW(
-            cls, user_id, left_table, left_sid, right_table,
+            cls, card_id, left_table, left_sid, right_table,
             right_sid, good_joins, error_joins, join_type):
         """
         Сохраняет временные ошибочные и нормальные джойны таблиц
@@ -1542,7 +1542,7 @@ class RedisSourceService(object):
         :param joins: list
         :param error_joins: list
         """
-        card_key = RKeys.get_user_card_key(user_id)
+        card_key = RKeys.get_user_card_key(card_id)
         builder_str = RKeys.get_user_card_builder(card_key)
         str_joins = RKeys.get_source_joins(card_key)
 

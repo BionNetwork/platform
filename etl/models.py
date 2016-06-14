@@ -369,7 +369,7 @@ class TablesTree(object):
             })
 
     def update_node_joins_NEW(self, left_table, left_sid, right_table,
-                              right_sid, join_type, joins):
+                              right_sid, right_node_id, join_type, joins):
         """
         добавляет/меняет связи между таблицами
         :param sel_tree: TablesTree
@@ -386,7 +386,8 @@ class TablesTree(object):
 
         # случай, когда две таблицы не имели связей
         if not childs:
-            node = Node(right_table, right_sid, parent, [], join_type)
+            node = Node(
+                right_table, right_sid, parent, [], right_node_id, join_type)
             parent.childs.append(node)
         else:
             # меняем существующие связи

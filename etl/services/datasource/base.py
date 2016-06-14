@@ -12,7 +12,7 @@ from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
-from etl.services.datasource.repository.storage import RedisSourceService
+from etl.services.datasource.repository.storage import RedisSourceService, RKeys
 from etl.models import TableTreeRepository
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import generate_table_key
@@ -621,7 +621,7 @@ class DataSourceService(object):
         return good_joins, error_joins, joins_set
 
     @classmethod
-    def check_new_joins_NEW(cls, user_id, left_table, left_sid, right_table,
+    def check_new_joins_NEW(cls, card_id, left_table, left_sid, right_table,
                             right_sid, joins):
         """
         Redis
@@ -639,14 +639,14 @@ class DataSourceService(object):
             joins_set.add(tuple(j))
 
         ts_info = [(left_table, left_sid), (right_table, right_sid), ]
-        cols_types = cls.get_columns_types_NEW(user_id, ts_info)
+        cols_types = cls.get_columns_types_NEW(card_id, ts_info)
 
         # список джойнов с неверными типами
-        error_joins = list()
-        good_joins = list()
+        error_joins = []
+        good_joins = []
 
         for j in joins_set:
-            l_c, j_val, r_c = j
+            l_c, _, r_c = j
             if (cols_types[u'{0}.{1}.{2}'.format(left_table, l_c, left_sid)] !=
                     cols_types[u'{0}.{1}.{2}'.format(
                         right_table, r_c, right_sid)]):
@@ -713,8 +713,8 @@ class DataSourceService(object):
         return data
 
     @classmethod
-    def save_new_joins_NEW(cls, user_id, left_table, left_sid, right_table,
-                           right_sid, join_type, joins):
+    def save_new_joins_NEW(cls, card_id, left_table, left_sid, right_table,
+                           right_sid, child_node_id, join_type, joins):
         """
         Redis
         Cохранение новых джойнов
@@ -732,31 +732,31 @@ class DataSourceService(object):
 
         # FIXME: Описать
         good_joins, error_joins, joins_set = cls.check_new_joins_NEW(
-            user_id, left_table, left_sid, right_table, right_sid, joins)
+            card_id, left_table, left_sid, right_table, right_sid, joins)
 
         data = RedisSourceService.save_good_error_joins_NEW(
-            user_id, left_table, left_sid, right_table, right_sid,
+            card_id, left_table, left_sid, right_table, right_sid,
             good_joins, error_joins, join_type)
 
         if not error_joins:
-            # достаем структуру дерева из редиса
-            structure = RedisSS.get_active_tree_structure_NEW(user_id)
+            # Получаем структуру дерева из редиса
+            structure = RedisSS.get_active_tree_structure_NEW(card_id)
             # строим дерево
             sel_tree = TableTreeRepository.build_tree_by_structure(structure)
 
             sel_tree.update_node_joins_NEW(left_table, left_sid, right_table,
-                                           right_sid, join_type, joins_set)
+                                           right_sid, child_node_id, join_type, joins_set)
             # сохраняем дерево
             ordered_nodes = sel_tree.ordered_nodes
             structure = sel_tree.structure
 
             RedisSS.insert_tree_NEW(
-                structure, ordered_nodes, user_id, update_joins=False)
+                card_id, ordered_nodes, update_joins=False)
 
             # если совсем нет ошибок ни у кого, то на клиенте перерисуем дерево,
             # на всякий пожарный
-            data['draw_table'] = RedisSS.get_final_info_NEW(
-                ordered_nodes, user_id)
+            # data['draw_table'] = RedisSS.get_final_info_NEW(
+            #     ordered_nodes, user_id)
 
             # # работа с последней таблицей
             # remain = RedisSourceService.get_last_remain(source_key)
@@ -808,7 +808,7 @@ class DataSourceService(object):
         return cols_types
 
     @classmethod
-    def get_columns_types_NEW(cls, user_id, tables_info):
+    def get_columns_types_NEW(cls, card_id, tables_info):
         """
         Redis
         Получение типов колонок таблиц
@@ -821,8 +821,8 @@ class DataSourceService(object):
         cols_types = {}
 
         for (t_name, sid) in tables_info:
-            t_id = RedisSS.get_table_name_or_id(t_name, user_id, sid)
-            t_cols = RedisSS.get_table_info(t_id, user_id, sid)['columns']
+            t_id = RedisSS.get_table_name_or_id(t_name, card_id, sid)
+            t_cols = RedisSS.get_table_info(t_id, sid)['columns']
 
             for col in t_cols:
                 cols_types[u'{0}.{1}.{2}'.format(
@@ -1212,3 +1212,22 @@ class DataSourceService(object):
             relations.append(rel)
 
         return relations
+
+    @staticmethod
+    def get_node(card_id, node_id):
+        """
+        Получение данных по узлу
+
+        Arguments:
+            card_id(int): id карточки
+            node_id(int): id узла
+
+        Returns:
+            dict: данные об узле
+        """
+        structure = RedisSS.get_active_tree_structure_NEW(card_id)
+        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+        node_info = sel_tree.get_node_info(node_id)
+        card_key = RKeys.get_user_card_key(card_id)
+        actives = RedisSS.get_card_actives_data(card_key)
+        return RedisSS.get_node_info(actives, node_info)

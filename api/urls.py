@@ -16,7 +16,7 @@ router.register(r'tasks', views.TaskViewSet, 'Task')
 router.register(r'cards', views.CardViewSet, 'cards')
 card_router = routers.NestedSimpleRouter(router, r'cards', lookup='card')
 card_router.register(r'nodes', views.NodeViewSet, base_name='card-nodes')
-node_router = routers.NestedSimpleRouter(card_router, r'nodes', lookup='right')
+node_router = routers.NestedSimpleRouter(card_router, r'nodes', lookup='node')
 node_router.register(r'joins', views.JoinViewSet, base_name='node-joins')
 
 urlpatterns = [

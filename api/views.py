@@ -301,19 +301,6 @@ class CardViewSet(viewsets.ViewSet):
         return Response(info)
 
 
-class Node(object):
-    def __init__(self, **kwargs):
-        for field in ('dist', 'is_root', 'source_id', 't_name', 'without_bind'):
-            setattr(self, field, kwargs.get(field, None))
-
-nodes = {
-    1: Node(id=1, dest='auth_group', is_root=True,
-            source_id=1, t_name='auth_group', is_bind=False),
-    2: Node(id=1, dest='auth_group', is_root=True,
-            source_id=1, t_name='auth_group_permission', is_bind=False),
-}
-
-
 class NodeViewSet(viewsets.ViewSet):
     """
     Предстваление для работы с узлами для дерева
@@ -359,7 +346,9 @@ class NodeViewSet(viewsets.ViewSet):
         node_info = sel_tree.get_node_info(pk)
         card_key = RKeys.get_user_card_key(card_pk)
         actives = RedisSS.get_card_actives_data(card_key)
-        data = RedisSS.get_node_cols(actives, node_info)
+        data = RedisSS.get_node_info(actives, node_info)
+
+        data = DataSourceService.get_node(card_pk, pk)
 
         return Response(data={
                 'id': pk,
@@ -420,22 +409,24 @@ class JoinViewSet(viewsets.ViewSet):
     Представление для связей таблиц
     """
 
-    def retrieve(self, request, card_pk=None, right_pk=None, pk=None):
+    def retrieve(self, request, card_pk=None, node_pk=None, pk=None):
         """
         Получение информации о соединение узлов (join)
         ---
         Args:
             card_pk(int): id карточки
-            node_pk(int): id родительского узла (right)
-            pk(int): id дочернего узла (left)
+            node_pk(int): id родительского узла
+            pk(int): id дочернего узла
 
         Returns:
         """
-        parent_sid = 4
-        child_sid = 1
+        right_data = DataSourceService.get_node(card_pk, node_pk)
+        left_data = DataSourceService.get_node(card_pk, pk)
+        parent_sid = right_data['source_id']
+        child_sid = left_data['source_id']
 
-        parent_table = u'list1'
-        child_table = u'auth_group'
+        parent_table = right_data['tname']
+        child_table = left_data['tname']
 
         data = DataSourceService.get_columns_and_joins(
             request.user.id, parent_table, parent_sid, child_table, child_sid)
@@ -443,4 +434,53 @@ class JoinViewSet(viewsets.ViewSet):
         return Response(data=data)
 
     def update(self, request, card_pk=None, node_pk=None, pk=None):
-        pass
+        """
+        {
+        "joins":
+        {
+            "right": "group_id",
+            "join": "eq",
+            "left": "id"
+        }
+}
+        """
+
+        right_data = DataSourceService.get_node(card_pk, node_pk)
+        left_data = DataSourceService.get_node(card_pk, pk)
+        parent_sid = right_data['source_id']
+        child_sid = left_data['source_id']
+
+        parent_table = right_data['tname']
+        child_table = left_data['tname']
+
+        join_type = 'inner'
+
+        joins = []
+        for each in request.data['joins']:
+            joins.append([each['right'], each['join'], each['left']])
+
+        data = DataSourceService.save_new_joins_NEW(
+            card_pk, parent_table, parent_sid, child_table,
+            child_sid, pk, join_type, joins)
+
+        return Response(data=data)
+
+
+# {"good_joins": [
+#         {
+#             "right": {
+#                 "column": "group_id",
+#                 "table": "auth_group_permissions",
+#                 "sid": 1
+#             },
+#             "join": {
+#                 "type": "inner",
+#                 "value": "eq"
+#             },
+#             "left": {
+#                 "column": "id",
+#                 "table": "auth_group",
+#                 "sid": 1
+#             }
+#         }
+#     ]}
