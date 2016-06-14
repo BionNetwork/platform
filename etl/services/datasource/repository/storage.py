@@ -1064,13 +1064,11 @@ class RedisSourceService(object):
         return node_info
 
     @classmethod
-    def extract_tree_from_storage(cls, card_id, ordered_nodes):
+    def prepare_tree_nodes_info(cls, ordered_nodes):
         """
         Информация о дереве для передачи на клиент
         """
         result = []
-        card_key = RKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
 
         for ind, node in enumerate(ordered_nodes):
             table, source_id = node.val, node.source_id
@@ -1078,13 +1076,12 @@ class RedisSourceService(object):
             n_info = {
                 'val': table,
                 'sid': source_id,
-                'parent_id': getattr(node.parent, 'val', None),
+                'parent_id': getattr(node.parent, 'node_id', None),
                 'is_root': not ind,
                 'without_bind': False,
                 'node_id': node.node_id,
             }
-            table_id = actives[str(source_id)]['actives'][table]
-            table_info = cls.get_table_info(table_id, source_id)
+            table_info = cls.get_table_info(node.node_id, source_id)
 
             n_info['cols'] = [{'col_name': x['name'],
                                'col_title': x.get('title', None), }
@@ -1664,32 +1661,32 @@ class RedisSourceService(object):
             for k, v in actives[sid]['remains'].iteritems():
                 if node_id == int(v):
                     return {
-                        'val': k,
+                        'value': k,
                         'sid': sid,
                         'node_id': node_id,
                         'parent_id': None,
                     }
         return None
 
-    @classmethod
-    def check_node_id_in(cls, card_id, node_id):
-        """
-        Проверяет есть ли данный id в билдере карты
-        """
-        node_id = int(node_id)
-        card_key = RKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
-
-        for sid in actives:
-            s_actives = actives[sid]
-            for act, act_id in s_actives['actives'].iteritems():
-                if int(act_id) == node_id:
-                    return True
-
-            for rem, rem_id in s_actives['remains'].iteritems():
-                if int(rem_id) == node_id:
-                    return True
-        return False
+    # @classmethod
+    # def check_node_id_in(cls, card_id, node_id):
+    #     """
+    #     Проверяет есть ли данный id в билдере карты
+    #     """
+    #     node_id = int(node_id)
+    #     card_key = RKeys.get_user_card_key(card_id)
+    #     actives = cls.get_card_actives_data(card_key)
+    #
+    #     for sid in actives:
+    #         s_actives = actives[sid]
+    #         for act, act_id in s_actives['actives'].iteritems():
+    #             if int(act_id) == node_id:
+    #                 return True
+    #
+    #         for rem, rem_id in s_actives['remains'].iteritems():
+    #             if int(rem_id) == node_id:
+    #                 return True
+    #     return False
 
 
 # FIXME не используется на данный момент

@@ -223,25 +223,63 @@ class DataSourceService(object):
         """
         Пытаемся забиндить 2 узла
         """
-        # if (not RedisSS.check_node_id_in(card_id, node_id) or
-        #         not RedisSS.check_node_id_in(card_id, parent_id)):
-        #     raise Exception("Incorrect ID!")
-
-        # FIXME second part of cls.rebuild_tree for mini tree
         sel_tree = cls.get_tree(card_id)
 
-        parent_node = sel_tree.get_node_info(parent_id)
-        if parent_node is None:
+        parent_info = sel_tree.get_node_info(parent_id)
+        if parent_info is None:
             raise Exception("Incorrect parent ID!")
 
-        child_node = sel_tree.get_node_info(child_id)
-        if child_node is None:
+        # child node can be whether in actives or in remains
+        if sel_tree.contains_node_id(child_id):
+            child_info = sel_tree.get_node_info(child_id)
+        else:
+            child_info = RedisSS.get_node_info_from_remain(card_id, child_id)
+
+        if child_info is None:
             raise Exception("Incorrect child ID!")
 
+        tables_info = {}
 
+        par_value = parent_info['value']
+        par_sid = parent_info['sid']
+        par_nid = parent_info['node_id']
+        tables_info['{0}_{1}'.format(par_sid, par_value)] = (
+            RedisSS.get_table_info(par_nid, par_sid))
 
+        ch_value = child_info['value']
+        ch_sid = child_info['sid']
+        ch_nid = child_info['node_id']
+        tables_info['{0}_{1}'.format(ch_sid, ch_value)] = (
+            RedisSS.get_table_info(ch_nid, ch_sid))
 
+        sel_tree = cls.get_tree(card_id)
+        parent_node = sel_tree.get_node(parent_id)
 
+        remain = sel_tree.build_mono(parent_node, ch_value, ch_sid, tables_info)
+
+        ordered_nodes = sel_tree.ordered_nodes
+
+        # если забиндилось
+        if remain is None:
+            # сохраняем дерево, если таблицы не в дереве
+            RedisSS.insert_tree_NEW(card_id, ordered_nodes)
+
+        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
+        remains = RedisSS.extract_card_remains_from_storage(card_id)
+
+        # если не забиндилось, то отдаем инфу об остатке
+        if remain:
+            for rem in remains:
+                if (rem["value"] == ch_value and
+                        str(rem["sid"]) == str(ch_sid)):
+                    remain = rem
+                    remains.remove(rem)
+                    break
+        return {
+            'tree_nodes': tree_nodes,
+            'remains': remains,
+            'tail': remain,
+        }
 
     @classmethod
     def get_tree(cls, card_id):
@@ -264,7 +302,8 @@ class DataSourceService(object):
         sel_tree = cls.rebuild_tree(card_id, source_id, table)
         ordered_nodes = sel_tree.ordered_nodes
 
-        # новая таблица без связи
+        # новая таблица без связи, если таблица в дереве,
+        # то without_bind тоже пустой
         if sel_tree.without_bind:
             RedisSourceService.insert_without_bind(
                 sel_tree.without_bind, card_id, source_id)
@@ -277,14 +316,14 @@ class DataSourceService(object):
             structure = sel_tree.structure
             RedisSS.save_active_tree_NEW(structure, card_id)
 
-        tree_nodes = RedisSS.extract_tree_from_storage(card_id, ordered_nodes)
+        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
 
         remains = RedisSS.extract_card_remains_from_storage(card_id)
 
         remain = None
         if sel_tree.without_bind:
             for rem in remains:
-                if (rem["val"] == table and
+                if (rem["value"] == table and
                         str(rem["sid"]) == str(source_id)):
                     remain = rem
                     remains.remove(rem)
@@ -326,7 +365,7 @@ class DataSourceService(object):
                     ordered_nodes, card_id, table, source_id)
 
                 # перестраиваем дерево
-                without_bind = sel_tree.build_NEW(table, tables_info, source_id)
+                without_bind = sel_tree.build_NEW(table, source_id, tables_info)
 
         sel_tree.without_bind = without_bind
         sel_tree.already_in = already_in
@@ -351,8 +390,7 @@ class DataSourceService(object):
             sel_tree = cls.get_tree(card_id)
             ordered_nodes = sel_tree.ordered_nodes
 
-            tree_nodes = RedisSS.extract_tree_from_storage(
-                card_id, ordered_nodes)
+            tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
             remains = RedisSS.extract_card_remains_from_storage(card_id)
 
         return {
