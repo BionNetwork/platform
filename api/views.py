@@ -361,12 +361,16 @@ class NodeViewSet(viewsets.ViewSet):
             })
     # [{"source_id":1,"table_name":"cubes"},{"source_id":1,"table_name":"datasets"}]
 
-    @detail_route(methods=['post'])
-    def change_destination(self):
+    @detail_route(methods=['get'])
+    def reparent(self, request, card_pk, pk):
         """
-        Изменение родительского узла
+        Изменение родительского узла, перенос ноды с одгного места на другое
         """
-        pass
+        node_id = pk
+        parent_id = request.data['parent_id']
+
+        info = DataSourceService.reparent(card_pk, node_id, parent_id)
+        return Response(info)
 
     @detail_route(methods=['post'])
     def to_remain(self):
@@ -398,7 +402,7 @@ class NodeViewSet(viewsets.ViewSet):
         node_id = pk
         parent_id = request.data['parent_id']
 
-        info = DataSourceService.try_to_bind_nodes(
+        info = DataSourceService.from_remain_to_certain(
             card_pk, node_id, parent_id)
 
         return Response(info)

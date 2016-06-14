@@ -204,7 +204,7 @@ class DataSourceService(object):
     @classmethod
     def from_remain_to_whatever(cls, card_id, node_id):
         """
-        Добавление
+        Добавление из остатков куда-либо
         """
         node_info = RedisSS.get_node_info_from_remain(card_id, node_id)
 
@@ -219,9 +219,9 @@ class DataSourceService(object):
         return info
 
     @classmethod
-    def try_to_bind_nodes(cls, card_id, child_id, parent_id):
+    def from_remain_to_certain(cls, card_id, child_id, parent_id):
         """
-        Пытаемся забиндить 2 узла
+        Добавление из остатков в определенную ноду
         """
         sel_tree = cls.get_tree(card_id)
 
@@ -229,33 +229,20 @@ class DataSourceService(object):
         if parent_info is None:
             raise Exception("Incorrect parent ID!")
 
-        # child node can be whether in actives or in remains
-        if sel_tree.contains_node_id(child_id):
-            child_info = sel_tree.get_node_info(child_id)
-        else:
-            child_info = RedisSS.get_node_info_from_remain(card_id, child_id)
+        # child node must be in remains
+        child_info = RedisSS.get_node_info_from_remain(card_id, child_id)
 
         if child_info is None:
             raise Exception("Incorrect child ID!")
 
-        tables_info = {}
-
-        par_value = parent_info['value']
-        par_sid = parent_info['sid']
-        par_nid = parent_info['node_id']
-        tables_info['{0}_{1}'.format(par_sid, par_value)] = (
-            RedisSS.get_table_info(par_nid, par_sid))
-
         ch_value = child_info['value']
         ch_sid = child_info['sid']
-        ch_nid = child_info['node_id']
-        tables_info['{0}_{1}'.format(ch_sid, ch_value)] = (
-            RedisSS.get_table_info(ch_nid, ch_sid))
 
         sel_tree = cls.get_tree(card_id)
         parent_node = sel_tree.get_node(parent_id)
 
-        remain = sel_tree.build_mono(parent_node, ch_value, ch_sid, tables_info)
+        remain = sel_tree.build_mono_node(
+            parent_node, ch_value, ch_sid, parent_info, child_info)
 
         ordered_nodes = sel_tree.ordered_nodes
 
@@ -270,8 +257,54 @@ class DataSourceService(object):
         # если не забиндилось, то отдаем инфу об остатке
         if remain:
             for rem in remains:
-                if (rem["value"] == ch_value and
-                        str(rem["sid"]) == str(ch_sid)):
+                if int(rem["node_id"]) == int(child_id):
+                    remain = rem
+                    remains.remove(rem)
+                    break
+        return {
+            'tree_nodes': tree_nodes,
+            'remains': remains,
+            'tail': remain,
+        }
+
+    @classmethod
+    def reparent(cls, card_id, child_id, parent_id):
+        """
+        Пытаемся перетащить узел дерева из одного места в другое
+        """
+        sel_tree = cls.get_tree(card_id)
+
+        parent_info = sel_tree.get_node_info(parent_id)
+        if parent_info is None:
+            raise Exception("Incorrect parent ID!")
+
+        # child node must be in actives
+        child_info = sel_tree.get_node_info(child_id)
+
+        if child_info is None:
+            raise Exception("Incorrect child ID!")
+
+        sel_tree = cls.get_tree(card_id)
+        child_node = sel_tree.get_node(child_id)
+        parent_node = sel_tree.get_node(parent_id)
+
+        remain = sel_tree.reparent_node(
+            parent_node, child_node, parent_info, child_info)
+
+        ordered_nodes = sel_tree.ordered_nodes
+
+        # если забиндилось
+        if remain is None:
+            # сохраняем дерево, если таблицы не в дереве
+            RedisSS.insert_tree_NEW(card_id, ordered_nodes)
+
+        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
+        remains = RedisSS.extract_card_remains_from_storage(card_id)
+
+        # если не забиндилось, то отдаем инфу об остатке
+        if remain:
+            for rem in remains:
+                if int(rem["node_id"]) == int(child_id):
                     remain = rem
                     remains.remove(rem)
                     break

@@ -297,26 +297,40 @@ class TablesTree(object):
         return table
 
     @classmethod
-    def build_mono(cls, parent_node, table, source_id, tables_info):
+    def build_mono_node(cls, parent_node, table, source_id,
+                        parent_info, child_info):
         """
         Пытается связать к дереву 1 новый узел
         """
-        s = u"{0}_{1}"
-
-        par_info = tables_info[s.format(
-            parent_node.source_id, parent_node.val)]
-        ch_info = tables_info[s.format(source_id, table)]
-
         joins = cls.get_joins_NEW(
-            parent_node.val, table, par_info, ch_info)
+            parent_node.val, table, parent_info, child_info)
 
         if joins:
             new_node = Node(table, source_id, parent=parent_node, joins=joins)
             parent_node.childs.append(new_node)
-            table = None
+            return
 
-        # таблицы без связей
-        return table
+        # признак, что таблица без связей
+        return True
+
+    @classmethod
+    def reparent_node(cls, parent_node, child_node, parent_info, child_info):
+        """
+        Пытается связать к дереву 1 новый узел
+        """
+        joins = cls.get_joins_NEW(
+            parent_node.val, child_node.val, parent_info, child_info)
+
+        if joins:
+            old_parent = child_node.parent
+            old_parent.childs.remove(child_node)
+            child_node.joins = joins
+            child_node.parent = parent_node
+            parent_node.childs.append(child_node)
+            return
+
+        # признак, что таблица без связей
+        return True
 
     def build_by_structure(self, children):
         self._build_by_structure(self.root, children)
