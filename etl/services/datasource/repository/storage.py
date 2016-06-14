@@ -1037,9 +1037,9 @@ class RedisSourceService(object):
         for s_info in actives:
             for remain, remain_id in actives[s_info]['remains'].iteritems():
                 remains.append({
-                    'tname': remain,
-                    'source_id': s_info,
-                    'dest': None,
+                    'value': remain,
+                    'sid': s_info,
+                    'parent_id': None,
                     'is_root': False,
                     'without_bind': True,
                     'node_id': remain_id,
@@ -1047,25 +1047,21 @@ class RedisSourceService(object):
         return remains
 
     @classmethod
-    def get_node_info(cls, actives, node_info):
+    def get_node_cols(cls, actives, node_info):
 
-        table, source_id = node_info['val'], node_info['sid']
-        n_info = {
-            'tname': table,
-            'source_id': source_id,
-            'dest': node_info['parent_id'],
-            # FIXME Убрать is_root или что-то около того
-            'is_root': not True,
-            'without_bind': False,
-        }
+        table, source_id = node_info['value'], node_info['sid']
         # FIXME нода дерева может быть тока в активных
         table_id = actives[str(source_id)]['actives'][table]
         table_info = cls.get_table_info(table_id, source_id)
 
-        n_info['cols'] = [{'col_name': x['name'],
-                           'col_title': x.get('title', None), }
-                          for x in table_info['columns']]
-        return n_info
+        node_info['without_bind'] = False
+
+        node_info['cols'] = [
+            {
+                'col_name': x['name'], 'col_title': x.get('title', None), }
+            for x in table_info['columns']
+            ]
+        return node_info
 
     @classmethod
     def extract_tree_from_storage(cls, card_id, ordered_nodes):
@@ -1080,9 +1076,9 @@ class RedisSourceService(object):
             table, source_id = node.val, node.source_id
 
             n_info = {
-                'tname': table,
-                'source_id': source_id,
-                'dest': getattr(node.parent, 'val', None),
+                'val': table,
+                'sid': source_id,
+                'parent_id': getattr(node.parent, 'val', None),
                 'is_root': not ind,
                 'without_bind': False,
                 'node_id': node.node_id,
@@ -1668,12 +1664,10 @@ class RedisSourceService(object):
             for k, v in actives[sid]['remains'].iteritems():
                 if node_id == int(v):
                     return {
-                        'tname': k,
-                        'source_id': sid,
-                        'dest': None,
-                        'is_root': False,
-                        'without_bind': True,
+                        'val': k,
+                        'sid': sid,
                         'node_id': node_id,
+                        'parent_id': None,
                     }
         return None
 

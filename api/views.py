@@ -357,13 +357,13 @@ class NodeViewSet(viewsets.ViewSet):
         node_info = sel_tree.get_node_info(pk)
         card_key = RKeys.get_user_card_key(card_pk)
         actives = RedisSS.get_card_actives_data(card_key)
-        data = RedisSS.get_node_info(actives, node_info)
+        data = RedisSS.get_node_cols(actives, node_info)
 
         return Response(data={
                 'id': pk,
-                'source_id': data['source_id'],
-                'table_name': data['tname'],
-                'dest': data['dest'],
+                'source_id': data['sid'],
+                'table_name': data['value'],
+                'dest': data['parent_id'],
                 'is_root': data['is_root'],
                 'is_remain': False,
                 'is_bind': not data['without_bind']

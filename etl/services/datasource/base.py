@@ -219,13 +219,13 @@ class DataSourceService(object):
         return info
 
     @classmethod
-    def try_to_bind_nodes(cls, card_id, node_id, parent_id):
+    def try_to_bind_nodes(cls, card_id, child_id, parent_id):
         """
         Пытаемся забиндить 2 узла
         """
-        if (not RedisSS.check_node_id_in(card_id, node_id) or
-                not RedisSS.check_node_id_in(card_id, parent_id)):
-            raise Exception("Incorrect ID!")
+        # if (not RedisSS.check_node_id_in(card_id, node_id) or
+        #         not RedisSS.check_node_id_in(card_id, parent_id)):
+        #     raise Exception("Incorrect ID!")
 
         # FIXME second part of cls.rebuild_tree for mini tree
         sel_tree = cls.get_tree(card_id)
@@ -234,9 +234,11 @@ class DataSourceService(object):
         if parent_node is None:
             raise Exception("Incorrect parent ID!")
 
-        child_node = sel_tree.get_node_info(node_id)
-        if parent_node is None:
-            raise Exception("Incorrect parent ID!")
+        child_node = sel_tree.get_node_info(child_id)
+        if child_node is None:
+            raise Exception("Incorrect child ID!")
+
+
 
 
 
@@ -282,8 +284,8 @@ class DataSourceService(object):
         remain = None
         if sel_tree.without_bind:
             for rem in remains:
-                if (rem["tname"] == table and
-                        str(rem["source_id"]) == str(source_id)):
+                if (rem["val"] == table and
+                        str(rem["sid"]) == str(source_id)):
                     remain = rem
                     remains.remove(rem)
                     break
