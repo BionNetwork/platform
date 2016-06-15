@@ -276,12 +276,12 @@ class CardViewSet(viewsets.ViewSet):
         card_id = pk
 
         data = [
-            # {"source_id": 2, "table_name": u'auth_group', },
+            {"source_id": 2, "table_name": u'auth_group', },
             # {"source_id": 2, "table_name": u'auth_group_permissions', },
             # {"source_id": 2, "table_name": u'auth_permission', },
             # {"source_id": 2, "table_name": u'card_card', },
-            # {"source_id": 1, "table_name": u'Лист1', },
-            # {"source_id": 1, "table_name": u'List3', },
+            {"source_id": 1, "table_name": u'Лист1', },
+            {"source_id": 1, "table_name": u'List3', },
             # {"source_id": 1, "table_name": u'Лист2', },
         ]
 
@@ -293,10 +293,9 @@ class CardViewSet(viewsets.ViewSet):
 
                 table = each['table_name']
                 source_id = each['source_id']
-                source = Datasource.objects.get(id=source_id)
 
                 info = DataSourceService.try_tree_restruct(
-                    card_id, source, table)
+                    card_id, source_id, table)
 
         return Response(info)
 
@@ -344,8 +343,7 @@ class NodeViewSet(viewsets.ViewSet):
         structure = RedisSS.get_active_tree_structure_NEW(card_pk)
         sel_tree = TableTreeRepository.build_tree_by_structure(structure)
         node_info = sel_tree.get_node_info(pk)
-        card_key = RKeys.get_user_card_key(card_pk)
-        actives = RedisSS.get_card_actives_data(card_key)
+        actives = RedisSS.get_card_builder_data(card_pk)
         data = RedisSS.get_node_info(actives, node_info)
 
         data = DataSourceService.get_node(card_pk, pk)
@@ -372,11 +370,15 @@ class NodeViewSet(viewsets.ViewSet):
         info = DataSourceService.reparent(card_pk, node_id, parent_id)
         return Response(info)
 
-    @detail_route(methods=['post'])
-    def to_remain(self):
+    @detail_route(methods=['get'])
+    def to_remain(self, request, card_pk, pk):
         """
         Добавлеине узла дерева в остатки
         """
+        node_id = pk
+        info = DataSourceService.send_nodes_to_remains(card_pk, node_id)
+
+        return Response(info)
 
     @detail_route(methods=['post'])
     def change_source(self):

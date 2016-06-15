@@ -239,7 +239,7 @@ class RedisSourceService(object):
         # r_server.set(counter_str, json.dumps(coll_counter))
 
     @classmethod
-    def delete_tables_NEW(cls, user_id, tables):
+    def delete_tables_NEW(cls, card_id, tables):
         """
         удаляет информацию о таблицах
 
@@ -247,11 +247,11 @@ class RedisSourceService(object):
             source(Datasource): объект Источника
             tables(list): Список названий таблиц
         """
-        card_key = RKeys.get_user_card_key(user_id)
+        card_key = RKeys.get_user_card_key(card_id)
         str_actives = RKeys.get_user_card_builder(card_key)
         str_joins = RKeys.get_source_joins(card_key)
 
-        actives = cls.get_card_actives(card_key)
+        actives = cls.get_card_builder(card_id)
         actives_data = actives['data']
 
         # если есть, то удаляем таблицу без связей
@@ -391,21 +391,21 @@ class RedisSourceService(object):
         return r_server.get(cls.get_collection_name(source, table))
 
     @classmethod
-    def get_table_info(cls, table_id_or_name, source_id):
+    def get_table_info(cls, table_id, source_id):
         source_key = RKeys.get_user_datasource(source_id)
-        str_table = RKeys.get_active_table(source_key, table_id_or_name)
+        str_table = RKeys.get_active_table(source_key, table_id)
         return cls.r_get(str_table)
 
     @classmethod
-    def set_table_info(cls, table_id_or_name, source_id, table_info):
+    def set_table_info(cls, table_id, source_id, table_info):
         source_key = RKeys.get_user_datasource(source_id)
-        str_table = RKeys.get_active_table(source_key, table_id_or_name)
+        str_table = RKeys.get_active_table(source_key, table_id)
         return cls.r_set(str_table, table_info)
 
     @classmethod
-    def del_table_info(cls, table_id_or_name, source_id):
+    def del_table_info(cls, table_id, source_id):
         source_key = RKeys.get_user_datasource(source_id)
-        str_table = RKeys.get_active_table(source_key, table_id_or_name)
+        str_table = RKeys.get_active_table(source_key, table_id)
         return cls.r_del(str_table)
 
     @classmethod
@@ -429,27 +429,21 @@ class RedisSourceService(object):
         return not_exists, actives_names
 
     @classmethod
-    def already_table_in_redis(cls, card_id, source_id, table):
+    def table_in_builder_remains(cls, card_id, source_id, table):
         """
-        Проверяет таблица в редисе или нет
-        Args:
-            source(Datasource): объект источника
-            table(str): таблица
-        Returns:
-            bool
+        Проверяет таблица в остатках или нет
         """
-        card_key = RKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
-
+        actives = cls.get_card_builder_data(card_id)
         s_id = str(source_id)
 
         if s_id in actives:
             source_colls = actives[s_id]
-            # таблица уже в дереве или в остатках
-            return (table in source_colls['actives'] or
-                    table in source_colls['remains'])
-
-        return False
+            # таблица не должна быть в активных
+            if table in source_colls['actives']:
+                raise Exception("Table must be in remains, but it's in actives")
+            # таблица уже в остатках
+            return source_colls['remains'].get(table, None)
+        return None
 
     @classmethod
     def check_tree_exists(cls, source):
@@ -569,7 +563,7 @@ class RedisSourceService(object):
             if order is None:
 
                 # порядковый номер cчетчика коллекций пользователя
-                sequence_id = coll_counter['next_sequence_id']
+                sequence_id = coll_counter['next_id']
 
                 # Получаем информацию либо по имени, либо по порядковому номеру
                 table_info = json.loads(
@@ -596,12 +590,12 @@ class RedisSourceService(object):
                 try:
                     assert isinstance(coll_counter, dict)
                 except AssertionError:
-                    coll_counter = {'data': [], 'next_sequence_id': coll_counter}
+                    coll_counter = {'data': [], 'next_id': coll_counter}
                 # добавляем новую таблциу в карту активных таблиц
                 coll_counter['data'].append({'name': n_val, 'id': sequence_id})
 
                 # увеличиваем счетчик
-                coll_counter['next_sequence_id'] += 1
+                coll_counter['next_id'] += 1
 
             # добавляем инфу новых джойнов
             if update_joins:
@@ -627,16 +621,17 @@ class RedisSourceService(object):
         :param ordered_nodes:
         """
         card_key = RKeys.get_user_card_key(card_id)
+        # fixme есть метод другой на сохранение коллекций
         builder_str = RKeys.get_user_card_builder(card_key)
-        str_joins = RKeys.get_source_joins(card_key)
+        # str_joins = RKeys.get_source_joins(card_key)
 
         # список коллекций
-        coll_counter = cls.get_card_actives(card_key)
+        coll_counter = cls.get_card_builder(card_id)
         actives = coll_counter['data']
         # порядковый номер cчетчика коллекций пользователя
-        sequence_id = coll_counter['next_sequence_id']
+        sequence_id = coll_counter['next_id']
 
-        joins_in_redis = defaultdict(list)
+        # joins_in_redis = defaultdict(list)
 
         for node in ordered_nodes:
             n_val = node.val
@@ -675,17 +670,17 @@ class RedisSourceService(object):
                     sequence_id += 1
 
             # добавляем инфу новых джойнов
-            if update_joins:
-                joins = node.get_node_joins_info_NEW()
-                for k, v in joins.iteritems():
-                    joins_in_redis[k] += v
+            # if update_joins:
+            #     joins = node.get_node_joins_info_NEW()
+            #     for k, v in joins.iteritems():
+            #         joins_in_redis[k] += v
 
-        coll_counter['next_sequence_id'] = sequence_id
+        coll_counter['next_id'] = sequence_id
 
         r_server.set(builder_str, json.dumps(coll_counter))
 
-        if update_joins:
-            r_server.set(str_joins, json.dumps(joins_in_redis))
+        # if update_joins:
+        #     r_server.set(str_joins, json.dumps(joins_in_redis))
 
     @classmethod
     def tree_full_clean(cls, source, delete_ddl=True):
@@ -722,11 +717,11 @@ class RedisSourceService(object):
         pipe.execute()
 
     @classmethod
-    def tree_full_clean_NEW(cls, user_id):
+    def tree_full_clean_NEW(cls, card_id):
         """ удаляет информацию о таблицах, джоинах, дереве
             из редиса
         """
-        card_key = RKeys.get_user_card_key(user_id)
+        card_key = RKeys.get_user_card_key(card_id)
         str_actives = RKeys.get_user_card_builder(card_key)
         str_joins = RKeys.get_source_joins(card_key)
         str_active_tree = RKeys.get_active_tree(card_key)
@@ -734,7 +729,7 @@ class RedisSourceService(object):
         # delete keys in redis
         pipe = r_server.pipeline()
 
-        actives = cls.get_card_actives_data(card_key)
+        actives = cls.get_card_builder_data(card_id)
         for f_sid in actives:
             sid = f_sid[1:]
             t_names = (actives[f_sid]['actives'].values() +
@@ -795,9 +790,8 @@ class RedisSourceService(object):
         сохраняет таблицу без связей
         :return:
         """
-        card_key = RKeys.get_user_card_key(card_id)
-        card_collections = cls.get_card_actives(card_key)
-        next_id = int(card_collections['next_sequence_id'])
+        card_collections = cls.get_card_builder(card_id)
+        next_id = int(card_collections['next_id'])
         actives = card_collections['data']
 
         f_sid = str(source_id)
@@ -806,7 +800,7 @@ class RedisSourceService(object):
                 'actives': {},
                 'remains': {table: next_id, },
             }
-            card_collections['next_sequence_id'] = next_id + 1
+            card_collections['next_id'] = next_id + 1
             remain_info = cls.get_table_info(table, source_id)
             cls.set_table_info(next_id, source_id, remain_info)
             cls.del_table_info(table, source_id)
@@ -814,12 +808,12 @@ class RedisSourceService(object):
         else:
             if table not in actives[f_sid]['remains']:
                 actives[f_sid]['remains'][table] = next_id
-                card_collections['next_sequence_id'] = next_id + 1
+                card_collections['next_id'] = next_id + 1
                 remain_info = cls.get_table_info(table, source_id)
                 cls.set_table_info(next_id, source_id, remain_info)
                 cls.del_table_info(table, source_id)
 
-        cls.set_card_actives(card_key, card_collections)
+        cls.set_card_actives(card_id, card_collections)
 
     @classmethod
     def delete_unneeded_remains(cls, source, remains):
@@ -934,12 +928,11 @@ class RedisSourceService(object):
         }
 
     @classmethod
-    def get_columns_for_joins(cls, user_id, parent_table, parent_sid,
+    def get_columns_for_joins(cls, card_id, parent_table, parent_sid,
                               child_table, child_sid):
         """
         """
-        card_key = RKeys.get_user_card_key(user_id)
-        actives = cls.get_card_actives_data(card_key)
+        actives = cls.get_card_builder_data(card_id)
 
         of_parent = actives[str(parent_sid)]
         of_child = actives[str(child_sid)]
@@ -1032,8 +1025,7 @@ class RedisSourceService(object):
         """
         remains = []
 
-        card_key = RKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
+        actives = cls.get_card_builder_data(card_id)
 
         for s_info in actives:
             for remain, remain_id in actives[s_info]['remains'].iteritems():
@@ -1092,32 +1084,31 @@ class RedisSourceService(object):
         return result
 
     @classmethod
-    def insert_columns_info(cls, source_id, table, columns,
-                            indexes, foreigns, stats, intervals):
+    def put_table_info_in_builder(cls, card_id, source_id, table, table_info):
         """
-        инфа о колонках, констраинтах, индексах в редис
-        :param source:
-        :param tables:
-        :param columns:
-        :param indexes:
-        :param foreigns:
-        :param stats:
-        :return:
+        инфу таблицы кладем в остатки билдера дерева
         """
-        source_key = cls.get_user_source(source_id)
-        str_table_by_name = RedisCacheKeys.get_active_table(
-            source_key, '{0}')
+        builder = cls.get_card_builder(card_id)
+        next_id = builder['next_id']
+        b_data = builder['data']
 
-        r_server.set(str_table_by_name.format(table), json.dumps(
-            {
-                "sid": source_id,
-                "columns": columns[table],
-                "indexes": indexes[table],
-                "foreigns": foreigns[table],
-                "stats": stats[table],
-                "date_intervals": intervals.get(table, [])
-            }, cls=CustomJsonEncoder
-        ))
+        cls.set_table_info(next_id, source_id, table_info)
+
+        sid = str(source_id)
+        if sid not in b_data:
+            b_data[sid] = {
+                'actives': {},
+                'remains': {table: next_id, },
+            }
+        else:
+            b_data[sid]['remains'][table] = next_id
+
+        builder['next_id'] = next_id + 1
+
+        # save builder's new state
+        cls.set_card_actives(card_id, builder)
+
+        return next_id
 
     @classmethod
     def insert_date_intervals(cls, source, tables, intervals):
@@ -1212,8 +1203,7 @@ class RedisSourceService(object):
 
         final_info = {}
 
-        card_key = RedisCacheKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
+        actives = cls.get_card_builder_data(card_id)
 
         sid_name = u'{0}_{1}'
 
@@ -1302,16 +1292,14 @@ class RedisSourceService(object):
         return tables_info_for_meta
 
     @classmethod
-    def tables_info_for_metasource_NEW(cls, tables, user_id):
+    def tables_info_for_metasource_NEW(cls, tables, card_id):
         """
         Достает инфу о колонках, выбранных таблиц,
         для хранения в DatasourceMeta
         """
 
         tables_info = defaultdict(dict)
-        card_key = RKeys.get_user_card_key(user_id)
-
-        actives = cls.get_card_actives_data(card_key)
+        actives = cls.get_card_builder_data(card_id)
 
         for sid, table_list in tables.iteritems():
             sid_format = str(sid)
@@ -1319,7 +1307,7 @@ class RedisSourceService(object):
 
             for table in table_list:
                 table_id = collections['actives'][table]
-                table_info = cls.get_table_info(table_id, user_id, sid)
+                table_info = cls.get_table_info(table_id, sid)
                 tables_info[sid][table] = table_info
 
         return tables_info
@@ -1420,43 +1408,41 @@ class RedisSourceService(object):
         if not r_server.exists(counter_str):
             r_server.set(counter_str, json.dumps({
                 'data': [],
-                'next_sequence_id': 1,
+                'next_id': 1,
             }))
         return cls.r_get(counter_str)
 
     @classmethod
-    def get_card_actives(cls, card_key):
+    def get_card_builder(cls, card_id):
         """
-        порядковый номер коллекции юзера
-
-        Args:
-            source_key(str): Базовая часть ключа
-
-        Returns:
-            dict:
+        Строительная карта дерева
         """
+        card_key = RKeys.get_user_card_key(card_id)
         card_builder = RKeys.get_user_card_builder(card_key)
+
         if not r_server.exists(card_builder):
             builder = {
                 'data': {},
-                'next_sequence_id': 1,
+                'next_id': 1,
             }
             cls.r_set(card_builder, builder)
             return builder
         return cls.r_get(card_builder)
 
     @classmethod
-    def set_card_actives(cls, card_key, collections):
+    def set_card_actives(cls, card_id, actives):
         """
         """
+        card_key = RKeys.get_user_card_key(card_id)
         card_builder = RKeys.get_user_card_builder(card_key)
-        return cls.r_set(card_builder, collections)
+        return cls.r_set(card_builder, actives)
 
     @classmethod
-    def get_card_actives_data(cls, card_key):
+    def get_card_builder_data(cls, card_id):
         """
         """
-        builder = cls.get_card_actives(card_key)
+        card_key = RKeys.get_user_card_key(card_id)
+        builder = cls.get_card_builder(card_key)
         return builder['data']
 
     @classmethod
@@ -1464,7 +1450,7 @@ class RedisSourceService(object):
         """
         """
         card_key = RKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
+        actives = cls.get_card_builder_data(card_key)
         s_actives = actives[str(sid)]
 
         if table in s_actives['actives']:
@@ -1656,7 +1642,7 @@ class RedisSourceService(object):
         """
         node_id = int(node_id)
         card_key = RKeys.get_user_card_key(card_id)
-        actives = cls.get_card_actives_data(card_key)
+        actives = cls.get_card_builder_data(card_key)
 
         for sid in actives:
             for k, v in actives[sid]['remains'].iteritems():
@@ -1691,22 +1677,22 @@ class RedisSourceService(object):
 
 
 # FIXME не используется на данный момент
-class RedisStorage:
-    """
-    Обертка над методами сохранения информации в redis
-    Позволяет работать с объектами в python стиле, при этом информация сохраняется в redis
-    Пока поддерживаются словари
-    """
-    def __init__(self, client):
-        self.client = client
-
-    def set_dict(self, redis_key, key, value):
-        tasks = RedisDict(key=redis_key, redis=self.client, pickler=json)
-        tasks[key] = value
-
-    def get_dict(self, key):
-        tasks = RedisDict(key=key, redis=self.client, pickler=json)
-        return tasks
+# class RedisStorage:
+#     """
+#     Обертка над методами сохранения информации в redis
+#     Позволяет работать с объектами в python стиле, при этом информация сохраняется в redis
+#     Пока поддерживаются словари
+#     """
+#     def __init__(self, client):
+#         self.client = client
+#
+#     def set_dict(self, redis_key, key, value):
+#         tasks = RedisDict(key=redis_key, redis=self.client, pickler=json)
+#         tasks[key] = value
+#
+#     def get_dict(self, key):
+#         tasks = RedisDict(key=key, redis=self.client, pickler=json)
+#         return tasks
 
 
 # r = redis.StrictRedis(host='localhost', port=6379, db=9)

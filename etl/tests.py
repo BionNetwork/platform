@@ -456,7 +456,7 @@ class RedisKeysTest(BaseCoreTest):
             self.assertTrue(r_server.exists(k), 'Ключ {0} не создался!'.format(k))
 
         self.assertEqual(json.loads(r_server.get(counter_str)),
-                         {"next_sequence_id": 2,
+                         {"next_id": 2,
                           "data": [{"name": "test_table", "id": 1}]},
                          'Счетчик коллекций сохранен неправильно!')
 

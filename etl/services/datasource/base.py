@@ -148,7 +148,7 @@ class DataSourceService(object):
             columns, indexes, foreigns, statistics, date_intervals = (
                 service.get_columns_info(new_tables))
 
-            RedisSourceService.insert_columns_info(
+            RedisSourceService.insert_table_info(
                 source, new_tables, columns, indexes,
                 foreigns, statistics, date_intervals)
 
@@ -326,12 +326,12 @@ class DataSourceService(object):
         return tree
 
     @classmethod
-    def try_tree_restruct(cls, card_id, source, table):
+    def try_tree_restruct(cls, card_id, source_id, table):
         """
         """
-        cls.cache_columns(card_id, source, table)
+        # TODO
+        node_id = cls.cache_columns(card_id, source_id, table)
 
-        source_id = source.id
         sel_tree = cls.rebuild_tree(card_id, source_id, table)
         ordered_nodes = sel_tree.ordered_nodes
 
@@ -430,25 +430,31 @@ class DataSourceService(object):
             }
 
     @classmethod
-    def cache_columns(cls, card_id, source, table):
+    def cache_columns(cls, card_id, source_id, table):
+        """
+        Пришедшую таблицу СУЁТ в строительную карту дерева
+        """
+        table_id = RedisSS.table_in_builder_remains(card_id, source_id, table)
+        if table_id is None:
+            source = Datasource.objects.get(id=source_id)
+            service = cls.get_source_service(source)
 
-        service = cls.get_source_service(source)
-
-        source_id = source.id
-
-        # если информация о таблице уже есть в редисе,
-        # то просто получаем их,
-        # иначе спрашиваем информацию по нему у источника
-        already = RedisSS.already_table_in_redis(card_id, source_id, table)
-
-        if not already:
             columns, indexes, foreigns, statistics, date_intervals = (
                 service.get_columns_info([table, ]))
 
-            # кладем в редис по имени просто
-            RedisSS.insert_columns_info(
-                source_id, table, columns, indexes,
-                foreigns, statistics, date_intervals)
+            info = {
+                "value": table,
+                "sid": source_id,
+                "columns": columns[table],
+                "indexes": indexes[table],
+                "foreigns": foreigns[table],
+                "stats": statistics[table],
+                "date_intervals": date_intervals.get(table, [])
+            }
+
+            # кладем инфу таблицы в остатки билдера дерева
+            table_id = RedisSS.put_table_info_in_builder(card_id, source_id, table, info)
+        return table_id
 
     @classmethod
     def get_rows_info(cls, source, cols):
@@ -1259,6 +1265,5 @@ class DataSourceService(object):
         structure = RedisSS.get_active_tree_structure_NEW(card_id)
         sel_tree = TableTreeRepository.build_tree_by_structure(structure)
         node_info = sel_tree.get_node_info(node_id)
-        card_key = RKeys.get_user_card_key(card_id)
-        actives = RedisSS.get_card_actives_data(card_key)
+        actives = RedisSS.get_card_builder_data(card_id)
         return RedisSS.get_node_info(actives, node_info)
