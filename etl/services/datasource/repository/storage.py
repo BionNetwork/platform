@@ -495,7 +495,7 @@ class RedisSourceService(object):
         cls.r_set(str_active_tree, tree_structure)
 
     @classmethod
-    def save_active_tree_NEW(cls, tree_structure, card_id):
+    def save_tree_structure(cls, card_id, tree):
         """
         сохраняем структуру дерева
         :param tree_structure: string
@@ -504,6 +504,7 @@ class RedisSourceService(object):
         card_key = RKeys.get_user_card_key(card_id)
         str_active_tree = RKeys.get_active_tree(card_key)
 
+        tree_structure = tree.structure
         cls.r_set(str_active_tree, tree_structure)
 
     # достаем структуру дерева из редиса
@@ -619,7 +620,7 @@ class RedisSourceService(object):
         cls.save_active_tree(structure, source)
 
     @classmethod
-    def insert_tree_NEW(cls, card_id, ordered_nodes, update_joins=True):
+    def save_tree_builder(cls, card_id, ordered_nodes, update_joins=True):
         """
         сохраняем полную инфу о дереве
         :param structure:

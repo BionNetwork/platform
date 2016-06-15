@@ -297,16 +297,22 @@ class TablesTree(object):
         return table
 
     @classmethod
-    def build_mono_node(cls, parent_node, table, source_id,
+    def build_mono_node(cls, parent_node, child_node_info,
                         parent_info, child_info):
         """
         Пытается связать к дереву 1 новый узел
         """
+
+        table = child_node_info["value"]
+        source_id = child_node_info["sid"]
+        node_id = child_node_info["node_id"]
+
         joins = cls.get_joins_NEW(
             parent_node.val, table, parent_info, child_info)
 
         if joins:
-            new_node = Node(table, source_id, parent=parent_node, joins=joins)
+            new_node = Node(table, source_id, parent=parent_node,
+                            joins=joins, node_id=node_id)
             parent_node.childs.append(new_node)
             return
 

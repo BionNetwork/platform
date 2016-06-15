@@ -225,31 +225,30 @@ class DataSourceService(object):
         """
         sel_tree = cls.get_tree(card_id)
 
-        parent_info = sel_tree.get_node_info(parent_id)
-        if parent_info is None:
+        p_node = sel_tree.get_node(parent_id)
+        if p_node is None:
             raise Exception("Incorrect parent ID!")
 
         # child node must be in remains
-        child_info = RedisSS.get_node_info_from_remain(card_id, child_id)
+        ch_node_info = RedisSS.get_node_info_from_remain(card_id, child_id)
 
-        if child_info is None:
+        if ch_node_info is None:
             raise Exception("Incorrect child ID!")
 
-        ch_value = child_info['value']
-        ch_sid = child_info['sid']
-
-        sel_tree = cls.get_tree(card_id)
-        parent_node = sel_tree.get_node(parent_id)
+        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
+        child_info = RedisSS.get_table_info(child_id, ch_node_info["sid"])
 
         remain = sel_tree.build_mono_node(
-            parent_node, ch_value, ch_sid, parent_info, child_info)
+            p_node, ch_node_info, parent_info, child_info)
 
         ordered_nodes = sel_tree.ordered_nodes
 
         # если забиндилось
         if remain is None:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.insert_tree_NEW(card_id, ordered_nodes)
+            RedisSS.save_tree_builder(card_id, ordered_nodes)
+            # save tree structure
+            RedisSS.save_tree_structure(card_id, sel_tree)
 
         tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
         remains = RedisSS.extract_card_remains_from_storage(card_id)
@@ -274,29 +273,30 @@ class DataSourceService(object):
         """
         sel_tree = cls.get_tree(card_id)
 
-        parent_info = sel_tree.get_node_info(parent_id)
-        if parent_info is None:
+        p_node = sel_tree.get_node(parent_id)
+        if p_node is None:
             raise Exception("Incorrect parent ID!")
 
         # child node must be in actives
-        child_info = sel_tree.get_node_info(child_id)
+        ch_node = sel_tree.get_node(child_id)
 
-        if child_info is None:
+        if ch_node is None:
             raise Exception("Incorrect child ID!")
 
-        sel_tree = cls.get_tree(card_id)
-        child_node = sel_tree.get_node(child_id)
-        parent_node = sel_tree.get_node(parent_id)
+        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
+        child_info = RedisSS.get_table_info(child_id, ch_node.source_id)
 
         remain = sel_tree.reparent_node(
-            parent_node, child_node, parent_info, child_info)
+            p_node, ch_node, parent_info, child_info)
 
         ordered_nodes = sel_tree.ordered_nodes
 
         # если забиндилось
         if remain is None:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.insert_tree_NEW(card_id, ordered_nodes)
+            RedisSS.save_tree_builder(card_id, ordered_nodes)
+            # save tree structure
+            RedisSS.save_tree_structure(card_id, sel_tree)
 
         tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
         remains = RedisSS.extract_card_remains_from_storage(card_id)
@@ -343,11 +343,9 @@ class DataSourceService(object):
         # новой таблицы нет в дереве
         elif not sel_tree.already_in:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.insert_tree_NEW(card_id, ordered_nodes)
-
+            RedisSS.save_tree_builder(card_id, ordered_nodes)
             # save tree structure
-            structure = sel_tree.structure
-            RedisSS.save_active_tree_NEW(structure, card_id)
+            RedisSS.save_tree_structure(card_id, sel_tree)
 
         tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
 
@@ -544,7 +542,7 @@ class DataSourceService(object):
 
             ordered_nodes = sel_tree.ordered_nodes
             structure = sel_tree.structure
-            RedisSS.insert_tree_NEW(structure, ordered_nodes,
+            RedisSS.save_tree_builder(structure, ordered_nodes,
                                     user_id, update_joins=False)
 
     @classmethod
@@ -783,7 +781,7 @@ class DataSourceService(object):
             ordered_nodes = sel_tree.ordered_nodes
             structure = sel_tree.structure
 
-            RedisSS.insert_tree_NEW(
+            RedisSS.save_tree_builder(
                 card_id, ordered_nodes, update_joins=False)
 
             # если совсем нет ошибок ни у кого, то на клиенте перерисуем дерево,
