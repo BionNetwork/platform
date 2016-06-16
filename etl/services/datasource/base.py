@@ -329,7 +329,6 @@ class DataSourceService(object):
     def try_tree_restruct(cls, card_id, source_id, table):
         """
         """
-        # TODO
         node_id = cls.cache_columns(card_id, source_id, table)
 
         sel_tree = cls.rebuild_tree(card_id, source_id, table)
@@ -1266,4 +1265,4 @@ class DataSourceService(object):
         sel_tree = TableTreeRepository.build_tree_by_structure(structure)
         node_info = sel_tree.get_node_info(node_id)
         actives = RedisSS.get_card_builder_data(card_id)
-        return RedisSS.get_node_info(actives, node_info)
+        return RedisSS.get_node_cols(actives, node_info)
