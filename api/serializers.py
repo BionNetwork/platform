@@ -162,6 +162,10 @@ class NodeSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         pass
 
+class ParentIdSerializer(serializers.Serializer):
+
+    parent_id = serializers.IntegerField()
+
 
 class TreeSerializerRequest(serializers.Serializer):
 

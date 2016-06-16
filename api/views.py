@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 
 import logging
 from rest_framework import serializers
-
+from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
 from rest_framework.views import APIView
@@ -11,7 +11,8 @@ from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, CardDatasourceSerializer, TaskSerializer, tasks,
-    TableSerializer, NodeSerializer, TreeSerializer, TreeSerializerRequest)
+    TableSerializer, NodeSerializer, TreeSerializer, TreeSerializerRequest,
+    ParentIdSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys, CardDatasource)
@@ -276,13 +277,13 @@ class CardViewSet(viewsets.ViewSet):
         card_id = pk
 
         data = [
-            {"source_id": 2, "table_name": u'auth_group', },
-            # {"source_id": 2, "table_name": u'auth_group_permissions', },
-            # {"source_id": 2, "table_name": u'auth_permission', },
-            # {"source_id": 2, "table_name": u'card_card', },
-            {"source_id": 1, "table_name": u'Лист1', },
-            {"source_id": 1, "table_name": u'List3', },
-            # {"source_id": 1, "table_name": u'Лист2', },
+            {"source_id": 1, "table_name": u"auth_group", },
+            {"source_id": 1, "table_name": u"auth_group_permissions", },
+            {"source_id": 1, "table_name": u"auth_permission", },
+            {"source_id": 1, "table_name": u"card_card", },
+            {"source_id": 4, "table_name": u"list1", },
+            {"source_id": 4, "table_name": u"List3", },
+            {"source_id": 4, "table_name": u"Лист2", },
         ]
 
         serializer = self.serializer_class(data=data, many=True)
@@ -340,35 +341,38 @@ class NodeViewSet(viewsets.ViewSet):
     def retrieve(self, request, card_pk=None, pk=None):
         # достаем структуру дерева из редиса
         # FIXME: Перенести в сервис Datasource
-        structure = RedisSS.get_active_tree_structure_NEW(card_pk)
-        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
-        node_info = sel_tree.get_node_info(pk)
-        actives = RedisSS.get_card_builder_data(card_pk)
-        data = RedisSS.get_node_info(actives, node_info)
 
         data = DataSourceService.get_node(card_pk, pk)
 
         return Response(data={
                 'id': pk,
-                'source_id': data['sid'],
-                'table_name': data['value'],
-                'dest': data['parent_id'],
-                'is_root': data['is_root'],
-                'is_remain': False,
+                'sid': data['sid'],
+                'value': data['value'],
+                'parent_id': data['parent_id'],
                 'is_bind': not data['without_bind']
             })
     # [{"source_id":1,"table_name":"cubes"},{"source_id":1,"table_name":"datasets"}]
 
-    @detail_route(methods=['post'])
+    @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
     def reparent(self, request, card_pk, pk):
         """
-        Изменение родительского узла, перенос ноды с одгного места на другое
-        """
-        node_id = pk
-        parent_id = request.data['parent_id']
+        Изменение родительского узла, перенос узла с одного места на другое
 
-        info = DataSourceService.reparent(card_pk, node_id, parent_id)
-        return Response(info)
+        Args:
+            card_pk(int): id карточки
+            pk(int): id узла
+
+        Returns:
+            dict: Информацию об связанных/не связанных узлах дерева и остатка
+        """
+        serializer = self.serializer_class(data=request.data, many=True)
+        if serializer.is_valid(raise_exception=True):
+            try:
+                info = DataSourceService.reparent(
+                    card_pk, request.data['parent_id'], pk)
+                return Response(info)
+            except Exception as ex:
+                raise APIException(ex.message)
 
     @detail_route(methods=['get'])
     def to_remain(self, request, card_pk, pk):
@@ -395,19 +399,28 @@ class NodeViewSet(viewsets.ViewSet):
         info = DataSourceService.from_remain_to_whatever(card_pk, pk)
         return Response(info)
 
-    @detail_route(methods=['post'])
+    @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
     def remain_current(self, request, card_pk, pk):
         """
         Перенос узла из остатков в основное дерево
         в определенный узел
+
+        Args:
+            card_pk(int): id карточки
+            pk(int): id узла
+
+        Returns:
+            dict: Информацию об связанных/не связанных узлах дерева и остатка
         """
-        node_id = pk
-        parent_id = request.data['parent_id']
-
-        info = DataSourceService.from_remain_to_certain(
-            card_pk, node_id, parent_id)
-
-        return Response(info)
+        serializer = self.serializer_class(data=request.data, many=True)
+        if serializer.is_valid(raise_exception=True):
+            try:
+                parent_id = request.data['parent_id']
+                info = DataSourceService.from_remain_to_certain(
+                    card_pk, parent_id, pk)
+                return Response(info)
+            except Exception as ex:
+                raise APIException(ex.message)
 
 
 class JoinViewSet(viewsets.ViewSet):
@@ -426,21 +439,21 @@ class JoinViewSet(viewsets.ViewSet):
 
         Returns:
         """
-        right_data = DataSourceService.get_node(card_pk, node_pk)
-        left_data = DataSourceService.get_node(card_pk, pk)
-        parent_sid = right_data['source_id']
-        child_sid = left_data['source_id']
-
-        parent_table = right_data['tname']
-        child_table = left_data['tname']
 
         data = DataSourceService.get_columns_and_joins(
-            request.user.id, parent_table, parent_sid, child_table, child_sid)
+            card_pk, int(node_pk), int(pk))
 
         return Response(data=data)
 
     def update(self, request, card_pk=None, node_pk=None, pk=None):
         """
+        Обновление связи между узлами
+
+        Args:
+            card_pk(int): id карточки
+            node_pk(int): id родительского узла
+            pk(int): id узла-потомка
+
         {
         "joins":
         {
@@ -453,11 +466,11 @@ class JoinViewSet(viewsets.ViewSet):
 
         right_data = DataSourceService.get_node(card_pk, node_pk)
         left_data = DataSourceService.get_node(card_pk, pk)
-        parent_sid = right_data['source_id']
-        child_sid = left_data['source_id']
+        parent_sid = right_data['sid']
+        child_sid = left_data['sid']
 
-        parent_table = right_data['tname']
-        child_table = left_data['tname']
+        parent_table = right_data['value']
+        child_table = left_data['value']
 
         join_type = 'inner'
 

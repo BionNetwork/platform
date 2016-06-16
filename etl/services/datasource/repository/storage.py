@@ -1033,7 +1033,6 @@ class RedisSourceService(object):
                     'value': remain,
                     'sid': s_info,
                     'parent_id': None,
-                    'is_root': False,
                     'without_bind': True,
                     'node_id': remain_id,
                 })
@@ -1070,15 +1069,15 @@ class RedisSourceService(object):
                 'val': table,
                 'sid': source_id,
                 'parent_id': getattr(node.parent, 'node_id', None),
-                'is_root': not ind,
+                # 'is_root': not ind,
                 'without_bind': False,
                 'node_id': node.node_id,
             }
-            table_info = cls.get_table_info(node.node_id, source_id)
-
-            n_info['cols'] = [{'col_name': x['name'],
-                               'col_title': x.get('title', None), }
-                              for x in table_info['columns']]
+            # table_info = cls.get_table_info(node.node_id, source_id)
+            #
+            # n_info['cols'] = [{'col_name': x['name'],
+            #                    'col_title': x.get('title', None), }
+            #                   for x in table_info['columns']]
             result.append(n_info)
 
         return result
@@ -1441,9 +1440,7 @@ class RedisSourceService(object):
     def get_card_builder_data(cls, card_id):
         """
         """
-        card_key = RKeys.get_user_card_key(card_id)
-        builder = cls.get_card_builder(card_key)
-        return builder['data']
+        return cls.get_card_builder(card_id)['data']
 
     @classmethod
     def get_table_name_or_id(cls, table, card_id, sid):
@@ -1597,10 +1594,56 @@ class RedisSourceService(object):
         return good_joins, error_joins
 
     @classmethod
-    def get_good_error_joins_NEW(cls, user_id, parent_table, parent_sid,
-                                 child_table, child_sid):
+    def get_joins(cls, card_id, parent_id, child_id):
+        """
+        Получение информацию по связям узлов
+        """
+        card_key = RKeys.get_user_card_key(card_id)
+        active_tree = cls.r_get(RKeys.get_active_tree(card_key))
+        return cls.get_join(active_tree, parent_id, child_id)
 
-        card_key = RKeys.get_user_card_key(user_id)
+
+    @classmethod
+    def get_join(cls, tree, parent_id, child_id):
+        """
+        Рекурсивно получаем необходимую пару предок-потомок
+        """
+        if tree['node_id'] == parent_id:
+            parent_value = tree['val']
+            for el in tree['childs']:
+                if el['node_id'] == child_id:
+                    child_value = el['val']
+                    return cls.construct_join_info(
+                        el['joins'], parent_value, child_value)
+        else:
+            for el in tree['childs']:
+                cls.get_joins(el, parent_id, child_id)
+        return None, []
+
+    @classmethod
+    def construct_join_info(cls, joins, parent, child):
+        """
+        Собираем к нужному виду информацию о связе для пары узлов
+        """
+        join_type = joins[0]['join']['type']
+        cols_info = []
+        for el in joins:
+            d = {
+                'left': el['left']['column'] if el['left']['table'] == parent else el['right']['column'],
+                'right': el['left']['column'] if el['left']['table'] == child else el['right']['column'],
+                'join': el['join']['value']
+            }
+            cols_info.append(d)
+
+        return join_type, cols_info
+
+
+    @classmethod
+    def get_good_error_joins_NEW(cls, card_id, parent_table, parent_sid,
+                                 child_table, child_sid):
+        # FIXME: к удалению ?
+
+        card_key = RKeys.get_user_card_key(card_id)
         r_joins = cls.get_source_joins(card_key)
 
         t_s = T_S.format(parent_table, parent_sid)
@@ -1625,6 +1668,7 @@ class RedisSourceService(object):
 
     @classmethod
     def get_source_joins(cls, source_key):
+        # FIXME: к удалению ?
         str_joins = RedisCacheKeys.get_source_joins(source_key)
         return json.loads(r_server.get(str_joins))
 

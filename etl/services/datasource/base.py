@@ -204,7 +204,14 @@ class DataSourceService(object):
     @classmethod
     def from_remain_to_whatever(cls, card_id, node_id):
         """
-        Добавление из остатков куда-либо
+        Добавление из остатков в любое место активного дерева
+
+        Args:
+            card_id: id карточки
+            node_id: id узла
+
+        Returns:
+            dict: Информацию об связанных/не связанных узлах дерева и остатка
         """
         node_info = RedisSS.get_node_info_from_remain(card_id, node_id)
 
@@ -219,7 +226,7 @@ class DataSourceService(object):
         return info
 
     @classmethod
-    def from_remain_to_certain(cls, card_id, child_id, parent_id):
+    def from_remain_to_certain(cls, card_id, parent_id, child_id):
         """
         Добавление из остатков в определенную ноду
         """
@@ -267,9 +274,17 @@ class DataSourceService(object):
         }
 
     @classmethod
-    def reparent(cls, card_id, child_id, parent_id):
+    def reparent(cls, card_id, parent_id, child_id):
         """
         Пытаемся перетащить узел дерева из одного места в другое
+
+        Args:
+            card_id(int): id карточки
+            parent_id(int): id родительского узла
+            child_id(int): id узла-потомка
+
+        Returns:
+            dict: Информацию об связанных/не связанных узлах дерева и остатка
         """
         sel_tree = cls.get_tree(card_id)
 
@@ -602,21 +617,23 @@ class DataSourceService(object):
         return result
 
     @classmethod
-    def get_columns_and_joins(cls, user_id, parent_table, parent_sid,
-                              child_table, child_sid):
+    def get_columns_and_joins(cls, card_id, parent_id, child_id):
         """
         """
+        right_data = DataSourceService.get_node(card_id, parent_id)
+        left_data = DataSourceService.get_node(card_id, child_id)
+        parent_sid, parent_table = right_data['sid'], right_data['value']
+        child_sid, child_table = left_data['sid'], left_data['value']
+
         columns = RedisSS.get_columns_for_joins(
-            user_id, parent_table, parent_sid, child_table, child_sid)
+            card_id, parent_table, parent_sid, child_table, child_sid)
 
-        good_joins, error_joins = RedisSS.get_good_error_joins_NEW(
-            user_id, parent_table, parent_sid, child_table, child_sid)
+        join_type, cols_info = RedisSS.get_joins(card_id, parent_id, child_id)
 
-        result = {'columns': columns,
-                  'good_joins': good_joins,
-                  'error_joins': error_joins,
+        return {'columns': columns,
+                'join_type': join_type,
+                'joins': cols_info
                   }
-        return result
 
     @classmethod
     def check_new_joins(cls, source, left_table, right_table, joins):
