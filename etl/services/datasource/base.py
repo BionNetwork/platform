@@ -767,10 +767,6 @@ class DataSourceService(object):
         good_joins, error_joins, joins_set = cls.check_new_joins_NEW(
             card_id, left_table, left_sid, right_table, right_sid, joins)
 
-        data = RedisSourceService.save_good_error_joins_NEW(
-            card_id, left_table, left_sid, right_table, right_sid,
-            good_joins, error_joins, join_type)
-
         if not error_joins:
             # Получаем структуру дерева из редиса
             structure = RedisSS.get_active_tree_structure_NEW(card_id)
@@ -779,25 +775,18 @@ class DataSourceService(object):
 
             sel_tree.update_node_joins_NEW(left_table, left_sid, right_table,
                                            right_sid, child_node_id, join_type, joins_set)
+            RedisSS.save_tree_structure(card_id, sel_tree)
             # сохраняем дерево
             ordered_nodes = sel_tree.ordered_nodes
-            structure = sel_tree.structure
 
-            RedisSS.save_tree_builder(
-                card_id, ordered_nodes, update_joins=False)
+            # RedisSS.save_tree_builder(card_id, ordered_nodes)
 
             # если совсем нет ошибок ни у кого, то на клиенте перерисуем дерево,
             # на всякий пожарный
             # data['draw_table'] = RedisSS.get_final_info_NEW(
             #     ordered_nodes, user_id)
 
-            # # работа с последней таблицей
-            # remain = RedisSourceService.get_last_remain(source_key)
-            # if remain == right_table:
-            #     # удаляем инфу о таблице без связи, если она есть
-            #     RedisSourceService.delete_last_remain(source_key)
-
-        return data
+        return {}
 
     @staticmethod
     def get_collections_names(source, tables):
