@@ -160,9 +160,9 @@ class TablesTree(object):
     def build(self, tables, tables_info):
         self.no_bind_tables = self._build([self.root], tables, tables_info)
 
-    def build_NEW(self, table, source_id, tables_info):
+    def build_NEW(self, table, source_id,  node_id, tables_info):
         remain = self._build_NEW(
-            [self.root, ], table, source_id, tables_info)
+            [self.root, ], table, source_id,  node_id, tables_info)
 
         return remain
 
@@ -250,55 +250,48 @@ class TablesTree(object):
         return tables
 
     @classmethod
-    def _build_NEW(cls, children, table, source_id, tables_info):
+    def _build_NEW(cls, children, table, source_id, node_id, tables_info):
         """
         строит дерево таблиц, возвращает таблицы без связей
-
-        Args:
-            children(list of Node):
-            tables
-            tables_info
-
-        Returns:
-            list: Список не связанных таблиц
         """
-        table_tuple = (table, source_id)
-        child_vals = [(x.val, x.source_id) for x in children]
+        # table_tuple = (table, source_id)
+        # child_vals = [(x.val, x.source_id) for x in children]
+
+        # if table_tuple not in child_vals:
 
         s = u"{0}_{1}"
 
-        if table_tuple not in child_vals:
+        new_children = []
 
-            new_children = []
+        for child in children:
+            new_children += child.childs
+            l_val = child.val
+            l_source = child.source_id
+            l_info = tables_info[s.format(l_source, l_val)]
 
-            for child in children:
-                new_children += child.childs
-                l_val = child.val
-                l_source = child.source_id
-                l_info = tables_info[s.format(l_source, l_val)]
+            r_info = tables_info[s.format(source_id, table)]
+            joins = cls.get_joins_NEW(
+                l_val, table, l_info, r_info)
 
-                r_info = tables_info[s.format(source_id, table)]
-                joins = cls.get_joins_NEW(
-                    l_val, table, l_info, r_info)
+            if joins:
+                new_node = Node(table, source_id, parent=child,
+                                joins=joins, node_id=node_id)
+                child.childs.append(new_node)
+                new_children.append(new_node)
 
-                if joins:
-                    new_node = Node(table, source_id, parent=child, joins=joins)
-                    child.childs.append(new_node)
-                    new_children.append(new_node)
+                table = None
+                break
 
-                    table = None
-                    break
-
-            if new_children and table is not None:
-                table = cls._build_NEW(
-                    new_children, table, source_id, tables_info)
+        if new_children and table is not None:
+            table = cls._build_NEW(
+                new_children, table, source_id, node_id, tables_info)
 
         # таблицы без связей
         return table
 
     @classmethod
-    def build_mono_node(cls, parent_node, child_node_info,
-                        parent_info, child_info):
+    def try_bind_two_nodes(cls, parent_node, child_node_info,
+                           parent_info, child_info):
         """
         Пытается связать к дереву 1 новый узел
         """
@@ -669,11 +662,12 @@ class TableTreeRepository(object):
         return trees, without_bind
 
     @staticmethod
-    def build_single_root(table, source_id):
+    def build_single_root(node_info):
         """
         Строит дерево из 1 элемента
         """
-        tree = TablesTree(table, source_id)
+        tree = TablesTree(
+            node_info['value'], node_info['sid'], node_info['node_id'])
         return tree
 
     @staticmethod

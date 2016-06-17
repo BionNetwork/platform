@@ -202,30 +202,6 @@ class DataSourceService(object):
         return RedisSourceService.get_final_info(ordered_nodes, source, last)
 
     @classmethod
-    def from_remain_to_whatever(cls, card_id, node_id):
-        """
-        Добавление из остатков в любое место активного дерева
-
-        Args:
-            card_id: id карточки
-            node_id: id узла
-
-        Returns:
-            dict: Информацию об связанных/не связанных узлах дерева и остатка
-        """
-        node_info = RedisSS.get_node_info_from_remain(card_id, node_id)
-
-        if node_info is None:
-            raise Exception('No such item in remians!')
-
-        source_id = node_info['source_id']
-        table = node_info['tname']
-
-        source = Datasource.objects.get(id=int(source_id))
-        info = DataSourceService.try_tree_restruct(card_id, source, table)
-        return info
-
-    @classmethod
     def from_remain_to_certain(cls, card_id, parent_id, child_id):
         """
         Добавление из остатков в определенную ноду
@@ -245,7 +221,7 @@ class DataSourceService(object):
         parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
         child_info = RedisSS.get_table_info(child_id, ch_node_info["sid"])
 
-        remain = sel_tree.build_mono_node(
+        remain = sel_tree.try_bind_two_nodes(
             p_node, ch_node_info, parent_info, child_info)
 
         ordered_nodes = sel_tree.ordered_nodes
@@ -258,7 +234,7 @@ class DataSourceService(object):
             RedisSS.save_tree_structure(card_id, sel_tree)
 
         tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
-        remains = RedisSS.extract_card_remains_from_storage(card_id)
+        remains = RedisSS.extract_card_remains(card_id)
 
         # если не забиндилось, то отдаем инфу об остатке
         if remain:
@@ -314,7 +290,7 @@ class DataSourceService(object):
             RedisSS.save_tree_structure(card_id, sel_tree)
 
         tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
-        remains = RedisSS.extract_card_remains_from_storage(card_id)
+        remains = RedisSS.extract_card_remains(card_id)
 
         # если не забиндилось, то отдаем инфу об остатке
         if remain:
@@ -341,81 +317,61 @@ class DataSourceService(object):
         return tree
 
     @classmethod
-    def try_tree_restruct(cls, card_id, source_id, table):
+    def get_tail(cls, remains, node_id):
         """
+        Из остатков определяет последнюю несвязанную ноду
         """
-        node_id = cls.cache_columns(card_id, source_id, table)
+        for remain in remains:
+            if str(remain["node_id"]) == str(node_id):
+                remains.remove(remain)
+                return remain
 
-        sel_tree = cls.rebuild_tree(card_id, source_id, table)
+    @classmethod
+    def add_randomly_from_remains(cls, card_id, node_id):
+        """
+        Пытаемся связать остаток с деревом в любое место
+        """
+
+        node_info = RedisSS.get_node_info_from_remain(card_id, node_id)
+
+        table, source_id = node_info['value'], node_info['sid']
+
+        if not RedisSS.check_tree_exists_NEW(card_id):
+            sel_tree = TableTreeRepository.build_single_root(node_info)
+            resave = True
+        else:
+            # достаем деревo из редиса
+            sel_tree = cls.get_tree(card_id)
+            ordered_nodes = sel_tree.ordered_nodes
+
+            tables_info = RedisSS.info_for_tree_building_NEW(
+                ordered_nodes, card_id, node_info)
+
+            # перестраиваем дерево
+            unbinded = sel_tree.build_NEW(
+                table, source_id, node_id, tables_info)
+            resave = unbinded is None
+
         ordered_nodes = sel_tree.ordered_nodes
 
-        # новая таблица без связи, если таблица в дереве,
-        # то without_bind тоже пустой
-        if sel_tree.without_bind:
-            RedisSourceService.insert_without_bind(
-                sel_tree.without_bind, card_id, source_id)
-        # новой таблицы нет в дереве
-        elif not sel_tree.already_in:
+        # признак того, что дерево перестроилось
+        if resave:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.save_tree_builder(card_id, ordered_nodes)
+            RedisSS.save_tree_builder(card_id, node_info)
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
         tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
+        remains = RedisSS.extract_card_remains(card_id)
 
-        remains = RedisSS.extract_card_remains_from_storage(card_id)
+        # determining unbinded tail
+        tail_ = cls.get_tail(remains, node_id) if not resave else None
 
-        remain = None
-        if sel_tree.without_bind:
-            for rem in remains:
-                if (rem["value"] == table and
-                        str(rem["sid"]) == str(source_id)):
-                    remain = rem
-                    remains.remove(rem)
-                    break
         return {
             'tree_nodes': tree_nodes,
             'remains': remains,
-            'tail': remain,
+            'tail': tail_,
         }
-
-    @classmethod
-    def rebuild_tree(cls, card_id, source_id, table):
-        """
-        Строит дерево, если его нет, иначе перестраивает
-        """
-        tree_exists = RedisSS.check_tree_exists_NEW(card_id)
-
-        # признак таблицы без связи
-        without_bind = None
-
-        # дерева еще нет
-        if not tree_exists:
-            RedisSS.info_for_tree_building_NEW((), card_id, table, source_id)
-            sel_tree = TableTreeRepository.build_single_root(table, source_id)
-            # пытались забиндить таблицу, которая уже в дереве
-            already_in = False
-
-        # иначе достраиваем дерево, если можем, если не можем вернем остаток
-        else:
-            # достаем деревo из редиса
-            sel_tree = cls.get_tree(card_id)
-
-            already_in = sel_tree.contains(table, source_id)
-
-            if not already_in:
-                ordered_nodes = sel_tree.ordered_nodes
-
-                tables_info = RedisSS.info_for_tree_building_NEW(
-                    ordered_nodes, card_id, table, source_id)
-
-                # перестраиваем дерево
-                without_bind = sel_tree.build_NEW(table, source_id, tables_info)
-
-        sel_tree.without_bind = without_bind
-        sel_tree.already_in = already_in
-
-        return sel_tree
 
     @classmethod
     def get_tree_api(cls, card_id):
@@ -436,7 +392,7 @@ class DataSourceService(object):
             ordered_nodes = sel_tree.ordered_nodes
 
             tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
-            remains = RedisSS.extract_card_remains_from_storage(card_id)
+            remains = RedisSS.extract_card_remains(card_id)
 
         return {
                 'tree_nodes': tree_nodes,
@@ -1283,3 +1239,25 @@ class DataSourceService(object):
         node_info = sel_tree.get_node_info(node_id)
         actives = RedisSS.get_card_builder_data(card_id)
         return RedisSS.get_node_cols(actives, node_info)
+
+    @classmethod
+    def check_node_id_in_builder(cls, card_id, node_id, in_remain=True):
+        """
+        Проверяет есть ли данный id в билдере карты в активных или остатках
+        """
+        node_id = int(node_id)
+        b_data = RedisSS.get_card_builder_data(card_id)
+
+        for sid in b_data:
+            s_data = b_data[sid]
+            # проверка в остатках
+            if in_remain:
+                for remain, remain_id in s_data['remains'].iteritems():
+                    if int(remain_id) == node_id:
+                        return True
+            # проверка в активных
+            else:
+                for active, active_id in s_data['actives'].iteritems():
+                    if int(active_id) == node_id:
+                        return True
+        return False

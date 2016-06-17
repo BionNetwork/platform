@@ -277,28 +277,74 @@ class CardViewSet(viewsets.ViewSet):
         card_id = pk
 
         data = [
-            {"source_id": 1, "table_name": u"auth_group", },
-            {"source_id": 1, "table_name": u"auth_group_permissions", },
-            {"source_id": 1, "table_name": u"auth_permission", },
-            {"source_id": 1, "table_name": u"card_card", },
-            {"source_id": 4, "table_name": u"list1", },
-            {"source_id": 4, "table_name": u"List3", },
-            {"source_id": 4, "table_name": u"Лист2", },
+            {"source_id": 2, "table_name": u'auth_group', },
+            # {"source_id": 2, "table_name": u'auth_group_permissions', },
+            # {"source_id": 2, "table_name": u'auth_permission', },
+            # {"source_id": 2, "table_name": u'card_card', },
+            {"source_id": 1, "table_name": u'Лист1', },
+            {"source_id": 1, "table_name": u'List3', },
+            # {"source_id": 1, "table_name": u'Лист2', },
+            
+            # {"source_id": 1, "table_name": u"auth_group", },
+            # {"source_id": 1, "table_name": u"auth_group_permissions", },
+            # {"source_id": 1, "table_name": u"auth_permission", },
+            # {"source_id": 1, "table_name": u"card_card", },
+            # {"source_id": 4, "table_name": u"list1", },
+            # {"source_id": 4, "table_name": u"List3", },
+            # {"source_id": 4, "table_name": u"Лист2", },
         ]
 
-        serializer = self.serializer_class(data=data, many=True)
         info = []
 
+        serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
             for each in data:
 
-                table = each['table_name']
-                source_id = each['source_id']
+                node_id = DataSourceService.cache_columns(
+                    card_id, each['source_id'], each['table_name'])
 
-                info = DataSourceService.try_tree_restruct(
-                    card_id, source_id, table)
+                info = DataSourceService.add_randomly_from_remains(
+                    card_id, node_id)
 
         return Response(info)
+
+
+def check_parent(func):
+    """
+    Проверка ID родителя на существование
+    """
+    def inner(*args, **kwargs):
+        request = args[1]
+        card_id = int(kwargs['card_pk'])
+        parent_id = int(request.data.get('parent_id'))
+
+        if not DataSourceService.check_node_id_in_builder(
+                card_id, parent_id, in_remain=False):
+            raise APIException("No such node id in builder!")
+
+        return func(*args, **kwargs)
+    return inner
+
+
+def check_child(in_remain=True):
+    """
+    Проверка ID ребенка на существование, если in_remain=True,
+    то проверяет в остатках, иначе в активных
+    """
+    def inner(func):
+        def inner(*args, **kwargs):
+
+            node_id = int(kwargs['pk'])
+            card_id = int(kwargs['card_pk'])
+
+            # проверка узла родителя
+            if not DataSourceService.check_node_id_in_builder(
+                    card_id, node_id, in_remain):
+                raise APIException("No such node id in builder!")
+
+            return func(*args, **kwargs)
+        return inner
+    return inner
 
 
 class NodeViewSet(viewsets.ViewSet):
@@ -319,29 +365,10 @@ class NodeViewSet(viewsets.ViewSet):
         # if serializer.is_valid():
         return Response(data=data)
 
-    # def create(self, request):
-    #     data = request.POST
-    #     source = Datasource.objects.get(id=4)
-    #     table = 'tname'
-    #     info = DataSourceService.get_tree_info(
-    #         source, table)
-    #     return
-    #
-    # def update(self, request, card_pk=None, pk=None):
-    #     return Response(data={
-    #             'id': 1,
-    #             'source_id': 1,
-    #             'table_name': 'cubes',
-    #             'dest': 'abc',
-    #             'is_root': True,
-    #             'is_remain': False,
-    #             'is_bind': True
-    #         })
-
     def retrieve(self, request, card_pk=None, pk=None):
-        # достаем структуру дерева из редиса
-        # FIXME: Перенести в сервис Datasource
-
+        """
+        Инфа ноды
+        """
         data = DataSourceService.get_node(card_pk, pk)
 
         return Response(data={
@@ -351,9 +378,10 @@ class NodeViewSet(viewsets.ViewSet):
                 'parent_id': data['parent_id'],
                 'is_bind': not data['without_bind']
             })
-    # [{"source_id":1,"table_name":"cubes"},{"source_id":1,"table_name":"datasets"}]
 
     @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
+    @check_child(in_remain=False)
+    @check_parent
     def reparent(self, request, card_pk, pk):
         """
         Изменение родительского узла, перенос узла с одного места на другое
@@ -375,6 +403,7 @@ class NodeViewSet(viewsets.ViewSet):
                 raise APIException(ex.message)
 
     @detail_route(methods=['get'])
+    @check_child(in_remain=False)
     def to_remain(self, request, card_pk, pk):
         """
         Добавлеине узла дерева в остатки
@@ -391,15 +420,20 @@ class NodeViewSet(viewsets.ViewSet):
         """
 
     @detail_route(methods=['post'])
+    @check_child
     def remain_whatever(self, request, card_pk, pk):
         """
         Перенос узла из остатков в основное дерево
         в произвольное место
         """
-        info = DataSourceService.from_remain_to_whatever(card_pk, pk)
+        node_id = pk
+        info = DataSourceService.add_randomly_from_remains(
+                    card_pk, node_id)
         return Response(info)
 
     @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
+    @check_child
+    @check_parent
     def remain_current(self, request, card_pk, pk):
         """
         Перенос узла из остатков в основное дерево
@@ -421,6 +455,13 @@ class NodeViewSet(viewsets.ViewSet):
                 return Response(info)
             except Exception as ex:
                 raise APIException(ex.message)
+
+    @detail_route(methods=['post'])
+    # @check_child(in_remain=False)
+    @check_parent
+    def decor(self, request, card_pk, pk):
+
+        return Response('OK')
 
 
 class JoinViewSet(viewsets.ViewSet):
