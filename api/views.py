@@ -456,13 +456,6 @@ class NodeViewSet(viewsets.ViewSet):
             except Exception as ex:
                 raise APIException(ex.message)
 
-    @detail_route(methods=['post'])
-    # @check_child(in_remain=False)
-    @check_parent
-    def decor(self, request, card_pk, pk):
-
-        return Response('OK')
-
 
 class JoinViewSet(viewsets.ViewSet):
     """

@@ -202,131 +202,6 @@ class DataSourceService(object):
         return RedisSourceService.get_final_info(ordered_nodes, source, last)
 
     @classmethod
-    def from_remain_to_certain(cls, card_id, parent_id, child_id):
-        """
-        Добавление из остатков в определенную ноду
-        """
-        sel_tree = cls.get_tree(card_id)
-
-        p_node = sel_tree.get_node(parent_id)
-        if p_node is None:
-            raise Exception("Incorrect parent ID!")
-
-        # child node must be in remains
-        ch_node_info = RedisSS.get_node_info_from_remain(card_id, child_id)
-
-        if ch_node_info is None:
-            raise Exception("Incorrect child ID!")
-
-        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
-        child_info = RedisSS.get_table_info(child_id, ch_node_info["sid"])
-
-        remain = sel_tree.try_bind_two_nodes(
-            p_node, ch_node_info, parent_info, child_info)
-
-        ordered_nodes = sel_tree.ordered_nodes
-
-        # если забиндилось
-        if remain is None:
-            # сохраняем дерево, если таблицы не в дереве
-            RedisSS.save_tree_builder(card_id, ordered_nodes)
-            # save tree structure
-            RedisSS.save_tree_structure(card_id, sel_tree)
-
-        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
-        remains = RedisSS.extract_card_remains(card_id)
-
-        # если не забиндилось, то отдаем инфу об остатке
-        if remain:
-            for rem in remains:
-                if int(rem["node_id"]) == int(child_id):
-                    remain = rem
-                    remains.remove(rem)
-                    break
-        return {
-            'tree_nodes': tree_nodes,
-            'remains': remains,
-            'tail': remain,
-        }
-
-    @classmethod
-    def reparent(cls, card_id, parent_id, child_id):
-        """
-        Пытаемся перетащить узел дерева из одного места в другое
-
-        Args:
-            card_id(int): id карточки
-            parent_id(int): id родительского узла
-            child_id(int): id узла-потомка
-
-        Returns:
-            dict: Информацию об связанных/не связанных узлах дерева и остатка
-        """
-        sel_tree = cls.get_tree(card_id)
-
-        p_node = sel_tree.get_node(parent_id)
-        if p_node is None:
-            raise Exception("Incorrect parent ID!")
-
-        # child node must be in actives
-        ch_node = sel_tree.get_node(child_id)
-
-        if ch_node is None:
-            raise Exception("Incorrect child ID!")
-
-        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
-        child_info = RedisSS.get_table_info(child_id, ch_node.source_id)
-
-        remain = sel_tree.reparent_node(
-            p_node, ch_node, parent_info, child_info)
-
-        ordered_nodes = sel_tree.ordered_nodes
-
-        # если забиндилось
-        if remain is None:
-            # сохраняем дерево, если таблицы не в дереве
-            RedisSS.save_tree_builder(card_id, ordered_nodes)
-            # save tree structure
-            RedisSS.save_tree_structure(card_id, sel_tree)
-
-        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
-        remains = RedisSS.extract_card_remains(card_id)
-
-        # если не забиндилось, то отдаем инфу об остатке
-        if remain:
-            for rem in remains:
-                if int(rem["node_id"]) == int(child_id):
-                    remain = rem
-                    remains.remove(rem)
-                    break
-        return {
-            'tree_nodes': tree_nodes,
-            'remains': remains,
-            'tail': remain,
-        }
-
-    @classmethod
-    def get_tree(cls, card_id):
-        """
-        Достает дерево карты
-        """
-        # достаем структуру дерева из редиса
-        structure = RedisSS.get_active_tree_structure_NEW(card_id)
-        # строим дерево
-        tree = TableTreeRepository.build_tree_by_structure(structure)
-        return tree
-
-    @classmethod
-    def get_tail(cls, remains, node_id):
-        """
-        Из остатков определяет последнюю несвязанную ноду
-        """
-        for remain in remains:
-            if str(remain["node_id"]) == str(node_id):
-                remains.remove(remain)
-                return remain
-
-    @classmethod
     def add_randomly_from_remains(cls, card_id, node_id):
         """
         Пытаемся связать остаток с деревом в любое место
@@ -372,6 +247,122 @@ class DataSourceService(object):
             'remains': remains,
             'tail': tail_,
         }
+
+    @classmethod
+    def from_remain_to_certain(cls, card_id, parent_id, child_id):
+        """
+        Добавление из остатков в определенную ноду
+        """
+        sel_tree = cls.get_tree(card_id)
+
+        p_node = sel_tree.get_node(parent_id)
+        if p_node is None:
+            raise Exception("Incorrect parent ID!")
+
+        # child node must be in remains
+        ch_node_info = RedisSS.get_node_info_from_remain(card_id, child_id)
+
+        if ch_node_info is None:
+            raise Exception("Incorrect child ID!")
+
+        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
+        child_info = RedisSS.get_table_info(child_id, ch_node_info["sid"])
+
+        remain = sel_tree.try_bind_two_nodes(
+            p_node, ch_node_info, parent_info, child_info)
+
+        # если забиндилось
+        if remain is None:
+            # сохраняем дерево, если таблицы не в дереве
+            RedisSS.save_tree_builder(card_id, ch_node_info)
+            # save tree structure
+            RedisSS.save_tree_structure(card_id, sel_tree)
+
+        tree_nodes = RedisSS.prepare_tree_nodes_info(
+            sel_tree.ordered_nodes)
+        remains = RedisSS.extract_card_remains(card_id)
+
+        # determining unbinded tail
+        tail_ = cls.get_tail(remains, child_id) if remain else None
+
+        return {
+            'tree_nodes': tree_nodes,
+            'remains': remains,
+            'tail': tail_,
+        }
+
+    @classmethod
+    def reparent(cls, card_id, parent_id, child_id):
+        """
+        Пытаемся перетащить узел дерева из одного места в другое
+
+        Args:
+            card_id(int): id карточки
+            parent_id(int): id родительского узла
+            child_id(int): id узла-потомка
+
+        Returns:
+            dict: Информацию об связанных/не связанных узлах дерева и остатка
+        """
+        sel_tree = cls.get_tree(card_id)
+
+        p_node = sel_tree.get_node(parent_id)
+        if p_node is None:
+            raise Exception("Incorrect parent ID!")
+
+        # child node must be in actives
+        ch_node = sel_tree.get_node(child_id)
+
+        if ch_node is None:
+            raise Exception("Incorrect child ID!")
+
+        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
+        child_info = RedisSS.get_table_info(child_id, ch_node.source_id)
+
+        remain = sel_tree.reparent_node(
+            p_node, ch_node, parent_info, child_info)
+
+        ordered_nodes = sel_tree.ordered_nodes
+
+        # если забиндилось
+        if remain is None:
+            # сохраняем дерево, если таблицы не в дереве
+            RedisSS.save_tree_builder(card_id, ordered_nodes)
+            # save tree structure
+            RedisSS.save_tree_structure(card_id, sel_tree)
+
+        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
+        remains = RedisSS.extract_card_remains(card_id)
+
+        # determining unbinded tail
+        tail_ = cls.get_tail(remains, child_id) if remain else None
+
+        return {
+            'tree_nodes': tree_nodes,
+            'remains': remains,
+            'tail': tail_,
+        }
+
+    @classmethod
+    def get_tree(cls, card_id):
+        """
+        Достает дерево карты
+        """
+        # достаем структуру дерева из редиса
+        structure = RedisSS.get_active_tree_structure_NEW(card_id)
+        # строим дерево
+        tree = TableTreeRepository.build_tree_by_structure(structure)
+        return tree
+
+    @classmethod
+    def get_tail(cls, remains, node_id):
+        """
+        Из остатков определяет последнюю несвязанную ноду
+        """
+        for remain in remains:
+            if str(remain["node_id"]) == str(node_id):
+                remains.remove(remain)
+                return remain
 
     @classmethod
     def get_tree_api(cls, card_id):
@@ -423,7 +414,9 @@ class DataSourceService(object):
             }
 
             # кладем инфу таблицы в остатки билдера дерева
-            table_id = RedisSS.put_table_info_in_builder(card_id, source_id, table, info)
+            table_id = RedisSS.put_table_info_in_builder(
+                card_id, source_id, table, info)
+
         return table_id
 
     @classmethod
