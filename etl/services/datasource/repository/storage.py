@@ -446,23 +446,7 @@ class RedisSourceService(object):
         return None
 
     @classmethod
-    def check_tree_exists(cls, source):
-        """
-        Проверяет существование дерева
-
-        Args:
-            source(Datasource): источник
-
-        Returns:
-            bool: Наличие 'user_datasource:<user_id>:<source_id>:active:tree'
-        """
-        source_key = cls.get_user_source(source)
-        str_active_tree = RedisCacheKeys.get_active_tree(source_key)
-
-        return r_server.exists(str_active_tree)
-
-    @classmethod
-    def check_tree_exists_NEW(cls, card_id):
+    def check_tree_exists(cls, card_id):
         """
         Проверяет существование дерева
 
@@ -614,9 +598,9 @@ class RedisSourceService(object):
         cls.save_active_tree(structure, source)
 
     @classmethod
-    def save_tree_builder(cls, card_id, node_info):
+    def put_remain_to_builder_actives(cls, card_id, node_info):
         """
-        сохраняем карту дерева
+        сохраняем карту дерева, перенос остатка в активные
         """
         builber = cls.get_card_builder(card_id)
         b_data = builber['data']
@@ -637,6 +621,26 @@ class RedisSourceService(object):
 
         del s_remains[table]
         s_actives[table] = node_id
+
+        cls.set_card_builder(card_id, builber)
+
+    @classmethod
+    def put_actives_to_builder_remains(cls, card_id, to_remain_nodes):
+        """
+        сохраняем карту дерева, перенос активов в остатки
+        """
+        builber = cls.get_card_builder(card_id)
+        b_data = builber['data']
+
+        for node in to_remain_nodes:
+            table, sid, node_id = (
+                node.val, str(node.source_id), node.node_id)
+
+            s_remains = b_data[sid]['remains']
+            s_actives = b_data[sid]['actives']
+
+            del s_actives[table]
+            s_remains[table] = node_id
 
         cls.set_card_builder(card_id, builber)
 

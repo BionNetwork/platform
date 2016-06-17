@@ -211,7 +211,7 @@ class DataSourceService(object):
 
         table, source_id = node_info['value'], node_info['sid']
 
-        if not RedisSS.check_tree_exists_NEW(card_id):
+        if not RedisSS.check_tree_exists(card_id):
             sel_tree = TableTreeRepository.build_single_root(node_info)
             resave = True
         else:
@@ -232,7 +232,7 @@ class DataSourceService(object):
         # признак того, что дерево перестроилось
         if resave:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.save_tree_builder(card_id, node_info)
+            RedisSS.put_remain_to_builder_actives(card_id, node_info)
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
@@ -274,7 +274,7 @@ class DataSourceService(object):
         # если забиндилось
         if remain is None:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.save_tree_builder(card_id, ch_node_info)
+            RedisSS.put_remain_to_builder_actives(card_id, ch_node_info)
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
@@ -322,26 +322,57 @@ class DataSourceService(object):
         remain = sel_tree.reparent_node(
             p_node, ch_node, parent_info, child_info)
 
-        ordered_nodes = sel_tree.ordered_nodes
-
         # если забиндилось
         if remain is None:
-            # сохраняем дерево, если таблицы не в дереве
-            RedisSS.save_tree_builder(card_id, ordered_nodes)
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
-        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
+        tree_nodes = RedisSS.prepare_tree_nodes_info(
+            sel_tree.ordered_nodes)
         remains = RedisSS.extract_card_remains(card_id)
 
-        # determining unbinded tail
-        tail_ = cls.get_tail(remains, child_id) if remain else None
+        # fixme неправильно, остаток должен браться не из ремаинов, а из активов
 
-        return {
-            'tree_nodes': tree_nodes,
-            'remains': remains,
-            'tail': tail_,
-        }
+        # # determining unbinded tail
+        # tail_ = cls.get_tail(remains, child_id) if remain else None
+        #
+        # return {
+        #     'tree_nodes': tree_nodes,
+        #     'remains': remains,
+        #     'tail': tail_,
+        # }
+
+    @classmethod
+    def send_nodes_to_remains(cls, card_id, node_id):
+        """
+        Перенос нодов дерева в остатки
+        """
+        sel_tree = cls.get_tree(card_id)
+        node = sel_tree.get_node(node_id)
+
+        # is root
+        if node.parent is None:
+            cls.full_tree_to_remains(card_id)
+        else:
+            node_to_remove = sel_tree.remove_sub_tree(node_id)
+
+            to_remain_nodes = sel_tree._get_tree_ordered_nodes(
+                [node_to_remove, ])
+            # сохраняем дерево, если таблицы не в дереве
+            RedisSS.put_actives_to_builder_remains(
+                card_id, to_remain_nodes)
+
+            # save tree structure
+            RedisSS.save_tree_structure(card_id, sel_tree)
+
+            tree_nodes = RedisSS.prepare_tree_nodes_info(
+                sel_tree.ordered_nodes)
+            remains = RedisSS.extract_card_remains(card_id)
+
+            return {
+                'tree_nodes': tree_nodes,
+                'remains': remains,
+            }
 
     @classmethod
     def get_tree(cls, card_id):
@@ -369,7 +400,7 @@ class DataSourceService(object):
         """
         Строит дерево, если его нет, иначе перестраивает
         """
-        tree_exists = RedisSS.check_tree_exists_NEW(card_id)
+        tree_exists = RedisSS.check_tree_exists(card_id)
 
         # дерева еще нет
         if not tree_exists:

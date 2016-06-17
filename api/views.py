@@ -299,7 +299,6 @@ class CardViewSet(viewsets.ViewSet):
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
             for each in data:
-
                 node_id = DataSourceService.cache_columns(
                     card_id, each['source_id'], each['table_name'])
 
@@ -409,7 +408,8 @@ class NodeViewSet(viewsets.ViewSet):
         Добавлеине узла дерева в остатки
         """
         node_id = pk
-        info = DataSourceService.send_nodes_to_remains(card_pk, node_id)
+        info = DataSourceService.send_nodes_to_remains(
+            card_pk, node_id)
 
         return Response(info)
 

@@ -82,7 +82,6 @@ class TablesTree(object):
 
     def __init__(self, t_name, source_id, node_id=None):
         self.root = Node(t_name, source_id, node_id=node_id)
-        self.no_bind_tables = None
 
     def display(self):
         if self.root:
@@ -631,6 +630,25 @@ class TablesTree(object):
                 node.childs.remove(child)
             else:
                 cls._delete_nodes_from_tree_NEW(child, tables)
+
+    def remove_sub_tree(self, node_id):
+        """
+        Удаление поддерева по id,
+        возвращает корень этого поддерева
+        """
+        node_id = int(node_id)
+        node = self.get_node(node_id)
+        parent = node.parent
+
+        if parent is not None:
+            for child in parent.childs:
+                if child.node_id == node_id:
+                    parent.childs.remove(child)
+                    break
+
+        node.parent = None
+
+        return node
 
 
 class TableTreeRepository(object):
