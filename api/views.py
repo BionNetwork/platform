@@ -498,19 +498,19 @@ class JoinViewSet(viewsets.ViewSet):
 }
         """
 
-        right_data = DataSourceService.get_node(card_pk, node_pk)
-        left_data = DataSourceService.get_node(card_pk, pk)
-        parent_sid = right_data['sid']
-        child_sid = left_data['sid']
+        right_data = DataSourceService.get_node(card_pk, pk)
+        left_data = DataSourceService.get_node(card_pk, node_pk)
+        parent_sid = left_data['sid']
+        child_sid = right_data['sid']
 
-        parent_table = right_data['value']
-        child_table = left_data['value']
+        parent_table = left_data['value']
+        child_table = right_data['value']
 
         join_type = 'inner'
 
         joins = []
         for each in request.data['joins']:
-            joins.append([each['right'], each['join'], each['left']])
+            joins.append([each['left'], each['join'], each['right']])
 
         data = DataSourceService.save_new_joins_NEW(
             card_pk, parent_table, parent_sid, child_table,
@@ -519,7 +519,7 @@ class JoinViewSet(viewsets.ViewSet):
         return Response(data=data)
 
 
-# {"good_joins": [
+# {"joins": [
 #         {
 #             "right": {
 #                 "column": "group_id",
