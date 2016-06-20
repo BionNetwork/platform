@@ -98,15 +98,18 @@ class DatasourceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return self.model.objects.filter(user_id=self.request.user.id)
 
+    def list(self, request, *args, **kwargs):
+        return super(DatasourceViewSet, self).list(request, *args, **kwargs)
+
     def create(self, request, *args, **kwargs):
         request.data.update({'user_id': request.user.id})
         return super(DatasourceViewSet, self).create(request, *args, **kwargs)
 
-    def destroy(self, request, *args, **kwargs):
-        source = self.get_object()
-        DataSourceService.delete_datasource(source)
-        DataSourceService.tree_full_clean(source)
-        return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
+    # def destroy(self, request, *args, **kwargs):
+    #     source = self.get_object()
+    #     DataSourceService.delete_datasource(source)
+    #     DataSourceService.tree_full_clean(source)
+    #     return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
 
     @detail_route(methods=['get'])
     def tables(self, request, pk=None):
@@ -114,6 +117,19 @@ class DatasourceViewSet(viewsets.ModelViewSet):
 
         service = DataSourceService.get_source_service(source)
         data = service.get_tables()
+        return Response(data)
+
+
+class TablesDataView(APIView):
+
+    def get(self, request, source_id, table_name):
+        """
+        Получение данных о таблице
+        """
+        source = Datasource.objects.get(id=source_id)
+
+        service = DataSourceService.get_source_service(source)
+        data = service.fetch_tables_columns([table_name])
         return Response(data)
 
 
@@ -223,43 +239,6 @@ class GetDimensionDataView(BaseViewNoLogin):
         }, dimensions)
 
         return self.json_response({'data': data, })
-
-
-# @api_view()
-def build_tree(request):
-    return Response({'message': 'Hello, world!'})
-
-
-class TaskViewSet(viewsets.ViewSet):
-    # Required for the Browsable API renderer to have a nice form.
-    serializer_class = TaskSerializer
-
-    def list(self, request):
-        serializer = TaskSerializer(
-            instance=tasks.values(), many=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, pk=None):
-        return Response(tasks[int(pk)].__dict__)
-
-    def update(self, request, pk=None):
-        return Response(tasks[int(pk)].__dict__)
-
-    def create(self, request):
-        return Response()
-
-
-class TablesDataView(APIView):
-
-    def get(self, request, source_id, table_name):
-        """
-        Получение данных о таблице
-        """
-        source = Datasource.objects.get(id=source_id)
-
-        service = DataSourceService.get_source_service(source)
-        data = service.fetch_tables_columns([table_name])
-        return Response(data)
 
 
 class CardViewSet(viewsets.ViewSet):
@@ -494,7 +473,7 @@ class JoinViewSet(viewsets.ViewSet):
             "right": "group_id",
             "join": "eq",
             "left": "id"
-        }
+        }, {...}
 }
         """
 

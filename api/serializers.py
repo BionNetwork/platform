@@ -8,6 +8,7 @@ from rest_framework.exceptions import APIException
 import xmltodict
 from core.models import User, Datasource, DatasourceSettings, Cube, CardDatasource
 from etl import helpers
+from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 
 logger = logging.getLogger(__name__)
@@ -42,14 +43,14 @@ class DatasourceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Datasource
         fields = ('id', 'db', 'host', 'port', 'login', 'password',
-                  'conn_type', 'user_id', 'settings')
+                  'conn_type', 'user_id', 'settings', 'file')
 
     def update(self, instance, validated_data):
         instance = super(DatasourceSerializer, self).update(
             instance, validated_data)
         if settings.USE_REDIS_CACHE:
-            helpers.DataSourceService.delete_datasource(instance)
-            helpers.DataSourceService.tree_full_clean(instance)
+            DataSourceService.delete_datasource(instance)
+            DataSourceService.tree_full_clean(instance)
         return instance
 
 

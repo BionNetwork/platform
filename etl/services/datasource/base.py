@@ -776,15 +776,10 @@ class DataSourceService(object):
             sel_tree.update_node_joins_NEW(left_table, left_sid, right_table,
                                            right_sid, child_node_id, join_type, joins_set)
             RedisSS.save_tree_structure(card_id, sel_tree)
+
             # сохраняем дерево
-            ordered_nodes = sel_tree.ordered_nodes
-
+            # ordered_nodes = sel_tree.ordered_nodes
             # RedisSS.save_tree_builder(card_id, ordered_nodes)
-
-            # если совсем нет ошибок ни у кого, то на клиенте перерисуем дерево,
-            # на всякий пожарный
-            # data['draw_table'] = RedisSS.get_final_info_NEW(
-            #     ordered_nodes, user_id)
 
         return {}
 

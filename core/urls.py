@@ -19,5 +19,5 @@ urlpatterns = [
     url(r'^users/edit/(?P<id>\d+)/$', views.EditUserView.as_view(), name='users.edit'),
     url(r'^users/add$', views.NewUserView.as_view(), name='users.add'),
     url(r'^users/profile/(?P<id>\d+)/$', views.UserProfileView.as_view(), name='users.profile'),
-    url(r'^docs/', include('rest_framework_swagger.urls')),
+    # url(r'^docs/', include('rest_framework_swagger.urls')),
 ]
