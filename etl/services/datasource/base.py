@@ -462,7 +462,6 @@ class DataSourceService(object):
         Args:
             source(core.models.Datasource): Источник
             cols(list): Описать
-
         Returns:
             list Описать
         """

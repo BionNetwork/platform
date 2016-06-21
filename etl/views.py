@@ -591,31 +591,34 @@ class LoadDataViewMono(BaseEtlView):
         return {'channels': channels}
 
 
-class LoadDataView(BaseEtlView):
+class LoadDataView(BaseView):
 
-    def start_post_action(self, request, source):
+    def post(self, request, card_id=None):
         """
         Постановка задачи в очередь на загрузку данных в хранилище
         """
         post = request.POST
 
+        if card_id is None:
+            raise Exception("Card ID is None!")
+
         # columns = json.loads(post.get('columns'))
         columns_info = {
-            '1': {
+            # '1':
+            '2':
+                {
                 "auth_group": ["id", "name", ],
                 "auth_group_permissions": ["id", "group_id", ],
                 "auth_permission": ["id", "name", ],
             },
-            '4': {
+            # '4':
+            '1':
+                {
                 "list1": ["auth_group_id", "name2", "gender"],
                 "Лист2": ["name2", "join_to_list3", "Coutry"],
                 "List3": ["join_to_list3", "some_id", "name"],
             },
         }
-
-        # в будущем card_id, пока user_id
-        user_id = request.user.id
-        card_id = user_id
 
         cols_str = generate_columns_string_NEW(columns_info)
         cube_key = generate_cube_key(cols_str, card_id)
@@ -653,8 +656,7 @@ class LoadDataView(BaseEtlView):
         # Параметры для задач
         load_args = {
             'cols_type': json.dumps(cols_type),
-            'card_id': user_id,
-            'user_id': user_id,
+            'card_id': card_id,
             'is_update': False,
             'tree_structure': tree_structure,
             'sub_trees': sub_trees,
@@ -662,8 +664,8 @@ class LoadDataView(BaseEtlView):
             "relations": relations,
         }
 
-        get_single_task(
-            CREATE_DATASET_MULTI, create_dataset_multi, load_args)
+        # get_single_task(
+        #     CREATE_DATASET_MULTI, create_dataset_multi, load_args)
 
 
 class GetUserTasksView(BaseView):

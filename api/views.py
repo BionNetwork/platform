@@ -2,11 +2,15 @@
 from __future__ import unicode_literals
 
 import logging
+
+from django.db import transaction
+
 from rest_framework import serializers
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
 from rest_framework.views import APIView
+from rest_framework.decorators import detail_route, list_route
 
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
@@ -21,9 +25,7 @@ from etl.models import TableTreeRepository
 from etl.services.datasource.base import DataSourceService, RedisSS
 from etl.services.datasource.repository.storage import RKeys
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
-from django.db import transaction
-
-from rest_framework.decorators import detail_route, list_route
+from etl.views import LoadDataView
 
 
 logger = logging.getLogger(__name__)
@@ -265,13 +267,13 @@ class CardViewSet(viewsets.ViewSet):
             {"source_id": 1, "table_name": u'List3', },
             {"source_id": 1, "table_name": u'Лист2', },
 
-        #     # {"source_id": 1, "table_name": u"auth_group", },
-        #     # {"source_id": 1, "table_name": u"auth_group_permissions", },
-        #     # {"source_id": 1, "table_name": u"auth_permission", },
-        #     # {"source_id": 1, "table_name": u"card_card", },
-        #     # {"source_id": 4, "table_name": u"list1", },
-        #     # {"source_id": 4, "table_name": u"List3", },
-        #     # {"source_id": 4, "table_name": u"Лист2", },
+            # {"source_id": 1, "table_name": u"auth_group", },
+            # {"source_id": 1, "table_name": u"auth_group_permissions", },
+            # {"source_id": 1, "table_name": u"auth_permission", },
+            # {"source_id": 1, "table_name": u"card_card", },
+            # {"source_id": 4, "table_name": u"list1", },
+            # {"source_id": 4, "table_name": u"List3", },
+            # {"source_id": 4, "table_name": u"Лист2", },
         ]
 
         info = []
@@ -286,6 +288,15 @@ class CardViewSet(viewsets.ViewSet):
                     card_id, node_id)
 
         return Response(info)
+
+    @detail_route(['post', ])
+    def load_data(self, request, pk):
+        """
+        Начачло загрузки данных
+        """
+        load_view = LoadDataView.as_view()
+        load_view(request, card_id=pk)
+        return Response('OK')
 
 
 def check_parent(func):
