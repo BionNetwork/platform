@@ -56,10 +56,10 @@ class Excel(File):
                     "name": col_name,
                     "type": col_type,
                     "origin_type": origin_type,
-                    "extra": None,
+                    # "extra": None,
                     "max_length": None,
-                    "is_unique": None,
-                    "is_primary": None,
+                    # "is_unique": None,
+                    # "is_primary": None,
                 })
 
         return columns

@@ -74,6 +74,12 @@ class FileService(DatasourceApi):
 
         return columns, indexes, foreigns, statistics, date_intervals
 
+    def fetch_tables_columns(self, sheets):
+        # возвращает список колонок страниц
+        instance = self.datasource
+        columns = instance.get_columns_info(sheets)
+        return columns
+
     def get_structure_rows_number(self, structure,  cols):
         return 0
 
