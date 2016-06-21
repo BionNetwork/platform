@@ -258,17 +258,18 @@ class TablesTree(object):
 
         # if table_tuple not in child_vals:
 
-        s = u"{0}_{1}"
+        nid_sid = "{0}_{1}"
 
         new_children = []
 
         for child in children:
             new_children += child.childs
             l_val = child.val
-            l_source = child.source_id
-            l_info = tables_info[s.format(l_source, l_val)]
+            l_sid = child.source_id
+            l_nid = child.node_id
+            l_info = tables_info[nid_sid.format(l_nid, l_sid)]
 
-            r_info = tables_info[s.format(source_id, table)]
+            r_info = tables_info[nid_sid.format(node_id, source_id)]
             joins = cls.get_joins_NEW(
                 l_val, table, l_info, r_info)
 

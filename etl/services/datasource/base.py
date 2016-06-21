@@ -240,7 +240,7 @@ class DataSourceService(object):
         remains = RedisSS.extract_card_remains(card_id)
 
         # determining unbinded tail
-        tail_ = cls.get_tail(remains, node_id) if not resave else None
+        tail_ = cls.extract_tail(remains, node_id) if not resave else None
 
         return {
             'tree_nodes': tree_nodes,
@@ -283,7 +283,7 @@ class DataSourceService(object):
         remains = RedisSS.extract_card_remains(card_id)
 
         # determining unbinded tail
-        tail_ = cls.get_tail(remains, child_id) if remain else None
+        tail_ = cls.extract_tail(remains, child_id) if remain else None
 
         return {
             'tree_nodes': tree_nodes,
@@ -331,16 +331,14 @@ class DataSourceService(object):
             sel_tree.ordered_nodes)
         remains = RedisSS.extract_card_remains(card_id)
 
-        # fixme неправильно, остаток должен браться не из ремаинов, а из активов
+        # determining unbinded tail
+        tail_ = cls.extract_tail(tree_nodes, child_id) if remain else None
 
-        # # determining unbinded tail
-        # tail_ = cls.get_tail(remains, child_id) if remain else None
-        #
-        # return {
-        #     'tree_nodes': tree_nodes,
-        #     'remains': remains,
-        #     'tail': tail_,
-        # }
+        return {
+            'tree_nodes': tree_nodes,
+            'remains': remains,
+            'tail': tail_,
+        }
 
     @classmethod
     def send_nodes_to_remains(cls, card_id, node_id):
@@ -352,7 +350,11 @@ class DataSourceService(object):
 
         # is root
         if node.parent is None:
-            cls.full_tree_to_remains(card_id)
+            RedisSS.put_actives_to_builder_remains(
+                card_id, sel_tree.ordered_nodes)
+            RedisSS.remove_tree(card_id)
+            tree_nodes = []
+
         else:
             node_to_remove = sel_tree.remove_sub_tree(node_id)
 
@@ -367,12 +369,13 @@ class DataSourceService(object):
 
             tree_nodes = RedisSS.prepare_tree_nodes_info(
                 sel_tree.ordered_nodes)
-            remains = RedisSS.extract_card_remains(card_id)
 
-            return {
-                'tree_nodes': tree_nodes,
-                'remains': remains,
-            }
+        remains = RedisSS.extract_card_remains(card_id)
+
+        return {
+            'tree_nodes': tree_nodes,
+            'remains': remains,
+        }
 
     @classmethod
     def get_tree(cls, card_id):
@@ -386,14 +389,15 @@ class DataSourceService(object):
         return tree
 
     @classmethod
-    def get_tail(cls, remains, node_id):
+    def extract_tail(cls, nodes_info, node_id):
         """
-        Из остатков определяет последнюю несвязанную ноду
+        Из остатков или активов определяет последнюю несвязанную ноду
+        remains - список диктов [{}, {}, ...]
         """
-        for remain in remains:
-            if str(remain["node_id"]) == str(node_id):
-                remains.remove(remain)
-                return remain
+        for node in nodes_info:
+            if str(node["node_id"]) == str(node_id):
+                nodes_info.remove(node)
+                return node
 
     @classmethod
     def get_tree_api(cls, card_id):

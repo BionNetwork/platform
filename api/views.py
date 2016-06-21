@@ -255,15 +255,16 @@ class CardViewSet(viewsets.ViewSet):
 
         card_id = pk
 
-        # data = [
-        #     {"source_id": 2, "table_name": u'auth_group', },
-        #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
-        #     # {"source_id": 2, "table_name": u'auth_permission', },
-        #     # {"source_id": 2, "table_name": u'card_card', },
-        #     {"source_id": 1, "table_name": u'Лист1', },
-        #     {"source_id": 1, "table_name": u'List3', },
-        #     # {"source_id": 1, "table_name": u'Лист2', },
-        #
+        data = [
+
+            {"source_id": 2, "table_name": u'auth_group', },
+            {"source_id": 2, "table_name": u'auth_group_permissions', },
+            {"source_id": 2, "table_name": u'auth_permission', },
+            {"source_id": 2, "table_name": u'card_card', },
+            {"source_id": 1, "table_name": u'Лист1', },
+            {"source_id": 1, "table_name": u'List3', },
+            {"source_id": 1, "table_name": u'Лист2', },
+
         #     # {"source_id": 1, "table_name": u"auth_group", },
         #     # {"source_id": 1, "table_name": u"auth_group_permissions", },
         #     # {"source_id": 1, "table_name": u"auth_permission", },
@@ -271,7 +272,7 @@ class CardViewSet(viewsets.ViewSet):
         #     # {"source_id": 4, "table_name": u"list1", },
         #     # {"source_id": 4, "table_name": u"List3", },
         #     # {"source_id": 4, "table_name": u"Лист2", },
-        # ]
+        ]
 
         info = []
 
@@ -371,16 +372,20 @@ class NodeViewSet(viewsets.ViewSet):
         Returns:
             dict: Информацию об связанных/не связанных узлах дерева и остатка
         """
-        serializer = self.serializer_class(data=request.data, many=True)
-        if serializer.is_valid(raise_exception=True):
-            try:
-                info = DataSourceService.reparent(
-                    card_pk, request.data['parent_id'], pk)
-                return Response(info)
-            except Exception as ex:
-                raise APIException(ex.message)
 
-    @detail_route(methods=['get'])
+        # fixme serializer проверить
+        # serializer = self.serializer_class(data=request.data, many=True)
+        # if serializer.is_valid(raise_exception=True):
+        # try:
+        info = DataSourceService.reparent(
+                card_pk,
+                request.data['parent_id'],
+                pk)
+        return Response(info)
+        # except Exception as ex:
+        #     raise APIException(ex.message)
+
+    @detail_route(methods=['post'])
     @check_child(in_remain=False)
     def to_remain(self, request, card_pk, pk):
         """
@@ -425,15 +430,16 @@ class NodeViewSet(viewsets.ViewSet):
         Returns:
             dict: Информацию об связанных/не связанных узлах дерева и остатка
         """
-        serializer = self.serializer_class(data=request.data, many=True)
-        if serializer.is_valid(raise_exception=True):
-            try:
-                parent_id = request.data['parent_id']
-                info = DataSourceService.from_remain_to_certain(
-                    card_pk, parent_id, pk)
-                return Response(info)
-            except Exception as ex:
-                raise APIException(ex.message)
+        # fixme serializer проверить
+        # serializer = self.serializer_class(data=request.data, many=True)
+        # if serializer.is_valid(raise_exception=True):
+        try:
+            parent_id = request.data['parent_id']
+            info = DataSourceService.from_remain_to_certain(
+                card_pk, parent_id, pk)
+            return Response(info)
+        except Exception as ex:
+            raise APIException(ex.message)
 
 
 class JoinViewSet(viewsets.ViewSet):
@@ -469,11 +475,11 @@ class JoinViewSet(viewsets.ViewSet):
 
         {
         "joins":
-        {
+        [{
             "right": "group_id",
             "join": "eq",
             "left": "id"
-        }, {...}
+        }, {...}]
 }
         """
 

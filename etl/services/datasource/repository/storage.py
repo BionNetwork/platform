@@ -11,7 +11,6 @@ from core.helpers import CustomJsonEncoder
 
 
 # FIXME описать
-# S = "S{0}"
 T_S = "T{0}_S{1}"
 
 
@@ -1119,7 +1118,6 @@ class RedisSourceService(object):
 
         return final_info
 
-    # FIXME пееределать проще с помощью node_id
     @classmethod
     def info_for_tree_building_NEW(cls, ordered_nodes, card_id, node_info):
         """
@@ -1127,7 +1125,7 @@ class RedisSourceService(object):
         """
         final_info = {}
         b_data = cls.get_card_builder_data(card_id)
-        sid_tname = u'{0}_{1}'
+        nid_sid = '{0}_{1}'
 
         # инфа таблиц из существующего дерева
         for child in ordered_nodes:
@@ -1144,14 +1142,13 @@ class RedisSourceService(object):
                 raise Exception(u'Информация о таблцие не найдена!')
 
             # достаем по порядковому номеру
-            final_info[sid_tname.format(sid, t_name)] = (
+            final_info[nid_sid.format(node_id, sid)] = (
                 cls.get_table_info(node_id, sid)
             )
         # информация таблицы, которую хотим забиндить
-        t_name, sid, node_id = (
-            node_info['value'], node_info['sid'], node_info['node_id'])
+        node_id, sid = node_info['node_id'], node_info['sid']
 
-        final_info[sid_tname.format(sid, t_name)] = (
+        final_info[nid_sid.format(node_id, sid)] = (
                 cls.get_table_info(node_id, sid)
             )
 
@@ -1598,5 +1595,13 @@ class RedisSourceService(object):
                     }
         return None
 
+    @classmethod
+    def remove_tree(cls, card_id):
+        """
+        Удаляет дерево из хранилища
+        """
+        card_key = RedisCacheKeys.get_user_card_key(card_id)
+        tree_key = RedisCacheKeys.get_active_tree(card_key)
+        cls.r_del(tree_key)
 
 # r = redis.StrictRedis(host='localhost', port=6379, db=9)
