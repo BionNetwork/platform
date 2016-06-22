@@ -74,6 +74,38 @@ class Node(object):
                 })
         return node_joins
 
+    def api_info(self):
+        """
+        Публичная информация об узле
+        """
+        return dict(
+            val=self.val,
+            sid=self.source_id,
+            parent_id=getattr(self.parent, 'node_id', None),
+            without_bind=False,
+            node_id=self.node_id,
+        )
+
+
+class RemainNode(Node):
+
+    def __init__(self, t_name, source_id, node_id=None):
+        super(RemainNode, self).__init__(
+            t_name=t_name, source_id=source_id, node_id=node_id
+        )
+
+    def api_info(self):
+        """
+        Публичная информация об узле
+        """
+        return dict(
+            val=self.val,
+            sid=self.source_id,
+            parent_id=getattr(self.parent, 'node_id', None),
+            without_bind=True,
+            node_id=self.node_id,
+        )
+
 
 class TablesTree(object):
     """
@@ -192,6 +224,7 @@ class TablesTree(object):
                 return node
         return None
 
+    # FIXME: К удалению
     def get_node_info(self, node_id):
         """
         Node's info by id
@@ -290,27 +323,26 @@ class TablesTree(object):
         return table
 
     @classmethod
-    def try_bind_two_nodes(cls, parent_node, child_node_info,
+    def try_bind_two_nodes(cls, parent_node, child_node,
                            parent_info, child_info):
         """
         Пытается связать к дереву 1 новый узел
+
+        Returns:
+            bool: True, если удалось связать два узла, иначе False
         """
 
-        table = child_node_info["value"]
-        source_id = child_node_info["sid"]
-        node_id = child_node_info["node_id"]
-
         joins = cls.get_joins_NEW(
-            parent_node.val, table, parent_info, child_info)
+            parent_node.val, child_node.val, parent_info, child_info)
 
         if joins:
-            new_node = Node(table, source_id, parent=parent_node,
-                            joins=joins, node_id=node_id)
+            new_node = Node(child_node.val, child_node.sid, parent=parent_node,
+                            joins=joins, node_id=child_node.node_id)
             parent_node.childs.append(new_node)
-            return
+            return True
 
         # признак, что таблица без связей
-        return True
+        return False
 
     @classmethod
     def reparent_node(cls, parent_node, child_node, parent_info, child_info):
@@ -681,13 +713,11 @@ class TableTreeRepository(object):
         return trees, without_bind
 
     @staticmethod
-    def build_single_root(node_info):
+    def build_single_root(node):
         """
         Строит дерево из 1 элемента
         """
-        tree = TablesTree(
-            node_info['value'], node_info['sid'], node_info['node_id'])
-        return tree
+        return TablesTree(node.val, node.sid, node.node_id)
 
     @staticmethod
     def build_tree_by_structure(structure):

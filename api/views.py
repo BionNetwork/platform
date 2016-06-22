@@ -328,7 +328,7 @@ class NodeViewSet(viewsets.ViewSet):
 
     def list(self, request, card_pk):
         """
-        Cписок узлов дерева и остаткa
+        Список узлов дерева и остаткa
         """
         data = DataSourceService.get_tree_api(card_pk)
 
@@ -343,13 +343,7 @@ class NodeViewSet(viewsets.ViewSet):
         """
         data = DataSourceService.get_node(card_pk, pk)
 
-        return Response(data={
-                'id': pk,
-                'sid': data['sid'],
-                'value': data['value'],
-                'parent_id': data['parent_id'],
-                'is_bind': not data['without_bind']
-            })
+        return Response(data=data)
 
     @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
     @check_child(in_remain=False)

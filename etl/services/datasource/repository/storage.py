@@ -11,6 +11,8 @@ from core.helpers import CustomJsonEncoder
 
 
 # FIXME описать
+from etl.models import RemainNode
+
 T_S = "T{0}_S{1}"
 
 
@@ -597,16 +599,14 @@ class RedisSourceService(object):
         cls.save_active_tree(structure, source)
 
     @classmethod
-    def put_remain_to_builder_actives(cls, card_id, node_info):
+    def put_remain_to_builder_actives(cls, card_id, node):
         """
         сохраняем карту дерева, перенос остатка в активные
         """
         builber = cls.get_card_builder(card_id)
         b_data = builber['data']
 
-        table, sid, node_id = (
-            node_info['value'], str(node_info['sid']), node_info['node_id']
-        )
+        table, sid, node_id = node.value, str(node.sid), node.node_id
 
         s_remains = b_data[sid]['remains']
         s_actives = b_data[sid]['actives']
@@ -949,67 +949,54 @@ class RedisSourceService(object):
         return result
 
     @classmethod
-    def extract_card_remains(cls, card_id):
-        """
-        get all remains of card
-        """
+    def remains_nodes(cls, card_id):
+
         remains = []
         actives = cls.get_card_builder_data(card_id)
 
-        for s_info in actives:
-            for remain, remain_id in actives[s_info]['remains'].iteritems():
-                remains.append({
-                    'value': remain,
-                    'sid': s_info,
-                    'parent_id': None,
-                    'without_bind': True,
-                    'node_id': remain_id,
-                })
+        for sid in actives:
+            for remain, remain_id in actives[sid]['remains'].iteritems():
+                remains.append(
+                    RemainNode(remain, sid, remain_id)
+                )
         return remains
 
     @classmethod
-    def get_node_cols(cls, actives, node_info):
+    def get_remain_node(cls, nodes, node_id):
+        """
+        Получение узла
+        """
+        for node in nodes:
+            if node.node_id == node_id:
+                return node
+        return
 
-        table, source_id = node_info['value'], node_info['sid']
-        # FIXME нода дерева может быть тока в активных
+
+    @classmethod
+    def get_active_node_info(cls, actives, node):
+
+        table, source_id = node.val, node.source_id
         table_id = actives[str(source_id)]['actives'][table]
         table_info = cls.get_table_info(table_id, source_id)
 
-        node_info['without_bind'] = False
-
-        node_info['cols'] = [
-            {
-                'col_name': x['name'], 'col_title': x.get('title', None), }
-            for x in table_info['columns']
-            ]
-        return node_info
+        return dict(
+            node_id=node.node_id,
+            parent_id=getattr(node.parent, 'node_id', None),
+            sid=source_id,
+            val=table,
+            without_bind=False,
+            cols=[
+                {
+                    'col_name': x['name'], 'col_title': x.get('title', None), }
+                for x in table_info['columns']
+                ])
 
     @classmethod
-    def prepare_tree_nodes_info(cls, ordered_nodes):
+    def nodes_info(cls, nodes):
         """
         Информация о дереве для передачи на клиент
         """
-        result = []
-
-        for ind, node in enumerate(ordered_nodes):
-            table, source_id = node.val, node.source_id
-
-            n_info = {
-                'val': table,
-                'sid': source_id,
-                'parent_id': getattr(node.parent, 'node_id', None),
-                # 'is_root': not ind,
-                'without_bind': False,
-                'node_id': node.node_id,
-            }
-            # table_info = cls.get_table_info(node.node_id, source_id)
-            #
-            # n_info['cols'] = [{'col_name': x['name'],
-            #                    'col_title': x.get('title', None), }
-            #                   for x in table_info['columns']]
-            result.append(n_info)
-
-        return result
+        return [node.api_info() for node in nodes]
 
     @classmethod
     def put_table_info_in_builder(cls, card_id, source_id, table, table_info):
@@ -1119,7 +1106,7 @@ class RedisSourceService(object):
         return final_info
 
     @classmethod
-    def info_for_tree_building_NEW(cls, ordered_nodes, card_id, node_info):
+    def info_for_tree_building_NEW(cls, ordered_nodes, card_id, node):
         """
         информация по таблицам для построения дерева
         """
@@ -1146,7 +1133,7 @@ class RedisSourceService(object):
                 cls.get_table_info(node_id, sid)
             )
         # информация таблицы, которую хотим забиндить
-        node_id, sid = node_info['node_id'], node_info['sid']
+        node_id, sid = node.node_id, node.sid
 
         final_info[nid_sid.format(node_id, sid)] = (
                 cls.get_table_info(node_id, sid)
@@ -1577,6 +1564,7 @@ class RedisSourceService(object):
                 if r_server.exists(tables_remain_key) else None)
 
     @classmethod
+    # FIXME: К удалению
     def get_node_info_from_remain(cls, card_id, node_id):
         """
         Информация об остатке
