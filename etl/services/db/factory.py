@@ -90,7 +90,7 @@ class DatabaseService(DatasourceApi):
 
         return columns, indexes, foreigns, statistics, date_intervals
 
-    def fetch_tables_columns(self, tables):
+    def fetch_tables_columns(self, tables, indent):
         # возвращает список колонок таблиц
 
         return self.datasource.get_columns(self.source, tables)
@@ -147,10 +147,13 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_fetchall_result(connection, query, *args, **kwargs)
 
-    def get_source_table_rows(self, table_name, limit=None, offset=None):
+    def get_source_table_rows(self, table_name, **kwargs):
         """
         Данные по одной таблице источника
         """
+        limit = kwargs.get('limit')
+        offset = kwargs.get('offset')
+
         query = self.datasource.get_table_data(table_name, limit, offset)
         return self.get_fetchall_result(
             self.datasource.connection, query)

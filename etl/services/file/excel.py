@@ -28,33 +28,40 @@ class Excel(File):
 
         return map(lambda x: {'name': x, }, sheet_names)
 
-    def get_data(self, sheet_name):
+    def get_data(self, sheet_name, indents):
+
         file_path = self.source.file
         excel = pandas.ExcelFile(file_path)
-        df = pandas.read_excel(excel, sheet_name)
+        indent = indents[sheet_name]
+
+        df = pandas.read_excel(excel, sheet_name, skiprows=indent)
         return df.to_dict(orient='records')
 
-
-    def get_columns_info(self, sheets):
+    def get_columns_info(self, sheets, indents):
         """
         Получение списка колонок в таблицах
 
         Args:
             source(`Datasource`): источник
             tables(list): список названий таблиц
-
+            indents: defaultdict
         Returns:
             dict вида {'sheet_name': [{
             "name": col_name,
             "type": col_type,
             "origin_type": origin_type,}, ]
         """
+
         columns = defaultdict(list)
 
         excel_path = self.source.get_file_path()
 
         for sheet_name in sheets:
-            sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+
+            indent = indents[sheet_name]
+            sheet_df = pandas.read_excel(
+                excel_path, sheetname=sheet_name, skiprows=indent)
+
             col_names = sheet_df.columns
             for col_name in col_names:
                 origin_type = sheet_df[col_name].dtype.name

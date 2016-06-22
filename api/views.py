@@ -118,6 +118,28 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         data = service.get_tables()
         return Response(data)
 
+    # FIXME Maybe needed decorator for source_id
+    @detail_route(methods=['get'])
+    def set_indent(self, request, pk):
+        """
+        Отступ в соурсах, предположительно в файлах
+        """
+        source_id = pk
+        sheet = "Таблица1"#request.get('sheet', None)
+        if sheet is None:
+            raise APIException("Sheet name is needed!")
+        indent = 1#request.get('indent', None)
+        if indent is None:
+            raise APIException("Indent is needed!")
+        try:
+            indent = int(indent)
+        except Exception:
+            raise APIException("Indent is incorrect!")
+
+        DataSourceService.insert_source_indentation(source_id, sheet, indent)
+
+        return Response('Setted!')
+
 
 class TablesView(APIView):
 
@@ -126,9 +148,11 @@ class TablesView(APIView):
         Получение данных о таблице
         """
         source = Datasource.objects.get(id=source_id)
-
         service = DataSourceService.get_source_service(source)
-        data = service.fetch_tables_columns([table_name])
+
+        indents = DataSourceService.extract_source_indentation(source_id)
+
+        data = service.fetch_tables_columns([table_name], indents)
         return Response(data)
 
 
@@ -138,8 +162,11 @@ class TablesDataView(APIView):
 
         source = Datasource.objects.get(id=source_id)
         source_service = DataSourceService.get_source_service(source)
+
+        indents = DataSourceService.extract_source_indentation(source_id)
+
         data = source_service.get_source_table_rows(
-                    table_name, limit=1000, offset=0)
+            table_name, limit=1000, offset=0, indents=indents)
 
         return Response(data=data)
 

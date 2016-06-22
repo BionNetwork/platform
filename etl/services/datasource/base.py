@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import json
 from itertools import groupby
 import operator
+from collections import defaultdict
 
 from django.db import transaction
 
@@ -1163,3 +1164,17 @@ class DataSourceService(object):
                     if int(active_id) == node_id:
                         return True
         return False
+
+    @classmethod
+    def extract_source_indentation(cls, source_id):
+        indent = RedisSS.get_source_indentation(source_id)
+        return indent
+
+    @classmethod
+    def insert_source_indentation(cls, source_id, sheet, indent):
+        """
+        Сохраняем отступ для страницы соурса
+        """
+        indents = RedisSS.get_source_indentation(source_id)
+        indents[sheet] = indent
+        RedisSS.set_source_indentation(source_id, indents)

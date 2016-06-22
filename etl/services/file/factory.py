@@ -74,10 +74,10 @@ class FileService(DatasourceApi):
 
         return columns, indexes, foreigns, statistics, date_intervals
 
-    def fetch_tables_columns(self, sheets):
+    def fetch_tables_columns(self, sheets, indents):
         # возвращает список колонок страниц
         instance = self.datasource
-        columns = instance.get_columns_info(sheets)
+        columns = instance.get_columns_info(sheets, indents)
         return columns
 
     def get_structure_rows_number(self, structure,  cols):
@@ -86,11 +86,11 @@ class FileService(DatasourceApi):
     def get_source_rows(self, structure, cols, limit=None, offset=None):
         return self.datasource.get_rows(cols, structure)
 
-
-    def get_source_table_rows(self, table_name, limit=None, offset=None):
+    def get_source_table_rows(self, table_name, **kwargs):
         """
         Данные по одной таблице источника
         """
+        indents = kwargs.get('indents')
         instance = self.datasource
-        columns = instance.get_data(table_name)
+        columns = instance.get_data(table_name, indents)
         return columns

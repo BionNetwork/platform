@@ -141,6 +141,13 @@ class RedisCacheKeys(object):
         """
         return u'queue:{0}'.format(task_id)
 
+    @classmethod
+    def get_indent_key(cls, source_id):
+        """
+        Ключ отступа
+        """
+        source_key = cls.get_user_datasource(source_id)
+        return u'{0}:indent'.format(source_key)
 
 RKeys = RedisCacheKeys
 
@@ -151,11 +158,11 @@ class RedisSourceService(object):
     """
 
     @staticmethod
-    def r_get(template, params=None):
+    def r_get(name, params=None):
         if params:
-            return json.loads(r_server.get(template.format(*params)))
+            return json.loads(r_server.get(name.format(*params)))
         else:
-            return json.loads(r_server.get(template))
+            return json.loads(r_server.get(name))
 
     @staticmethod
     def r_set(name, structure):
@@ -164,6 +171,10 @@ class RedisSourceService(object):
     @staticmethod
     def r_del(name):
         r_server.delete(name)
+
+    @staticmethod
+    def r_exists(name):
+        return r_server.exists(name)
 
     @staticmethod
     def get_user_source(source_id):
@@ -1331,4 +1342,22 @@ class RedisSourceService(object):
         tree_key = RedisCacheKeys.get_active_tree(card_key)
         cls.r_del(tree_key)
 
-# r = redis.StrictRedis(host='localhost', port=6379, db=9)
+    @classmethod
+    def get_source_indentation(cls, source_id):
+        """
+        Достаем отступ для страницы соурса
+        """
+        indent_key = RKeys.get_indent_key(source_id)
+
+        if not cls.r_exists(indent_key):
+            return defaultdict(int)
+
+        return defaultdict(int, cls.r_get(indent_key))
+
+    @classmethod
+    def set_source_indentation(cls, source_id, indents):
+        """
+        Сохраняем отступ для страницы соурса
+        """
+        indent_key = RKeys.get_indent_key(source_id)
+        cls.r_set(indent_key, indents)
