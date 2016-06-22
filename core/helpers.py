@@ -108,7 +108,7 @@ def users_file_upload_path(instance, filename):
         filename(str): путь до файла загрузки
         user(core.models.User): объект пользователь
     """
-    return os.path.join('users', 'files', str(instance.user_id), filename)
+    return os.path.join('users', 'files', str(instance.id), filename)
 
 
 class HashEncoder(object):

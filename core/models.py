@@ -71,6 +71,17 @@ class Datasource(models.Model):
 
     objects = models.Manager.from_queryset(RetryQueryset)()
 
+    def save(self, *args, **kwargs):
+        if self.pk is None:
+            saved_file = self.file
+            self.file = None
+            super(Datasource, self).save(*args, **kwargs)
+
+            self.file = saved_file
+            self.save()
+        else:
+            super(Datasource, self).save(*args, **kwargs)
+
     def get_connection_dict(self):
         return {
             'host': get_utf8_string(self.host),
