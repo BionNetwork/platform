@@ -30,7 +30,10 @@ urlpatterns = [
     url(r'^', include(card_router.urls)),
     url(r'^', include(node_router.urls)),
     url(r'^datasources/(?P<source_id>\d+)/(?P<table_name>\w+)/$',
+        views.TablesView.as_view(), name='tables_data'),
+    url(r'^datasources/(?P<source_id>\d+)/(?P<table_name>\w+)/preview/$',
         views.TablesDataView.as_view(), name='tables_data'),
+
 
     # url(r'^datasource/(?P<source_id>\d+)/tables/$', views.TablesViewSet, name='tables'),
     # url(r'^datasource/(?P<source_id>[0-9]+)/tables2/$', views.TablesViewSet.as_view({'get': 'get'}), name='tables2'),

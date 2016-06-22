@@ -28,6 +28,13 @@ class Excel(File):
 
         return map(lambda x: {'name': x, }, sheet_names)
 
+    def get_data(self, sheet_name):
+        file_path = self.source.file
+        excel = pandas.ExcelFile(file_path)
+        df = pandas.read_excel(excel, sheet_name)
+        return df.to_dict(orient='records')
+
+
     def get_columns_info(self, sheets):
         """
         Получение списка колонок в таблицах

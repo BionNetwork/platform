@@ -322,6 +322,10 @@ class Database(object):
             cols_str, query_join,
             '%(limit)s', '%(offset)s')
 
+    def get_table_data(self, table_name, limit, offset):
+
+        return """SELECT * FROM {table_name}""".format(table_name=table_name)
+
     def get_rows(self, cols, structure):
         """
         Получаем записи из клиентской базы для предварительного показа

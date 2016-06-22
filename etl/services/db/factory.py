@@ -147,13 +147,20 @@ class DatabaseService(DatasourceApi):
         """
         return self.datasource.get_fetchall_result(connection, query, *args, **kwargs)
 
+    def get_source_table_rows(self, table_name, limit=None, offset=None):
+        """
+        Данные по одной таблице источника
+        """
+        query = self.datasource.get_table_data(table_name, limit, offset)
+        return self.get_fetchall_result(
+            self.datasource.connection, query)
+
     def get_source_rows(self, structure, cols, limit=None, offset=None):
         """
         Получение постраничных данных из базы пользователя
         """
 
         query = self.datasource.get_rows_query(cols, structure)
-        print 'query', query
         return self.get_fetchall_result(
             self.datasource.connection, query, limit=limit, offset=offset)
 

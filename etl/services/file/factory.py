@@ -85,3 +85,12 @@ class FileService(DatasourceApi):
 
     def get_source_rows(self, structure, cols, limit=None, offset=None):
         return self.datasource.get_rows(cols, structure)
+
+
+    def get_source_table_rows(self, table_name, limit=None, offset=None):
+        """
+        Данные по одной таблице источника
+        """
+        instance = self.datasource
+        columns = instance.get_data(table_name)
+        return columns

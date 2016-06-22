@@ -119,7 +119,7 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         return Response(data)
 
 
-class TablesDataView(APIView):
+class TablesView(APIView):
 
     def get(self, request, source_id, table_name):
         """
@@ -130,6 +130,18 @@ class TablesDataView(APIView):
         service = DataSourceService.get_source_service(source)
         data = service.fetch_tables_columns([table_name])
         return Response(data)
+
+
+class TablesDataView(APIView):
+
+    def get(self, request, source_id, table_name):
+
+        source = Datasource.objects.get(id=source_id)
+        source_service = DataSourceService.get_source_service(source)
+        data = source_service.get_source_table_rows(
+                    table_name, limit=1000, offset=0)
+
+        return Response(data=data)
 
 
 class SchemasListView(mixins.ListModelMixin,
