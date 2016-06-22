@@ -253,25 +253,15 @@ class TablesTree(object):
         """
         строит дерево таблиц, возвращает таблицы без связей
         """
-        # table_tuple = (table, source_id)
-        # child_vals = [(x.val, x.source_id) for x in children]
-
-        # if table_tuple not in child_vals:
-
-        nid_sid = "{0}_{1}"
-
         new_children = []
 
         for child in children:
             new_children += child.childs
-            l_val = child.val
-            l_sid = child.source_id
             l_nid = child.node_id
-            l_info = tables_info[nid_sid.format(l_nid, l_sid)]
+            l_info = tables_info[int(l_nid)]
 
-            r_info = tables_info[nid_sid.format(node_id, source_id)]
-            joins = cls.get_joins_NEW(
-                l_val, table, l_info, r_info)
+            r_info = tables_info[int(node_id)]
+            joins = cls.get_joins_NEW(l_info, r_info)
 
             if joins:
                 new_node = Node(table, source_id, parent=child,
@@ -300,8 +290,7 @@ class TablesTree(object):
         source_id = child_node_info["sid"]
         node_id = child_node_info["node_id"]
 
-        joins = cls.get_joins_NEW(
-            parent_node.val, table, parent_info, child_info)
+        joins = cls.get_joins_NEW(parent_info, child_info)
 
         if joins:
             new_node = Node(table, source_id, parent=parent_node,
@@ -317,8 +306,7 @@ class TablesTree(object):
         """
         Пытается связать к дереву 1 новый узел
         """
-        joins = cls.get_joins_NEW(
-            parent_node.val, child_node.val, parent_info, child_info)
+        joins = cls.get_joins_NEW(parent_info, child_info)
 
         if joins:
             old_parent = child_node.parent
@@ -497,15 +485,16 @@ class TablesTree(object):
         return dict_joins
 
     @staticmethod
-    def get_joins_NEW(l_t, r_t, l_info, r_info):
+    def get_joins_NEW(l_info, r_info):
         """
         Функция выявляет связи между таблицами
-        :param l_t:
-        :param r_t:
         :param l_info:
         :param r_info:
         :return: list
         """
+        l_t = l_info['value']
+        r_t = r_info['value']
+
         l_sid = l_info['sid']
         r_sid = r_info['sid']
 
@@ -753,3 +742,23 @@ class TableTreeRepository(object):
             childs = new_childs
 
         return differents
+
+    @classmethod
+    def prepare_tree_nodes_info(cls, ordered_nodes):
+        """
+        Информация о дереве для передачи на клиент
+        """
+        result = []
+
+        for node in ordered_nodes:
+            table, source_id = node.val, node.source_id
+            n_info = {
+                'val': table,
+                'sid': source_id,
+                'parent_id': getattr(node.parent, 'node_id', None),
+                'without_bind': False,
+                'node_id': node.node_id,
+            }
+            result.append(n_info)
+
+        return result

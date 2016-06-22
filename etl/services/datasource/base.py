@@ -13,7 +13,7 @@ from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
 from etl.services.datasource.repository.storage import RedisSourceService, RKeys
-from etl.models import TableTreeRepository
+from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import generate_table_key
 
@@ -122,86 +122,6 @@ class DataSourceService(object):
         return DatabaseService.get_connection_by_dict(conn_info)
 
     @classmethod
-    def get_columns_info(cls, source, tables):
-
-        """
-        Получение информации по колонкам
-
-        Args:
-            source(`Datasource`): источник
-            tables(list): Список имен таблиц
-
-        Returns:
-            list: Список словарей с информацией о дереве. Подробрый формат
-            ответа см. RedisSourceService.get_final_info
-        """
-
-        service = cls.get_source_service(source)
-
-        # если информация о таблице уже есть в редисе, то просто получаем их,
-        # иначе получаем новые таблицы
-        #  и спрашиваем информацию по ним у источника
-        new_tables, old_tables = RedisSourceService.filter_exists_tables(
-            source, tables)
-
-        if new_tables:
-            columns, indexes, foreigns, statistics, date_intervals = (
-                service.get_columns_info(new_tables))
-
-            RedisSourceService.insert_table_info(
-                source, new_tables, columns, indexes,
-                foreigns, statistics, date_intervals)
-
-        # FIXME для старых таблиц, которые уже лежат в редисе,
-        # FIXME нужно ли актуализировать интервалы дат каждый раз
-
-        # if old_tables:
-        #     # берем колонки старых таблиц
-        #     all_columns = service.fetch_tables_columns(tables)
-        #     old_tables_intervals = service.get_date_intervals(all_columns)
-        #     # актуализируем интервалы дат (min, max) для таблиц с датами
-        #     RedisSourceService.insert_date_intervals(
-        #         source, old_tables, old_tables_intervals)
-
-        # существование дерева
-        tree_exists = RedisSourceService.check_tree_exists(source)
-
-        # работа с деревьями
-        if not tree_exists:
-            tables_info = RedisSourceService.info_for_tree_building(
-                (), tables, source)
-
-            trees, without_bind = TableTreeRepository.build_trees(
-                tuple(tables), tables_info)
-            sel_tree = TableTreeRepository.select_tree(trees)
-
-            remains = without_bind[sel_tree.root.val]
-        else:
-            # достаем структуру дерева из редиса
-            structure = RedisSourceService.get_active_tree_structure(source)
-            # строим дерево
-            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
-
-            ordered_nodes = sel_tree.ordered_nodes
-
-            tables_info = RedisSourceService.info_for_tree_building(
-                ordered_nodes, tables, source)
-
-            # перестраиваем дерево
-            sel_tree.build(tuple(tables), tables_info)
-            remains = sel_tree.no_bind_tables
-
-        # таблица без связи
-        last = RedisSourceService.insert_remains(source, remains)
-
-        # сохраняем дерево
-        structure = sel_tree.structure
-        ordered_nodes = sel_tree.ordered_nodes
-        RedisSourceService.insert_tree(structure, ordered_nodes, source)
-
-        return RedisSourceService.get_final_info(ordered_nodes, source, last)
-
-    @classmethod
     def add_randomly_from_remains(cls, card_id, node_id):
         """
         Пытаемся связать остаток с деревом в любое место
@@ -212,7 +132,7 @@ class DataSourceService(object):
         table, source_id = node_info['value'], node_info['sid']
 
         if not RedisSS.check_tree_exists(card_id):
-            sel_tree = TableTreeRepository.build_single_root(node_info)
+            sel_tree = TTRepo.build_single_root(node_info)
             resave = True
         else:
             # достаем деревo из редиса
@@ -220,7 +140,7 @@ class DataSourceService(object):
             ordered_nodes = sel_tree.ordered_nodes
 
             tables_info = RedisSS.info_for_tree_building_NEW(
-                ordered_nodes, card_id, node_info)
+                card_id, ordered_nodes, node_info)
 
             # перестраиваем дерево
             unbinded = sel_tree.build_NEW(
@@ -236,7 +156,7 @@ class DataSourceService(object):
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
-        tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
+        tree_nodes = TTRepo.prepare_tree_nodes_info(ordered_nodes)
         remains = RedisSS.extract_card_remains(card_id)
 
         # determining unbinded tail
@@ -265,8 +185,10 @@ class DataSourceService(object):
         if ch_node_info is None:
             raise Exception("Incorrect child ID!")
 
-        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
-        child_info = RedisSS.get_table_info(child_id, ch_node_info["sid"])
+        parent_info = RedisSS.get_table_info(
+            card_id, p_node.source_id, parent_id)
+        child_info = RedisSS.get_table_info(
+            card_id, ch_node_info["sid"], child_id)
 
         remain = sel_tree.try_bind_two_nodes(
             p_node, ch_node_info, parent_info, child_info)
@@ -278,7 +200,7 @@ class DataSourceService(object):
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
-        tree_nodes = RedisSS.prepare_tree_nodes_info(
+        tree_nodes = TTRepo.prepare_tree_nodes_info(
             sel_tree.ordered_nodes)
         remains = RedisSS.extract_card_remains(card_id)
 
@@ -316,8 +238,10 @@ class DataSourceService(object):
         if ch_node is None:
             raise Exception("Incorrect child ID!")
 
-        parent_info = RedisSS.get_table_info(parent_id, p_node.source_id)
-        child_info = RedisSS.get_table_info(child_id, ch_node.source_id)
+        parent_info = RedisSS.get_table_info(
+            card_id, p_node.source_id, parent_id)
+        child_info = RedisSS.get_table_info(
+            card_id, ch_node.source_id, child_id)
 
         remain = sel_tree.reparent_node(
             p_node, ch_node, parent_info, child_info)
@@ -327,7 +251,7 @@ class DataSourceService(object):
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
-        tree_nodes = RedisSS.prepare_tree_nodes_info(
+        tree_nodes = TTRepo.prepare_tree_nodes_info(
             sel_tree.ordered_nodes)
         remains = RedisSS.extract_card_remains(card_id)
 
@@ -367,7 +291,7 @@ class DataSourceService(object):
             # save tree structure
             RedisSS.save_tree_structure(card_id, sel_tree)
 
-            tree_nodes = RedisSS.prepare_tree_nodes_info(
+            tree_nodes = TTRepo.prepare_tree_nodes_info(
                 sel_tree.ordered_nodes)
 
         remains = RedisSS.extract_card_remains(card_id)
@@ -385,7 +309,7 @@ class DataSourceService(object):
         # достаем структуру дерева из редиса
         structure = RedisSS.get_active_tree_structure_NEW(card_id)
         # строим дерево
-        tree = TableTreeRepository.build_tree_by_structure(structure)
+        tree = TTRepo.build_tree_by_structure(structure)
         return tree
 
     @classmethod
@@ -417,7 +341,7 @@ class DataSourceService(object):
             sel_tree = cls.get_tree(card_id)
             ordered_nodes = sel_tree.ordered_nodes
 
-            tree_nodes = RedisSS.prepare_tree_nodes_info(ordered_nodes)
+            tree_nodes = TTRepo.prepare_tree_nodes_info(ordered_nodes)
             remains = RedisSS.extract_card_remains(card_id)
 
         return {
@@ -499,7 +423,7 @@ class DataSourceService(object):
         # достаем структуру дерева из редиса
         structure = RedisSourceService.get_active_tree_structure(source)
         # строим дерево
-        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+        sel_tree = TTRepo.build_tree_by_structure(structure)
 
         r_val = sel_tree.root.val
         if r_val in tables:
@@ -529,7 +453,7 @@ class DataSourceService(object):
         structure = RedisSS.get_active_tree_structure_NEW(user_id)
 
         # строим дерево
-        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+        sel_tree = TTRepo.build_tree_by_structure(structure)
 
         r_val = sel_tree.root.val
         source_id = sel_tree.root.source_id
@@ -549,57 +473,6 @@ class DataSourceService(object):
                                     user_id, update_joins=False)
 
     @classmethod
-    def check_is_binding_remain(cls, source, child_table):
-        """
-        Проверяем является ли таблица child_table остаточной таблицей,
-        то есть последней в дереве без связей
-        """
-        source_key = RedisSourceService.get_user_source(source)
-        remain = RedisSourceService.get_last_remain(source_key)
-        return remain == child_table
-
-    @classmethod
-    def get_columns_and_joins_for_join_window(
-            cls, source, parent_table, child_table, has_warning):
-        """
-        Redis
-        список колонок и джойнов таблиц для окна связей таблиц
-
-        Args:
-            source(core.models.Datasource): Источник
-            parent_table(): Описать
-            child_table(): Описать
-            has_warning(): Описать
-
-        Returns:
-            dict: Описать
-        """
-        # FIXME: Описать
-        is_binding_remain = cls.check_is_binding_remain(
-            source, child_table)
-
-        # если связываем проблемных и один из них последний(remain)
-        if has_warning and is_binding_remain:
-            columns = RedisSourceService.get_columns_for_tables_without_bind(
-                source, parent_table, child_table)
-            good_joins, error_joins = RedisSourceService.get_good_error_joins(
-                source, parent_table, child_table)
-
-        # если связываем непроблемных или таблицы в дереве,
-        # имеющие неправильные связи
-        else:
-            columns = RedisSourceService.get_columns_for_tables_with_bind(
-                source, parent_table, child_table)
-            good_joins, error_joins = RedisSourceService.get_good_error_joins(
-                source, parent_table, child_table)
-
-        result = {'columns': columns,
-                  'good_joins': good_joins,
-                  'error_joins': error_joins,
-                  }
-        return result
-
-    @classmethod
     def get_columns_and_joins(cls, card_id, parent_id, child_id):
         """
         """
@@ -613,10 +486,11 @@ class DataSourceService(object):
 
         join_type, cols_info = RedisSS.get_joins(card_id, parent_id, child_id)
 
-        return {'columns': columns,
-                'join_type': join_type,
-                'joins': cols_info
-                  }
+        return {
+            'columns': columns,
+            'join_type': join_type,
+            'joins': cols_info
+        }
 
     @classmethod
     def check_new_joins(cls, source, left_table, right_table, joins):
@@ -724,7 +598,7 @@ class DataSourceService(object):
             # достаем структуру дерева из редиса
             structure = RedisSourceService.get_active_tree_structure(source)
             # строим дерево
-            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+            sel_tree = TTRepo.build_tree_by_structure(structure)
 
             sel_tree.update_node_joins(
                 left_table, right_table, join_type, joins_set)
@@ -734,11 +608,6 @@ class DataSourceService(object):
             structure = sel_tree.structure
             RedisSourceService.insert_tree(
                 structure, ordered_nodes, source, update_joins=False)
-
-            # если совсем нет ошибок ни у кого, то на клиенте перерисуем дерево,
-            # на всякий пожарный
-            data['draw_table'] = RedisSourceService.get_final_info(
-                ordered_nodes, source)
 
             # работа с последней таблицей
             remain = RedisSourceService.get_last_remain(source_key)
@@ -774,7 +643,7 @@ class DataSourceService(object):
             # Получаем структуру дерева из редиса
             structure = RedisSS.get_active_tree_structure_NEW(card_id)
             # строим дерево
-            sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+            sel_tree = TTRepo.build_tree_by_structure(structure)
 
             sel_tree.update_node_joins_NEW(left_table, left_sid, right_table,
                                            right_sid, child_node_id, join_type, joins_set)
@@ -842,7 +711,7 @@ class DataSourceService(object):
 
         for (t_name, sid) in tables_info:
             t_id = RedisSS.get_table_name_or_id(t_name, card_id, sid)
-            t_cols = RedisSS.get_table_info(t_id, sid)['columns']
+            t_cols = RedisSS.get_table_info(card_id, sid, t_id)['columns']
 
             for col in t_cols:
                 cols_types[u'{0}.{1}.{2}'.format(
@@ -1113,7 +982,7 @@ class DataSourceService(object):
         """
         Подготавливает список отдельных сущностей для закачки в монго
         """
-        subs_by_sid = TableTreeRepository.split_nodes_by_sources(
+        subs_by_sid = TTRepo.split_nodes_by_sources(
             tree_structure)
         subs_by_type = cls.split_nodes_by_source_types(
             subs_by_sid)
@@ -1246,10 +1115,10 @@ class DataSourceService(object):
             dict: данные об узле
         """
         structure = RedisSS.get_active_tree_structure_NEW(card_id)
-        sel_tree = TableTreeRepository.build_tree_by_structure(structure)
+        sel_tree = TTRepo.build_tree_by_structure(structure)
         node_info = sel_tree.get_node_info(node_id)
         actives = RedisSS.get_card_builder_data(card_id)
-        return RedisSS.get_node_cols(actives, node_info)
+        return RedisSS.get_node_cols(card_id, actives, node_info)
 
     @classmethod
     def check_node_id_in_builder(cls, card_id, node_id, in_remain=True):

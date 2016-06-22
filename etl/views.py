@@ -466,9 +466,6 @@ class GetColumnsForChoicesView(BaseEtlView):
         # parent_table = request.GET.get('parent')
         # child_table = request.GET.get('child_bind')
         # has_warning = json.loads(request.GET.get('has_warning'))
-        #
-        # data = DataSourceService.get_columns_and_joins_for_join_window(
-        #     source, parent_table, child_table, has_warning)
 
         data = DataSourceService.get_columns_and_joins(
             request.user.id, parent_table, parent_sid, child_table, child_sid)
