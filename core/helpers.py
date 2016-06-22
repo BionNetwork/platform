@@ -100,7 +100,7 @@ def users_avatar_upload_path(user, filename):
         'users', 'photos', 'user', str(user.id), filename)
 
 
-def users_file_upload_path(user, filename):
+def users_file_upload_path(instance, filename):
     """
     Путь сохранения файла-источника пользователя
 
@@ -108,7 +108,7 @@ def users_file_upload_path(user, filename):
         filename(str): путь до файла загрузки
         user(core.models.User): объект пользователь
     """
-    return os.path.join('users', 'files', str(user.id), filename)
+    return os.path.join('users', 'files', str(instance.user_id), filename)
 
 
 class HashEncoder(object):

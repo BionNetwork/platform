@@ -6,7 +6,7 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import APIException
 import xmltodict
-from core.models import User, Datasource, DatasourceSettings, Cube, CardDatasource
+from core.models import User, Datasource, DatasourceSettings, Cube
 from etl import helpers
 from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
@@ -52,18 +52,6 @@ class DatasourceSerializer(serializers.ModelSerializer):
             DataSourceService.delete_datasource(instance)
             DataSourceService.tree_full_clean(instance)
         return instance
-
-
-class CardDatasourceSerializer(serializers.ModelSerializer):
-    """
-    Источник в карточке
-    """
-    # card_id = serializers.RelatedField(source='card')
-    # source_id = serializers.RelatedField(source='source')
-
-    class Meta:
-        model = CardDatasource
-        fields = ('card', 'source')
 
 
 class TableDataSerializer(serializers.Serializer):

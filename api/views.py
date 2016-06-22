@@ -10,23 +10,20 @@ from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
 from rest_framework.views import APIView
-from rest_framework.decorators import detail_route, list_route
 
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
-    SchemasRetreviewSerializer, CardDatasourceSerializer, TaskSerializer, tasks,
-    TableSerializer, NodeSerializer, TreeSerializer, TreeSerializerRequest,
-    ParentIdSerializer)
+    SchemasRetreviewSerializer, NodeSerializer, TreeSerializer,
+    TreeSerializerRequest, ParentIdSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
-                         DatasourceMetaKeys, CardDatasource)
+                         DatasourceMetaKeys)
 from core.views import BaseViewNoLogin
-from etl.models import TableTreeRepository
-from etl.services.datasource.base import DataSourceService, RedisSS
-from etl.services.datasource.repository.storage import RKeys
+from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from etl.views import LoadDataView
 
+from rest_framework.decorators import detail_route
 
 logger = logging.getLogger(__name__)
 
@@ -107,11 +104,11 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         request.data.update({'user_id': request.user.id})
         return super(DatasourceViewSet, self).create(request, *args, **kwargs)
 
-    # def destroy(self, request, *args, **kwargs):
-    #     source = self.get_object()
-    #     DataSourceService.delete_datasource(source)
-    #     DataSourceService.tree_full_clean(source)
-    #     return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
+    def destroy(self, request, *args, **kwargs):
+        source = self.get_object()
+        DataSourceService.delete_datasource(source)
+        DataSourceService.tree_full_clean(source)
+        return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
 
     @detail_route(methods=['get'])
     def tables(self, request, pk=None):
@@ -133,20 +130,6 @@ class TablesDataView(APIView):
         service = DataSourceService.get_source_service(source)
         data = service.fetch_tables_columns([table_name])
         return Response(data)
-
-
-class CardDataSourceViewSet(viewsets.ModelViewSet):
-    """
-    Источкник в карточке
-    """
-    model = CardDatasource
-    serializer_class = CardDatasourceSerializer
-
-    def get_queryset(self):
-        return self.model.objects.filter(source__user_id=self.request.user.id)
-
-    def create(self, request, *args, **kwargs):
-        pass
 
 
 class SchemasListView(mixins.ListModelMixin,
@@ -257,24 +240,23 @@ class CardViewSet(viewsets.ViewSet):
 
         card_id = pk
 
-        data = [
-
-            {"source_id": 2, "table_name": u'auth_group', },
-            {"source_id": 2, "table_name": u'auth_group_permissions', },
-            {"source_id": 2, "table_name": u'auth_permission', },
-            {"source_id": 2, "table_name": u'card_card', },
-            {"source_id": 1, "table_name": u'Лист1', },
-            {"source_id": 1, "table_name": u'List3', },
-            {"source_id": 1, "table_name": u'Лист2', },
-
-            # {"source_id": 1, "table_name": u"auth_group", },
-            # {"source_id": 1, "table_name": u"auth_group_permissions", },
-            # {"source_id": 1, "table_name": u"auth_permission", },
-            # {"source_id": 1, "table_name": u"card_card", },
-            # {"source_id": 4, "table_name": u"list1", },
-            # {"source_id": 4, "table_name": u"List3", },
-            # {"source_id": 4, "table_name": u"Лист2", },
-        ]
+        # data = [
+        #     {"source_id": 2, "table_name": u'auth_group', },
+        #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
+        #     # {"source_id": 2, "table_name": u'auth_permission', },
+        #     # {"source_id": 2, "table_name": u'card_card', },
+        #     {"source_id": 1, "table_name": u'Лист1', },
+        #     {"source_id": 1, "table_name": u'List3', },
+        #     # {"source_id": 1, "table_name": u'Лист2', },
+        #
+        #     # {"source_id": 1, "table_name": u"auth_group", },
+        #     # {"source_id": 1, "table_name": u"auth_group_permissions", },
+        #     # {"source_id": 1, "table_name": u"auth_permission", },
+        #     # {"source_id": 1, "table_name": u"card_card", },
+        #     # {"source_id": 4, "table_name": u"list1", },
+        #     # {"source_id": 4, "table_name": u"List3", },
+        #     # {"source_id": 4, "table_name": u"Лист2", },
+        # ]
 
         info = []
 

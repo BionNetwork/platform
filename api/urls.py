@@ -10,7 +10,6 @@ router = routers.SimpleRouter()
 router.register(r'users', views.UserViewSet)
 router.register(r'datasources', views.DatasourceViewSet, 'Datasource')
 # router.register(r'datasource/(?P<source_id>\d+)/tables', views.TablesViewSet, 'tables')
-router.register(r'card_datasource', views.CardDataSourceViewSet, 'CardDatasource')
 
 router.register(r'cards', views.CardViewSet, 'cards')
 card_router = routers.NestedSimpleRouter(router, r'cards', lookup='card')
