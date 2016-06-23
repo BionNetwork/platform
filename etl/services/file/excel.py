@@ -78,7 +78,7 @@ class Excel(File):
 
         return columns
 
-    def get_statistic(self, sheets):
+    def get_statistic(self, sheets, indents):
         """
         возвращает статистику страниц файла
 
@@ -95,14 +95,16 @@ class Excel(File):
         excel_path = self.source.get_file_path()
 
         for sheet_name in sheets:
-            sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+            indent = indents[sheet_name]
+            sheet_df = pandas.read_excel(
+                excel_path, sheetname=sheet_name, skiprows=indent)
             height, width = sheet_df.shape
             size = sheet_df.memory_usage(deep=True).sum()
             statistic[sheet_name] = {"count": height, "size": size}
 
         return statistic
 
-    def get_intervals(self, sheets):
+    def get_intervals(self, sheets, indents):
         """
         Возращается список интервалов для полей типа Дата
 
@@ -123,7 +125,9 @@ class Excel(File):
         excel_path = self.source.get_file_path()
 
         for sheet_name in sheets:
-            sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+            indent = indents[sheet_name]
+            sheet_df = pandas.read_excel(
+                excel_path, sheetname=sheet_name, skiprows=indent)
             col_names = sheet_df.columns
             for col_name in col_names:
                 col_df = sheet_df[col_name]

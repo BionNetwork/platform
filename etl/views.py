@@ -320,13 +320,13 @@ class BaseEtlView(BaseView):
         return []
 
 
-class GetColumnsView(BaseEtlView):
-
-    def start_get_action(self, request, source):
-        tables = json.loads(request.GET.get('tables', ''))
-        info = DataSourceService.get_columns_info(
-            source, tables)
-        return info
+# class GetColumnsView(BaseEtlView):
+#
+#     def start_get_action(self, request, source):
+#         tables = json.loads(request.GET.get('tables', ''))
+#         info = DataSourceService.get_columns_info(
+#             source, tables)
+#         return info
 
 
 class GetColumnsViewNew(BaseEtlView):

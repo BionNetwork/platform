@@ -379,8 +379,10 @@ class DataSourceService(object):
             source = Datasource.objects.get(id=source_id)
             service = cls.get_source_service(source)
 
+            indents = DataSourceService.extract_source_indentation(source_id)
+
             columns, indexes, foreigns, statistics, date_intervals = (
-                service.get_columns_info([table, ]))
+                service.get_columns_info([table, ], indents))
 
             info = {
                 "value": table,

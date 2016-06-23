@@ -52,7 +52,7 @@ class FileService(DatasourceApi):
         """
         return self.datasource.get_tables()
 
-    def get_columns_info(self, sheets):
+    def get_columns_info(self, sheets, indents):
         """
             Получение полной информации о колонках таблиц
         Args:
@@ -64,9 +64,9 @@ class FileService(DatasourceApi):
         """
         instance = self.datasource
 
-        columns = instance.get_columns_info(sheets)
-        statistics = instance.get_statistic(sheets)
-        date_intervals = instance.get_intervals(sheets)
+        columns = instance.get_columns_info(sheets, indents)
+        statistics = instance.get_statistic(sheets, indents)
+        date_intervals = instance.get_intervals(sheets, indents)
 
         # заглушки
         indexes = defaultdict(list)

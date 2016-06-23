@@ -67,7 +67,7 @@ class DatabaseService(DatasourceApi):
         tables = filter(lambda x: x['name'] not in trigger_tables, tables)
         return tables
 
-    def get_columns_info(self, tables):
+    def get_columns_info(self, tables, indents):
         """
             Получение полной информации о колонках таблиц
         Args:
