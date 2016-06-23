@@ -35,7 +35,7 @@ class DataSourceService(object):
     FILE_TYPES = [
         ConnectionChoices.EXCEL,
         ConnectionChoices.CSV,
-        ConnectionChoices.TXT,
+        # ConnectionChoices.TXT,
     ]
 
     @classmethod
@@ -195,6 +195,8 @@ class DataSourceService(object):
             raise Exception("Incorrect parent ID!")
 
         remain_nodes = cls.remains_nodes(card_id)
+        print remain_nodes[0].node_id
+        print child_id
         ch_node = RedisSS.get_remain_node(remain_nodes, child_id)
 
         if ch_node is None:
@@ -221,7 +223,7 @@ class DataSourceService(object):
         remains = TTRepo.nodes_info(remain_nodes)
 
         # determining unbinded tail
-        tail_ = cls.extract_tail(remains, child_id) if is_bind else None
+        tail_ = cls.extract_tail(remains, child_id) if not is_bind else None
 
         return {
             'tree_nodes': tree_nodes,
@@ -319,6 +321,13 @@ class DataSourceService(object):
             'tree_nodes': tree_nodes,
             'remains': remains,
         }
+
+    @classmethod
+    def check_table_in_builder(cls, card_id, source_id, table):
+        """
+        Проверяем узел приходящий уже есть в наличие билдера
+        """
+        return RedisSS.table_in_builder(card_id, source_id, table)
 
     @classmethod
     def get_tree(cls, card_id):
@@ -500,8 +509,8 @@ class DataSourceService(object):
         """
         right_data = DataSourceService.get_node(card_id, parent_id)
         left_data = DataSourceService.get_node(card_id, child_id)
-        parent_sid, parent_table = right_data['sid'], right_data['value']
-        child_sid, child_table = left_data['sid'], left_data['value']
+        parent_sid, parent_table = right_data['sid'], right_data['val']
+        child_sid, child_table = left_data['sid'], left_data['val']
 
         columns = RedisSS.get_columns_for_joins(
             card_id, parent_table, parent_sid, child_table, child_sid)

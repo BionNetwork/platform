@@ -437,6 +437,22 @@ class RedisSourceService(object):
         return not_exists, actives_names
 
     @classmethod
+    def table_in_builder(cls, card_id, source_id, table):
+        """
+        Проверяет таблица в остатках или нет
+        """
+        actives = cls.get_card_builder_data(card_id)
+        s_id = str(source_id)
+
+        if s_id in actives:
+            source_colls = actives[s_id]
+            # таблица не должна быть в активных
+            if (table in source_colls['actives'] or
+                        table in source_colls['remains']):
+                return True
+        return False
+
+    @classmethod
     def table_in_builder_remains(cls, card_id, source_id, table):
         """
         Проверяет таблица в остатках или нет
@@ -817,8 +833,10 @@ class RedisSourceService(object):
         """
         Получение узла
         """
+        node_id = int(node_id)
+
         for node in nodes:
-            if node.node_id == node_id:
+            if int(node.node_id) == node_id:
                 return node
         return
 
@@ -834,7 +852,7 @@ class RedisSourceService(object):
             parent_id=getattr(node.parent, 'node_id', None),
             sid=source_id,
             val=table,
-            without_bind=False,
+            # without_bind=False,
             cols=[
                 {
                     'col_name': x['name'], 'col_title': x.get('title', None), }

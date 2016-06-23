@@ -107,7 +107,7 @@ class DatasourceViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         source = self.get_object()
         DataSourceService.delete_datasource(source)
-        DataSourceService.tree_full_clean(source)
+        # DataSourceService.tree_full_clean(source)
         return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
 
     @detail_route(methods=['get'])
@@ -284,12 +284,12 @@ class CardViewSet(viewsets.ViewSet):
 
         data = [
             {"source_id": 2, "table_name": u'auth_group', },
-            # {"source_id": 2, "table_name": u'auth_group_permissions', },
-            # {"source_id": 2, "table_name": u'auth_permission', },
-            # {"source_id": 2, "table_name": u'card_card', },
-            # {"source_id": 1, "table_name": u'Лист1', },
-            # {"source_id": 1, "table_name": u'List3', },
-            # {"source_id": 1, "table_name": u'Лист2', },
+            {"source_id": 2, "table_name": u'auth_group_permissions', },
+            {"source_id": 2, "table_name": u'auth_permission', },
+            {"source_id": 2, "table_name": u'card_card', },
+            {"source_id": 1, "table_name": u'Лист1', },
+            {"source_id": 1, "table_name": u'List3', },
+            {"source_id": 1, "table_name": u'Лист2', },
 
             # {"source_id": 12, "table_name": u'Лист1', },
 
@@ -307,11 +307,16 @@ class CardViewSet(viewsets.ViewSet):
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
             for each in data:
-                node_id = DataSourceService.cache_columns(
+
+                exists = DataSourceService.check_table_in_builder(
                     card_id, each['source_id'], each['table_name'])
 
-                info = DataSourceService.add_randomly_from_remains(
-                    card_id, node_id)
+                if not exists:
+                    node_id = DataSourceService.cache_columns(
+                        card_id, each['source_id'], each['table_name'])
+
+                    info = DataSourceService.add_randomly_from_remains(
+                        card_id, node_id)
 
         return Response(info)
 
@@ -347,8 +352,8 @@ def check_child(in_remain=True):
     Проверка ID ребенка на существование, если in_remain=True,
     то проверяет в остатках, иначе в активных
     """
-    def inner(func):
-        def inner(*args, **kwargs):
+    def inner1(func):
+        def inner2(*args, **kwargs):
 
             node_id = int(kwargs['pk'])
             card_id = int(kwargs['card_pk'])
@@ -359,8 +364,8 @@ def check_child(in_remain=True):
                 raise APIException("No such node id in builder!")
 
             return func(*args, **kwargs)
-        return inner
-    return inner
+        return inner2
+    return inner1
 
 
 class NodeViewSet(viewsets.ViewSet):
@@ -446,9 +451,9 @@ class NodeViewSet(viewsets.ViewSet):
                     card_pk, node_id)
         return Response(info)
 
-    @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
+    @detail_route(methods=['get'], serializer_class=ParentIdSerializer)
     @check_child
-    @check_parent
+    # @check_parent
     def remain_current(self, request, card_pk, pk):
         """
         Перенос узла из остатков в основное дерево
@@ -465,7 +470,7 @@ class NodeViewSet(viewsets.ViewSet):
         # serializer = self.serializer_class(data=request.data, many=True)
         # if serializer.is_valid(raise_exception=True):
         try:
-            parent_id = request.data['parent_id']
+            parent_id = 1#request.data['parent_id']
             info = DataSourceService.from_remain_to_certain(
                 card_pk, parent_id, pk)
             return Response(info)

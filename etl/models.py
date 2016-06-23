@@ -82,7 +82,7 @@ class Node(object):
             val=self.val,
             sid=self.source_id,
             parent_id=getattr(self.parent, 'node_id', None),
-            without_bind=False,
+            # without_bind=False,
             node_id=self.node_id,
         )
 
@@ -102,7 +102,7 @@ class RemainNode(Node):
             val=self.val,
             sid=self.source_id,
             parent_id=getattr(self.parent, 'node_id', None),
-            without_bind=True,
+            # without_bind=True,
             node_id=self.node_id,
         )
 
