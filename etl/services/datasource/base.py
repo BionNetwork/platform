@@ -195,8 +195,6 @@ class DataSourceService(object):
             raise Exception("Incorrect parent ID!")
 
         remain_nodes = cls.remains_nodes(card_id)
-        print remain_nodes[0].node_id
-        print child_id
         ch_node = RedisSS.get_remain_node(remain_nodes, child_id)
 
         if ch_node is None:

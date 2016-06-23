@@ -345,13 +345,13 @@ def check_parent(func):
     return inner
 
 
-def check_child(in_remain=True):
+def check_child(in_remain):
     """
     Проверка ID ребенка на существование, если in_remain=True,
     то проверяет в остатках, иначе в активных
     """
-    def inner1(func):
-        def inner2(*args, **kwargs):
+    def inner(func):
+        def inner(*args, **kwargs):
 
             node_id = int(kwargs['pk'])
             card_id = int(kwargs['card_pk'])
@@ -362,8 +362,8 @@ def check_child(in_remain=True):
                 raise APIException("No such node id in builder!")
 
             return func(*args, **kwargs)
-        return inner2
-    return inner1
+        return inner
+    return inner
 
 
 class NodeViewSet(viewsets.ViewSet):
@@ -452,9 +452,9 @@ class NodeViewSet(viewsets.ViewSet):
                     card_pk, node_id)
         return Response(info)
 
-    @detail_route(methods=['get'], serializer_class=ParentIdSerializer)
-    @check_child
-    # @check_parent
+    @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
+    @check_child(in_remain=True)
+    @check_parent
     def remain_current(self, request, card_pk, pk):
         """
         Перенос узла из остатков в основное дерево
