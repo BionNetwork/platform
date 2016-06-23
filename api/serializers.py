@@ -142,10 +142,9 @@ class TableSerializer(serializers.Serializer):
 
 class NodeSerializer(serializers.Serializer):
 
-    dest = serializers.CharField(max_length=256, allow_null=True)
-    is_root = serializers.BooleanField()
+    parent = serializers.CharField(max_length=256, allow_null=True)
     source_id = serializers.IntegerField()
-    table_name = serializers.CharField(max_length=256)
+    val = serializers.CharField(max_length=256)
     is_bind = serializers.BooleanField()
 
     def update(self, instance, validated_data):

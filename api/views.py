@@ -283,23 +283,21 @@ class CardViewSet(viewsets.ViewSet):
         card_id = pk
 
         data = [
-            {"source_id": 2, "table_name": u'auth_group', },
-            {"source_id": 2, "table_name": u'auth_group_permissions', },
-            {"source_id": 2, "table_name": u'auth_permission', },
-            {"source_id": 2, "table_name": u'card_card', },
-            {"source_id": 1, "table_name": u'Лист1', },
-            {"source_id": 1, "table_name": u'List3', },
-            {"source_id": 1, "table_name": u'Лист2', },
+            # {"source_id": 2, "table_name": u'auth_group', },
+            # {"source_id": 2, "table_name": u'auth_group_permissions', },
+            # {"source_id": 2, "table_name": u'auth_permission', },
+            # {"source_id": 2, "table_name": u'card_card', },
+            # {"source_id": 1, "table_name": u'Лист1', },
+            # {"source_id": 1, "table_name": u'List3', },
+            # {"source_id": 1, "table_name": u'Лист2', },
 
-            # {"source_id": 12, "table_name": u'Лист1', },
-
-        #     # {"source_id": 1, "table_name": u"auth_group", },
-        #     # {"source_id": 1, "table_name": u"auth_group_permissions", },
-        #     # {"source_id": 1, "table_name": u"auth_permission", },
-        #     # {"source_id": 1, "table_name": u"card_card", },
-        #     # {"source_id": 4, "table_name": u"list1", },
-        #     # {"source_id": 4, "table_name": u"List3", },
-        #     # {"source_id": 4, "table_name": u"Лист2", },
+            {"source_id": 1, "table_name": u"auth_group", },
+            {"source_id": 1, "table_name": u"auth_group_permissions", },
+            {"source_id": 1, "table_name": u"auth_permission", },
+            {"source_id": 1, "table_name": u"card_card", },
+            {"source_id": 4, "table_name": u"list1", },
+            {"source_id": 4, "table_name": u"List3", },
+            {"source_id": 4, "table_name": u"Лист2", },
         ]
 
         info = []
@@ -390,7 +388,10 @@ class NodeViewSet(viewsets.ViewSet):
         """
         Инфа ноды
         """
-        data = DataSourceService.get_node(card_pk, pk)
+        try:
+            data = DataSourceService.get_node(card_pk, pk)
+        except TypeError:
+            raise APIException("Узел должен быть частью дерева(не остаток)")
 
         return Response(data=data)
 
@@ -421,7 +422,7 @@ class NodeViewSet(viewsets.ViewSet):
         # except Exception as ex:
         #     raise APIException(ex.message)
 
-    @detail_route(methods=['post'])
+    @detail_route(methods=['get'])
     @check_child(in_remain=False)
     def to_remain(self, request, card_pk, pk):
         """
@@ -470,7 +471,7 @@ class NodeViewSet(viewsets.ViewSet):
         # serializer = self.serializer_class(data=request.data, many=True)
         # if serializer.is_valid(raise_exception=True):
         try:
-            parent_id = 1#request.data['parent_id']
+            parent_id = request.data['parent_id']
             info = DataSourceService.from_remain_to_certain(
                 card_pk, parent_id, pk)
             return Response(info)

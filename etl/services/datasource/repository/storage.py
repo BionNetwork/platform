@@ -836,7 +836,7 @@ class RedisSourceService(object):
         node_id = int(node_id)
 
         for node in nodes:
-            if int(node.node_id) == node_id:
+            if node.node_id == node_id:
                 return node
         return
 

@@ -325,7 +325,7 @@ class TablesTree(object):
         joins = cls.get_joins_NEW(parent_info, child_info)
 
         if joins:
-            new_node = Node(child_node.val, child_node.sid, parent=parent_node,
+            new_node = Node(child_node.val, child_node.source_id, parent=parent_node,
                             joins=joins, node_id=child_node.node_id)
             parent_node.childs.append(new_node)
             return True
