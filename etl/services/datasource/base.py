@@ -137,8 +137,6 @@ class DataSourceService(object):
         Пытаемся связать остаток с деревом в любое место
         """
 
-        # node_info = RedisSS.get_node_info_from_remain(card_id, node_id)
-
         remain_nodes = cls.remains_nodes(card_id)
         node = RedisSS.get_remain_node(remain_nodes, node_id)
 
@@ -325,7 +323,7 @@ class DataSourceService(object):
         """
         Проверяем узел приходящий уже есть в наличие билдера
         """
-        return RedisSS.table_in_builder(card_id, source_id, table)
+        return RedisSS.check_table_in_builder(card_id, source_id, table)
 
     @classmethod
     def get_tree(cls, card_id):
@@ -381,7 +379,7 @@ class DataSourceService(object):
         """
         Пришедшую таблицу СУЁТ в строительную карту дерева
         """
-        table_id = RedisSS.table_in_builder_remains(card_id, source_id, table)
+        table_id = RedisSS.check_table_in_builder_remains(card_id, source_id, table)
         if table_id is None:
             source = Datasource.objects.get(id=source_id)
             service = cls.get_source_service(source)
@@ -1131,8 +1129,8 @@ class DataSourceService(object):
 
         return relations
 
-    @staticmethod
-    def get_node(card_id, node_id):
+    @classmethod
+    def get_node(cls, card_id, node_id):
         """
         Получение данных по узлу
 
@@ -1143,14 +1141,38 @@ class DataSourceService(object):
         Returns:
             dict: данные об узле
         """
-        structure = RedisSS.get_active_tree_structure_NEW(card_id)
-        sel_tree = TTRepo.build_tree_by_structure(structure)
-        node = sel_tree.get_node(node_id)
-        actives = RedisSS.get_card_builder_data(card_id)
-        return RedisSS.get_active_node_info(card_id, actives, node)
+        node = None
 
-        # node = sel_tree.get_node(node_id)
-        # return node.api_info()
+        if not cls.check_node_id_in_remains(card_id, node_id):
+            structure = RedisSS.get_active_tree_structure_NEW(card_id)
+            sel_tree = TTRepo.build_tree_by_structure(structure)
+            node = sel_tree.get_node(node_id)
+        else:
+            actives = RedisSS.get_card_builder_data(card_id)
+            for remain in TTRepo.remains_nodes(actives):
+                if int(remain.node_id) == int(node_id):
+                    node = remain
+                    break
+        if node is None:
+            raise Exception("Bull shit!")
+
+        return RedisSS.get_node_info(card_id, node_id, node)
+
+    @classmethod
+    def check_node_id_in_remains(cls, card_id, node_id):
+        """
+        Проверяет есть ли данный id в билдере карты в остатках
+        """
+        node_id = int(node_id)
+        b_data = RedisSS.get_card_builder_data(card_id)
+
+        for sid in b_data:
+            s_data = b_data[sid]
+            # проверка в остатках
+            for remain, remain_id in s_data['remains'].iteritems():
+                if int(remain_id) == node_id:
+                    return True
+        return False
 
     @classmethod
     def check_node_id_in_builder(cls, card_id, node_id, in_remain=True):

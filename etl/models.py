@@ -224,23 +224,6 @@ class TablesTree(object):
                 return node
         return None
 
-    # FIXME: К удалению
-    def get_node_info(self, node_id):
-        """
-        Node's info by id
-        """
-        node_id = int(node_id)
-        nodes = self.ordered_nodes
-        for node in nodes:
-            if node.node_id == node_id:
-                return {
-                    'value': node.val,
-                    'sid': node.source_id,
-                    'node_id': node_id,
-                    'parent_id': getattr(node.parent, 'node_id', None),
-                }
-        return None
-
     @classmethod
     def _build(cls, children, tables, tables_info):
         """

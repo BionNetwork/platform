@@ -437,7 +437,7 @@ class RedisSourceService(object):
         return not_exists, actives_names
 
     @classmethod
-    def table_in_builder(cls, card_id, source_id, table):
+    def check_table_in_builder(cls, card_id, source_id, table):
         """
         Проверяет таблица в остатках или нет
         """
@@ -453,7 +453,7 @@ class RedisSourceService(object):
         return False
 
     @classmethod
-    def table_in_builder_remains(cls, card_id, source_id, table):
+    def check_table_in_builder_remains(cls, card_id, source_id, table):
         """
         Проверяет таблица в остатках или нет
         """
@@ -841,10 +841,9 @@ class RedisSourceService(object):
         return
 
     @classmethod
-    def get_active_node_info(cls, card_id, actives, node):
+    def get_node_info(cls, card_id, table_id, node):
 
         table, source_id = node.val, node.source_id
-        table_id = actives[str(source_id)]['actives'][table]
         table_info = cls.get_table_info(card_id, source_id, table_id)
 
         return dict(

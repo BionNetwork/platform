@@ -282,7 +282,7 @@ class CardViewSet(viewsets.ViewSet):
 
         card_id = pk
 
-        data = [
+        # data = [
             # {"source_id": 2, "table_name": u'auth_group', },
             # {"source_id": 2, "table_name": u'auth_group_permissions', },
             # {"source_id": 2, "table_name": u'auth_permission', },
@@ -291,14 +291,14 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'List3', },
             # {"source_id": 1, "table_name": u'Лист2', },
 
-            {"source_id": 1, "table_name": u"auth_group", },
-            {"source_id": 1, "table_name": u"auth_group_permissions", },
-            {"source_id": 1, "table_name": u"auth_permission", },
-            {"source_id": 1, "table_name": u"card_card", },
-            {"source_id": 4, "table_name": u"list1", },
-            {"source_id": 4, "table_name": u"List3", },
-            {"source_id": 4, "table_name": u"Лист2", },
-        ]
+        #     {"source_id": 1, "table_name": u"auth_group", },
+        #     {"source_id": 1, "table_name": u"auth_group_permissions", },
+        #     {"source_id": 1, "table_name": u"auth_permission", },
+        #     {"source_id": 1, "table_name": u"card_card", },
+        #     {"source_id": 4, "table_name": u"list1", },
+        #     {"source_id": 4, "table_name": u"List3", },
+        #     {"source_id": 4, "table_name": u"Лист2", },
+        # ]
 
         info = []
 
