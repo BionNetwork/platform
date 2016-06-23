@@ -119,16 +119,19 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         return Response(data)
 
     # FIXME Maybe needed decorator for source_id
-    @detail_route(methods=['get'])
+    @detail_route(methods=['post'])
     def set_indent(self, request, pk):
         """
         Отступ в соурсах, предположительно в файлах
         """
+        post = request.data
+
         source_id = pk
-        sheet = "Таблица1"#request.get('sheet', None)
+        sheet = post.get('sheet', None)
         if sheet is None:
             raise APIException("Sheet name is needed!")
-        indent = 1#request.get('indent', None)
+        indent = post.get('indent', None)
+
         if indent is None:
             raise APIException("Indent is needed!")
         try:
