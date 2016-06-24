@@ -534,9 +534,11 @@ class JoinViewSet(viewsets.ViewSet):
         for each in request.data['joins']:
             joins.append([each['left'], each['join'], each['right']])
 
+        parent_id, child_id = node_pk, pk
+
         data = DataSourceService.save_new_joins_NEW(
             card_pk, parent_table, parent_sid, child_table,
-            child_sid, pk, join_type, joins)
+            child_sid, pk, join_type, joins, parent_id, child_id)
 
         return Response(data=data)
 

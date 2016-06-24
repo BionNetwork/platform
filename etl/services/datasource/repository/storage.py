@@ -1296,7 +1296,7 @@ class RedisSourceService(object):
                         el['joins'], parent_value, child_value)
         else:
             for el in tree['childs']:
-                cls.get_join(el, parent_id, child_id)
+                return cls.get_join(el, parent_id, child_id)
         return None, []
 
     @classmethod

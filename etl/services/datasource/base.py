@@ -646,7 +646,7 @@ class DataSourceService(object):
 
     @classmethod
     def save_new_joins_NEW(cls, card_id, left_table, left_sid, right_table,
-                           right_sid, child_node_id, join_type, joins):
+                           right_sid, child_node_id, join_type, joins, parent_id, child_id):
         """
         Redis
         Cохранение новых джойнов
@@ -675,6 +675,11 @@ class DataSourceService(object):
             sel_tree.update_node_joins_NEW(left_table, left_sid, right_table,
                                            right_sid, child_node_id, join_type, joins_set)
             RedisSS.save_tree_structure(card_id, sel_tree)
+
+            if cls.check_node_id_in_remains(card_id, int(child_id)):
+                remain_nodes = cls.remains_nodes(card_id)
+                node = RedisSS.get_remain_node(remain_nodes, int(child_id))
+                RedisSS.put_remain_to_builder_actives(card_id, node)
 
             # сохраняем дерево
             # ordered_nodes = sel_tree.ordered_nodes
