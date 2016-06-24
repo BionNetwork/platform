@@ -737,7 +737,7 @@ class DataSourceService(object):
         cols_types = {}
 
         for (t_name, sid) in tables_info:
-            t_id = RedisSS.get_table_name_or_id(t_name, card_id, sid)
+            t_id = RedisSS.get_node_id(t_name, card_id, sid)
             t_cols = RedisSS.get_table_info(card_id, sid, t_id)['columns']
 
             for col in t_cols:

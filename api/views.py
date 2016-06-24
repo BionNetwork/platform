@@ -525,8 +525,8 @@ class JoinViewSet(viewsets.ViewSet):
         parent_sid = left_data['sid']
         child_sid = right_data['sid']
 
-        parent_table = left_data['value']
-        child_table = right_data['value']
+        parent_table = left_data['val']
+        child_table = right_data['val']
 
         join_type = 'inner'
 

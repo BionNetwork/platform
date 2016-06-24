@@ -811,12 +811,12 @@ class RedisSourceService(object):
         if parent_table in of_parent['actives']:
             par_table_id = of_parent['actives'][parent_table]
         else:
-            par_table_id = parent_table
+            par_table_id = of_parent['remains'][parent_table]
 
         if child_table in of_child['actives']:
             ch_table_id = of_child['actives'][child_table]
         else:
-            ch_table_id = child_table
+            ch_table_id = of_child['remains'][child_table]
 
         par_cols = cls.get_table_info(
             card_id, parent_sid, par_table_id)['columns']
@@ -1146,7 +1146,7 @@ class RedisSourceService(object):
         return builder['data']
 
     @classmethod
-    def get_table_name_or_id(cls, table, card_id, sid):
+    def get_node_id(cls, table, card_id, sid):
         """
         """
         actives = cls.get_card_builder_data(card_id)
@@ -1154,11 +1154,10 @@ class RedisSourceService(object):
 
         if table in s_actives['actives']:
             return s_actives['actives'][table]
+        elif table in s_actives['remains']:
+            return s_actives['remains'][table]
 
-        elif table not in s_actives['remains']:
-            raise Exception(u'Отсутствует информация по таблице!')
-
-        return table
+        raise Exception(u'Отсутствует информация по таблице!')
 
     @classmethod
     def get_active_table_list(cls, source_key):
