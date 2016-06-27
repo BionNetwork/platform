@@ -305,13 +305,13 @@ class CardViewSet(viewsets.ViewSet):
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
             for each in data:
-
+                sid, table = each['source_id'], each['table_name']
                 exists = DataSourceService.check_table_in_builder(
-                    card_id, each['source_id'], each['table_name'])
+                    card_id, sid, table)
 
                 if not exists:
                     node_id = DataSourceService.cache_columns(
-                        card_id, each['source_id'], each['table_name'])
+                        card_id, sid, table)
 
                     info = DataSourceService.add_randomly_from_remains(
                         card_id, node_id)
@@ -389,7 +389,7 @@ class NodeViewSet(viewsets.ViewSet):
         Инфа ноды
         """
         try:
-            data = DataSourceService.get_node(card_pk, pk)
+            data = DataSourceService.get_node_info(card_pk, pk)
         except TypeError:
             raise APIException("Узел должен быть частью дерева(не остаток)")
 
@@ -520,13 +520,11 @@ class JoinViewSet(viewsets.ViewSet):
 }
         """
 
-        right_data = DataSourceService.get_node(card_pk, pk)
-        left_data = DataSourceService.get_node(card_pk, node_pk)
-        parent_sid = left_data['sid']
-        child_sid = right_data['sid']
+        left_node = DataSourceService.get_node(card_pk, node_pk)
+        right_node = DataSourceService.get_node(card_pk, pk)
 
-        parent_table = left_data['val']
-        child_table = right_data['val']
+        parent_sid, parent_table = left_node.source_id, left_node.val
+        child_sid, child_table = right_node.source_id, right_node.val
 
         join_type = 'inner'
 
@@ -536,9 +534,9 @@ class JoinViewSet(viewsets.ViewSet):
 
         parent_id, child_id = node_pk, pk
 
-        data = DataSourceService.save_new_joins_NEW(
+        data = DataSourceService.save_new_joins(
             card_pk, parent_table, parent_sid, child_table,
-            child_sid, pk, join_type, joins, parent_id, child_id)
+            child_sid, pk, join_type, joins, left_node, right_node)
 
         return Response(data=data)
 

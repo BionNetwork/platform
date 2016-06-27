@@ -206,47 +206,6 @@ class RedisSourceService(object):
         r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
 
     @classmethod
-    def delete_tables(cls, source, tables):
-        """
-        удаляет информацию о таблицах
-
-        Args:
-            source(Datasource): объект Источника
-            tables(list): Список названий таблиц
-        """
-        rck = RedisCacheKeys
-        source_key = cls.get_user_source(source)
-        # str_table = rck.get_active_table(source_key, '{0}')
-        # str_table_ddl = rck.get_active_table_ddl(source_key, '{0}')
-        str_table_by_name = rck.get_active_table(source_key, '{0}')
-        str_joins = rck.get_source_joins(source_key)
-
-        joins = json.loads(r_server.get(str_joins))
-
-        # если есть, то удаляем таблицу без связей
-        for t_name in tables:
-            r_server.delete(str_table_by_name.format(t_name))
-
-        # удаляем все джоины пришедших таблиц
-        cls.initial_delete_joins(tables, joins)
-        child_tables = cls.delete_joins(tables, joins)
-
-        # добавляем к основным таблицам, их дочерние для дальнейшего удаления
-        tables += child_tables
-
-        r_server.set(str_joins, json.dumps(joins))
-
-        # FIXME раньше удалялась о таблицах, сейчас оставляем
-        # counter_str = RedisCacheKeys.get_user_collection_counter(
-        #     source.user_id, source.id)
-        # coll_counter = json.loads(
-        #     cls.get_collection_counter(source.user_id, source.id))
-        # actives = coll_counter['data']
-        # удаляем полную инфу пришедших таблиц
-        # cls.delete_tables_info(tables, actives, str_table, str_table_ddl)
-        # r_server.set(counter_str, json.dumps(coll_counter))
-
-    @classmethod
     def delete_tables_NEW(cls, card_id, tables):
         """
         удаляет информацию о таблицах
@@ -279,7 +238,7 @@ class RedisSourceService(object):
         joins = json.loads(r_server.get(str_joins))
 
         # удаляем все джоины пришедших таблиц
-        cls.initial_delete_joins_NEW(tables, joins)
+        cls.initial_delete_joins(tables, joins)
         child_tables = cls.delete_joins_NEW(tables, joins)
 
         # добавляем к основным таблицам, их дочерние для дальнейшего удаления
@@ -290,16 +249,6 @@ class RedisSourceService(object):
 
     @classmethod
     def initial_delete_joins(cls, tables, joins):
-        """
-        Удаляем связи таблиц, из таблиц, стоящих левее выбранных
-        """
-        for v in joins.values():
-            for j in v[:]:
-                if j['right']['table'] in tables:
-                    v.remove(j)
-
-    @classmethod
-    def initial_delete_joins_NEW(cls, tables, joins):
         """
         Удаляем связи таблиц, из таблиц, стоящих левее выбранных
         """
@@ -399,15 +348,13 @@ class RedisSourceService(object):
         return r_server.get(cls.get_collection_name(source, table))
 
     @classmethod
-    def get_table_info(cls, node_id, source_id, table_id):
-        str_table = RKeys.get_active_table(
-            node_id, source_id, table_id)
+    def get_table_info(cls, card_id, source_id, table_id):
+        str_table = RKeys.get_active_table(card_id, source_id, table_id)
         return cls.r_get(str_table)
 
     @classmethod
-    def set_table_info(cls, node_id, source_id, table_id, table_info):
-        str_table = RKeys.get_active_table(
-            node_id, source_id, table_id)
+    def set_table_info(cls, card_id, source_id, table_id, table_info):
+        str_table = RKeys.get_active_table(card_id, source_id, table_id)
         return cls.r_set(str_table, table_info)
 
     @classmethod
@@ -457,11 +404,11 @@ class RedisSourceService(object):
         """
         Проверяет таблица в остатках или нет
         """
-        actives = cls.get_card_builder_data(card_id)
+        builder_data = cls.get_card_builder_data(card_id)
         s_id = str(source_id)
 
-        if s_id in actives:
-            source_colls = actives[s_id]
+        if s_id in builder_data:
+            source_colls = builder_data[s_id]
             # таблица не должна быть в активных
             if table in source_colls['actives']:
                 raise Exception("Table must be in remains, but it's in actives")
@@ -510,20 +457,10 @@ class RedisSourceService(object):
         cls.r_set(str_active_tree, tree_structure)
 
     # достаем структуру дерева из редиса
-    @classmethod
-    def get_active_tree_structure(cls, source):
-        """
-        Получение текущей структуры дерева источника
-        :param source: Datasource
-        :return:
-        """
-        source_key = cls.get_user_source(source)
-        str_active_tree = RKeys.get_active_tree(source_key)
 
-        return json.loads(r_server.get(str_active_tree))
 
     @classmethod
-    def get_active_tree_structure_NEW(cls, card_id):
+    def get_active_tree_structure(cls, card_id):
         """
         Получение текущей структуры дерева источника
         :param source: Datasource
@@ -532,94 +469,6 @@ class RedisSourceService(object):
         card_key = RKeys.get_user_card_key(card_id)
         str_active_tree = RKeys.get_active_tree(card_key)
         return cls.r_get(str_active_tree)
-
-    @classmethod
-    def insert_tree(cls, structure, ordered_nodes, source, update_joins=True):
-        """
-        сохраняем полную инфу о дереве
-        :param structure:
-        :param ordered_nodes:
-        :param source:
-        """
-
-        source_key = cls.get_user_source(source)
-
-        str_table = RedisCacheKeys.get_active_table(
-            source_key, '{0}')
-        str_table_ddl = RedisCacheKeys.get_active_table_ddl(
-            source_key, '{0}')
-        str_table_by_name = RedisCacheKeys.get_active_table_by_name(
-            source_key, '{0}')
-        str_joins = RedisCacheKeys.get_source_joins(source_key)
-        counter_str = RedisCacheKeys.get_user_collection_counter(
-            source_key)
-
-        # список коллекций
-        coll_counter = cls.get_collection_counter(source_key)
-
-        # старый список коллекций
-        actives = coll_counter['data']
-
-        joins_in_redis = defaultdict(list)
-
-        pipe = r_server.pipeline()
-
-        for node in ordered_nodes:
-            n_val = node.val
-            order = cls.get_order_from_actives(n_val, actives)
-            # если инфы о коллекции нет
-            if order is None:
-
-                # порядковый номер cчетчика коллекций пользователя
-                sequence_id = coll_counter['next_id']
-
-                # Получаем информацию либо по имени, либо по порядковому номеру
-                table_info = json.loads(
-                    cls.get_table_full_info(source, n_val))
-
-                info_for_coll = deepcopy(table_info)
-                info_for_ddl = deepcopy(table_info)
-
-                for column in info_for_coll["columns"]:
-                    del column["origin_type"]
-                    # del column["is_nullable"]
-                    del column["extra"]
-
-                pipe.set(str_table.format(sequence_id), json.dumps(info_for_coll))
-
-                for column in info_for_ddl["columns"]:
-                    column["type"] = column["origin_type"]
-                    del column["origin_type"]
-
-                pipe.set(str_table_ddl.format(sequence_id), json.dumps(info_for_ddl))
-
-                # удаляем таблицы с именованными ключами
-                pipe.delete(str_table_by_name.format(n_val))
-                try:
-                    assert isinstance(coll_counter, dict)
-                except AssertionError:
-                    coll_counter = {'data': [], 'next_id': coll_counter}
-                # добавляем новую таблциу в карту активных таблиц
-                coll_counter['data'].append({'name': n_val, 'id': sequence_id})
-
-                # увеличиваем счетчик
-                coll_counter['next_id'] += 1
-
-            # добавляем инфу новых джойнов
-            if update_joins:
-                joins = node.get_node_joins_info()
-                for k, v in joins.iteritems():
-                    joins_in_redis[k] += v
-
-        pipe.set(counter_str, json.dumps(coll_counter))
-
-        if update_joins:
-            pipe.set(str_joins, json.dumps(joins_in_redis))
-
-        pipe.execute()
-
-        # сохраняем само дерево
-        cls.save_active_tree(structure, source)
 
     @classmethod
     def put_remain_to_builder_actives(cls, card_id, node):
@@ -839,24 +688,6 @@ class RedisSourceService(object):
             if node.node_id == node_id:
                 return node
         return
-
-    @classmethod
-    def get_node_info(cls, card_id, table_id, node):
-
-        table, source_id = node.val, node.source_id
-        table_info = cls.get_table_info(card_id, source_id, table_id)
-
-        return dict(
-            node_id=node.node_id,
-            parent_id=getattr(node.parent, 'node_id', None),
-            sid=source_id,
-            val=table,
-            # without_bind=False,
-            cols=[
-                {
-                    'col_name': x['name'], 'col_title': x.get('title', None), }
-                for x in table_info['columns']
-                ])
 
     @classmethod
     def put_table_info_in_builder(cls, card_id, source_id, table, table_info):
@@ -1171,61 +1002,11 @@ class RedisSourceService(object):
         return cls.get_collection_counter(source_key)['data']
 
     @classmethod
-    def save_good_error_joins(cls, source, left_table, right_table,
-                              good_joins, error_joins, join_type):
-        """
-        Сохраняет временные ошибочные и нормальные джойны таблиц
-        :param source: Datasource
-        :param joins: list
-        :param error_joins: list
-        """
-        source_key = cls.get_user_source(source)
-        str_joins = RedisCacheKeys.get_source_joins(source_key)
-        r_joins = json.loads(r_server.get(str_joins))
-
-        if left_table in r_joins:
-            # старые связи таблицы папы
-            old_left_joins = r_joins[left_table]
-            # меняем связи с right_table, а остальное оставляем
-            r_joins[left_table] = [j for j in old_left_joins
-                                   if j['right']['table'] != right_table]
-        else:
-            r_joins[left_table] = []
-
-        for j in good_joins:
-            l_c, j_val, r_c = j
-            r_joins[left_table].append(
-                {
-                    'left': {'table': left_table, 'column': l_c},
-                    'right': {'table': right_table, 'column': r_c},
-                    'join': {'type': join_type, 'value': j_val},
-                }
-            )
-
-        if error_joins:
-            for j in error_joins:
-                l_c, j_val, r_c = j
-                r_joins[left_table].append(
-                    {
-                        'left': {'table': left_table, 'column': l_c},
-                        'right': {'table': right_table, 'column': r_c},
-                        'join': {'type': join_type, 'value': j_val},
-                        'error': 'types mismatch'
-                    }
-                )
-        r_server.set(str_joins, json.dumps(r_joins))
-
-        return {'has_error_joins': bool(error_joins), }
-
-    @classmethod
-    def save_good_error_joins_NEW(
+    def save_good_error_joins(
             cls, card_id, left_table, left_sid, right_table,
             right_sid, good_joins, error_joins, join_type):
         """
         Сохраняет временные ошибочные и нормальные джойны таблиц
-        :param source: Datasource
-        :param joins: list
-        :param error_joins: list
         """
         card_key = RKeys.get_user_card_key(card_id)
         builder_str = RKeys.get_user_card_builder(card_key)
@@ -1328,26 +1109,6 @@ class RedisSourceService(object):
         # если имя таблицы кириллица, то в юникод преобразуем
         return (r_server.get(tables_remain_key).decode('utf8')
                 if r_server.exists(tables_remain_key) else None)
-
-    @classmethod
-    # FIXME: К удалению
-    def get_node_info_from_remain(cls, card_id, node_id):
-        """
-        Информация об остатке
-        """
-        node_id = int(node_id)
-        actives = cls.get_card_builder_data(card_id)
-
-        for sid in actives:
-            for k, v in actives[sid]['remains'].iteritems():
-                if node_id == int(v):
-                    return {
-                        'value': k,
-                        'sid': sid,
-                        'node_id': node_id,
-                        'parent_id': None,
-                    }
-        return None
 
     @classmethod
     def remove_tree(cls, card_id):

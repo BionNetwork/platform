@@ -59,9 +59,6 @@ class RedisContextBuilder(ContextBuilder):
         self.source = Datasource.objects.get(id=source_id)
         self.cols = cols
 
-    def get_tree(self):
-        return RedisSourceService.get_active_tree_structure(self.source)
-
     def get_meta(self):
         return DataSourceService.tables_info_for_metasource(
             self.source, self.tables)
@@ -69,9 +66,6 @@ class RedisContextBuilder(ContextBuilder):
     def get_cdc_type(self):
         return DatasourceSettings.objects.get(
             datasource_id=self.source.id, name=DatasourceSettings.SETTING_CDC_NAME).value
-
-    def get_cols_types(self):
-        return DataSourceService.get_columns_types(self.source, self.tables)
 
     def get_collection_names(self):
         return DataSourceService.get_collections_names(

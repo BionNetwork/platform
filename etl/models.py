@@ -188,11 +188,8 @@ class TablesTree(object):
             root_info['childs'].append(cls._get_tree_structure(ch))
         return root_info
 
-    def build(self, tables, tables_info):
-        self.no_bind_tables = self._build([self.root], tables, tables_info)
-
-    def build_NEW(self, table, source_id,  node_id, tables_info):
-        remain = self._build_NEW(
+    def build(self, table, source_id,  node_id, tables_info):
+        remain = self._build(
             [self.root, ], table, source_id,  node_id, tables_info)
 
         return remain
@@ -225,47 +222,7 @@ class TablesTree(object):
         return None
 
     @classmethod
-    def _build(cls, children, tables, tables_info):
-        """
-        строит дерево таблиц, возвращает таблицы без связей
-
-        Args:
-            children(list of Node):
-            tables
-            tables_info
-
-        Returns:
-            list: Список не связанных таблиц
-        """
-
-        child_vals = [x.val for x in children]
-        tables = [x for x in tables if x not in child_vals]
-
-        new_children = []
-
-        for child in children:
-            new_children += child.childs
-            l_val = child.val
-            l_info = tables_info[l_val]
-
-            for t_name in tables[:]:
-                r_info = tables_info[t_name]
-                joins = cls.get_joins(l_val, t_name, l_info, r_info)
-
-                if joins:
-                    tables.remove(t_name)
-                    new_node = Node(t_name, 1, child, joins)
-                    child.childs.append(new_node)
-                    new_children.append(new_node)
-
-        if new_children and tables:
-            tables = cls._build(new_children, tables, tables_info)
-
-        # таблицы без связей
-        return tables
-
-    @classmethod
-    def _build_NEW(cls, children, table, source_id, node_id, tables_info):
+    def _build(cls, children, table, source_id, node_id, tables_info):
         """
         строит дерево таблиц, возвращает таблицы без связей
         """
@@ -277,7 +234,7 @@ class TablesTree(object):
             l_info = tables_info[int(l_nid)]
 
             r_info = tables_info[int(node_id)]
-            joins = cls.get_joins_NEW(l_info, r_info)
+            joins = cls.get_joins(l_info, r_info)
 
             if joins:
                 new_node = Node(table, source_id, parent=child,
@@ -289,7 +246,7 @@ class TablesTree(object):
                 break
 
         if new_children and table is not None:
-            table = cls._build_NEW(
+            table = cls._build(
                 new_children, table, source_id, node_id, tables_info)
 
         # таблицы без связей
@@ -305,7 +262,7 @@ class TablesTree(object):
             bool: True, если удалось связать два узла, иначе False
         """
 
-        joins = cls.get_joins_NEW(parent_info, child_info)
+        joins = cls.get_joins(parent_info, child_info)
 
         if joins:
             new_node = Node(child_node.val, child_node.source_id, parent=parent_node,
@@ -321,7 +278,7 @@ class TablesTree(object):
         """
         Пытается связать к дереву 1 новый узел
         """
-        joins = cls.get_joins_NEW(parent_info, child_info)
+        joins = cls.get_joins(parent_info, child_info)
 
         if joins:
             old_parent = child_node.parent
@@ -352,39 +309,7 @@ class TablesTree(object):
             root.childs.append(new_node)
             cls._build_by_structure(new_node, ch['childs'])
 
-    def update_node_joins(self, left_table,
-                          right_table, join_type, joins):
-        """
-        добавляет/меняет связи между таблицами
-        :param sel_tree: TablesTree
-        :param left_table: str
-        :param right_table: str
-        :param join_type: str
-        :param joins: list
-        """
-        nodes = self.ordered_nodes
-        parent = [x for x in nodes if x.val == left_table][0]
-        childs = [x for x in parent.childs if x.val == right_table]
-
-        # случай, когда две таблицы не имели связей
-        if not childs:
-            node = Node(right_table, parent, [], join_type)
-            parent.childs.append(node)
-        else:
-            # меняем существующие связи
-            node = childs[0]
-            node.joins = []
-            node.join_type = join_type
-
-        for came_join in joins:
-            parent_col, oper, child_col = came_join
-            node.joins.append({
-                'left': {'table': left_table, 'column': parent_col},
-                'right': {'table': right_table, 'column': child_col},
-                'join': {"type": join_type, "value": oper},
-            })
-
-    def update_node_joins_NEW(self, left_table, left_sid, right_table,
+    def update_node_joins(self, left_table, left_sid, right_table,
                               right_sid, right_node_id, join_type, joins):
         """
         добавляет/меняет связи между таблицами
@@ -422,85 +347,7 @@ class TablesTree(object):
             })
 
     @staticmethod
-    def get_joins(l_t, r_t, l_info, r_info):
-        """
-        Функция выявляет связи между таблицами
-        :param l_t:
-        :param r_t:
-        :param l_info:
-        :param r_info:
-        :return: list
-        """
-        l_cols = l_info['columns']
-        r_cols = r_info['columns']
-
-        joins = set()
-        # избавляет от дублей
-        unique_set = set()
-
-        for l_c in l_cols:
-            l_str = u'{0}_{1}'.format(l_t, l_c['name'])
-            for r_c in r_cols:
-                r_str = u'{0}_{1}'.format(r_t, r_c['name'])
-                if l_c['name'] == r_str and l_c['type'] == r_c['type']:
-                    j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
-                    sort_j_tuple = tuple(sorted(j_tuple))
-                    if sort_j_tuple not in unique_set:
-                        joins.add(j_tuple)
-                        unique_set.add(sort_j_tuple)
-                        break
-                if l_str == r_c["name"] and l_c['type'] == r_c['type']:
-                    j_tuple = (l_t, l_c["name"], r_t, r_c["name"])
-                    sort_j_tuple = tuple(sorted(j_tuple))
-                    if sort_j_tuple not in unique_set:
-                        joins.add(j_tuple)
-                        unique_set.add(sort_j_tuple)
-                        break
-
-        l_foreign = l_info['foreigns']
-        r_foreign = r_info['foreigns']
-
-        for f in l_foreign:
-            if f['destination']['table'] == r_t:
-                j_tuple = (
-                    f['source']['table'],
-                    f['source']['column'],
-                    f['destination']['table'],
-                    f['destination']['column'],
-                )
-                sort_j_tuple = tuple(sorted(j_tuple))
-                if sort_j_tuple not in unique_set:
-                    joins.add(j_tuple)
-                    unique_set.add(sort_j_tuple)
-                    break
-
-        for f in r_foreign:
-            if f['destination']['table'] == l_t:
-                j_tuple = (
-                    f['source']['table'],
-                    f['source']['column'],
-                    f['destination']['table'],
-                    f['destination']['column'],
-                )
-                sort_j_tuple = tuple(sorted(j_tuple))
-                if sort_j_tuple not in unique_set:
-                    joins.add(j_tuple)
-                    unique_set.add(sort_j_tuple)
-                    break
-
-        dict_joins = []
-
-        for join in joins:
-            dict_joins.append({
-                'left': {'table': join[0], 'column': join[1]},
-                'right': {'table': join[2], 'column': join[3]},
-                'join': {"type": JoinTypes.INNER, "value": Operations.EQ},
-            })
-
-        return dict_joins
-
-    @staticmethod
-    def get_joins_NEW(l_info, r_info):
+    def get_joins(l_info, r_info):
         """
         Функция выявляет связи между таблицами
         :param l_info:
@@ -764,13 +611,13 @@ class TableTreeRepository(object):
         return [node.api_info() for node in nodes]
 
     @classmethod
-    def remains_nodes(cls, actives):
+    def remains_nodes(cls, builder_data):
         """
         Остатки в RemainNode
         """
         remains = []
-        for sid in actives:
-            for remain, remain_id in actives[sid]['remains'].iteritems():
+        for sid in builder_data:
+            for remain, remain_id in builder_data[sid]['remains'].iteritems():
                 remains.append(
                     RemainNode(remain, sid, remain_id)
                 )
