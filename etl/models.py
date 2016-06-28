@@ -775,3 +775,42 @@ class TableTreeRepository(object):
                     RemainNode(remain, sid, remain_id)
                 )
         return remains
+
+    @classmethod
+    def get_joins(cls, tree, parent_id, child_id):
+        """
+        Получение информацию по связям узлов
+        """
+        parent = tree.get_node(parent_id)
+        if parent is None:
+            raise Exception("No such parent in tree!")
+
+        child = None
+        child_id = int(child_id)
+        for ch in parent.childs:
+            if int(ch.node_id) == child_id:
+                child = ch
+                break
+        # элемент, которого связываем нет в дереве
+        if child is None:
+            return None, []
+
+        return cls.construct_join_info(parent, child)
+
+    @classmethod
+    def construct_join_info(cls, parent, child):
+        """
+        Собираем к нужному виду информацию о связе для пары узлов
+        """
+        joins = child.joins
+        join_type = joins[0]['join']['type']
+        joins_info = []
+        for el in joins:
+            d = {
+                'left': el['left']['column'] if el['left']['table'] == parent else el['right']['column'],
+                'right': el['left']['column'] if el['left']['table'] == child else el['right']['column'],
+                'join': el['join']['value']
+            }
+            joins_info.append(d)
+
+        return join_type, joins_info
