@@ -1054,50 +1054,6 @@ class RedisSourceService(object):
         return {'has_error_joins': bool(error_joins), }
 
     @classmethod
-    def get_joins(cls, card_id, parent_id, child_id):
-        """
-        Получение информацию по связям узлов
-        """
-        card_key = RKeys.get_user_card_key(card_id)
-        active_tree = cls.r_get(RKeys.get_active_tree(card_key))
-        return cls.get_join(active_tree, parent_id, child_id)
-
-
-    @classmethod
-    def get_join(cls, tree, parent_id, child_id):
-        """
-        Рекурсивно получаем необходимую пару предок-потомок
-        """
-        if tree['node_id'] == parent_id:
-            parent_value = tree['val']
-            for el in tree['childs']:
-                if el['node_id'] == child_id:
-                    child_value = el['val']
-                    return cls.construct_join_info(
-                        el['joins'], parent_value, child_value)
-        else:
-            for el in tree['childs']:
-                return cls.get_join(el, parent_id, child_id)
-        return None, []
-
-    @classmethod
-    def construct_join_info(cls, joins, parent, child):
-        """
-        Собираем к нужному виду информацию о связе для пары узлов
-        """
-        join_type = joins[0]['join']['type']
-        cols_info = []
-        for el in joins:
-            d = {
-                'left': el['left']['column'] if el['left']['table'] == parent else el['right']['column'],
-                'right': el['left']['column'] if el['left']['table'] == child else el['right']['column'],
-                'join': el['join']['value']
-            }
-            cols_info.append(d)
-
-        return join_type, cols_info
-
-    @classmethod
     def get_source_joins(cls, source_key):
         # FIXME: к удалению ?
         str_joins = RedisCacheKeys.get_source_joins(source_key)

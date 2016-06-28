@@ -464,7 +464,9 @@ class DataSourceService(object):
         columns = RedisSS.get_columns_for_joins(
             card_id, parent_table, parent_sid, child_table, child_sid)
 
-        join_type, cols_info = RedisSS.get_joins(card_id, parent_id, child_id)
+        tree = cls.get_tree(card_id)
+
+        join_type, cols_info = TTRepo.get_joins(tree, parent_id, child_id)
 
         return {
             'columns': columns,
