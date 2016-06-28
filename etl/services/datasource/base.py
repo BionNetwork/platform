@@ -352,13 +352,15 @@ class DataSourceService(object):
         """
         Строит дерево, если его нет, иначе перестраивает
         """
-        tree_exists = RedisSS.check_tree_exists(card_id)
+        # дерева еще нет или все в остатках
+        if not RedisSS.check_tree_exists(card_id):
+            tree_nodes = []
+            remain_nodes = cls.remains_nodes(card_id)
+            remains = TTRepo.nodes_info(remain_nodes)
 
-        # дерева еще нет
-        if not tree_exists:
             return {
-                'tree_nodes': [],
-                'remains': [],
+                'tree_nodes': tree_nodes,
+                'remains': remains,
             }
         # иначе достраиваем дерево, если можем, если не можем вернем остаток
         sel_tree = cls.get_tree(card_id)

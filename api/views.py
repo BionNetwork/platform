@@ -440,8 +440,8 @@ class NodeViewSet(viewsets.ViewSet):
         Измение источника для узла
         """
 
-    @detail_route(methods=['post'])
-    @check_child
+    @detail_route(methods=['get'])
+    @check_child(in_remain=True)
     def remain_whatever(self, request, card_pk, pk):
         """
         Перенос узла из остатков в основное дерево
