@@ -309,8 +309,7 @@ class TablesTree(object):
             root.childs.append(new_node)
             cls._build_by_structure(new_node, ch['childs'])
 
-    def update_node_joins(self, left_table, left_sid, right_table,
-                              right_sid, right_node_id, join_type, joins):
+    def update_node_joins(self, parent, child, join_type, joins):
         """
         добавляет/меняет связи между таблицами
         :param sel_tree: TablesTree
@@ -319,16 +318,16 @@ class TablesTree(object):
         :param join_type: str
         :param joins: list
         """
-        nodes = self.ordered_nodes
-        parent = [x for x in nodes if x.val == left_table and
-                  int(x.source_id) == int(left_sid)][0]
-        childs = [x for x in parent.childs if x.val == right_table and
-                  int(x.source_id) == int(right_sid)]
+        # nodes = self.ordered_nodes
+        # parent = [x for x in nodes if x.val == parent.val and
+        #           int(x.source_id) == int(parent.source_id)][0]
+        childs = [x for x in parent.childs if x.val == child.val and
+                  int(x.source_id) == int(child.source_id)]
 
         # случай, когда две таблицы не имели связей
         if not childs:
             node = Node(
-                right_table, right_sid, parent, [], right_node_id, join_type)
+                child.val, child.source_id, parent, [], child.node_id, join_type)
             parent.childs.append(node)
         else:
             # меняем существующие связи
@@ -339,10 +338,10 @@ class TablesTree(object):
         for came_join in joins:
             parent_col, oper, child_col = came_join
             node.joins.append({
-                'left': {'table': left_table, 'column': parent_col,
-                         'sid': left_sid, },
-                'right': {'table': right_table, 'column': child_col,
-                          'sid': right_sid, },
+                'left': {'table': parent.val, 'column': parent_col,
+                         'sid': parent.source_id, },
+                'right': {'table': child.val, 'column': child_col,
+                          'sid': child.source_id, },
                 'join': {"type": join_type, "value": oper},
             })
 

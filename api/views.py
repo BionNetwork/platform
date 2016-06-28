@@ -291,13 +291,13 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'List3', },
             # {"source_id": 1, "table_name": u'Лист2', },
 
-        #     {"source_id": 1, "table_name": u"auth_group", },
-        #     {"source_id": 1, "table_name": u"auth_group_permissions", },
-        #     {"source_id": 1, "table_name": u"auth_permission", },
-        #     {"source_id": 1, "table_name": u"card_card", },
-        #     {"source_id": 4, "table_name": u"list1", },
-        #     {"source_id": 4, "table_name": u"List3", },
-        #     {"source_id": 4, "table_name": u"Лист2", },
+        # [{"source_id": 1, "table_name": "auth_group"},
+        #  {"source_id": 1, "table_name": "auth_group_permissions"},
+        #  {"source_id": 1, "table_name": "auth_permission"},
+        #  {"source_id": 1, "table_name": "card_card"},
+        #  {"source_id": 2, "table_name": "list1"},
+        #  {"source_id": 2, "table_name": "List3"},
+        #  {"source_id": 2, "table_name": "Лист2"}]
         # ]
 
         info = []
@@ -523,20 +523,14 @@ class JoinViewSet(viewsets.ViewSet):
         left_node = DataSourceService.get_node(card_pk, node_pk)
         right_node = DataSourceService.get_node(card_pk, pk)
 
-        parent_sid, parent_table = left_node.source_id, left_node.val
-        child_sid, child_table = right_node.source_id, right_node.val
-
         join_type = 'inner'
 
         joins = []
         for each in request.data['joins']:
             joins.append([each['left'], each['join'], each['right']])
 
-        parent_id, child_id = node_pk, pk
-
         data = DataSourceService.save_new_joins(
-            card_pk, parent_table, parent_sid, child_table,
-            child_sid, pk, join_type, joins, left_node, right_node)
+            card_pk, left_node, right_node, join_type, joins)
 
         return Response(data=data)
 
