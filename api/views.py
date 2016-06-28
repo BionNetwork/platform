@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, NodeSerializer, TreeSerializer,
-    TreeSerializerRequest, ParentIdSerializer)
+    TreeSerializerRequest, ParentIdSerializer, IndentSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys)
@@ -119,7 +119,7 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         return Response(data)
 
     # FIXME Maybe needed decorator for source_id
-    @detail_route(methods=['post'])
+    @detail_route(methods=['post'], serializer_class=IndentSerializer)
     def set_indent(self, request, pk):
         """
         Отступ в соурсах, предположительно в файлах
