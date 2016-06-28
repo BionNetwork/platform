@@ -54,6 +54,12 @@ class DatasourceSerializer(serializers.ModelSerializer):
         return instance
 
 
+class IndentSerializer(serializers.Serializer):
+
+    sheet = serializers.CharField(max_length=200)
+    indent = serializers.IntegerField()
+
+
 class TableDataSerializer(serializers.Serializer):
 
     source_id = serializers.IntegerField()

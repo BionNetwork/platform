@@ -154,7 +154,7 @@ class DataSourceService(object):
                 card_id, ordered_nodes, node)
 
             # перестраиваем дерево
-            unbinded = sel_tree.build_NEW(
+            unbinded = sel_tree.build(
                 table, source_id, node_id, tables_info)
             resave = unbinded is None
 
@@ -328,13 +328,11 @@ class DataSourceService(object):
     @classmethod
     def get_tree(cls, card_id):
         """
-        Достает дерево карты
+        Получаем дерево
         """
-        # достаем структуру дерева из редиса
-        structure = RedisSS.get_active_tree_structure_NEW(card_id)
-        # строим дерево
-        tree = TTRepo.build_tree_by_structure(structure)
-        return tree
+        # Получаем структуру из Redis и строем дерево
+        structure = RedisSS.get_active_tree_structure(card_id)
+        return TTRepo.build_tree_by_structure(structure)
 
     @classmethod
     def extract_tail(cls, nodes_info, node_id):
@@ -379,33 +377,33 @@ class DataSourceService(object):
     @classmethod
     def cache_columns(cls, card_id, source_id, table):
         """
-        Пришедшую таблицу СУЁТ в строительную карту дерева
+        Пришедшую таблицу кладем в строительную карту дерева
         """
-        table_id = RedisSS.check_table_in_builder_remains(card_id, source_id, table)
-        if table_id is None:
-            source = Datasource.objects.get(id=source_id)
-            service = cls.get_source_service(source)
+        node_id = RedisSS.check_table_in_builder_remains(card_id, source_id, table)
+        if node_id:
+            return node_id
 
-            indents = DataSourceService.extract_source_indentation(source_id)
+        source = Datasource.objects.get(id=source_id)
+        service = cls.get_source_service(source)
 
-            columns, indexes, foreigns, statistics, date_intervals = (
-                service.get_columns_info([table, ], indents))
+        indents = DataSourceService.extract_source_indentation(source_id)
 
-            info = {
-                "value": table,
-                "sid": source_id,
-                "columns": columns[table],
-                "indexes": indexes[table],
-                "foreigns": foreigns[table],
-                "stats": statistics[table],
-                "date_intervals": date_intervals.get(table, [])
-            }
+        columns, indexes, foreigns, statistics, date_intervals = (
+            service.get_columns_info([table, ], indents))
 
-            # кладем инфу таблицы в остатки билдера дерева
-            table_id = RedisSS.put_table_info_in_builder(
-                card_id, source_id, table, info)
+        info = {
+            "value": table,
+            "sid": source_id,
+            "columns": columns[table],
+            "indexes": indexes[table],
+            "foreigns": foreigns[table],
+            "stats": statistics[table],
+            "date_intervals": date_intervals.get(table, [])
+        }
 
-        return table_id
+        # кладем инфу таблицы в остатки билдера дерева
+        return RedisSS.put_table_info_in_builder(
+            card_id, source_id, table, info)
 
     @classmethod
     def get_rows_info(cls, source, cols):
@@ -415,32 +413,17 @@ class DataSourceService(object):
         Args:
             source(core.models.Datasource): Источник
             cols(list): Описать
-        Returns:
-            list Описать
-        """
-        structure = RedisSourceService.get_active_tree_structure(source)
-        service = cls.get_source_service(source)
-        return service.get_rows(cols, structure)
-
-    @classmethod
-    def get_rows_info_NEW(cls, source, cols):
-        """
-        Получение списка значений указанных колонок и таблиц
-        в выбранном источнике данных
-        Args:
-            source(core.models.Datasource): Источник
-            cols(list): Описать
 
         Returns:
             list Описать
         """
-        structure = RedisSourceService.get_active_tree_structure_NEW(
+        structure = RedisSourceService.get_active_tree_structure(
             source.user_id)
         service = cls.get_source_service(source)
         return service.get_rows(cols, structure)
 
     @classmethod
-    def remove_tables_from_tree(cls, source, tables):
+    def remove_tables_from_tree_NEW(cls, card_id, tables):
         """
         Redis
         удаление таблиц из дерева
@@ -449,66 +432,34 @@ class DataSourceService(object):
             source(core.models.Datasource): Источник
             tables(): Описать
         """
-        # достаем структуру дерева из редиса
-        structure = RedisSourceService.get_active_tree_structure(source)
-        # строим дерево
-        sel_tree = TTRepo.build_tree_by_structure(structure)
-
-        r_val = sel_tree.root.val
-        if r_val in tables:
-            RedisSourceService.tree_full_clean(source)
-            sel_tree.root = None
-        else:
-            sel_tree.delete_nodes(tables)
-
-        if sel_tree.root:
-            RedisSourceService.delete_tables(source, tables)
-
-            ordered_nodes = sel_tree.ordered_nodes
-            structure = sel_tree.structure
-            RedisSourceService.insert_tree(structure, ordered_nodes, source, update_joins=False)
-
-    @classmethod
-    def remove_tables_from_tree_NEW(cls, user_id, tables):
-        """
-        Redis
-        удаление таблиц из дерева
-
-        Args:
-            source(core.models.Datasource): Источник
-            tables(): Описать
-        """
-        # достаем структуру дерева из редиса
-        structure = RedisSS.get_active_tree_structure_NEW(user_id)
-
-        # строим дерево
-        sel_tree = TTRepo.build_tree_by_structure(structure)
+        # получаем дерево
+        sel_tree = cls.get_tree(card_id)
 
         r_val = sel_tree.root.val
         source_id = sel_tree.root.source_id
 
         if (r_val, source_id) in tables:
-            RedisSS.tree_full_clean_NEW(user_id)
+            RedisSS.tree_full_clean_NEW(card_id)
             sel_tree.root = None
         else:
             sel_tree.delete_nodes_NEW(tables)
 
         if sel_tree.root:
-            RedisSS.delete_tables_NEW(user_id, tables)
+            RedisSS.delete_tables_NEW(card_id, tables)
 
             ordered_nodes = sel_tree.ordered_nodes
             structure = sel_tree.structure
             RedisSS.save_tree_builder(structure, ordered_nodes,
-                                    user_id, update_joins=False)
+                                    card_id, update_joins=False)
 
     @classmethod
     def get_columns_and_joins(cls, card_id, parent_id, child_id):
         """
         """
-        right_data = DataSourceService.get_node(card_id, parent_id)
-        left_data = DataSourceService.get_node(card_id, child_id)
-        parent_sid, parent_table = right_data['sid'], right_data['val']
-        child_sid, child_table = left_data['sid'], left_data['val']
+        parent = DataSourceService.get_node(card_id, parent_id)
+        child = DataSourceService.get_node(card_id, child_id)
+        parent_sid, parent_table = parent.source_id, parent.val
+        child_sid, child_table = child.source_id, child.val
 
         columns = RedisSS.get_columns_for_joins(
             card_id, parent_table, parent_sid, child_table, child_sid)
@@ -524,46 +475,8 @@ class DataSourceService(object):
         }
 
     @classmethod
-    def check_new_joins(cls, source, left_table, right_table, joins):
-        # избавление от дублей
-        """
-        Redis
-        Проверяет пришедшие джойны на совпадение типов
-
-        Args:
-            source(core.models.Datasource): Источник
-            left_table(): Описать
-            right_table(): Описать
-            joins(): Описать
-
-        Returns:
-            Описать
-        """
-
-        # FIXME: Описать
-        joins_set = set()
-        for j in joins:
-            joins_set.add(tuple(j))
-
-        cols_types = cls.get_columns_types(source, [left_table, right_table])
-
-        # список джойнов с неверными типами
-        error_joins = list()
-        good_joins = list()
-
-        for j in joins_set:
-            l_c, j_val, r_c = j
-            if (cols_types[u'{0}.{1}'.format(left_table, l_c)] !=
-                    cols_types[u'{0}.{1}'.format(right_table, r_c)]):
-                error_joins.append(j)
-            else:
-                good_joins.append(j)
-
-        return good_joins, error_joins, joins_set
-
-    @classmethod
-    def check_new_joins_NEW(cls, card_id, left_table, left_sid, right_table,
-                            right_sid, joins):
+    def check_new_joins(cls, card_id, left_table, left_sid, right_table,
+                            right_sid, joins, parent_id, child_id):
         """
         Redis
         Проверяет пришедшие джойны на совпадение типов
@@ -580,7 +493,7 @@ class DataSourceService(object):
             joins_set.add(tuple(j))
 
         ts_info = [(left_table, left_sid), (right_table, right_sid), ]
-        cols_types = cls.get_columns_types_NEW(card_id, ts_info)
+        cols_types = cls.get_columns_types(card_id, ts_info)
 
         # список джойнов с неверными типами
         error_joins = []
@@ -598,7 +511,9 @@ class DataSourceService(object):
         return good_joins, error_joins, joins_set
 
     @classmethod
-    def save_new_joins(cls, source, left_table, right_table, join_type, joins):
+    def save_new_joins(cls, card_id, left_table, left_sid, right_table,
+                           right_sid, child_node_id, join_type, joins,
+                       parent_node, child_node):
         """
         Redis
         Cохранение новых джойнов
@@ -614,80 +529,22 @@ class DataSourceService(object):
             Описать
         """
 
-        source_key = RedisSourceService.get_user_source(source)
-
         # FIXME: Описать
-        # joins_set избавляет от дублей
         good_joins, error_joins, joins_set = cls.check_new_joins(
-            source, left_table, right_table, joins)
-
-        data = RedisSourceService.save_good_error_joins(
-            source, left_table, right_table,
-            good_joins, error_joins, join_type)
+            card_id, left_table, left_sid, right_table, right_sid, joins,
+            parent_node.node_id, child_node.node_id)
 
         if not error_joins:
-            # достаем структуру дерева из редиса
-            structure = RedisSourceService.get_active_tree_structure(source)
-            # строим дерево
-            sel_tree = TTRepo.build_tree_by_structure(structure)
+            # Получаем дерево
+            sel_tree = cls.get_tree(card_id)
 
             sel_tree.update_node_joins(
-                left_table, right_table, join_type, joins_set)
-
-            # сохраняем дерево
-            ordered_nodes = sel_tree.ordered_nodes
-            structure = sel_tree.structure
-            RedisSourceService.insert_tree(
-                structure, ordered_nodes, source, update_joins=False)
-
-            # работа с последней таблицей
-            remain = RedisSourceService.get_last_remain(source_key)
-            if remain == right_table:
-                # удаляем инфу о таблице без связи, если она есть
-                RedisSourceService.delete_last_remain(source_key)
-
-        return data
-
-    @classmethod
-    def save_new_joins_NEW(cls, card_id, left_table, left_sid, right_table,
-                           right_sid, child_node_id, join_type, joins, parent_id, child_id):
-        """
-        Redis
-        Cохранение новых джойнов
-
-        Args:
-            source(core.models.Datasource): Источник
-            left_table(): Описать
-            right_table(): Описать
-            join_type(): Описать
-            joins(): Описать
-
-        Returns:
-            Описать
-        """
-
-        # FIXME: Описать
-        good_joins, error_joins, joins_set = cls.check_new_joins_NEW(
-            card_id, left_table, left_sid, right_table, right_sid, joins)
-
-        if not error_joins:
-            # Получаем структуру дерева из редиса
-            structure = RedisSS.get_active_tree_structure_NEW(card_id)
-            # строим дерево
-            sel_tree = TTRepo.build_tree_by_structure(structure)
-
-            sel_tree.update_node_joins_NEW(left_table, left_sid, right_table,
-                                           right_sid, child_node_id, join_type, joins_set)
+                left_table, left_sid, right_table,
+                right_sid, child_node_id, join_type, joins_set)
             RedisSS.save_tree_structure(card_id, sel_tree)
 
-            if cls.check_node_id_in_remains(card_id, int(child_id)):
-                remain_nodes = cls.remains_nodes(card_id)
-                node = RedisSS.get_remain_node(remain_nodes, int(child_id))
-                RedisSS.put_remain_to_builder_actives(card_id, node)
-
-            # сохраняем дерево
-            # ordered_nodes = sel_tree.ordered_nodes
-            # RedisSS.save_tree_builder(card_id, ordered_nodes)
+            if cls.check_node_id_in_remains(card_id, child_node.node_id):
+                RedisSS.put_remain_to_builder_actives(card_id, child_node)
 
         return {}
 
@@ -709,31 +566,7 @@ class DataSourceService(object):
                 for table in tables]
 
     @classmethod
-    def get_columns_types(cls, source, tables):
-        """
-        Redis
-        Получение типов колонок таблиц
-
-        Args:
-            source(core.models.Datasource): Источник
-            tables(): Описать
-
-        Returns:
-            Описать
-        """
-        # FIXME: Описать
-        cols_types = {}
-
-        for table in tables:
-            t_cols = json.loads(
-                RedisSourceService.get_table_full_info(source, table))['columns']
-            for col in t_cols:
-                cols_types[u'{0}.{1}'.format(table, col['name'])] = col['type']
-
-        return cols_types
-
-    @classmethod
-    def get_columns_types_NEW(cls, card_id, tables_info):
+    def get_columns_types(cls, card_id, tables_info):
         """
         Redis
         Получение типов колонок таблиц
@@ -746,8 +579,8 @@ class DataSourceService(object):
         cols_types = {}
 
         for (t_name, sid) in tables_info:
-            t_id = RedisSS.get_node_id(t_name, card_id, sid)
-            t_cols = RedisSS.get_table_info(card_id, sid, t_id)['columns']
+            node_id = RedisSS.get_node_id(t_name, card_id, sid)
+            t_cols = RedisSS.get_table_info(card_id, sid, node_id)['columns']
 
             for col in t_cols:
                 cols_types[u'{0}.{1}.{2}'.format(
@@ -1138,6 +971,8 @@ class DataSourceService(object):
 
         return relations
 
+
+
     @classmethod
     def get_node(cls, card_id, node_id):
         """
@@ -1148,24 +983,38 @@ class DataSourceService(object):
             node_id(int): id узла
 
         Returns:
-            dict: данные об узле
+            Node
         """
         node = None
 
         if not cls.check_node_id_in_remains(card_id, node_id):
-            structure = RedisSS.get_active_tree_structure_NEW(card_id)
-            sel_tree = TTRepo.build_tree_by_structure(structure)
+            sel_tree = cls.get_tree(card_id)
             node = sel_tree.get_node(node_id)
         else:
-            actives = RedisSS.get_card_builder_data(card_id)
-            for remain in TTRepo.remains_nodes(actives):
+            builder_data = RedisSS.get_card_builder_data(card_id)
+            for remain in TTRepo.remains_nodes(builder_data):
                 if int(remain.node_id) == int(node_id):
                     node = remain
                     break
         if node is None:
             raise Exception("Bull shit!")
+        return node
 
-        return RedisSS.get_node_info(card_id, node_id, node)
+    @classmethod
+    def get_node_info(cls, card_id, node_id):
+        node = cls.get_node(card_id, node_id)
+        table, source_id = node.val, node.source_id
+        table_info = RedisSS.get_table_info(card_id, source_id, node.node_id)
+
+        return dict(
+            node_id=node.node_id,
+            parent_id=getattr(node.parent, 'node_id', None),
+            sid=source_id,
+            val=table,
+            cols=[{'col_name': x['name'], 'col_title': x.get('title', None),}
+                  for x in table_info['columns']
+                 ])
+
 
     @classmethod
     def check_node_id_in_remains(cls, card_id, node_id):
