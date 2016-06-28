@@ -154,7 +154,7 @@ class DataSourceService(object):
                 card_id, ordered_nodes, node)
 
             # перестраиваем дерево
-            unbinded = sel_tree.build_NEW(
+            unbinded = sel_tree.build(
                 table, source_id, node_id, tables_info)
             resave = unbinded is None
 
@@ -456,10 +456,10 @@ class DataSourceService(object):
     def get_columns_and_joins(cls, card_id, parent_id, child_id):
         """
         """
-        right_data = DataSourceService.get_node(card_id, parent_id)
-        left_data = DataSourceService.get_node(card_id, child_id)
-        parent_sid, parent_table = right_data['sid'], right_data['val']
-        child_sid, child_table = left_data['sid'], left_data['val']
+        parent = DataSourceService.get_node(card_id, parent_id)
+        child = DataSourceService.get_node(card_id, child_id)
+        parent_sid, parent_table = parent.source_id, parent.val
+        child_sid, child_table = child.source_id, child.val
 
         columns = RedisSS.get_columns_for_joins(
             card_id, parent_table, parent_sid, child_table, child_sid)
@@ -566,7 +566,7 @@ class DataSourceService(object):
                 for table in tables]
 
     @classmethod
-    def pylget_columns_types(cls, card_id, tables_info):
+    def get_columns_types(cls, card_id, tables_info):
         """
         Redis
         Получение типов колонок таблиц

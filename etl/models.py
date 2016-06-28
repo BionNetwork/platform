@@ -654,8 +654,8 @@ class TableTreeRepository(object):
         joins_info = []
         for el in joins:
             d = {
-                'left': el['left']['column'] if el['left']['table'] == parent else el['right']['column'],
-                'right': el['left']['column'] if el['left']['table'] == child else el['right']['column'],
+                'left': el['left']['column'] if el['left']['table'] == parent.val else el['right']['column'],
+                'right': el['left']['column'] if el['left']['table'] == child.val else el['right']['column'],
                 'join': el['join']['value']
             }
             joins_info.append(d)
