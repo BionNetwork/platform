@@ -602,8 +602,7 @@
             <div style="padding:0; display:inline-flex;">
                 <% if (!row.is_root) { %>
                     <a class="fa fa-exchange relation"
-                       onclick="showJoinWindow('{% url "etl:datasources.cols_for_choices"%}',
-                                               '<%= row.dest %>', '<%= row.tname %>', <%= row.without_bind %>)">
+                       onclick="showJoinWindow('<%= row.dest %>', '<%= row.tname %>', <%= row.without_bind %>)">
                         <% if (row.without_bind) { %><span class="without_bind" style="color:red;">!!!</span><% } %>
                     </a>
                 <% } %>
