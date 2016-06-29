@@ -421,9 +421,9 @@ class LoadDataView(BaseView):
             # '4':
             '1':
                 {
-                "list1": ["auth_group_id", "name2", "gender"],
-                "Лист2": ["name2", "join_to_list3", "Coutry"],
-                "List3": ["join_to_list3", "some_id", "name"],
+                "Лист1": ["auth_group_id", "name2", "пол"],
+                "Лист2": ["name2", "join_to_list3", "name"],
+                "List3": ["join_to_list3", "some_id", "name2"],
             },
         }
 

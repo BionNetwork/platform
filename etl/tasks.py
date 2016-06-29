@@ -226,6 +226,7 @@ class LoadForeignTable(TaskProcessing):
         local_db_service = DataSourceService.get_local_instance()
         local_db_service.create_foreign_table()
 
+
 class LoadDb(TaskProcessing):
 
     def processing(self):

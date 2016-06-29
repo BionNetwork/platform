@@ -133,6 +133,7 @@ class LoadMongodbMulti(TaskProcessing):
                 page += 1
 
                 # FIXME у файлов прогон 1 раз
+                # Fixme not true
                 if sub_tree['type'] == 'file':
                     break
 
