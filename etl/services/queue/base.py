@@ -95,7 +95,7 @@ class TaskProcessing(object):
         name(str): Название задачи
     """
 
-    def __init__(self, task_id, channel, last_task=False):
+    def __init__(self, task_id, channel, context, last_task=False):
         """
         Args:
             task_id(int): id задачи
@@ -105,7 +105,8 @@ class TaskProcessing(object):
         self.channel = channel
         self.last_task = last_task
         self.user_id = None
-        self.context = None
+        # self.context = None
+        self.context = context
         self.was_error = False
         self.err_msg = ''
         self.publisher = RPublish(self.channel, self.task_id)
@@ -150,7 +151,8 @@ class TaskProcessing(object):
         """
         Точка входа
         """
-        self.prepare()
+        # FIXME подумать чо делать потом с prepare
+        # self.prepare()
         try:
             print 'Task <"{0}"> started'.format(self.name)
             self.processing()
@@ -166,7 +168,8 @@ class TaskProcessing(object):
                 self.user_id, self.task_id)
             logger.exception(self.err_msg)
             raise
-        self.exit()
+        # FIXME подумать чо делать потом с exit
+        # self.exit()
         if self.next_task_params:
             get_single_task(*self.next_task_params)
 
@@ -337,7 +340,7 @@ class RPublish(object):
             ))
 
 
-def get_single_task(task_name, task_def, params):
+def get_single_task(task_def, context):
     """
     Args:
         task_name(str): Название задачи
@@ -348,12 +351,16 @@ def get_single_task(task_name, task_def, params):
         `Signature`: Celery-задача к выполнению
         list: Список каналов для сокетов
     """
-    if not task_name:
-        return
-    task_id, channel = TaskService(task_name).add_task(
-        arguments=params)
-    # return task_def.apply_async((task_id, channel),), [channel]
-    return task_def(task_id, channel), [channel]
+    task_name = task_def.name
+
+    print "{0} started!".format(task_name)
+
+    # FIXME подумать чо тут и как тут для мультизагрузки
+    # task_id, channel = TaskService(task_name).add_task(
+    #     arguments=params)
+    task_id, channel = None, None
+    return task_def.apply_async((task_id, channel, context),), [channel]
+    # return task_def(task_id, channel), [channel]
 
 
 class RowKeysCreator(object):

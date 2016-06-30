@@ -22,7 +22,7 @@ DB_DETECT_REDUNDANT = 'etl:cdc:detect_redundant'
 DB_DELETE_REDUNDANT = 'etl:cdc:delete_redundant'
 GENERATE_DIMENSIONS = 'etl:database:generate_dimensions'
 GENERATE_MEASURES = 'etl:database:generate_measures'
-CREATE_TRIGGERS = 'etl.tasks.create_triggers'
+CREATE_TRIGGERS = 'etl:tasks:create_triggers'
 CREATE_CUBE = 'etl:database:generate_cube'
 
 # Префиксы названий таблиц
@@ -50,7 +50,10 @@ DATE_TABLE_COLS_LEN = 9
 
 # Название задач MULTI
 CREATE_DATASET_MULTI = 'etl:database:create_dataset_multi'
+MONGODB_DATA_LOAD_MONO = 'etl:load_data:mongo_mono'
+MONGODB_DATA_LOAD_MULTI = 'etl:load_data:mongo_multi'
+MONGODB_DATA_LOAD_CALLBACK = 'etl:load_data:mongo_callback'
 
 
 # Префиксы названий таблиц
-MULTI_STTM = 'sttm_'  # Временная загружаемая таблица Mongo
+STTM = 'sttm_'  # Временная загружаемая таблица Mongo

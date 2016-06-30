@@ -824,7 +824,7 @@ class RedisSourceService(object):
         return tables_info_for_meta
 
     @classmethod
-    def tables_info_for_metasource_NEW(cls, tables, card_id):
+    def tables_info_for_metasource_NEW(cls, card_id, tables):
         """
         Достает инфу о колонках, выбранных таблиц,
         для хранения в DatasourceMeta
@@ -839,7 +839,7 @@ class RedisSourceService(object):
 
             for table in table_list:
                 table_id = collections['actives'][table]
-                table_info = cls.get_table_info(table_id, sid)
+                table_info = cls.get_table_info(card_id, sid, table_id)
                 tables_info[sid][table] = table_info
 
         return tables_info
