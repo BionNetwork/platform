@@ -471,7 +471,7 @@ class RedisSourceService(object):
         return cls.r_get(str_active_tree)
 
     @classmethod
-    def put_remain_to_builder_actives(cls, card_id, node):
+    def  put_remain_to_builder_actives(cls, card_id, node):
         """
         сохраняем карту дерева, перенос остатка в активные
         """

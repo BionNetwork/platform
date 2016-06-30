@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 import json
 from itertools import groupby
 import operator
-from collections import defaultdict
 
 from django.db import transaction
 
@@ -13,7 +12,7 @@ from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
-from etl.services.datasource.repository.storage import RedisSourceService, RKeys
+from etl.services.datasource.repository.storage import RedisSourceService
 from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import generate_table_key
@@ -127,9 +126,9 @@ class DataSourceService(object):
         """
         Возвращает список остатков типа TTRepo.RemainNode
         """
-        actives = RedisSS.get_card_builder_data(card_id)
+        builder_data = RedisSS.get_card_builder_data(card_id)
 
-        return TTRepo.remains_nodes(actives)
+        return TTRepo.remains_nodes(builder_data)
 
     @classmethod
     def add_randomly_from_remains(cls, card_id, node_id):
@@ -146,7 +145,7 @@ class DataSourceService(object):
             sel_tree = TTRepo.build_single_root(node)
             resave = True
         else:
-            # достаем деревo из редиса
+            # получаем дерево из редиса
             sel_tree = cls.get_tree(card_id)
             ordered_nodes = sel_tree.ordered_nodes
 
@@ -475,15 +474,15 @@ class DataSourceService(object):
         }
 
     @classmethod
-    def check_new_joins(cls, card_id, left_table, left_sid, right_table,
-                            right_sid, joins, parent_id, child_id):
+    def check_new_joins(cls, card_id, parent, child, joins):
         """
         Redis
         Проверяет пришедшие джойны на совпадение типов
         Args:
-            left_table(): Описать
-            right_table(): Описать
-            joins(): Описать
+            card_id(int): id карточки
+            parent(Node): родительский узел
+            child(RemainNode): дочерний узел
+            joins(): Информация о связях
         Returns:
             Описать
         """
@@ -492,8 +491,7 @@ class DataSourceService(object):
         for j in joins:
             joins_set.add(tuple(j))
 
-        ts_info = [(left_table, left_sid), (right_table, right_sid), ]
-        cols_types = cls.get_columns_types(card_id, ts_info)
+        cols_types = cls.get_columns_types(card_id, parent, child)
 
         # список джойнов с неверными типами
         error_joins = []
@@ -501,9 +499,9 @@ class DataSourceService(object):
 
         for j in joins_set:
             l_c, _, r_c = j
-            if (cols_types[u'{0}.{1}.{2}'.format(left_table, l_c, left_sid)] !=
+            if (cols_types[u'{0}.{1}.{2}'.format(parent.val, l_c, parent.source_id)] !=
                     cols_types[u'{0}.{1}.{2}'.format(
-                        right_table, r_c, right_sid)]):
+                        child.val, r_c, child.source_id)]):
                 error_joins.append(j)
             else:
                 good_joins.append(j)
@@ -511,9 +509,7 @@ class DataSourceService(object):
         return good_joins, error_joins, joins_set
 
     @classmethod
-    def save_new_joins(cls, card_id, left_table, left_sid, right_table,
-                           right_sid, child_node_id, join_type, joins,
-                       parent_node, child_node):
+    def save_new_joins(cls, card_id, parent_node, child_node, join_type, joins):
         """
         Redis
         Cохранение новых джойнов
@@ -529,18 +525,16 @@ class DataSourceService(object):
             Описать
         """
 
-        # FIXME: Описать
         good_joins, error_joins, joins_set = cls.check_new_joins(
-            card_id, left_table, left_sid, right_table, right_sid, joins,
-            parent_node.node_id, child_node.node_id)
+            card_id, parent=parent_node, child=child_node, joins=joins,
+        )
 
         if not error_joins:
             # Получаем дерево
             sel_tree = cls.get_tree(card_id)
 
-            sel_tree.update_node_joins(
-                left_table, left_sid, right_table,
-                right_sid, child_node_id, join_type, joins_set)
+            sel_tree.update_node_joins(parent=parent_node, child=child_node,
+                                       join_type=join_type, joins=joins_set)
             RedisSS.save_tree_structure(card_id, sel_tree)
 
             if cls.check_node_id_in_remains(card_id, child_node.node_id):
@@ -566,25 +560,27 @@ class DataSourceService(object):
                 for table in tables]
 
     @classmethod
-    def get_columns_types(cls, card_id, tables_info):
+    def get_columns_types(cls, card_id, parent, child):
         """
         Redis
         Получение типов колонок таблиц
         Args:
-            tables(): Описать
+            card_id(int): id карточки
+            parent(Node): родительский узел
+            child(RemainNode): дочерний узел
         Returns:
-            Описать
+            dict: Информация о типах столбцов род и дочерней таблицы
         """
         # FIXME: Описать
         cols_types = {}
 
-        for (t_name, sid) in tables_info:
-            node_id = RedisSS.get_node_id(t_name, card_id, sid)
-            t_cols = RedisSS.get_table_info(card_id, sid, node_id)['columns']
+        for node in [parent, child]:
+            # node_id = RedisSS.get_node_id(t_name, card_id, sid)
+            t_cols = RedisSS.get_table_info(card_id, node.source_id, node.node_id)['columns']
 
             for col in t_cols:
                 cols_types[u'{0}.{1}.{2}'.format(
-                    t_name, col['name'], sid)] = col['type']
+                    node.val, col['name'], node.source_id)] = col['type']
 
         return cols_types
 

@@ -6,4 +6,4 @@ import brukva
 client = brukva.Client(host=settings.REDIS_HOST,
                        port=int(settings.REDIS_PORT),
                        selected_db=settings.REDIS_DB)
-client.connect()
+# client.connect()
