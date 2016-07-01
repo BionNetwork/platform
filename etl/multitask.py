@@ -70,8 +70,6 @@ class LoadMongodbMulti(TaskProcessing):
 
         sub_trees = self.context['sub_trees']
 
-        # ft_names = []
-
         # параллель из последований, в конце колбэк
         chord(
             chain(
@@ -80,7 +78,7 @@ class LoadMongodbMulti(TaskProcessing):
                 create_foreign_table.subtask()
             )
             for sub_tree in sub_trees)(
-                mongo_callback.subtask())
+                mongo_callback.subtask(self.context))
 
 
 @app.task(name=MONGODB_DATA_LOAD_MONO)
@@ -123,8 +121,6 @@ def load_to_mongo(sub_tree):
     while True:
         rows = source_service.get_source_rows(
             sub_tree, cols=columns, limit=limit, offset=(page-1)*limit)
-
-        print 'rows', rows
 
         if not rows:
             break
@@ -175,9 +171,6 @@ def load_to_mongo(sub_tree):
             break
 
     # ft_names.append(self.get_table(MULTI_STTM))
-    # l_service.create_postgres_server()
-    # local_service.create_materialized_view('my_view',
-    #                                        self.context['relations'])
 
     return sub_tree
 
@@ -188,6 +181,9 @@ def create_foreign_table(sub_tree):
     Создание таблиц Postgres
     """
     key = sub_tree["collection_hash"]
+    print key
+    # if key == '1_2__4634273996454754301':
+    #     1/1
     local_service = DataSourceService.get_local_instance()
 
     local_service.create_foreign_table(
@@ -197,11 +193,17 @@ def create_foreign_table(sub_tree):
 
 
 @app.task(name=MONGODB_DATA_LOAD_CALLBACK)
-def mongo_callback(results):
+def mongo_callback(context):
     """
-    Работа после закачки каждого в монго
+    Работа после создания
     """
-    print 'results', results
+    # fixme needs to check status of all subtasks
+    # если какой нить таск упал, то сюда не дойдет
+    local_service = DataSourceService.get_local_instance()
+    local_service.create_materialized_view(
+        'my_view', context['relations'])
+
+    print 'results', context
 
 
 # write in console: python manage.py celery -A etl.multitask worker

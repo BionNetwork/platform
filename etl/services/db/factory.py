@@ -436,7 +436,6 @@ class LocalDatabaseService(object):
         Создание удаленную таблицу к MongoDB
         """
         query = self.datasource.create_foreign_table_query(name, cols)
-        print query
         self.execute(query)
 
     def create_materialized_view(self, name, relations):
