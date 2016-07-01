@@ -13,7 +13,7 @@ from django.conf import settings
 from itertools import groupby, izip
 from datetime import datetime
 from djcelery import celery
-from celery import Celery, chord
+from celery import Celery, chord, chain
 from kombu import Queue
 
 from etl.constants import *
@@ -72,9 +72,13 @@ class LoadMongodbMulti(TaskProcessing):
 
         # ft_names = []
 
-        # параллелька с колбэком
+        # параллель из последований, в конце колбэк
         chord(
-            load_to_mongo.subtask((sub_tree, ))
+            chain(
+                load_to_mongo.subtask((sub_tree, )),
+                # получает, то что вернул load_to_mongo
+                create_foreign_table.subtask()
+            )
             for sub_tree in sub_trees)(
                 mongo_callback.subtask())
 
@@ -84,7 +88,6 @@ def load_to_mongo(sub_tree):
     """
     """
     limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-    local_service = DataSourceService.get_local_instance()
 
     page = 1
     sid = sub_tree['sid']
@@ -171,14 +174,24 @@ def load_to_mongo(sub_tree):
         if sub_tree['type'] == 'file':
             break
 
-    local_service.create_foreign_table(
-        '{0}_{1}'.format(STTM, key),
-        sub_tree['columns_types'])
-
     # ft_names.append(self.get_table(MULTI_STTM))
     # l_service.create_postgres_server()
     # local_service.create_materialized_view('my_view',
     #                                        self.context['relations'])
+
+    return sub_tree
+
+
+@app.task(name=PSQL_FOREIGN_TABLE)
+def create_foreign_table(sub_tree):
+    """
+    Создание таблиц Postgres
+    """
+    key = sub_tree["collection_hash"]
+    local_service = DataSourceService.get_local_instance()
+
+    local_service.create_foreign_table(
+        '{0}_{1}'.format(STTM, key), sub_tree['columns_types'])
 
     return 1
 

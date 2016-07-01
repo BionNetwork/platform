@@ -53,6 +53,7 @@ CREATE_DATASET_MULTI = 'etl:database:create_dataset_multi'
 MONGODB_DATA_LOAD_MONO = 'etl:load_data:mongo_mono'
 MONGODB_DATA_LOAD_MULTI = 'etl:load_data:mongo_multi'
 MONGODB_DATA_LOAD_CALLBACK = 'etl:load_data:mongo_callback'
+PSQL_FOREIGN_TABLE = 'etl:load_data:psql_foreign_table'
 
 
 # Префиксы названий таблиц

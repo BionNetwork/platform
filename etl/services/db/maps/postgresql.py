@@ -275,4 +275,5 @@ create_foreign_table_query = u"""
         CREATE FOREIGN TABLE {table_name} ({cols}
          ) SERVER mongo_server
          OPTIONS (database 'etl', collection '{table_name}');
+         ALTER FOREIGN TABLE {table_name} OWNER TO biplatform;
         """
