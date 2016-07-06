@@ -416,14 +416,15 @@ class LoadDataView(BaseView):
                 {
                 "auth_group": ["id", "name", ],
                 "auth_group_permissions": ["id", "group_id", ],
-                "auth_permission": ["id", "name", ],
+                # "auth_permission": ["id", "name", ],
+                # "auth_permission2": ["id", "name2", "auth_group_permissions_id"],
             },
             # '4':
             '1':
                 {
                 "Лист1": ["auth_group_id", "name2", "пол"],
-                "Лист2": ["name2", "join_to_list3", "name"],
-                "List3": ["join_to_list3", "some_id", "name2"],
+                # "Лист2": ["name2", "join_to_list3", "name"],
+                # "List3": ["join_to_list3", "some_id", "name2"],
             },
         }
 
@@ -436,14 +437,12 @@ class LoadDataView(BaseView):
         tables = extract_tables_info(columns_info)
         # достаем инфу колонок (статистика, типы, )
         meta_tables_info = RedisSourceService.tables_info_for_metasource_NEW(
-            tables, card_id)
+            card_id, tables)
 
         sub_trees = DataSourceService.prepare_sub_trees(
             tree_structure, columns_info, card_id, meta_tables_info)
 
         relations = DataSourceService.prepare_relations(sub_trees)
-
-        print sub_trees
 
         cols_type = {
             'auth_group__id': {
@@ -462,8 +461,8 @@ class LoadDataView(BaseView):
         }
         # Параметры для задач
         load_args = {
-            'cols_type': json.dumps(cols_type),
             'card_id': card_id,
+            'cols_type': json.dumps(cols_type),
             'is_update': False,
             'tree_structure': tree_structure,
             'sub_trees': sub_trees,
@@ -471,8 +470,7 @@ class LoadDataView(BaseView):
             "relations": relations,
         }
 
-        # get_single_task(
-        #     CREATE_DATASET_MULTI, create_dataset_multi, load_args)
+        get_single_task(create_dataset_multi, load_args)
 
 
 class GetUserTasksView(BaseView):

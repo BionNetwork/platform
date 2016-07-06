@@ -816,8 +816,6 @@ class DataSourceService(object):
 
             tree['columns'] = columns_info
 
-        return sub_trees
-
     @classmethod
     def split_nodes_by_source_types(cls, sub_trees):
         """
@@ -852,13 +850,13 @@ class DataSourceService(object):
         subs_by_type = cls.split_nodes_by_source_types(
             subs_by_sid)
 
-        items = cls.extract_columns(subs_by_type, columns)
+        cls.extract_columns(subs_by_type, columns)
 
-        items = cls.create_hash_names(items, card_id)
+        cls.create_hash_names(subs_by_type, card_id)
 
-        cls.build_columns_info(items, meta_tables_info)
+        cls.build_columns_info(subs_by_type, meta_tables_info)
 
-        return items
+        return subs_by_type
 
     @staticmethod
     def create_hash_names(items, card_id):
@@ -873,8 +871,6 @@ class DataSourceService(object):
                                for x in sorted_cols], u'')
             item['collection_hash'] = generate_table_key(
                 card_id, item['sid'], cols_str)
-
-        return items
 
     @staticmethod
     def build_columns_info(items, meta_tables_info):
@@ -967,8 +963,6 @@ class DataSourceService(object):
 
         return relations
 
-
-
     @classmethod
     def get_node(cls, card_id, node_id):
         """
@@ -1010,7 +1004,6 @@ class DataSourceService(object):
             cols=[{'col_name': x['name'], 'col_title': x.get('title', None),}
                   for x in table_info['columns']
                  ])
-
 
     @classmethod
     def check_node_id_in_remains(cls, card_id, node_id):

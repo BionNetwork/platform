@@ -1062,4 +1062,4 @@ class CreateCube(TaskProcessing):
             logger.error(json.loads(resp.text)['detail'])
 
 
-# write in console: python manage.py celery -A etl.tasks worker
+# write in console: python manage.py celery -A etl.tasks worker --loglevel=info
