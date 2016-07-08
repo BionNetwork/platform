@@ -158,15 +158,15 @@ class TaskProcessing(object):
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
-            TaskService.update_task_status(
-                self.task_id, TaskStatusEnum.ERROR,
-                error_code=TaskErrorCodeEnum.DEFAULT_CODE,
-                error_msg=e.message)
-            self.publisher.publish(TLSE.ERROR, msg=e.message)
-            RedisSourceService.delete_queue(self.task_id)
-            RedisSourceService.delete_user_subscriber(
-                self.user_id, self.task_id)
-            logger.exception(self.err_msg)
+            # TaskService.update_task_status(
+            #     self.task_id, TaskStatusEnum.ERROR,
+            #     error_code=TaskErrorCodeEnum.DEFAULT_CODE,
+            #     error_msg=e.message)
+            # self.publisher.publish(TLSE.ERROR, msg=e.message)
+            # RedisSourceService.delete_queue(self.task_id)
+            # RedisSourceService.delete_user_subscriber(
+            #     self.user_id, self.task_id)
+            # logger.exception(self.err_msg)
             raise
         # FIXME подумать чо делать потом с exit
         # self.exit()
@@ -359,8 +359,8 @@ def get_single_task(task_def, context):
     # task_id, channel = TaskService(task_name).add_task(
     #     arguments=params)
     task_id, channel = None, None
-    return task_def.apply_async((task_id, channel, context),), [channel]
-    # return task_def(task_id, channel), [channel]
+    # return task_def.apply_async((task_id, channel, context),), [channel]
+    return task_def(task_id, channel, context), [channel]
 
 
 class RowKeysCreator(object):

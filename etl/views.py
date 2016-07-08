@@ -410,22 +410,17 @@ class LoadDataView(BaseView):
             raise Exception("Card ID is None!")
 
         # columns = json.loads(post.get('columns'))
+
         columns_info = {
-            # '1':
-            '2':
+            '3':
                 {
-                "auth_group": ["id", "name", ],
-                "auth_group_permissions": ["id", "group_id", ],
-                # "auth_permission": ["id", "name", ],
-                # "auth_permission2": ["id", "name2", "auth_group_permissions_id"],
-            },
-            # '4':
-            '1':
+                    "shops": ["name", "id", ],
+                },
+            '5':
                 {
-                "Лист1": ["auth_group_id", "name2", "пол"],
-                # "Лист2": ["name2", "join_to_list3", "name"],
-                # "List3": ["join_to_list3", "some_id", "name2"],
-            },
+                    "Таблица1": ["name", "gender"],
+                    "Таблица2": ["name", "country2"],
+                },
         }
 
         cols_str = generate_columns_string_NEW(columns_info)
@@ -444,23 +439,14 @@ class LoadDataView(BaseView):
 
         relations = DataSourceService.prepare_relations(sub_trees)
 
-        cols_type = {
-            'auth_group__id': {
-                'type': 'int',
-            },
-            'auth_group__name': {
-                'type': 'text',
-                'max_length': 255,
-            },
-            'auth_group_permissions__id': {
-                'type': 'int'
-            },
-            'auth_group_permissions__group_id': {
-                'type': 'int'
-            }
-        }
+        cols_type = {}
+        for tree in sub_trees:
+            for k, v in tree['columns_types'].iteritems():
+                cols_type.update({k: v})
+
         # Параметры для задач
         load_args = {
+            'meta_info': json.dumps(meta_tables_info),
             'card_id': card_id,
             'cols_type': json.dumps(cols_type),
             'is_update': False,

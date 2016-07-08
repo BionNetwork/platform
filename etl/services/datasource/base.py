@@ -12,7 +12,7 @@ from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
-from etl.services.datasource.repository.storage import RedisSourceService
+from etl.services.datasource.repository.storage import RedisSourceService, CacheService
 from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import generate_table_key
@@ -36,6 +36,12 @@ class DataSourceService(object):
         ConnectionChoices.CSV,
         # ConnectionChoices.TXT,
     ]
+
+    # FIXME объеденить get_source_service_by_id  и get_source_service (через id)
+    @classmethod
+    def get_source_service_by_id(cls, source_id):
+        source = Datasource.objects.get(id=source_id)
+        return cls.get_source_service(source)
 
     @classmethod
     def get_source_service(cls, source):
@@ -126,7 +132,7 @@ class DataSourceService(object):
         """
         Возвращает список остатков типа TTRepo.RemainNode
         """
-        builder_data = RedisSS.get_card_builder_data(card_id)
+        builder_data = CacheService(card_id).card_builder_data
 
         return TTRepo.remains_nodes(builder_data)
 
@@ -138,6 +144,10 @@ class DataSourceService(object):
 
         remain_nodes = cls.remains_nodes(card_id)
         node = RedisSS.get_remain_node(remain_nodes, node_id)
+
+        # cache = CacheService(card_id)
+        # buider_data = cache.card_builder_data
+        # node =
 
         table, source_id = node.val, node.source_id
 
@@ -378,14 +388,14 @@ class DataSourceService(object):
         """
         Пришедшую таблицу кладем в строительную карту дерева
         """
-        node_id = RedisSS.check_table_in_builder_remains(card_id, source_id, table)
+        cache = CacheService(card_id)
+        node_id = cache.check_table_in_builder_remains(source_id, table)
         if node_id:
             return node_id
 
-        source = Datasource.objects.get(id=source_id)
-        service = cls.get_source_service(source)
+        service = cls.get_source_service_by_id(source_id)
 
-        indents = DataSourceService.extract_source_indentation(source_id)
+        indents = cls.extract_source_indentation(source_id)
 
         columns, indexes, foreigns, statistics, date_intervals = (
             service.get_columns_info([table, ], indents))
@@ -400,9 +410,8 @@ class DataSourceService(object):
             "date_intervals": date_intervals.get(table, [])
         }
 
-        # кладем инфу таблицы в остатки билдера дерева
-        return RedisSS.put_table_info_in_builder(
-            card_id, source_id, table, info)
+        # кладем информацию в Redis
+        return cache.fill_cache(source_id, table, info)
 
     @classmethod
     def get_rows_info(cls, source, cols):

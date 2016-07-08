@@ -352,6 +352,7 @@ class RedisSourceService(object):
         str_table = RKeys.get_active_table(card_id, source_id, table_id)
         return cls.r_get(str_table)
 
+    # FIXME перенесен в кэш
     @classmethod
     def set_table_info(cls, card_id, source_id, table_id, table_info):
         str_table = RKeys.get_active_table(card_id, source_id, table_id)
@@ -399,6 +400,7 @@ class RedisSourceService(object):
                 return True
         return False
 
+    # FIXME move to CacheService
     @classmethod
     def check_table_in_builder_remains(cls, card_id, source_id, table):
         """
@@ -471,7 +473,7 @@ class RedisSourceService(object):
         return cls.r_get(str_active_tree)
 
     @classmethod
-    def  put_remain_to_builder_actives(cls, card_id, node):
+    def put_remain_to_builder_actives(cls, card_id, node):
         """
         сохраняем карту дерева, перенос остатка в активные
         """
@@ -677,6 +679,7 @@ class RedisSourceService(object):
             child_table: [x['name'] for x in ch_cols],
         }
 
+    # FIXME убрать метод
     @classmethod
     def get_remain_node(cls, nodes, node_id):
         """
@@ -689,6 +692,7 @@ class RedisSourceService(object):
                 return node
         return
 
+    # FIXME перенесен в кэш
     @classmethod
     def put_table_info_in_builder(cls, card_id, source_id, table, table_info):
         """
@@ -828,14 +832,26 @@ class RedisSourceService(object):
         """
         Достает инфу о колонках, выбранных таблиц,
         для хранения в DatasourceMeta
-        """
 
+        Args:
+            card_id(int): id карточки
+            tables(dict): Список таблиц с привязкой к источнику
+            ::
+                {
+                    1: ['table_1', 'table_2'],
+                    2: ['table_3', 'table_4'],
+                }
+
+        Returns:
+            dict: Информация о таблицах
+
+        """
         tables_info = defaultdict(dict)
-        actives = cls.get_card_builder_data(card_id)
+        builder_data = cls.get_card_builder_data(card_id)
 
         for sid, table_list in tables.iteritems():
             sid_format = str(sid)
-            collections = actives[sid_format]
+            collections = builder_data[sid_format]
 
             for table in table_list:
                 table_id = collections['actives'][table]
@@ -844,6 +860,7 @@ class RedisSourceService(object):
 
         return tables_info
 
+    # FIXME К удалению
     @classmethod
     def get_ddl_tables_info(cls, source, tables):
         """
@@ -1094,3 +1111,130 @@ class RedisSourceService(object):
         """
         indent_key = RKeys.get_indent_key(source_id)
         cls.r_set(indent_key, indents)
+
+
+class CacheService(object):
+    """
+    Работа с кэш
+    """
+    def __init__(self, card_id):
+        """
+        Args:
+            card_id(int): id карточки
+        """
+        self.card_id = card_id
+
+    def check_table_in_builder_remains(self, sid, table):
+        """
+        Проверка наличия узла в builder
+        Args:
+            sid(int): id источника
+            table(unicode): название таблицы
+
+        Returns:
+            int: id узла
+        """
+        builder_data = self.card_builder_data
+        s_id = str(sid)
+
+        if s_id in builder_data:
+            source_colls = builder_data[s_id]
+            # таблица не должна быть в активных
+            if table in source_colls['actives']:
+                raise Exception("Table must be in remains, but it's in actives")
+            # таблица уже в остатках
+            return source_colls['remains'].get(table, None)
+        return None
+
+    @property
+    def card_builder_data(self):
+        """
+        """
+        return self.card_builder['data']
+
+    @property
+    def card_builder(self):
+        """
+        Строительная карта дерева
+        """
+        card_key = RKeys.get_user_card_key(self.card_id)
+        card_builder = RKeys.get_user_card_builder(card_key)
+
+        if not r_server.exists(card_builder):
+            builder = {
+                'data': {},
+                'next_id': 1,
+            }
+            self.r_set(card_builder, builder)
+            return builder
+        return self.r_get(card_builder)
+
+    @staticmethod
+    def r_get(name, params=None):
+        if params:
+            return json.loads(r_server.get(name.format(*params)))
+        else:
+            return json.loads(r_server.get(name))
+
+    @staticmethod
+    def r_set(name, structure):
+        r_server.set(name, json.dumps(structure, cls=CustomJsonEncoder))
+
+    def fill_cache(self, source_id, table, info):
+        """
+        Заполняем кэш данными для узла
+        Args:
+            source_id(int): id источника
+            table(unicode): Название таблицы, связанной с узлом
+            info(dict): Информация об узле
+
+        Returns:
+            int: id узла
+        """
+
+        builder = self.card_builder
+        next_id = builder['next_id']
+        b_data = builder['data']
+
+        if source_id not in b_data:
+            b_data[source_id] = {
+                'actives': {},
+                'remains': {table: next_id},
+            }
+        else:
+            b_data[source_id]['remains'][table] = next_id
+
+        builder['next_id'] = next_id + 1
+
+        # save builder's new state
+        self.set_card_builder(builder)
+        self.set_table_info(source_id, next_id, info)
+
+        return next_id
+
+    def set_card_builder(self, actives):
+        """
+
+        Args:
+            actives:
+
+        Returns:
+
+        """
+        card_key = RKeys.get_user_card_key(self.card_id)
+        card_builder = RKeys.get_user_card_builder(card_key)
+        return self.r_set(card_builder, actives)
+
+    def set_table_info(self, source_id, table_id, table_info):
+        """
+
+        Args:
+            source_id:
+            table_id:
+            table_info:
+
+        Returns:
+
+        """
+        str_table = RKeys.get_active_table(self.card_id, source_id, table_id)
+        return self.r_set(str_table, table_info)

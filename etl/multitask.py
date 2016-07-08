@@ -69,16 +69,34 @@ class LoadMongodbMulti(TaskProcessing):
     def processing(self):
 
         sub_trees = self.context['sub_trees']
+        local_db_service = DataSourceService.get_local_instance()
+        #
+        # # параллель из последований, в конце колбэк
+        # header = [chain(
+        #         load_to_mongo.subtask((sub_tree, )),
+        #         # получает, то что вернул load_to_mongo
+        #         create_foreign_table.subtask()
+        #     )
+        #     for sub_tree in sub_trees]
+        # header.append(local_db_service.create_date_tables(
+        #     "time_table_name", json.loads(self.context['meta_info']), self.context['db_update']))
+        #
+        # chord(
+        #     chain(
+        #         load_to_mongo.subtask((sub_tree, )),
+        #         # получает, то что вернул load_to_mongo
+        #         create_foreign_table.subtask()
+        #     )
+        #     for sub_tree in sub_trees)(
+        #         mongo_callback.subtask(self.context))
 
-        # параллель из последований, в конце колбэк
-        chord(
-            chain(
-                load_to_mongo.subtask((sub_tree, )),
-                # получает, то что вернул load_to_mongo
-                create_foreign_table.subtask()
-            )
-            for sub_tree in sub_trees)(
-                mongo_callback.subtask(self.context))
+        local_db_service.create_date_tables(
+            "time_table_name", json.loads(self.context['meta_info']), False)
+        for sub_tree in sub_trees:
+            load_to_mongo(sub_tree)
+            create_foreign_table(sub_tree)
+
+        mongo_callback(self.context)
 
 
 @app.task(name=MONGODB_DATA_LOAD_MONO)
@@ -111,8 +129,6 @@ def load_to_mongo(sub_tree):
     # Коллекция с текущими данными
     current_collection_name = '{0}_{1}'.format(STTM_DATASOURCE_KEYS, key)
     MongodbConnection.drop(current_collection_name)
-    current_collection = MongodbConnection(
-        current_collection_name, indexes=[('_id', ASC)]).collection
 
     loaded_count = 0
 
@@ -125,37 +141,16 @@ def load_to_mongo(sub_tree):
         if not rows:
             break
         data_to_insert = []
-        data_to_current_insert = []
 
         for ind, record in enumerate(rows, start=1):
-
-            # row_key = calc_key_for_row(
-            #     record, tables_key_creator, (page - 1) * limit + ind,
-            #     # FIXME binary
-            #     binary_types_list=None)
-            # # FIXME binary
-            # бинарные данные оборачиваем в Binary(), если они имеются
-            # new_record = process_binary_data(record, binary_types_list)
-
-            # # FIXME temporary
-            # if not cols_updated:
-            #     cols_updated = True
-            #     col_names += map(str, range(len(record)))
-
-            # new_record = record
-
-            # row_key = '%.6f' % random.random()
 
             record_normalized = (
                 [STSE.IDLE, EtlEncoder.encode(datetime.now())] +
                 [EtlEncoder.encode(rec_field) for rec_field in record])
 
             data_to_insert.append(dict(izip(col_names, record_normalized)))
-            # data_to_current_insert.append(dict(_id=row_key))
         # try:
         collection.insert_many(data_to_insert, ordered=False)
-        # current_collection.insert_many(
-        #     data_to_current_insert, ordered=False)
         loaded_count += ind
         print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
             ind, loaded_count, 'rows_count')
@@ -181,9 +176,6 @@ def create_foreign_table(sub_tree):
     Создание таблиц Postgres
     """
     key = sub_tree["collection_hash"]
-    print key
-    # if key == '1_2__4634273996454754301':
-    #     1/1
     local_service = DataSourceService.get_local_instance()
 
     local_service.create_foreign_table(
@@ -201,7 +193,7 @@ def mongo_callback(context):
     # если какой нить таск упал, то сюда не дойдет
     local_service = DataSourceService.get_local_instance()
     local_service.create_materialized_view(
-        'my_view', context['relations'])
+        'my_view2', context['relations'])
 
     print 'results', context
 

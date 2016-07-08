@@ -503,15 +503,20 @@ class LocalDatabaseService(object):
         """
         Создание таблиц дат
         """
+        date_intervals_info = []
+        for sid, data in meta_info.iteritems():
+            date_intervals_info.extend(
+            [t_info['date_intervals']
+              for (t_name, t_info) in data.iteritems()])
 
         date_tables = {}
-
-        date_intervals_info = [(t_name, t_info['date_intervals'])
-                               for (t_name, t_info) in meta_info.iteritems()]
+        #
+        # date_intervals_info = [(t_name, t_info['date_intervals'])
+        #                        for (t_name, t_info) in date_intervals.iteritems()]
 
         # список всех интервалов
         intervals = reduce(
-            lambda x, y: x[1]+y[1], date_intervals_info, ['', []])
+            lambda x, y: x+y, date_intervals_info, [])
 
         if not intervals:
             return date_tables

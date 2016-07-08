@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, NodeSerializer, TreeSerializer,
-    TreeSerializerRequest, ParentIdSerializer, IndentSerializer)
+    TreeSerializerRequest, ParentIdSerializer, IndentSerializer, LoadDataSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys)
@@ -318,7 +318,7 @@ class CardViewSet(viewsets.ViewSet):
 
         return Response(info)
 
-    @detail_route(['post', ])
+    @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
         """
         Начачло загрузки данных

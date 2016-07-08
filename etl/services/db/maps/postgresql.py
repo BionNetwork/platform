@@ -233,7 +233,7 @@ create_mongo_server = """
         FOREIGN DATA WRAPPER mongo_fdw
         OPTIONS (address '127.0.0.1', port '27017');
 
-        CREATE USER MAPPING FOR postgres
+        CREATE USER MAPPING FOR biplatform
         SERVER mongo_server
         OPTIONS (username 'bi_user', password 'bi_user');
         """
@@ -275,5 +275,5 @@ create_foreign_table_query = u"""
         CREATE FOREIGN TABLE {table_name} ({cols}
          ) SERVER mongo_server
          OPTIONS (database 'etl', collection '{table_name}');
-         ALTER FOREIGN TABLE {table_name} OWNER TO biplatform;
+         --ALTER FOREIGN TABLE {table_name} OWNER TO biplatform;
         """
