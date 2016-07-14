@@ -1,11 +1,11 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import json
 import logging
 
 from django.db import transaction
 
-from rest_framework import serializers
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
@@ -19,9 +19,12 @@ from api.serializers import (
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys)
 from core.views import BaseViewNoLogin
+from etl.multitask import create_dataset_multi
 from etl.services.datasource.base import DataSourceService
+from etl.services.datasource.repository.storage import RedisSourceService, CacheService
+from etl.services.middleware.base import extract_tables_info, generate_cube_key, generate_columns_string_NEW
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
-from etl.views import LoadDataView
+from etl.services.queue.base import get_single_task
 
 from rest_framework.decorators import detail_route
 
@@ -323,9 +326,52 @@ class CardViewSet(viewsets.ViewSet):
         """
         Начачло загрузки данных
         """
-        load_view = LoadDataView.as_view()
-        load_view(request, card_id=pk)
-        return Response('OK')
+
+        if pk is None:
+            raise Exception("Card ID is None!")
+
+        # columns = json.loads(post.get('columns'))
+
+        columns_info = {
+            '1':
+                {
+                    "django_migrations": ["app", "name", "applied"],
+                },
+        }
+
+        cols_str = generate_columns_string_NEW(columns_info)
+        cube_key = generate_cube_key(cols_str, pk)
+
+        cache = CacheService(card_id=pk)
+        tree_structure = cache.active_tree_structure
+
+        tables = extract_tables_info(columns_info)
+        # достаем инфу колонок (статистика, типы, )
+        meta_tables_info = cache.tables_info_for_metasource(tables)
+
+        sub_trees = DataSourceService.prepare_sub_trees(
+            tree_structure, columns_info, pk, meta_tables_info)
+
+        relations = DataSourceService.prepare_relations(sub_trees)
+
+        cols_type = {}
+        for tree in sub_trees:
+            for k, v in tree['columns_types'].iteritems():
+                cols_type.update({k: v})
+
+        # Параметры для задач
+        load_args = {
+            'meta_info': json.dumps(meta_tables_info),
+            'card_id': pk,
+            'cols_type': json.dumps(cols_type),
+            'is_update': False,
+            'tree_structure': tree_structure,
+            'sub_trees': sub_trees,
+            'cube_key': cube_key,
+            "relations": relations,
+        }
+
+        get_single_task(create_dataset_multi, load_args)
 
 
 def check_parent(func):
@@ -533,23 +579,3 @@ class JoinViewSet(viewsets.ViewSet):
             card_pk, left_node, right_node, join_type, joins)
 
         return Response(data=data)
-
-
-# {"joins": [
-#         {
-#             "right": {
-#                 "column": "group_id",
-#                 "table": "auth_group_permissions",
-#                 "sid": 1
-#             },
-#             "join": {
-#                 "type": "inner",
-#                 "value": "eq"
-#             },
-#             "left": {
-#                 "column": "id",
-#                 "table": "auth_group",
-#                 "sid": 1
-#             }
-#         }
-#     ]}

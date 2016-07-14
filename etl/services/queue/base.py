@@ -36,46 +36,6 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-class Context(object):
-
-    __builder = None
-
-    def setBuilder(self, builder):
-        self.__builder = builder
-        return self
-
-
-class ContextBuilder(object):
-
-
-    def get_cols(self):
-        pass
-
-
-class RedisContextBuilder(ContextBuilder):
-
-    def __init__(self, source_id, cols, tables):
-        self.tables = tables
-        self.source = Datasource.objects.get(id=source_id)
-        self.cols = cols
-
-    def get_meta(self):
-        return DataSourceService.tables_info_for_metasource(
-            self.source, self.tables)
-
-    def get_cdc_type(self):
-        return DatasourceSettings.objects.get(
-            datasource_id=self.source.id, name=DatasourceSettings.SETTING_CDC_NAME).value
-
-    def get_collection_names(self):
-        return DataSourceService.get_collections_names(
-            self.source, self.tables)
-
-    def get_tables_info(self):
-        return RedisSourceService.get_ddl_tables_info(
-                    self.source, self.tables)
-
-
 class TaskProcessing(object):
     """
     Базовый класс, отвечающий за про процесс выполнения celery-задач

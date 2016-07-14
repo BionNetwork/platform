@@ -4,6 +4,8 @@ from __future__ import unicode_literals
 import operator
 from collections import defaultdict
 
+from functools import reduce
+
 from etl.services.db.interfaces import JoinTypes, Operations
 
 
@@ -117,14 +119,14 @@ class TablesTree(object):
 
     def display(self):
         if self.root:
-            print self.root.val, self.root.joins
+            print(self.root.val, self.root.joins)
             r_chs = [x for x in self.root.childs]
-            print [(x.val, x.joins) for x in r_chs]
+            print([(x.val, x.joins) for x in r_chs])
             for c in r_chs:
-                print [x.val for x in c.childs]
-            print 80*'*'
+                print([x.val for x in c.childs])
+            print(80*'*')
         else:
-            print 'Empty Tree!!!'
+            print('Empty Tree!!!')
 
     @property
     def ordered_nodes(self):

@@ -95,6 +95,7 @@ class LoadMongodbMulti(TaskProcessing):
         for sub_tree in sub_trees:
             load_to_mongo(sub_tree)
             create_foreign_table(sub_tree)
+            create_view(sub_tree)
 
         mongo_callback(self.context)
 
@@ -146,7 +147,8 @@ def load_to_mongo(sub_tree):
 
             record_normalized = (
                 [STSE.IDLE, EtlEncoder.encode(datetime.now())] +
-                [EtlEncoder.encode(rec_field) for rec_field in record])
+                # [EtlEncoder.encode(rec_field) for rec_field in record])
+                [rec_field for rec_field in record])
 
             data_to_insert.append(dict(izip(col_names, record_normalized)))
         # try:
@@ -181,7 +183,19 @@ def create_foreign_table(sub_tree):
     local_service.create_foreign_table(
         '{0}_{1}'.format(STTM, key), sub_tree['columns_types'])
 
-    return 1
+@app.task(name=PSQL_VIEW)
+def create_view(sub_tree):
+    """
+    Создание View для Foreign Table со ссылкой на Дату
+    Args:
+        sub_tree(): Описать
+
+    Returns:
+    """
+
+    local_service = DataSourceService.get_local_instance()
+
+    local_service.create_foreign_view(sub_tree)
 
 
 @app.task(name=MONGODB_DATA_LOAD_CALLBACK)
@@ -193,7 +207,7 @@ def mongo_callback(context):
     # если какой нить таск упал, то сюда не дойдет
     local_service = DataSourceService.get_local_instance()
     local_service.create_materialized_view(
-        'my_view2', context['relations'])
+        'my_view4', context['relations'])
 
     print 'results', context
 

@@ -438,6 +438,19 @@ class LocalDatabaseService(object):
         query = self.datasource.create_foreign_table_query(name, cols)
         self.execute(query)
 
+    def create_foreign_view(self, sub_tree):
+        """
+        Создание представления для удаленной таблицы (Foreign Table)
+        Args:
+            sub_tree(dict): Поддерево
+
+        Returns: FIXME: Описать
+        """
+        view_name = 'view_name'
+        query = self.datasource.create_foreign_view_quwery('test_view', sub_tree)
+        self.execute(query)
+
+
     def create_materialized_view(self, name, relations):
         """"
         Создание материализованного представления
@@ -606,7 +619,7 @@ class LocalDatabaseService(object):
 
         # если в таблице дат имелся только 1 запись с id = 0
         else:
-            # +1 потому start_date тоже суем
+            # +1 потому start_date тоже кладем
             records, date_ids = self.prepare_dates_records(
                 start_date, delta.days + 1, 0)
             date_tables.update(date_ids)

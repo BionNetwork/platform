@@ -39,147 +39,6 @@ logger = logging.getLogger(__name__)
 SUCCESS = 'success'
 ERROR = 'error'
 
-
-class NewSourceView(JSONMixin, BaseTemplateView):
-    template_name = 'etl/datasources/add.html'
-
-    def get(self, request, *args, **kwargs):
-        form = etl_forms.SourceForm()
-        settings_form = etl_forms.SettingsForm()
-        # return render(request, self.template_name, {
-        #     'form': form, 'settings_form': settings_form})
-        return self.render_to_response(
-                {'form': form, 'settings_form': settings_form})
-
-    @transaction.atomic()
-    def post(self, request, *args, **kwargs):
-        try:
-            post = request.POST
-
-            cdc_value = post.get('cdc_type')
-
-            if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
-                raise ValidationError("Неверное значение для метода докачки данных")
-
-            form = etl_forms.SourceForm(post)
-            if not form.is_valid():
-                raise ValidationError('Поля формы заполнены неверно')
-
-            if Datasource.objects.filter(
-                host=post.get('host'), db=post.get('db'), user_id=request.user.id
-            ).exists():
-                raise ValidationError("Данный источник уже имеется в системе")
-
-            source = form.save(commit=False)
-            source.user_id = request.user.id
-            source.save()
-
-            # сохраняем настройки докачки
-            SourceSettings.objects.create(
-                name='cdc_type',
-                value=cdc_value,
-                datasource=source,
-            )
-
-            return self.json_response(
-                {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
-        except ValidationError as e:
-            return self.json_response(
-                {'status': ERROR, 'message': e.message})
-        except Exception as e:
-            logger.exception(e.message)
-            return self.json_response(
-                {'status': ERROR,
-                 'message': 'Произошла непредвиденная ошибка!'}
-            )
-
-
-class EditSourceView(BaseTemplateView):
-    template_name = 'etl/datasources/edit.html'
-
-    def get(self, request, *args, **kwargs):
-
-        source = get_object_or_404(Datasource, pk=kwargs.get('id'))
-        try:
-            cdc_value = source.settings.get(name='cdc_type').value
-        except DatasourceSettings.DoesNotExist:
-            cdc_value = SourceSettings.CHECKSUM
-
-        form = etl_forms.SourceForm(instance=source)
-        settings_form = etl_forms.SettingsForm(initial={
-            'cdc_type_field': cdc_value})
-        return self.render_to_response(
-            {'form': form, 'settings_form': settings_form,
-             'datasource_id': kwargs.get('id')})
-
-    def post(self, request, *args, **kwargs):
-
-        post = request.POST
-        source = get_object_or_404(Datasource, pk=kwargs.get('id'))
-        form = etl_forms.SourceForm(post, instance=source)
-
-        cdc_value = post.get('cdc_type')
-        if cdc_value not in [SourceSettings.CHECKSUM, SourceSettings.TRIGGERS]:
-            return self.json_response(
-                {'status': ERROR, 'message': 'Неверное значение выбора закачки!'})
-        # сохраняем настройки докачки
-        source_settings, create = SourceSettings.objects.get_or_create(
-            name='cdc_type',
-            datasource=source,
-        )
-        source_settings.value = cdc_value
-        source_settings.save()
-
-        if not form.is_valid():
-            return self.render_to_response({'form': form, })
-
-        if form.has_changed() and settings.USE_REDIS_CACHE:
-            # если что-то изменилось, то удаляем инфу о датасорсе
-            DataSourceService.delete_datasource(source)
-            # дополнительно удаляем инфу о таблицах, джоинах, дереве
-            DataSourceService.tree_full_clean(source)
-        form.save()
-
-        return self.json_response(
-                {'status': SUCCESS, 'redirect_url': reverse('etl:datasources.index')})
-
-
-class CheckConnectionView(BaseView):
-
-    def post(self, request, *args, **kwargs):
-
-        try:
-            DataSourceService.check_connection(request.POST)
-            return self.json_response(
-                {'status': SUCCESS,
-                 'message': 'Проверка соединения прошла успешно'})
-        except ValueError as e:
-            return self.json_response({'status': ERROR, 'message': e.message})
-        except Exception as e:
-            logger.exception(e.message)
-            return self.json_response(
-                {'status': ERROR,
-                 'message': 'Ошибка во время проверки соединения'}
-            )
-
-
-class GetConnectionDataView(BaseView):
-
-    def get(self, request, *args, **kwargs):
-        source = get_object_or_404(Datasource, pk=kwargs.get('id'))
-
-        # FIXME в зависимости от типа источника, определить как очищать редис
-        # очищаем из редиса инфу дерева перед созданием нового
-        DataSourceService.tree_full_clean(source)
-
-        try:
-            db_tables = DataSourceService.get_source_tables(source)
-        except ValueError as err:
-            return self.json_response({'status': ERROR, 'message': err.message})
-
-        return self.json_response({'data': db_tables, 'status': SUCCESS})
-
-
 class BaseEtlView(BaseView):
 
     @staticmethod
@@ -222,14 +81,6 @@ class BaseEtlView(BaseView):
             data = self.start_post_action(request, source)
         return self.json_response(
                 {'status': SUCCESS, 'data': data, 'message': ''})
-        # except (Datasource.DoesNotExist, ResponseError) as err:
-        #     return self.json_response(
-        #         {'status': ERROR, 'code': err.code, 'message': err.message})
-        # except Exception as e:
-        #     logger.exception(e.message)
-        #     return self.json_response({
-        #         'status': ERROR,
-        #         'message': 'Произошла непредвиденная ошибка'})
 
     def start_get_action(self, request, source):
         """
@@ -245,19 +96,8 @@ class BaseEtlView(BaseView):
         """
         return []
 
-class RetitleColumnView(BaseEtlView):
 
-    def start_post_action(self, request, source):
-        post = request.POST
-        table = post.get('table')
-        column = post.get('column')
-        title = post.get('title')
-
-        DataSourceService.retitle_table_column(
-            source, table, column, title)
-        return []
-
-
+# FIXME: Удалить
 class GetDataRowsView(BaseEtlView):
 
     def start_post_action(self, request, source):
@@ -304,14 +144,7 @@ class GetDataRowsView(BaseEtlView):
             json.dumps(context, cls=CustomJsonEncoder), **response_kwargs)
 
 
-class RemoveAllTablesView(BaseEtlView):
-
-    def start_get_action(self, request, source):
-        delete_ddl = request.GET.get('delete_ddl') == 'true'
-        RedisSourceService.tree_full_clean(source, delete_ddl)
-        return []
-
-
+# FIXME: Удалить
 class LoadDataViewMono(BaseEtlView):
 
     def start_post_action(self, request, source):
@@ -351,8 +184,8 @@ class LoadDataViewMono(BaseEtlView):
             source, tables)
 
         # достаем инфу колонок (статистика, типы, )
-        tables_info_for_meta = DataSourceService.tables_info_for_metasource(
-            source, tables)
+        # tables_info_for_meta = DataSourceService.tables_info_for_metasource(
+        #   source, tables)
 
         try:
             cdc_type = DatasourceSettings.objects.get(
@@ -368,7 +201,7 @@ class LoadDataViewMono(BaseEtlView):
             'tables': data.get('tables'),
             # 'col_types': json.dumps(
             #     DataSourceService.get_columns_types(source, tables)),
-            'meta_info': json.dumps(tables_info_for_meta),
+            # 'meta_info': json.dumps(tables_info_for_meta),
             # 'tree': RedisSourceService.get_active_tree_structure(source),
             'source': source.get_connection_dict(),
             'user_id': user_id,
@@ -396,86 +229,3 @@ class LoadDataViewMono(BaseEtlView):
             raise ResponseError(e.message)
 
         return {'channels': channels}
-
-
-class LoadDataView(BaseView):
-
-    def post(self, request, card_id=None):
-        """
-        Постановка задачи в очередь на загрузку данных в хранилище
-        """
-        post = request.POST
-
-        if card_id is None:
-            raise Exception("Card ID is None!")
-
-        # columns = json.loads(post.get('columns'))
-
-        columns_info = {
-            '3':
-                {
-                    "shops": ["name", "id", ],
-                },
-            '5':
-                {
-                    "Таблица1": ["name", "gender"],
-                    "Таблица2": ["name", "country2"],
-                },
-        }
-
-        cols_str = generate_columns_string_NEW(columns_info)
-        cube_key = generate_cube_key(cols_str, card_id)
-
-        tree_structure = (
-            RedisSourceService.get_active_tree_structure(card_id))
-
-        tables = extract_tables_info(columns_info)
-        # достаем инфу колонок (статистика, типы, )
-        meta_tables_info = RedisSourceService.tables_info_for_metasource_NEW(
-            card_id, tables)
-
-        sub_trees = DataSourceService.prepare_sub_trees(
-            tree_structure, columns_info, card_id, meta_tables_info)
-
-        relations = DataSourceService.prepare_relations(sub_trees)
-
-        cols_type = {}
-        for tree in sub_trees:
-            for k, v in tree['columns_types'].iteritems():
-                cols_type.update({k: v})
-
-        # Параметры для задач
-        load_args = {
-            'meta_info': json.dumps(meta_tables_info),
-            'card_id': card_id,
-            'cols_type': json.dumps(cols_type),
-            'is_update': False,
-            'tree_structure': tree_structure,
-            'sub_trees': sub_trees,
-            'cube_key': cube_key,
-            "relations": relations,
-        }
-
-        get_single_task(create_dataset_multi, load_args)
-
-
-class GetUserTasksView(BaseView):
-    """
-        Список юзеровских тасков
-    """
-    def get(self, request, *args, **kwargs):
-        # берем 10 последних инфо каналов юзера
-        subscribes = RedisSourceService.get_user_subscribers(
-            request.user.id)
-        if subscribes:
-            user_subscribes = json.loads(RedisSourceService.get_user_subscribers(
-                request.user.id))[-10:]
-        else:
-            user_subscribes = []
-
-        # сами каналы
-        channels = []
-        for ch in user_subscribes:
-            channels.append(ch['channel'])
-
-        return self.json_response({'channels': channels})

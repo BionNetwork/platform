@@ -271,7 +271,7 @@ select_dates_query = """
 """
 
 create_foreign_table_query = u"""
-        DROP FOREIGN TABLE IF EXISTS {table_name};
+        DROP FOREIGN TABLE IF EXISTS {table_name} CASCADE;
         CREATE FOREIGN TABLE {table_name} ({cols}
          ) SERVER mongo_server
          OPTIONS (database 'etl', collection '{table_name}');

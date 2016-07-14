@@ -50,7 +50,7 @@ class DatasourceSerializer(serializers.ModelSerializer):
             instance, validated_data)
         if settings.USE_REDIS_CACHE:
             DataSourceService.delete_datasource(instance)
-            DataSourceService.tree_full_clean(instance)
+          #  DataSourceService.tree_full_clean(instance)
         return instance
 
 

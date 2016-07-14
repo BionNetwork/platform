@@ -72,7 +72,7 @@ class Postgresql(Database):
         :param cols_str:
         :return:
         """
-        create_query = "CREATE TABLE {0} ({1})".format(key_str, cols_str)
+        create_query = """DROP TABLE IF EXISTS {0} CASCADE; CREATE TABLE {0} ({1})""".format(key_str, cols_str)
 
         return create_query
 
@@ -150,6 +150,42 @@ class Postgresql(Database):
 
         return query.format(table_name=table_name, cols=','.join(col_names))
 
+    def create_foreign_view_quwery(self, view_name, sub_tree):
+        """
+        Запрос на создание представления
+        Args:
+            view_name:
+
+        Returns:
+
+        """
+        view_name = 'view__{view_hash}'.format(view_hash=sub_tree['collection_hash'])
+        table_name = 'sttm__{view_hash}'.format(view_hash=sub_tree['collection_hash'])
+
+        columns = sub_tree['columns_types']
+
+        query_column = []
+        time_joins_map = {}
+        for index, column in enumerate(columns):
+            if columns[column]['type'] in ['date', 'datetime', 'timestamp']:
+                time_joins_map.update({index: column})
+                s = 't{index}."time_id" as "{column_name}"'.format(index=index, column_name=column)
+                query_column.append(s)
+            else:
+                query_column.append('"{table}"."{column}"'.format(table=table_name, column=column))
+
+        select_line = ', '.join(query_column)
+
+        joins_line = ''
+        if time_joins_map:
+            for index, column in time_joins_map.iteritems():
+                joins_line += 'JOIN time_table_name as t{index} ON "{foreign_table_name}"."{column}"::date = t{index}."the_date"'.format(index=index, foreign_table_name=table_name, column=column)
+
+        query = """DROP VIEW IF EXISTS  {view_name} CASCADE; CREATE VIEW {view_name} AS SELECT {select} FROM {table_name} {joins};""".format(
+            view_name=view_name, select=select_line, table_name=table_name, joins=joins_line)
+        return query
+
+
     def create_materialized_view_query(self, name, relations):
         """
         Запрос на создание материализованного представления
@@ -159,10 +195,10 @@ class Postgresql(Database):
             relations(list): Информация об объединяемых таблицах
         """
         table_names = [x['table_hash'] for x in relations]
-        query = "CREATE MATERIALIZED VIEW {view_name} AS SELECT {columns} FROM {first_table_name}".format(
+        query = """DROP MATERIALIZED VIEW IF EXISTS {view_name} CASCADE; CREATE MATERIALIZED VIEW {view_name} AS SELECT {columns} FROM {first_table_name}""".format(
             view_name=name,
-            columns=','.join(['"sttm__%s".*' % x for x in table_names]),
-            first_table_name='"sttm__%s"' % table_names[0])
+            columns=','.join(['"view__%s".*' % x for x in table_names]),
+            first_table_name='"view__%s"' % table_names[0])
 
         for node in relations[1:]:
             query += u' INNER JOIN "{table_name}" ON {condition}'.format(
