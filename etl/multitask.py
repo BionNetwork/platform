@@ -205,6 +205,7 @@ def mongo_callback(context):
     """
     # fixme needs to check status of all subtasks
     # если какой нить таск упал, то сюда не дойдет
+    # нужны декораторы на обработку ошибок
     local_service = DataSourceService.get_local_instance()
     local_service.create_materialized_view(
         'my_view4', context['relations'])
