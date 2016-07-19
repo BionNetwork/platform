@@ -136,6 +136,19 @@ class DataSourceService(object):
 
         return TTRepo.remains_nodes(builder_data)
 
+    # FIXME убрать метод
+    @classmethod
+    def get_remain_node(cls, nodes, node_id):
+        """
+        Получение узла
+        """
+        node_id = int(node_id)
+
+        for node in nodes:
+            if node.node_id == node_id:
+                return node
+        return
+
     @classmethod
     def add_randomly_from_remains(cls, card_id, node_id):
         """
@@ -143,7 +156,7 @@ class DataSourceService(object):
         """
 
         remain_nodes = cls.remains_nodes(card_id)
-        node = RedisSS.get_remain_node(remain_nodes, node_id)
+        node = cls.get_remain_node(remain_nodes, node_id)
 
         # cache = CacheService(card_id)
         # buider_data = cache.card_builder_data
@@ -202,7 +215,7 @@ class DataSourceService(object):
             raise Exception("Incorrect parent ID!")
 
         remain_nodes = cls.remains_nodes(card_id)
-        ch_node = RedisSS.get_remain_node(remain_nodes, child_id)
+        ch_node = cls.get_remain_node(remain_nodes, child_id)
 
         if ch_node is None:
             raise Exception("Incorrect child ID!")

@@ -547,20 +547,6 @@ class RedisSourceService(object):
             r_server.delete(str_table_by_name.format(last))
             r_server.delete(str_remain)
 
-
-    # FIXME убрать метод
-    @classmethod
-    def get_remain_node(cls, nodes, node_id):
-        """
-        Получение узла
-        """
-        node_id = int(node_id)
-
-        for node in nodes:
-            if node.node_id == node_id:
-                return node
-        return
-
     # FIXME перенесен в кэш
     @classmethod
     def put_table_info_in_builder(cls, card_id, source_id, table, table_info):
@@ -856,6 +842,14 @@ class RedisSourceService(object):
         """
         indent_key = RKeys.get_indent_key(source_id)
         cls.r_set(indent_key, indents)
+
+
+class Table(object):
+
+    def __init__(self, name, sid, columns=None):
+        self.name = name
+        self.sid = sid
+        self.columns = columns
 
 
 class CacheService(object):

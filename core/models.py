@@ -386,7 +386,7 @@ class DatasetStateChoices(DjangoChoices):
     Cтатусы для Dataset
     """
     IDLE = ChoiceItem(1, 'В ожидании данных')
-    FILUP = ChoiceItem(2, 'Наполнение данных')
+    FILLUP = ChoiceItem(2, 'Наполнение данных')
     DIMCR = ChoiceItem(3, 'Создание размерностей')
     MSRCR = ChoiceItem(4, 'Создание мер')
     LOADED = ChoiceItem(5, 'Загрузка данных завершилась')

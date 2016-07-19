@@ -121,7 +121,7 @@ class LoadMongodb(TaskProcessing):
     def processing(self):
 
         Dataset.update_state(
-            self.context['dataset_id'], DatasetStateChoices.FILUP)
+            self.context['dataset_id'], DatasetStateChoices.FILLUP)
 
         cols = json.loads(self.context['cols'])
         col_types = json.loads(self.context['col_types'])
@@ -680,7 +680,7 @@ class UpdateMongodb(TaskProcessing):
         """
 
         Dataset.update_state(
-            self.context['dataset_id'], DatasetStateChoices.FILUP)
+            self.context['dataset_id'], DatasetStateChoices.FILLUP)
 
         self.key = self.context['checksum']
         cols = json.loads(self.context['cols'])

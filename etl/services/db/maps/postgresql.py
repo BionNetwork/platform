@@ -77,8 +77,7 @@ cols_query = """
          then 'serial' else null end as extra,
     character_maximum_length
     FROM information_schema.columns
-    where table_name in {0} and table_catalog = '{1}' and
-          table_schema = '{2}' order by table_name;
+    where table_name in {0} and table_catalog = '{1}' order by table_name;
 """
 
 cdc_cols_query = """
@@ -226,25 +225,6 @@ check_table_exists = """
    );
 """
 
-create_mongo_server = """
-        CREATE EXTENSION IF NOT EXISTS mongo_fdw;
-        DROP SERVER IF EXISTS mongo_server CASCADE;
-        CREATE SERVER mongo_server
-        FOREIGN DATA WRAPPER mongo_fdw
-        OPTIONS (address '127.0.0.1', port '27017');
-
-        CREATE USER MAPPING FOR biplatform
-        SERVER mongo_server
-        OPTIONS (username 'bi_user', password 'bi_user');
-        """
-
-create_postgres_server = """
-        CREATE USER MAPPING FOR biplatform
-        SERVER mongo_server
-        OPTIONS (username 'bi_user', password 'bi_user');
-"""
-
-
 dimension_measure_triggers_query = """CREATE OR REPLACE FUNCTION
     reload_{new_table}_records() RETURNS TRIGGER AS $dim_meas_recs$
     BEGIN
@@ -270,10 +250,25 @@ select_dates_query = """
     select the_date::date, time_id from {0} where time_id <> 0
 """
 
-create_foreign_table_query = u"""
-        DROP FOREIGN TABLE IF EXISTS {table_name} CASCADE;
-        CREATE FOREIGN TABLE {table_name} ({cols}
-         ) SERVER mongo_server
-         OPTIONS (database 'etl', collection '{table_name}');
-         --ALTER FOREIGN TABLE {table_name} OWNER TO biplatform;
-        """
+# ====================================================
+
+fdw_server_create_query = """
+    DROP SERVER IF EXISTS {name} CASCADE;
+    CREATE SERVER {name}
+    FOREIGN DATA WRAPPER {source_type}
+    OPTIONS ({conn_params});
+    """
+
+fdw_mapping_create_query = """
+    CREATE USER MAPPING FOR biplatform
+    SERVER {name}
+    OPTIONS ({user params});
+"""
+
+foreign_table_create_query = """
+    DROP FOREIGN TABLE IF EXISTS {table_name} CASCADE;
+    CREATE FOREIGN TABLE {table_name} ({cols}
+     ) SERVER {server_name}
+     OPTIONS (database 'etl', collection '{table_name}');
+     --ALTER FOREIGN TABLE {table_name} OWNER TO biplatform;
+    """

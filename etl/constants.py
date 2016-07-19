@@ -59,3 +59,6 @@ PSQL_VIEW = 'etl:load_data:psql_view'
 
 # Префиксы названий таблиц
 STTM = 'sttm_'  # Временная загружаемая таблица Mongo
+FDW = 'fdw_'
+
+MONGODB = 'mongodb'

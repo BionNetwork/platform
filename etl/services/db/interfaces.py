@@ -485,7 +485,6 @@ class Database(object):
         Получение списка колонок в таблицах
 
         Args:
-            source(`Datasource`): источник
             tables(list): список названий таблиц
 
         Returns:

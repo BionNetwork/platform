@@ -6,10 +6,10 @@
   <title>AdminLTE 2 | Dashboard</title>
   <!-- Tell the browser to be responsive to screen width -->
   <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
-  
+
   <!-- STYLES -->
   <link rel="stylesheet" href="/assets/angular/main.min.css"/>
-  
+
   <!-- STYLES -->
   <link rel="stylesheet" href="/assets/angular/css/font.min.css"/>
   <link rel="stylesheet" href="/assets/css/custom.css"/>
@@ -665,10 +665,10 @@
                         <a href="javascript:void(0)" onclick="cancelRenameColumn('head-<%= row.tname%>-<%= col.col_name %>')"
                                            style="display:none;" id="cancel-head-<%=row.tname%>-<%=col.col_name%>">
                                             <i class="fa fa-remove text-danger"></i></a>
-                        <input type="text" style="display:none;"
-                            id="input-head-<%=row.tname%>-<%=col.col_name%>"
-                            value="<% if(col.col_title){ %><%=col.col_title%><%  } else { %><%=row.tname%> <%=col.col_name%><% } %>"
-                               onkeydown="saveColumnName('head-<%= row.tname%>-<%= col.col_name %>', event, '{% url "etl:datasources.retitle_column"%}')">
+{#                        <input type="text" style="display:none;"#}
+{#                            id="input-head-<%=row.tname%>-<%=col.col_name%>"#}
+{#                            value="<% if(col.col_title){ %><%=col.col_title%><%  } else { %><%=row.tname%> <%=col.col_name%><% } %>"#}
+{#                               onkeydown="saveColumnName('head-<%= row.tname%>-<%= col.col_name %>', event, '{% url "etl:datasources.retitle_column"%}')">#}
                     </div>
                 </th>
 

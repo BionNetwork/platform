@@ -28,7 +28,7 @@ from . import client, settings
 
 __all__ = [
     'TLSE',  'STSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
-    'calc_key_for_row', 'TaskProcessing', 'SourceDbConnect', 'LocalDbConnect',
+    'calc_key_for_row', 'TaskProcessing',
     'DTCN', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
     'process_binary_data', 'get_binary_types_dict', 'fetch_date_intervals',
 ]
@@ -460,64 +460,6 @@ def fetch_date_intervals(meta_info):
         for (t_name, t_info) in meta_info.iteritems()]
 
     return date_intervals_info
-
-
-class LocalDbConnect(object):
-
-    connection = None
-
-    @staticmethod
-    def get_connection(source=None):
-        return LocalDatabaseService().datasource.connection
-
-    def __init__(self, query, source=None, execute=True):
-
-        self.query = query
-        self.source = source
-
-        if not self.connection:
-            self.connection = self.get_connection(source)
-        if execute:
-            self.execute()
-
-    def execute(self, args=None, many=False):
-        with self.connection:
-            with closing(self.connection.cursor()) as cursor:
-                if not many:
-                    cursor.execute(self.query, args)
-                else:
-                    cursor.executemany(self.query, args)
-
-    def fetchall(self, **kwargs):
-        with self.connection:
-            with closing(self.connection.cursor()) as cursor:
-                cursor.execute(self.query, kwargs)
-                return cursor.fetchall()
-
-    def fetchone(self, args=None):
-        with self.connection:
-            with closing(self.connection.cursor()) as cursor:
-                cursor.execute(self.query, args)
-                return cursor.fetchone()
-
-
-class SourceDbConnect(LocalDbConnect):
-
-    connection = None
-
-    @staticmethod
-    def get_connection(source=None):
-        return DataSourceService.get_source_connection(source)
-
-    def __init__(self, query, source, execute=False):
-        super(SourceDbConnect, self).__init__(query, source, execute)
-
-    def fetchall(self, **kwargs):
-        """
-        Расширение, у каждого database свой fetchall определяем
-        """
-        return DataSourceService.get_fetchall_result(
-            self.connection, self.source, self.query, **kwargs)
 
 
 class MongodbConnection(object):

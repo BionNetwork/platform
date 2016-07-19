@@ -101,6 +101,14 @@ DATABASES = {
         'PASSWORD': 'biplatform',
         'HOST': 'localhost',
         'PORT': '5432',
+    },
+    'data': {
+        'ENGINE': 'core.db.postgresql_psycopg2',
+        'NAME': 'bi_data',
+        'USER': 'bi_data',
+        'PASSWORD': 'bi_data',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 

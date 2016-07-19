@@ -71,7 +71,6 @@ class DatabaseService(DatasourceApi):
         """
             Получение полной информации о колонках таблиц
         Args:
-            source(core.models.Datasource): источник
             tables(list): список таблиц
 
         Returns:
@@ -416,26 +415,19 @@ class LocalDatabaseService(object):
                 cursor.execute(query, kwargs)
                 return cursor.fetchall()
 
-    def create_mongo_server(self):
+    def create_fdw_server(self, name, source_params):
         """
         Создание mongodb-расширения
         с соответсвущим сервером и картой пользователя
         """
-        query = self.datasource.create_mongo_server()
+        query = self.datasource.fdw_server_create_query(name, source_params)
         self.execute(query)
 
-    def create_postgres_server(self):
+    def create_foreign_table(self, server_name, name, cols):
         """
-        Создание postgres-расширения
+        Создание удаленную таблицу к Mongodb
         """
-        query = self.datasource.create_postgres_server()
-        self.execute(query)
-
-    def create_foreign_table(self, name, cols, ):
-        """
-        Создание удаленную таблицу к MongoDB
-        """
-        query = self.datasource.create_foreign_table_query(name, cols)
+        query = self.datasource.foreign_table_create_query(server_name, name, cols)
         self.execute(query)
 
     def create_foreign_view(self, sub_tree):
@@ -447,9 +439,8 @@ class LocalDatabaseService(object):
         Returns: FIXME: Описать
         """
         view_name = 'view_name'
-        query = self.datasource.create_foreign_view_quwery('test_view', sub_tree)
+        query = self.datasource.create_foreign_view_query('test_view', sub_tree)
         self.execute(query)
-
 
     def create_materialized_view(self, name, relations):
         """"
