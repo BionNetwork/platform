@@ -314,8 +314,6 @@ class CardViewSet(viewsets.ViewSet):
                     card_id, sid, table)
 
                 if not exists:
-                    print card_id, sid, table
-                    print 'not_exists'
                     node_id = DataSourceService.cache_columns(
                         card_id, sid, table)
 

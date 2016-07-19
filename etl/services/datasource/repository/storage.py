@@ -936,6 +936,9 @@ class CacheService(object):
         next_id = builder['next_id']
         b_data = builder['data']
 
+        self.set_table_info(source_id, next_id, info)
+
+        source_id = str(source_id)
         if source_id not in b_data:
             b_data[source_id] = {
                 'actives': {},
@@ -948,7 +951,6 @@ class CacheService(object):
 
         # save builder's new state
         self.set_card_builder(builder)
-        self.set_table_info(source_id, next_id, info)
 
         return next_id
 
