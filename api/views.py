@@ -284,8 +284,8 @@ class CardViewSet(viewsets.ViewSet):
         data = request.data
 
         # data = [
-        #     {"source_id": 2, "table_name": u'auth_group', },
-        #     {"source_id": 2, "table_name": u'auth_group_permissions', },
+            # {"source_id": 2, "table_name": u'auth_group', },
+            # {"source_id": 2, "table_name": u'auth_group_permissions', },
             # {"source_id": 2, "table_name": u'auth_permission', },
             # {"source_id": 2, "table_name": u'auth_permission2', },
             # {"source_id": 2, "table_name": u'card_card', },
@@ -293,13 +293,7 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'List3', },
             # {"source_id": 1, "table_name": u'Лист2', },
 
-        #     {"source_id": 1, "table_name": u"auth_group", },
-        #     {"source_id": 1, "table_name": u"auth_group_permissions", },
-        #     {"source_id": 1, "table_name": u"auth_permission", },
-        #     {"source_id": 1, "table_name": u"card_card", },
-        #     {"source_id": 4, "table_name": u"list1", },
-        #     {"source_id": 4, "table_name": u"List3", },
-        #     {"source_id": 4, "table_name": u"Лист2", },
+            # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
         # ]
 
         card_id = pk
@@ -334,10 +328,28 @@ class CardViewSet(viewsets.ViewSet):
         # columns = json.loads(post.get('columns'))
 
         columns_info = {
-            '8':
-                {
-                    "mrk_reference": ["pubmedid", "creation_date"],
-                },
+            # '8':
+            #     {
+            #         "mrk_reference": ["pubmedid", "creation_date"],
+            #     },
+            # '1':
+            #     {
+            #         "Лист1": [
+            #             "name2", "пол", "auth_group_id", "Date", "Floata", ],
+            #     },
+            # '2':
+            #     {
+            #         "auth_group": ["id", "name", ],
+            #         "auth_group_permissions": [
+            #             "id", "group_id", "permission_id", ],
+            #     },
+            # '31':
+            #     {
+            #         "kladr_kladrgeo": [
+            #             "id", "parent_id", "name", "socr", "code", "zipcode",
+            #             "gni", "uno", "okato", "status", "level",
+            #         ],
+            #     },
         }
 
         cols_str = generate_columns_string_NEW(columns_info)
@@ -373,6 +385,8 @@ class CardViewSet(viewsets.ViewSet):
         }
 
         get_single_task(create_dataset_multi, load_args)
+
+        return Response({"message": "Loading is started!"})
 
 
 def check_parent(func):

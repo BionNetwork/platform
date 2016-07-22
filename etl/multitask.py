@@ -3,6 +3,11 @@ from __future__ import unicode_literals, division
 
 import os
 import sys
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
+os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
+
 import json
 import time
 import logging
@@ -15,6 +20,7 @@ from datetime import datetime
 from djcelery import celery
 from celery import Celery, chord, chain
 from kombu import Queue
+from bisect import bisect_left
 
 from etl.constants import *
 from etl.services.datasource.base import DataSourceService
@@ -29,10 +35,6 @@ from core.models import (
 from etl.services.queue.base import *
 from etl.services.middleware.base import EtlEncoder
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(BASE_DIR)
-os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
-
 logger = logging.getLogger(__name__)
 
 ASC = 1
@@ -40,7 +42,7 @@ ASC = 1
 
 # FIXME chord на amqp бомбашится, паэтаму redis
 app = Celery('multi', backend='redis://localhost:6379/0',
-                   broker='redis://localhost:6379/0')
+             broker='redis://localhost:6379/0')
 
 
 @app.task(name=CREATE_DATASET_MULTI)
@@ -65,17 +67,18 @@ class LoadMongodbMulti(TaskProcessing):
     """
     Создание Dataset
     """
-
     def processing(self):
 
         sub_trees = self.context['sub_trees']
+
+        # FIXME проверить работу таблицы дат
+        # создание таблицы дат
         local_db_service = DataSourceService.get_local_instance()
-        #
-        # параллель из последований, в конце колбэк
         local_db_service.create_date_tables(
             "time_table_name", json.loads(self.context['meta_info']), False
         )
 
+        # параллель из последований, в конце колбэк
         # chord(
         #     chain(
         #         load_to_mongo.subtask((sub_tree, )),
@@ -86,8 +89,6 @@ class LoadMongodbMulti(TaskProcessing):
         #     for sub_tree in sub_trees)(
         #         mongo_callback.subtask(self.context))
 
-        local_db_service.create_date_tables(
-            "time_table_name", json.loads(self.context['meta_info']), False)
         for sub_tree in sub_trees:
             load_to_mongo(sub_tree)
             create_foreign_table(sub_tree)
@@ -100,6 +101,8 @@ class LoadMongodbMulti(TaskProcessing):
 def load_to_mongo(sub_tree):
     """
     """
+    t1 = time.time()
+
     limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
 
     page = 1
@@ -108,24 +111,18 @@ def load_to_mongo(sub_tree):
     source = Datasource.objects.get(id=sid)
     source_service = DataSourceService.get_source_service(source)
 
-    col_names = ['_state', '_date']
+    col_names = ['_id', '_state', ]
     col_names += sub_tree["joined_columns"]
 
-    # FIXME temporary
-    cols_updated = False
-
-    # FIXME temporary
     key = sub_tree["collection_hash"]
+
+    _ID, _STATE = '_id', '_state'
 
     # создаем коллекцию и индексы в Mongodb
     collection = MongodbConnection(
-        '{0}_{1}'.format(STTM, key), indexes=[
-            ('_id', ASC), ('_state', ASC), ('_date', ASC)]
+        '{0}_{1}'.format(STTM, key),
+        indexes=[(_ID, ASC), (_STATE, ASC), ]
         ).collection
-
-    # Коллекция с текущими данными
-    current_collection_name = '{0}_{1}'.format(STTM_DATASOURCE_KEYS, key)
-    MongodbConnection.drop(current_collection_name)
 
     loaded_count = 0
 
@@ -137,33 +134,73 @@ def load_to_mongo(sub_tree):
 
         if not rows:
             break
-        data_to_insert = []
+
+        keys = []
+        key_records = {}
 
         for ind, record in enumerate(rows, start=1):
+            row_key = simple_key_for_row(record, (page - 1) * limit + ind)
+            keys.append(row_key)
 
             record_normalized = (
-                [STSE.IDLE, EtlEncoder.encode(datetime.now())] +
-                # [EtlEncoder.encode(rec_field) for rec_field in record])
-                [rec_field for rec_field in record])
+                [row_key, TRSE.NEW, ] +
+                [EtlEncoder.encode(rec_field) for rec_field in record])
 
-            data_to_insert.append(dict(izip(col_names, record_normalized)))
-        # try:
-        collection.insert_many(data_to_insert, ordered=False)
-        loaded_count += ind
-        print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-            ind, loaded_count, 'rows_count')
-        # except Exception as e:
-        #     print e.message
-        #     self.error_handling(e.message)
+            key_records[row_key] = dict(izip(col_names, record_normalized))
+
+        exist_docs = collection.find({_ID: {'$in': keys}}, {_ID: 1})
+        exist_ids = map(lambda x: x[_ID], exist_docs)
+        exists_len = len(exist_ids)
+
+        # при докачке, есть совпадения
+        if exist_ids:
+            exist_ids.sort()
+
+            data_to_insert = []
+
+            for id_ in keys:
+                ind = bisect_left(exist_ids, id_)
+                if ind == exists_len or not exist_ids[ind] == id_:
+                    data_to_insert.append(key_records[id_])
+
+            # смена статусов предыдущих на NEW
+            collection.update_many(
+                {_ID: {'$in': exist_ids}}, {'$set': {_STATE: TRSE.NEW}, }
+            )
+
+        # вся пачка новых
+        else:
+            data_to_insert = [key_records[id_] for id_ in keys]
+
+        if data_to_insert:
+            try:
+                collection.insert_many(data_to_insert, ordered=False)
+                loaded_count += ind
+                print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                    ind, loaded_count, 'rows_count')
+            except Exception as e:
+                print 'Exception', loaded_count, loaded_count + ind, e.message
 
         page += 1
 
         # FIXME у файлов прогон 1 раз
         # Fixme not true
+        # Fixme подумать над пагинацией
         if sub_tree['type'] == 'file':
             break
 
-    # ft_names.append(self.get_table(MULTI_STTM))
+    t2 = time.time()
+    print 'xrange', t2 - t1
+
+    # удаление всех со статусом PREV
+    collection.delete_many({_STATE: TRSE.PREV},)
+
+    # проставление всем статуса PREV
+    collection.update_many({}, {'$set': {_STATE: TRSE.PREV}, })
+
+    t3 = time.time()
+    print 'xrange2', t3 - t2
+    print 'xrange3', t3 - t1
 
     return sub_tree
 
@@ -173,9 +210,9 @@ def create_foreign_table(sub_tree):
     """
     Создание Удаленной таблицы
     """
-
     fdw = ForeignDataWrapper(tree=sub_tree, is_mongodb=True)
     fdw.create()
+
 
 @app.task(name=PSQL_VIEW)
 def create_view(sub_tree):
@@ -186,7 +223,6 @@ def create_view(sub_tree):
 
     Returns:
     """
-
     local_service = DataSourceService.get_local_instance()
 
     local_service.create_foreign_view(sub_tree)
@@ -205,125 +241,6 @@ def mongo_callback(context):
         'my_view4', context['relations'])
 
     print 'results', context
-
-
-class UpdateMongodb(TaskProcessing):
-
-    def processing(self):
-        """
-        1. Процесс обновленения данных в коллекции `sttm_datasource_delta_{key}`
-        новыми данными с помощью `sttm_datasource_keys_{key}`
-        2. Создание коллекции `sttm_datasource_keys_{key}` c ключами для
-        текущего состояния источника
-        """
-
-        Dataset.update_state(
-            self.context['dataset_id'], DatasetStateChoices.FILLUP)
-
-        self.key = self.context['checksum']
-        cols = json.loads(self.context['cols'])
-        col_types = json.loads(self.context['col_types'])
-        structure = self.context['tree']
-        source = Datasource.objects.get(id=self.context['source']['id'])
-        meta_info = json.loads(self.context['meta_info'])
-
-        source_service = DataSourceService.get_source_service(source)
-        rows_count, loaded_count = source_service.get_structure_rows_number(
-            structure,  cols), 0
-
-        # общее количество строк в запросе
-        self.publisher.rows_count = rows_count
-        self.publisher.publish(TLSE.START)
-
-        col_names = ['_id', '_state', '_date']
-        for t_name, col_group in groupby(cols, lambda x: x["table"]):
-            for x in col_group:
-                col_names.append(
-                    STANDART_COLUMN_NAME.format(x["table"], x["col"]))
-
-        # находим бинарные данные для 1) создания ключей 2) инсерта в монго
-        binary_types_list = get_binary_types_list(cols, col_types)
-
-        collection = MongodbConnection(self.get_table(STTM_DATASOURCE)).collection
-
-        # Коллекция с текущими данными
-        current_collection_name = self.get_table(STTM_DATASOURCE_KEYS)
-        MongodbConnection.drop(current_collection_name)
-        current_collection = MongodbConnection(
-            current_collection_name, indexes=[('_id', ASC)]).collection
-
-        # Дельта-коллекция
-        delta_collection = MongodbConnection(
-            self.get_table(STTM_DATASOURCE_DELTA), indexes=[
-                ('_id', ASC), ('_state', ASC), ('_date', ASC)]).collection
-
-        tables_key_creator = [
-            RowKeysCreator(table=table, cols=cols, meta_data=value)
-            for table, value in meta_info.iteritems()]
-
-        # Выявляем новые записи в базе и записываем их в дельта-коллекцию
-        limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-        page = 1
-        while True:
-            rows = source_service.get_source_rows(
-                structure, cols, limit=limit, offset=(page-1)*limit)
-            if not rows:
-                break
-            data_to_insert = []
-            data_to_current_insert = []
-            for ind, record in enumerate(rows, start=1):
-                row_key = calc_key_for_row(
-                    record, tables_key_creator, (page - 1) * limit + ind,
-                    binary_types_list)
-
-                # бинарные данные оборачиваем в Binary(), если они имеются
-                new_record = process_binary_data(record, binary_types_list)
-
-                if not collection.find({'_id': row_key}).count():
-                    delta_rows = (
-                        [row_key, DTSE.NEW, EtlEncoder.encode(datetime.now())] +
-                        [EtlEncoder.encode(rec_field) for rec_field in new_record])
-                    data_to_insert.append(dict(izip(col_names, delta_rows)))
-
-                data_to_current_insert.append(dict(_id=row_key))
-            loaded_count += ind
-            print 'updated %d rows to mongodb. Total inserted %s/%s.' % (
-                ind, loaded_count, rows_count)
-
-            try:
-                if data_to_insert:
-                    delta_collection.insert_many(data_to_insert, ordered=False)
-                current_collection.insert_many(
-                    data_to_current_insert, ordered=False)
-            except Exception as e:
-                self.error_handling(e.message)
-            page += 1
-
-        # Обновляем основную коллекцию новыми данными
-        page = 1
-        while True:
-            delta_data = delta_collection.find(
-                {'_state': DTSE.NEW},
-                limit=limit, skip=(page-1)*limit).sort('_date', ASC)
-            to_ins = []
-            for record in delta_data:
-                record['_state'] = STSE.IDLE
-                to_ins.append(record)
-            if not to_ins:
-                break
-            try:
-                collection.insert_many(to_ins, ordered=False)
-            except Exception as e:
-                self.error_handling(e.message)
-
-            page += 1
-
-        # Обновляем статусы дельты-коллекции
-        delta_collection.update_many(
-            {'_state': DTSE.NEW}, {'$set': {'_state': DTSE.SYNCED}})
-
-        self.context['rows_count'] = rows_count
-        # self.next_task_params = (DB_DATA_LOAD, load_db, self.context)
 
 
 class ForeignDataWrapper(object):
@@ -445,4 +362,5 @@ class ForeignDataWrapper(object):
 
 
 # write in console: python manage.py celery -A etl.multitask worker
-#                   --loglevel=info --concurrency=10 (--concurrency=10 eventlet)
+#                   --loglevel=info --concurrency=10
+#                   (--concurrency=1000 -P (eventlet, gevent)

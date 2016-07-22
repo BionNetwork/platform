@@ -26,12 +26,13 @@ from bson import binary
 from etl.services.middleware.base import datetime_now_str
 from . import client, settings
 
-__all__ = [
-    'TLSE',  'STSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
-    'calc_key_for_row', 'TaskProcessing',
-    'DTCN', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
-    'process_binary_data', 'get_binary_types_dict', 'fetch_date_intervals',
-]
+# __all__ = [
+#     'TLSE',  'TRSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
+#     'calc_key_for_row', 'TaskProcessing',
+#     'DTCN', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
+#     'process_binary_data', 'get_binary_types_dict', 'fetch_date_intervals',
+#     'simple_key_for_row',
+# ]
 
 logger = logging.getLogger(__name__)
 
@@ -425,6 +426,14 @@ def calc_key_for_row(row, tables_key_creators, row_num, binary_types_list=None):
         return tables_key_creators[0].calc_key(row, row_num)
 
 
+def simple_key_for_row(row, row_num):
+    """
+    Calculating hash for record by record and record order number
+    """
+    return HashEncoder.encode(
+        reduce(lambda res, x: '%s%s' % (res, x), [row, row_num]).encode("utf8"))
+
+
 def get_binary_types_list(cols, col_types):
     # инфа о бинарниках для генерации ключа
     # генерит список [False, False, True, ...] - инфа
@@ -648,6 +657,19 @@ class SourceTableStatusEnum(BaseEnum):
     }
 
 STSE = SourceTableStatusEnum
+
+
+class TableRecordStatusEnum(BaseEnum):
+    """
+    Статус состояния записей в таблице-источнике!
+    PREV - означает, что запись загружена в предыдущей загрузке
+    NEW - означает, что запись загружена в нынешней загрузке
+    """
+
+    PREV, NEW = range(2)
+
+
+TRSE = TableRecordStatusEnum
 
 
 class DeltaTableStatusEnum(BaseEnum):

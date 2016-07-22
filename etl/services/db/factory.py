@@ -485,8 +485,6 @@ class LocalDatabaseService(object):
         query = self.datasource.cdc_key_delete_query(table_name)
         self.execute(query, records)
 
-
-
     def reload_trigger(self, trigger_name, orig_table, new_table, column_names):
         sep = self.datasource.get_separator()
         insert_cols = ['NEW.{1}{0}{1}'.format(col, sep) for col in column_names]
@@ -618,7 +616,8 @@ class LocalDatabaseService(object):
 
         return date_ids
 
-    def prepare_dates_records(self, start_date, days_count, max_id):
+    @staticmethod
+    def prepare_dates_records(start_date, days_count, max_id):
         # список рекордов для таблицы дат
         date_ids = {}
         records = []
