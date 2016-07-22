@@ -154,9 +154,14 @@ def load_to_mongo(sub_tree):
 
         # при докачке, есть совпадения
         if exist_ids:
-            exist_ids.sort()
+            # fixme либо сеты, либо бинари сёрч
+            # на 5000 элементах вроде скорость одинакова
+            # если что потом проверить и заменить
+            # not_exist = set(keys) - set(exist_ids)
+            # data_to_insert = [key_records[id_] for id_ in not_exist]
 
             data_to_insert = []
+            exist_ids.sort()
 
             for id_ in keys:
                 ind = bisect_left(exist_ids, id_)
