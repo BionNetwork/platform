@@ -14,15 +14,19 @@ from rest_framework.views import APIView
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
     SchemasRetreviewSerializer, NodeSerializer, TreeSerializer,
-    TreeSerializerRequest, ParentIdSerializer, IndentSerializer, LoadDataSerializer)
+    TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
+    LoadDataSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys)
 from core.views import BaseViewNoLogin
 from etl.multitask import create_dataset_multi
 from etl.services.datasource.base import DataSourceService
-from etl.services.datasource.repository.storage import RedisSourceService, CacheService
-from etl.services.middleware.base import extract_tables_info, generate_cube_key, generate_columns_string_NEW
+from etl.services.datasource.repository.storage import (
+    RedisSourceService, CacheService)
+from etl.services.middleware.base import (
+    extract_tables_info, generate_cube_key, generate_columns_string_NEW)
+from etl.helpers import group_by_source
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from etl.services.queue.base import get_single_task
 
@@ -283,9 +287,9 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
-        # data = [
-            # {"source_id": 2, "table_name": u'auth_group', },
-            # {"source_id": 2, "table_name": u'auth_group_permissions', },
+        data = [
+            {"source_id": 2, "table_name": u'auth_group', },
+            {"source_id": 2, "table_name": u'auth_group_permissions', },
             # {"source_id": 2, "table_name": u'auth_permission', },
             # {"source_id": 2, "table_name": u'auth_permission2', },
             # {"source_id": 2, "table_name": u'card_card', },
@@ -294,7 +298,7 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'Лист2', },
 
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
-        # ]
+        ]
 
         card_id = pk
 
@@ -302,12 +306,14 @@ class CardViewSet(viewsets.ViewSet):
 
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
+
+            cache = CacheService(card_id)
+
             for each in data:
                 sid, table = each['source_id'], each['table_name']
-                exists = DataSourceService.check_table_in_builder(
-                    card_id, sid, table)
+                node_id = cache.get_table_id(sid, table)
 
-                if not exists:
+                if node_id is None:
                     node_id = DataSourceService.cache_columns(
                         card_id, sid, table)
 
@@ -341,7 +347,8 @@ class CardViewSet(viewsets.ViewSet):
             #     {
             #         "auth_group": ["id", "name", ],
             #         "auth_group_permissions": [
-            #             "id", "group_id", "permission_id", ],
+            #             "id", "group_id", "permission_id",],
+            #         # 'asdf': ['asdf'],
             #     },
             # '31':
             #     {
@@ -352,10 +359,43 @@ class CardViewSet(viewsets.ViewSet):
             #     },
         }
 
+        worker = DataSourceService(card_id=pk)
+
+        # проверка на пришедшие колонки, лежат ли они в редисе,
+        # убираем ненужные типы (бинари)
+
+        # группируем по соурс id на всякий
+        columns_info = group_by_source(columns_info)
+
+        # проверяем наличие соурс id в кэше
+        uncached = worker.check_sids_exist(columns_info.keys())
+        if uncached:
+            return Response(
+                {"message": "Uncached source IDs: {0}!".format(uncached)})
+
+        # проверяем наличие соурс id в кэше
+        uncached_tables, uncached_keys, uncached_columns = (
+            worker.check_tables_columns_exist(columns_info))
+
+        if any([uncached_tables, uncached_keys, uncached_columns]):
+            message = ""
+            if uncached_tables:
+                message += "Uncached tables: {0}! ".format(uncached_tables)
+            if uncached_keys:
+                message += "No keys for: {0}! ".format(uncached_keys)
+            if uncached_columns:
+                message += "Uncached columns: {0}! ".format(uncached_columns)
+
+            return Response({"message": message})
+
+        # убираем колонки с ненужными типами, например бинари
+        columns_info = worker.exclude_types(columns_info)
+
         cols_str = generate_columns_string_NEW(columns_info)
         cube_key = generate_cube_key(cols_str, pk)
 
-        cache = CacheService(card_id=pk)
+        cache = worker.cache
+
         tree_structure = cache.active_tree_structure
 
         tables = extract_tables_info(columns_info)

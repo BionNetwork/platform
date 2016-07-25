@@ -13,6 +13,7 @@ from core.helpers import CustomJsonEncoder
 T_S = "T{0}_S{1}"
 
 
+
 class RedisCacheKeys(object):
     """Ключи для редиса"""
 
@@ -378,22 +379,6 @@ class RedisSourceService(object):
         actives_names = [x['name'] for x in coll_counter['data']]
         not_exists = [t for t in tables if t not in actives_names]
         return not_exists, actives_names
-
-    @classmethod
-    def check_table_in_builder(cls, card_id, source_id, table):
-        """
-        Проверяет таблица в остатках или нет
-        """
-        builder_data = cls.get_card_builder_data(card_id)
-        s_id = str(source_id)
-
-        if s_id in builder_data:
-            source_colls = builder_data[s_id]
-            # таблица не должна быть в активных
-            if (table in source_colls['actives'] or
-                        table in source_colls['remains']):
-                return True
-        return False
 
     @classmethod
     def check_tree_exists(cls, card_id):
@@ -864,27 +849,50 @@ class CacheService(object):
         self.card_id = card_id
         self.cache_keys = RedisCacheKeys
 
-    def check_table_in_builder_remains(self, sid, table):
+    def get_table_id(self, source_id, table, data=None):
         """
-        Проверка наличия узла в builder
-        Args:
-            sid(int): id источника
-            table(unicode): название таблицы
-
-        Returns:
-            int: id узла
+        Проверяет таблица уже в кэше или нет!
+        Возвращает id таблицы или None в случае отсутствия!
+        Если вызывается в цикле, то лучше передавать data,
+        во избежании лишних вводов-выводов
         """
-        builder_data = self.card_builder_data
-        s_id = str(sid)
+        builder_data = data or self.card_builder_data
+        s_id = str(source_id)
 
         if s_id in builder_data:
             source_colls = builder_data[s_id]
             # таблица не должна быть в активных
             if table in source_colls['actives']:
-                raise Exception("Table must be in remains, but it's in actives")
-            # таблица уже в остатках
-            return source_colls['remains'].get(table, None)
+                return source_colls['actives'][table]
+            elif table in source_colls['remains']:
+                return source_colls['remains'][table]
         return None
+
+    def check_table_in_actives(self, source_id, table):
+        """
+        Проверяет таблица в активных или нет!
+        """
+        builder_data = self.card_builder_data
+        s_id = str(source_id)
+
+        if s_id in builder_data:
+            source_colls = builder_data[s_id]
+            return table in source_colls['actives']
+
+        return False
+
+    def check_table_in_remains(self, source_id, table):
+        """
+        Проверяет таблица в остатках или нет!
+        """
+        builder_data = self.card_builder_data
+        s_id = str(source_id)
+
+        if s_id in builder_data:
+            source_colls = builder_data[s_id]
+            return table in source_colls['remains']
+
+        return False
 
     @property
     def card_builder_data(self):
@@ -919,6 +927,14 @@ class CacheService(object):
     @staticmethod
     def r_set(name, structure):
         r_server.set(name, json.dumps(structure, cls=CustomJsonEncoder))
+
+    @staticmethod
+    def r_del(name):
+        r_server.delete(name)
+
+    @staticmethod
+    def r_exists(name):
+        return r_server.exists(name)
 
     def fill_cache(self, source_id, table, info):
         """
@@ -968,7 +984,8 @@ class CacheService(object):
         return self.r_set(card_builder, actives)
 
     def get_table_info(self, source_id, table_id):
-        str_table = self.cache_keys.get_active_table(self.card_id, source_id, table_id)
+        str_table = self.cache_keys.get_active_table(
+            self.card_id, source_id, table_id)
         return self.r_get(str_table)
 
     def set_table_info(self, source_id, table_id, table_info):

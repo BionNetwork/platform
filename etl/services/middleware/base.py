@@ -1,6 +1,8 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+# TODO все перенести в helpers.py
+
 import decimal
 import datetime
 import operator

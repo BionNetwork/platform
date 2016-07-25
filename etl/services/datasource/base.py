@@ -37,6 +37,16 @@ class DataSourceService(object):
         # ConnectionChoices.TXT,
     ]
 
+    EXCLUDE_TYPES = ["binary", ]
+
+    def __init__(self, card_id):
+        """
+        Args:
+            card_id(int): id карточки
+        """
+        self.card_id = card_id
+        self.cache = CacheService(card_id)
+
     # FIXME объеденить get_source_service_by_id  и get_source_service (через id)
     @classmethod
     def get_source_service_by_id(cls, source_id):
@@ -343,13 +353,6 @@ class DataSourceService(object):
         }
 
     @classmethod
-    def check_table_in_builder(cls, card_id, source_id, table):
-        """
-        Проверяем узел приходящий уже есть в наличие билдера
-        """
-        return RedisSS.check_table_in_builder(card_id, source_id, table)
-
-    @classmethod
     def get_tree(cls, card_id):
         """
         Получаем дерево
@@ -404,8 +407,9 @@ class DataSourceService(object):
         Пришедшую таблицу кладем в строительную карту дерева
         """
         cache = CacheService(card_id)
-        node_id = cache.check_table_in_builder_remains(source_id, table)
-        if node_id:
+        node_id = cache.get_table_id(source_id, table)
+
+        if node_id is not None:
             return node_id
 
         service = cls.get_source_service_by_id(source_id)
@@ -1046,3 +1050,68 @@ class DataSourceService(object):
         indents = RedisSS.get_source_indentation(source_id)
         indents[sheet] = indent
         RedisSS.set_source_indentation(source_id, indents)
+
+    def check_sids_exist(self, sids):
+        """
+        Проверяем наличие source id в кэше
+        """
+        data = self.cache.card_builder_data
+
+        cached_sids = [str(i) for i in data.keys()]
+        sids = [str(i) for i in sids]
+        uncached = [x for x in sids if x not in cached_sids]
+
+        return uncached
+
+    def check_tables_columns_exist(self, columns_info):
+        """
+        Проверяем наличие таблиц, ключей и колонок в кэше
+        """
+        cache = self.cache
+        data = cache.card_builder_data
+
+        uncached_tables = []
+        uncached_keys = []
+        uncached_columns = []
+
+        for sid, info in columns_info.iteritems():
+            for table, columns in info.iteritems():
+                table_id = cache.get_table_id(sid, table, data=data)
+                # таблицы нет в билдере
+                if table_id is None:
+                    uncached_tables.append((sid, table))
+                else:
+                    table_info_str = cache.cache_keys.get_active_table(
+                        self.card_id, sid, table_id
+                    )
+                    # нет информации о таблице
+                    if not cache.r_exists(table_info_str):
+                        uncached_keys.append((sid, table))
+                    else:
+                        table_info = cache.get_table_info(sid, table_id)
+                        column_names = map(
+                            lambda x: x["name"], table_info["columns"])
+                        # нет информации о колонках
+                        range_ = [c for c in columns if c not in column_names]
+                        if range_:
+                            uncached_columns.append((sid, table, range_))
+
+        return uncached_tables, uncached_keys, uncached_columns
+
+    def exclude_types(self, columns_info):
+        """
+        убираем колонки с ненужными типами
+        """
+        cache = self.cache
+        data = cache.card_builder_data
+
+        for sid, info in columns_info.items():
+            for table, columns in info.items():
+                table_id = cache.get_table_id(sid, table, data=data)
+                table_info = cache.get_table_info(sid, table_id)
+                for column in columns[:]:
+                    for cached_column in table_info["columns"]:
+                        if (cached_column["name"] == column and
+                                cached_column["type"] in self.EXCLUDE_TYPES):
+                            columns.remove(column)
+        return columns_info

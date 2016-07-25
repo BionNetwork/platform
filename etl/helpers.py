@@ -1,12 +1,17 @@
 # coding: utf-8
+
 from __future__ import unicode_literals
-# from etl.services.datasource.repository.storage import RedisSourceService
-# from etl.services.datasource.base import DataSourceService
-# from etl.services.queue.base import (
-#     TaskService, TaskStatusEnum, TaskErrorCodeEnum)
-#
-# __author__ = 'miholeus'
-# """
-# Эти классы используются во view.py, tasks.py для более быстрого доступа к сервисам
-# Класс играет своего рода container
-# """
+
+from collections import defaultdict
+
+
+def group_by_source(columns_info):
+    """
+    Группировка по соурсам, на всякий пожарный перед загрузкой
+    """
+    sid_grouped = defaultdict(dict)
+
+    for sid, tables in columns_info.iteritems():
+        sid_grouped[str(sid)].update(tables)
+
+    return sid_grouped
