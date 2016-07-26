@@ -882,7 +882,8 @@ class DataSourceService(object):
             for col_info in item["columns"]:
                 t = col_info['table']
                 c = col_info['col']
-                col_joined = u"{0}__{1}".format(t, c)
+                # col_joined = u"{0}__{1}".format(t, c)
+                col_joined = u"{0}".format(c)
                 joined_columns.append(col_joined)
 
                 table_columns = meta_tables_info[sid][t]['columns']

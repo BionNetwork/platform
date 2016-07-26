@@ -90,11 +90,24 @@ class LoadMongodbMulti(TaskProcessing):
         #         mongo_callback.subtask(self.context))
 
         for sub_tree in sub_trees:
-            load_to_mongo(sub_tree)
-            create_foreign_table(sub_tree)
+            create_foreign_table(sub_tree, is_mongodb=False)
             create_view(sub_tree)
 
         mongo_callback(self.context)
+
+def create_schema(tree):
+    """
+    Создание схемы
+    Args:
+        tree:
+
+    Returns:
+
+    """
+
+    service = LocalDatabaseService()
+    service.create_schema('schema_17')
+
 
 
 @app.task(name=MONGODB_DATA_LOAD_MONO)
@@ -211,11 +224,11 @@ def load_to_mongo(sub_tree):
 
 
 @app.task(name=PSQL_FOREIGN_TABLE)
-def create_foreign_table(sub_tree):
+def create_foreign_table(sub_tree, is_mongodb=True):
     """
     Создание Удаленной таблицы
     """
-    fdw = ForeignDataWrapper(tree=sub_tree, is_mongodb=True)
+    fdw = RdbmsForeignTable(tree=sub_tree)
     fdw.create()
 
 
@@ -315,6 +328,7 @@ class ForeignDataWrapper(object):
             "connection": {
                 "host": source.host,
                 'port': source.port,
+                'dbname': source.db,
             },
             "user": {
                 'user': source.login,
@@ -353,8 +367,13 @@ class ForeignDataWrapper(object):
         Создание "удаленной таблицы"
         """
 
+        table_options = {
+            'schema_name': 'mgd',
+            'table_name': 'mrk_reference'
+        }
+
         self.service.create_foreign_table(
-            self.server_name, self.table, self.tree['columns_types'])
+            self.server_name, table_options, self.tree['columns_types'])
 
     def create(self, source=None):
         """
@@ -364,6 +383,94 @@ class ForeignDataWrapper(object):
         """
         self.create_server(self.generate_params(source))
         self.create_foreign_table()
+
+
+class BaseForeignTable(object):
+    """
+    Базовый класс для создания "удаленной таблицы"
+    """
+
+    def __init__(self, tree):
+        """
+        Args:
+            tree(dict): Метаинформация о создаваемой таблице
+        """
+        self.tree = tree
+        self.name = '{0}_{1}'.format(STTM, self.tree["collection_hash"])
+        self.service = LocalDatabaseService()
+
+    @property
+    def server_name(self):
+        raise NotImplementedError
+
+    @property
+    def db_url(self):
+
+        raise NotImplementedError
+
+    def create(self):
+        raise NotImplementedError
+
+
+class RdbmsForeignTable(BaseForeignTable):
+    """
+    Создание "удаленной таблицы" для РСУБД (Postgresql, MySQL, Oracle...)
+    """
+    def __init__(self, tree):
+
+        super(RdbmsForeignTable, self).__init__(tree)
+
+    @property
+    def db_url(self):
+        sid = int(self.tree['sid'])
+        source = Datasource.objects.get(id=sid)
+        return '{db_type}://{login}:{password}@{host}:{port}/{db}'.format(
+            db_type='postgresql',  # FIXME: Доделать для остальных типов баз данных
+            login=source.login,
+            password=source.password,
+            host=source.host,
+            port=source.port,
+            db=source.db,
+        )
+
+    @property
+    def server_name(self):
+        return RDBMS_SERVER
+
+    def create(self):
+        table_options = {
+            # 'schema': 'mgd',
+            'tablename': self.tree['val'],
+            'db_url': self.db_url
+        }
+
+        self.service.create_foreign_table(
+            self.server_name, table_options, self.tree['columns_types'])
+
+
+class CsvForeiginTable(BaseForeignTable):
+    """
+    Создание "удаленной таблицы" для файлов типа csv
+    """
+
+    def __init__(self, tree):
+        super(CsvForeiginTable, self).__init__(tree)
+
+    @property
+    def server_name(self):
+        return CSV_SERVER
+
+    @property
+    def db_url(self):
+        pass
+
+
+class MongoForeignTable(BaseForeignTable):
+    """
+    Создание "удаленной таблицы" для Mongodb
+    """
+
+
 
 
 # write in console: python manage.py celery -A etl.multitask worker

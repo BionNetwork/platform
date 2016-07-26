@@ -255,20 +255,24 @@ select_dates_query = """
 fdw_server_create_query = """
     DROP SERVER IF EXISTS {name} CASCADE;
     CREATE SERVER {name}
-    FOREIGN DATA WRAPPER {source_type}
+    FOREIGN DATA WRAPPER {fdw_name}
     OPTIONS ({conn_params});
     """
 
 fdw_mapping_create_query = """
     CREATE USER MAPPING FOR biplatform
     SERVER {name}
-    OPTIONS ({user params});
+    OPTIONS ({user_params});
 """
 
 foreign_table_create_query = """
     DROP FOREIGN TABLE IF EXISTS {table_name} CASCADE;
     CREATE FOREIGN TABLE {table_name} ({cols}
      ) SERVER {server_name}
-     OPTIONS (database 'etl', collection '{table_name}');
+     OPTIONS ({options});
      --ALTER FOREIGN TABLE {table_name} OWNER TO biplatform;
     """
+
+create_schema_query = """
+    CREATE SCHEMA {card_id};
+"""

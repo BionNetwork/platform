@@ -62,3 +62,6 @@ STTM = 'sttm_'  # Временная загружаемая таблица Mongo
 FDW = 'fdw_'
 
 MONGODB = 'mongodb'
+
+RDBMS_SERVER = 'rdbms_server'
+CSV_SERVER = 'csv_server'

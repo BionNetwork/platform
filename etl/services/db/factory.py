@@ -423,11 +423,11 @@ class LocalDatabaseService(object):
         query = self.datasource.fdw_server_create_query(name, source_params)
         self.execute(query)
 
-    def create_foreign_table(self, server_name, name, cols):
+    def create_foreign_table(self, server_name, options, cols):
         """
         Создание удаленную таблицу к Mongodb
         """
-        query = self.datasource.foreign_table_create_query(server_name, name, cols)
+        query = self.datasource.foreign_table_create_query(server_name, options, cols)
         self.execute(query)
 
     def create_foreign_view(self, sub_tree):
@@ -641,3 +641,13 @@ class LocalDatabaseService(object):
                 {current_day.strftime("%d.%m.%Y"): max_id + day_delta + 1})
 
         return records, date_ids
+
+    def create_schema(self, schema_name):
+        """
+        Создание схемы в локальной базе по id карточки
+        Args:
+            schema_name(str): Название схемы
+        """
+
+        query = self.datasource.create_schema_query(schema_name)
+        self.execute(query)

@@ -156,18 +156,25 @@ class Postgresql(Database):
         Returns:
             str: строка запроса для создания fdw-сервера
         """
+        fdw_map = {
+            1: 'postgres_fdw'
+        }
+
         source_type = source_params['source_type']
-        conn_params = ', '.join('{name} {value}'.format(name=key, value=value)
-                                for key, value in source_params['connection'])
+        fdw_name = fdw_map[source_type]
+        conn_params = ', '.join("{name} '{value}'".format(name=key, value=value)
+                                for key, value in source_params['connection'].iteritems())
         query = self.db_map.fdw_server_create_query.format(
-            name=name, source_type=source_type, conn_params=conn_params)
+            name=name, fdw_name=fdw_name, conn_params=conn_params)
         # Создаем соответствие пользователей удаленной и нашей базой
         if source_params['user']:
-            user_params = ', '.join('{name} {value}'.format(name=key, value=value)
-                for key, value in source_params['user'])
-            query += self.db_map.fdw_mapping_create_query(name=name, user_params=user_params)
+            user_params = ', '.join("{name} '{value}'".format(name=key, value=value)
+                for key, value in source_params['user'].iteritems())
+            query += self.db_map.fdw_mapping_create_query.format(name=name, user_params=user_params)
 
-    def foreign_table_create_query(self, server_name, table_name, cols_meta):
+        return query
+
+    def foreign_table_create_query(self, server_name, options, cols_meta):
         """
         Создание "удаленной таблицы"
         Args:
@@ -189,8 +196,13 @@ class Postgresql(Database):
             col_names.append(u'"{0}" {1}'.format(
                 field_name, field['type']))
 
-        return self.db_map.create_foreign_table_query.format(
-            server_name=server_name, table_name=table_name, cols=','.join(col_names))
+        table_name = 'schema_17.sttm__1_8_2675133954039524792'
+
+        options = ', '.join("{name} '{value}'".format(name=key, value=value)
+                            for key, value in options.iteritems())
+
+        return self.db_map.foreign_table_create_query.format(
+            server_name=server_name, table_name=table_name, options=options, cols=','.join(col_names))
 
     def create_foreign_view_query(self, view_name, sub_tree):
         """
@@ -249,6 +261,10 @@ class Postgresql(Database):
                     l=node['conditions'][0]['l'], operation=Operations.values[node['conditions'][0]['operation']], r=node['conditions'][0]['r'])
             )
         return query
+
+    def create_schema_query(self, card_id):
+
+        return self.db_map.create_schema_query.format(card_id=card_id)
 
 
 
