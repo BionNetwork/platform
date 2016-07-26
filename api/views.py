@@ -359,6 +359,10 @@ class CardViewSet(viewsets.ViewSet):
             #     },
         }
 
+        if not columns_info:
+            return Response(
+                {"message": "Data is empty!"})
+
         worker = DataSourceService(card_id=pk)
 
         # проверка на пришедшие колонки, лежат ли они в редисе,
@@ -373,7 +377,7 @@ class CardViewSet(viewsets.ViewSet):
             return Response(
                 {"message": "Uncached source IDs: {0}!".format(uncached)})
 
-        # проверяем наличие соурс id в кэше
+        # проверяем наличие ключей, таблиц, колонок в кэше
         uncached_tables, uncached_keys, uncached_columns = (
             worker.check_tables_columns_exist(columns_info))
 
@@ -387,6 +391,13 @@ class CardViewSet(viewsets.ViewSet):
                 message += "Uncached columns: {0}! ".format(uncached_columns)
 
             return Response({"message": message})
+
+        # проверка наличия всех таблиц из дерева в пришедших нам
+        range_ = worker.check_tables_with_tree_structure(columns_info)
+        if range_:
+            return Response({
+                "message": "Tables {0} in tree, but didn't come! ".format(
+                range_)})
 
         # убираем колонки с ненужными типами, например бинари
         columns_info = worker.exclude_types(columns_info)

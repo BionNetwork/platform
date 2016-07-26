@@ -1099,6 +1099,40 @@ class DataSourceService(object):
 
         return uncached_tables, uncached_keys, uncached_columns
 
+    def check_tables_with_tree_structure(self, columns_info):
+        """
+        Проверяем наличие всех таблиц из дерева в пришедших на загрузку
+        columns_info = {
+            8':
+                {
+                    "mrk_reference": ["pubmedid", "creation_date"],
+                },
+            '1':
+                {
+                    "Лист1": [
+                        "name2", "пол", "auth_group_id", "Date", "Floata", ],
+                },
+        }
+        Возвращает список таблиц, которые есть в дереве, но не пришедшие
+        к нам перед загрузкой
+        """
+        cache = self.cache
+
+        tree_structure = cache.active_tree_structure
+        tree = TTRepo.build_tree_by_structure(tree_structure)
+        tree_nodes = tree.ordered_nodes
+
+        tree_table_names = [
+            (int(node.source_id), node.val) for node in tree_nodes]
+        came_table_names = reduce(
+            list.__add__,
+            [[(int(sid), t) for t in tables.keys()]
+             for sid, tables in columns_info.iteritems()], [])
+
+        range_ = [table_tupl for table_tupl in tree_table_names if
+                  table_tupl not in came_table_names]
+        return range_
+
     def exclude_types(self, columns_info):
         """
         убираем колонки с ненужными типами

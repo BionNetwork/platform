@@ -14,4 +14,4 @@ def group_by_source(columns_info):
     for sid, tables in columns_info.iteritems():
         sid_grouped[str(sid)].update(tables)
 
-    return sid_grouped
+    return dict(sid_grouped)

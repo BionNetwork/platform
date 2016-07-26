@@ -95,6 +95,7 @@ class LoadMongodbMulti(TaskProcessing):
 
         mongo_callback(self.context)
 
+
 def create_schema(tree):
     """
     Создание схемы
@@ -107,7 +108,6 @@ def create_schema(tree):
 
     service = LocalDatabaseService()
     service.create_schema('schema_17')
-
 
 
 @app.task(name=MONGODB_DATA_LOAD_MONO)
