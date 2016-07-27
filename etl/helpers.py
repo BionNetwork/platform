@@ -15,3 +15,12 @@ def group_by_source(columns_info):
         sid_grouped[str(sid)].update(tables)
 
     return dict(sid_grouped)
+
+
+def extract_tables_info(columns):
+
+    tables_dict = {}
+
+    for sid, tables in columns.iteritems():
+        tables_dict[sid] = tables.keys()
+    return tables_dict

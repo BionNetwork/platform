@@ -22,11 +22,10 @@ from core.models import (Cube, User, Datasource, Dimension, Measure,
 from core.views import BaseViewNoLogin
 from etl.multitask import create_dataset_multi
 from etl.services.datasource.base import DataSourceService
-from etl.services.datasource.repository.storage import (
-    RedisSourceService, CacheService)
 from etl.services.middleware.base import (
-    extract_tables_info, generate_cube_key, generate_columns_string_NEW)
-from etl.helpers import group_by_source
+    generate_cube_key, generate_columns_string_NEW)
+from etl.helpers import (
+    group_by_source, extract_tables_info)
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from etl.services.queue.base import get_single_task
 
@@ -300,25 +299,20 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
         ]
 
-        card_id = pk
-
         info = []
 
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
 
-            cache = CacheService(card_id)
+            worker = DataSourceService(card_id=pk)
 
             for each in data:
                 sid, table = each['source_id'], each['table_name']
-                node_id = cache.get_table_id(sid, table)
+                node_id = worker.cache.get_table_id(sid, table)
 
                 if node_id is None:
-                    node_id = DataSourceService.cache_columns(
-                        card_id, sid, table)
-
-                    info = DataSourceService.add_randomly_from_remains(
-                        card_id, node_id)
+                    node_id = worker.cache_columns(sid, table)
+                    info = worker.add_randomly_from_remains(node_id)
 
         return Response(info)
 
@@ -359,6 +353,7 @@ class CardViewSet(viewsets.ViewSet):
             #     },
         }
 
+        # TODO возможно валидацию перенести в отдельный файл
         if not columns_info:
             return Response(
                 {"message": "Data is empty!"})
@@ -397,7 +392,9 @@ class CardViewSet(viewsets.ViewSet):
         if range_:
             return Response({
                 "message": "Tables {0} in tree, but didn't come! ".format(
-                range_)})
+                 range_)})
+
+        # TODO проверить пришедшие точно лежат в активных, не в остатках
 
         # убираем колонки с ненужными типами, например бинари
         columns_info = worker.exclude_types(columns_info)
@@ -413,10 +410,10 @@ class CardViewSet(viewsets.ViewSet):
         # достаем инфу колонок (статистика, типы, )
         meta_tables_info = cache.tables_info_for_metasource(tables)
 
-        sub_trees = DataSourceService.prepare_sub_trees(
+        sub_trees = worker.prepare_sub_trees(
             tree_structure, columns_info, pk, meta_tables_info)
 
-        relations = DataSourceService.prepare_relations(sub_trees)
+        relations = worker.prepare_relations(sub_trees)
 
         cols_type = {}
         for tree in sub_trees:
@@ -449,8 +446,10 @@ def check_parent(func):
         card_id = int(kwargs['card_pk'])
         parent_id = int(request.data.get('parent_id'))
 
-        if not DataSourceService.check_node_id_in_builder(
-                card_id, parent_id, in_remain=False):
+        worker = DataSourceService(card_id=card_id)
+
+        if not worker.check_node_id_in_builder(
+                parent_id, in_remain=False):
             raise APIException("No such node id in builder!")
 
         return func(*args, **kwargs)
@@ -468,9 +467,11 @@ def check_child(in_remain):
             node_id = int(kwargs['pk'])
             card_id = int(kwargs['card_pk'])
 
+            worker = DataSourceService(card_id=card_id)
+
             # проверка узла родителя
-            if not DataSourceService.check_node_id_in_builder(
-                    card_id, node_id, in_remain):
+            if not worker.check_node_id_in_builder(
+                    node_id, in_remain):
                 raise APIException("No such node id in builder!")
 
             return func(*args, **kwargs)
@@ -489,7 +490,8 @@ class NodeViewSet(viewsets.ViewSet):
         """
         Список узлов дерева и остаткa
         """
-        data = DataSourceService.get_tree_api(card_pk)
+        worker = DataSourceService(card_id=card_pk)
+        data = worker.get_tree_api()
 
         # FIXME доделать валидатор
         # serializer = NodeSerializer(data=data, many=True)
@@ -501,7 +503,8 @@ class NodeViewSet(viewsets.ViewSet):
         Инфа ноды
         """
         try:
-            data = DataSourceService.get_node_info(card_pk, pk)
+            worker = DataSourceService(card_id=card_pk)
+            data = worker.get_node_info(pk)
         except TypeError:
             raise APIException("Узел должен быть частью дерева(не остаток)")
 
@@ -513,23 +516,19 @@ class NodeViewSet(viewsets.ViewSet):
     def reparent(self, request, card_pk, pk):
         """
         Изменение родительского узла, перенос узла с одного места на другое
-
         Args:
             card_pk(int): id карточки
             pk(int): id узла
-
         Returns:
             dict: Информацию об связанных/не связанных узлах дерева и остатка
         """
-
         # fixme serializer проверить
         # serializer = self.serializer_class(data=request.data, many=True)
         # if serializer.is_valid(raise_exception=True):
         # try:
-        info = DataSourceService.reparent(
-                card_pk,
-                request.data['parent_id'],
-                pk)
+        worker = DataSourceService(card_id=card_pk)
+        info = worker.reparent(request.data['parent_id'], pk)
+
         return Response(info)
         # except Exception as ex:
         #     raise APIException(ex.message)
@@ -540,9 +539,8 @@ class NodeViewSet(viewsets.ViewSet):
         """
         Добавлеине узла дерева в остатки
         """
-        node_id = pk
-        info = DataSourceService.send_nodes_to_remains(
-            card_pk, node_id)
+        worker = DataSourceService(card_id=card_pk)
+        info = worker.send_nodes_to_remains(node_id=pk)
 
         return Response(info)
 
@@ -560,8 +558,9 @@ class NodeViewSet(viewsets.ViewSet):
         в произвольное место
         """
         node_id = pk
-        info = DataSourceService.add_randomly_from_remains(
-                    card_pk, node_id)
+        worker = DataSourceService(card_id=card_pk)
+
+        info = worker.add_randomly_from_remains(node_id)
         return Response(info)
 
     @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
@@ -584,8 +583,9 @@ class NodeViewSet(viewsets.ViewSet):
         # if serializer.is_valid(raise_exception=True):
         try:
             parent_id = request.data['parent_id']
-            info = DataSourceService.from_remain_to_certain(
-                card_pk, parent_id, pk)
+            worker = DataSourceService(card_id=card_pk)
+            info = worker.from_remain_to_certain(parent_id, pk)
+
             return Response(info)
         except Exception as ex:
             raise APIException(ex.message)
@@ -607,9 +607,8 @@ class JoinViewSet(viewsets.ViewSet):
 
         Returns:
         """
-
-        data = DataSourceService.get_columns_and_joins(
-            card_pk, int(node_pk), int(pk))
+        worker = DataSourceService(card_id=card_pk)
+        data = worker.get_columns_and_joins(int(node_pk), int(pk))
 
         return Response(data=data)
 
@@ -632,8 +631,10 @@ class JoinViewSet(viewsets.ViewSet):
 }
         """
 
-        left_node = DataSourceService.get_node(card_pk, node_pk)
-        right_node = DataSourceService.get_node(card_pk, pk)
+        worker = DataSourceService(card_id=card_pk)
+
+        left_node = worker.get_node(node_pk)
+        right_node = worker.get_node(pk)
 
         join_type = 'inner'
 
@@ -641,7 +642,7 @@ class JoinViewSet(viewsets.ViewSet):
         for each in request.data['joins']:
             joins.append([each['left'], each['join'], each['right']])
 
-        data = DataSourceService.save_new_joins(
-            card_pk, left_node, right_node, join_type, joins)
+        data = worker.save_new_joins(
+            left_node, right_node, join_type, joins)
 
         return Response(data=data)

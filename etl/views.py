@@ -31,7 +31,7 @@ from etl.multitask import create_dataset_multi
 from .services.queue.base import TaskStatusEnum, get_single_task
 from .services.middleware.base import (
     generate_columns_string, generate_columns_string_NEW,
-    generate_table_name_key, extract_tables_info, generate_cube_key)
+    generate_table_name_key, generate_cube_key)
 
 logger = logging.getLogger(__name__)
 

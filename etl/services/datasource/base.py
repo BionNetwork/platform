@@ -12,7 +12,8 @@ from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
 from etl.services.datasource.repository import r_server
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
-from etl.services.datasource.repository.storage import RedisSourceService, CacheService
+from etl.services.datasource.repository.storage import (
+    RedisSourceService, CardCacheService)
 from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import generate_table_key
@@ -21,6 +22,7 @@ from etl.services.middleware.base import generate_table_key
 RedisSS = RedisSourceService
 
 
+# TODO DataSourceService сделать для работы с соурс, СardService для карты
 class DataSourceService(object):
     """
         Сервис управляет сервисами БД, Файлов и Редиса!
@@ -44,8 +46,7 @@ class DataSourceService(object):
         Args:
             card_id(int): id карточки
         """
-        self.card_id = card_id
-        self.cache = CacheService(card_id)
+        self.cache = CardCacheService(card_id)
 
     # FIXME объеденить get_source_service_by_id  и get_source_service (через id)
     @classmethod
@@ -78,8 +79,7 @@ class DataSourceService(object):
         """
         RedisSourceService.delete_datasource(source)
 
-    @classmethod
-    def tree_full_clean(cls, card_id):
+    def tree_full_clean(self):
         """
         Redis
         Удаляет информацию о таблицах, джоинах, дереве
@@ -87,7 +87,7 @@ class DataSourceService(object):
         Args:
             card_id(int): id карточки
         """
-        CacheService(card_id).tree_full_clean()
+        self.cache.tree_full_clean()
 
     @classmethod
     def get_source_tables(cls, source):
@@ -137,52 +137,41 @@ class DataSourceService(object):
         }
         return DatabaseService.get_connection_by_dict(conn_info)
 
-    @staticmethod
-    def remains_nodes(card_id):
+    def remains_nodes(self):
         """
-        Возвращает список остатков типа TTRepo.RemainNode
+        Возвращает из остатков список нодов типа etl.models.RemainNode
         """
-        builder_data = CacheService(card_id).card_builder_data
+        builder_data = self.cache.card_builder_data
+        remains = TTRepo.remains_nodes(builder_data)
+        return remains
 
-        return TTRepo.remains_nodes(builder_data)
-
-    # FIXME убрать метод
-    @classmethod
-    def get_remain_node(cls, nodes, node_id):
+    def get_remain_node(self, node_id):
         """
-        Получение узла
+        Возвращает по node_id из остатков ноду типа etl.models.RemainNode
         """
-        node_id = int(node_id)
+        builder_data = self.cache.card_builder_data
+        node = TTRepo.get_remain_node(builder_data, node_id)
+        return node
 
-        for node in nodes:
-            if node.node_id == node_id:
-                return node
-        return
-
-    @classmethod
-    def add_randomly_from_remains(cls, card_id, node_id):
+    def add_randomly_from_remains(self, node_id):
         """
         Пытаемся связать остаток с деревом в любое место
         """
+        cache = self.cache
 
-        remain_nodes = cls.remains_nodes(card_id)
-        node = cls.get_remain_node(remain_nodes, node_id)
-
-        # cache = CacheService(card_id)
-        # buider_data = cache.card_builder_data
-        # node =
+        node = self.get_remain_node(node_id)
 
         table, source_id = node.val, node.source_id
 
-        if not RedisSS.check_tree_exists(card_id):
+        if not cache.check_tree_exists():
             sel_tree = TTRepo.build_single_root(node)
             resave = True
         else:
             # получаем дерево из редиса
-            sel_tree = cls.get_tree(card_id)
+            sel_tree = self.get_tree()
             ordered_nodes = sel_tree.ordered_nodes
 
-            tables_info = CacheService(card_id).info_for_tree_building(
+            tables_info = cache.info_for_tree_building(
                 ordered_nodes, node)
 
             # перестраиваем дерево
@@ -195,42 +184,42 @@ class DataSourceService(object):
         # признак того, что дерево перестроилось
         if resave:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.put_remain_to_builder_actives(card_id, node)
+            cache.transfer_remain_to_actives(node)
             # save tree structure
-            RedisSS.save_tree_structure(card_id, sel_tree)
+            cache.save_tree_structure(sel_tree)
 
         tree_nodes = TTRepo.nodes_info(ordered_nodes)
 
-        remain_nodes = cls.remains_nodes(card_id)
-        remains = TTRepo.nodes_info(remain_nodes)
+        remains = self.remains_nodes()
+        remain_nodes = TTRepo.nodes_info(remains)
 
         # determining unbinded tail
-        tail_ = cls.extract_tail(remains, node_id) if not resave else None
+        tail_ = (TTRepo.extract_tail(remain_nodes, node_id)
+                 if not resave else None)
 
         return {
             'tree_nodes': tree_nodes,
-            'remains': remains,
+            'remains': remain_nodes,
             'tail': tail_,
         }
 
-    @classmethod
-    def from_remain_to_certain(cls, card_id, parent_id, child_id):
+    def from_remain_to_certain(self, parent_id, child_id):
         """
         Добавление из остатков в определенную ноду
         """
-        sel_tree = cls.get_tree(card_id)
+        sel_tree = self.get_tree()
+        cache = self.cache
+        builder_data = cache.card_builder_data
 
         p_node = sel_tree.get_node(parent_id)
         if p_node is None:
             raise Exception("Incorrect parent ID!")
 
-        remain_nodes = cls.remains_nodes(card_id)
-        ch_node = cls.get_remain_node(remain_nodes, child_id)
+        ch_node = self.get_remain_node(child_id)
 
         if ch_node is None:
             raise Exception("Incorrect child ID!")
 
-        cache = CacheService(card_id)
         parent_info = cache.get_table_info(
             p_node.source_id, parent_id)
         child_info = cache.get_table_info(
@@ -242,38 +231,37 @@ class DataSourceService(object):
         # если забиндилось
         if is_bind:
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.put_remain_to_builder_actives(card_id, ch_node)
+            cache.transfer_remain_to_actives(ch_node)
             # save tree structure
-            RedisSS.save_tree_structure(card_id, sel_tree)
+            cache.save_tree_structure(sel_tree)
 
         tree_nodes = TTRepo.nodes_info(sel_tree.ordered_nodes)
 
-        remain_nodes = cls.remains_nodes(card_id)
-        remains = TTRepo.nodes_info(remain_nodes)
+        remains = self.remains_nodes()
+        remain_nodes = TTRepo.nodes_info(remains)
 
         # determining unbinded tail
-        tail_ = cls.extract_tail(remains, child_id) if not is_bind else None
+        tail_ = (TTRepo.extract_tail(remain_nodes, child_id)
+                 if not is_bind else None)
 
         return {
             'tree_nodes': tree_nodes,
-            'remains': remains,
+            'remains': remain_nodes,
             'tail': tail_,
         }
 
-    @classmethod
-    def reparent(cls, card_id, parent_id, child_id):
+    def reparent(self, parent_id, child_id):
         """
         Пытаемся перетащить узел дерева из одного места в другое
-
         Args:
             card_id(int): id карточки
             parent_id(int): id родительского узла
             child_id(int): id узла-потомка
-
         Returns:
             dict: Информацию об связанных/не связанных узлах дерева и остатка
         """
-        sel_tree = cls.get_tree(card_id)
+        sel_tree = self.get_tree()
+        cache = self.cache
 
         p_node = sel_tree.get_node(parent_id)
         if p_node is None:
@@ -285,7 +273,6 @@ class DataSourceService(object):
         if ch_node is None:
             raise Exception("Incorrect child ID!")
 
-        cache = CacheService(card_id)
         parent_info = cache.get_table_info(
             p_node.source_id, parent_id)
         child_info = cache.get_table_info(
@@ -297,16 +284,16 @@ class DataSourceService(object):
         # если забиндилось
         if remain is None:
             # save tree structure
-            RedisSS.save_tree_structure(card_id, sel_tree)
+            cache.save_tree_structure(sel_tree)
 
         tree_nodes = TTRepo.nodes_info(
             sel_tree.ordered_nodes)
 
-        remain_nodes = cls.remains_nodes(card_id)
+        remain_nodes = self.remains_nodes()
         remains = TTRepo.nodes_info(remain_nodes)
 
         # determining unbinded tail
-        tail_ = cls.extract_tail(tree_nodes, child_id) if remain else None
+        tail_ = (TTRepo.extract_tail(tree_nodes, child_id) if remain else None)
 
         return {
             'tree_nodes': tree_nodes,
@@ -314,19 +301,18 @@ class DataSourceService(object):
             'tail': tail_,
         }
 
-    @classmethod
-    def send_nodes_to_remains(cls, card_id, node_id):
+    def send_nodes_to_remains(self, node_id):
         """
         Перенос нодов дерева в остатки
         """
-        sel_tree = cls.get_tree(card_id)
+        cache = self.cache
+        sel_tree = self.get_tree()
         node = sel_tree.get_node(node_id)
 
         # is root
         if node.parent is None:
-            RedisSS.put_actives_to_builder_remains(
-                card_id, sel_tree.ordered_nodes)
-            RedisSS.remove_tree(card_id)
+            cache.transfer_actives_to_remains(sel_tree.ordered_nodes)
+            cache.remove_tree()
             tree_nodes = []
 
         else:
@@ -335,16 +321,15 @@ class DataSourceService(object):
             to_remain_nodes = sel_tree._get_tree_ordered_nodes(
                 [node_to_remove, ])
             # сохраняем дерево, если таблицы не в дереве
-            RedisSS.put_actives_to_builder_remains(
-                card_id, to_remain_nodes)
+            cache.transfer_actives_to_remains(to_remain_nodes)
 
             # save tree structure
-            RedisSS.save_tree_structure(card_id, sel_tree)
+            cache.save_tree_structure(sel_tree)
 
             tree_nodes = TTRepo.nodes_info(
                 sel_tree.ordered_nodes)
 
-        remain_nodes = cls.remains_nodes(card_id)
+        remain_nodes = self.remains_nodes()
         remains = TTRepo.nodes_info(remain_nodes)
 
         return {
@@ -352,35 +337,22 @@ class DataSourceService(object):
             'remains': remains,
         }
 
-    @classmethod
-    def get_tree(cls, card_id):
+    def get_tree(self):
         """
         Получаем дерево
         """
         # Получаем структуру из Redis и строем дерево
-        structure = CacheService(card_id).active_tree_structure
+        structure = self.cache.active_tree_structure
         return TTRepo.build_tree_by_structure(structure)
 
-    @classmethod
-    def extract_tail(cls, nodes_info, node_id):
-        """
-        Из остатков или активов определяет последнюю несвязанную ноду
-        remains - список диктов [{}, {}, ...]
-        """
-        for node in nodes_info:
-            if str(node["node_id"]) == str(node_id):
-                nodes_info.remove(node)
-                return node
-
-    @classmethod
-    def get_tree_api(cls, card_id):
+    def get_tree_api(self):
         """
         Строит дерево, если его нет, иначе перестраивает
         """
         # дерева еще нет или все в остатках
-        if not RedisSS.check_tree_exists(card_id):
+        if not self.cache.check_tree_exists():
             tree_nodes = []
-            remain_nodes = cls.remains_nodes(card_id)
+            remain_nodes = self.remains_nodes()
             remains = TTRepo.nodes_info(remain_nodes)
 
             return {
@@ -388,12 +360,12 @@ class DataSourceService(object):
                 'remains': remains,
             }
         # иначе достраиваем дерево, если можем, если не можем вернем остаток
-        sel_tree = cls.get_tree(card_id)
+        sel_tree = self.get_tree()
 
         ordered_nodes = sel_tree.ordered_nodes
         tree_nodes = TTRepo.nodes_info(ordered_nodes)
 
-        remain_nodes = cls.remains_nodes(card_id)
+        remain_nodes = self.remains_nodes()
         remains = TTRepo.nodes_info(remain_nodes)
 
         return {
@@ -401,20 +373,19 @@ class DataSourceService(object):
                 'remains': remains,
             }
 
-    @classmethod
-    def cache_columns(cls, card_id, source_id, table):
+    def cache_columns(self, source_id, table):
         """
         Пришедшую таблицу кладем в строительную карту дерева
         """
-        cache = CacheService(card_id)
+        cache = self.cache
         node_id = cache.get_table_id(source_id, table)
 
         if node_id is not None:
             return node_id
 
-        service = cls.get_source_service_by_id(source_id)
+        service = self.get_source_service_by_id(source_id)
 
-        indents = cls.extract_source_indentation(source_id)
+        indents = self.extract_source_indentation(source_id)
 
         columns, indexes, foreigns, statistics, date_intervals = (
             service.get_columns_info([table, ], indents))
@@ -444,13 +415,13 @@ class DataSourceService(object):
             tables(): Описать
         """
         # получаем дерево
-        sel_tree = cls.get_tree(card_id)
+        sel_tree = cls.get_tree()
 
         r_val = sel_tree.root.val
         source_id = sel_tree.root.source_id
 
         if (r_val, source_id) in tables:
-            CacheService(card_id).tree_full_clean()
+            CardCacheService(card_id).tree_full_clean()
             sel_tree.root = None
         else:
             sel_tree.delete_nodes_NEW(tables)
@@ -461,21 +432,20 @@ class DataSourceService(object):
             ordered_nodes = sel_tree.ordered_nodes
             structure = sel_tree.structure
             RedisSS.save_tree_builder(structure, ordered_nodes,
-                                    card_id, update_joins=False)
+                                      card_id, update_joins=False)
 
-    @classmethod
-    def get_columns_and_joins(cls, card_id, parent_id, child_id):
+    def get_columns_and_joins(self, parent_id, child_id):
         """
         """
-        parent = DataSourceService.get_node(card_id, parent_id)
-        child = DataSourceService.get_node(card_id, child_id)
+        parent = self.get_node(parent_id)
+        child = self.get_node(child_id)
         parent_sid, parent_table = parent.source_id, parent.val
         child_sid, child_table = child.source_id, child.val
 
-        columns = CacheService(card_id).get_columns_for_joins(
+        columns = self.cache.get_columns_for_joins(
             parent_table, parent_sid, child_table, child_sid)
 
-        tree = cls.get_tree(card_id)
+        tree = self.get_tree()
 
         join_type, cols_info = TTRepo.get_joins(tree, parent_id, child_id)
 
@@ -485,8 +455,7 @@ class DataSourceService(object):
             'joins': cols_info
         }
 
-    @classmethod
-    def check_new_joins(cls, card_id, parent, child, joins):
+    def check_new_joins(self, parent, child, joins):
         """
         Redis
         Проверяет пришедшие джойны на совпадение типов
@@ -503,7 +472,7 @@ class DataSourceService(object):
         for j in joins:
             joins_set.add(tuple(j))
 
-        cols_types = cls.get_columns_types(card_id, parent, child)
+        cols_types = self.get_columns_types(parent, child)
 
         # список джойнов с неверными типами
         error_joins = []
@@ -520,8 +489,8 @@ class DataSourceService(object):
 
         return good_joins, error_joins, joins_set
 
-    @classmethod
-    def save_new_joins(cls, card_id, parent_node, child_node, join_type, joins):
+    # TODO ответ о результате отсылать
+    def save_new_joins(self, parent_node, child_node, join_type, joins):
         """
         Redis
         Cохранение новых джойнов
@@ -532,28 +501,28 @@ class DataSourceService(object):
             right_table(): Описать
             join_type(): Описать
             joins(): Описать
-
         Returns:
             Описать
         """
-
-        good_joins, error_joins, joins_set = cls.check_new_joins(
-            card_id, parent=parent_node, child=child_node, joins=joins,
+        good_joins, error_joins, joins_set = self.check_new_joins(
+            parent=parent_node, child=child_node, joins=joins,
         )
 
         if not error_joins:
             # Получаем дерево
-            sel_tree = cls.get_tree(card_id)
+            sel_tree = self.get_tree()
+            cache = self.cache
 
             sel_tree.update_node_joins(parent=parent_node, child=child_node,
                                        join_type=join_type, joins=joins_set)
-            RedisSS.save_tree_structure(card_id, sel_tree)
+            cache.save_tree_structure(sel_tree)
 
-            if cls.check_node_id_in_remains(card_id, child_node.node_id):
-                RedisSS.put_remain_to_builder_actives(card_id, child_node)
+            if self.check_node_id_in_remains(child_node.node_id):
+                cache.transfer_remain_to_actives(child_node)
 
         return {}
 
+    # FIXME remove
     @staticmethod
     def get_collections_names(source, tables):
         """
@@ -571,8 +540,7 @@ class DataSourceService(object):
         return [RedisSourceService.get_collection_name(source, table)
                 for table in tables]
 
-    @classmethod
-    def get_columns_types(cls, card_id, parent, child):
+    def get_columns_types(self, parent, child):
         """
         Redis
         Получение типов колонок таблиц
@@ -585,11 +553,11 @@ class DataSourceService(object):
         """
         # FIXME: Описать
         cols_types = {}
+        cache = self.cache
 
         for node in [parent, child]:
-            # node_id = RedisSS.get_node_id(t_name, card_id, sid)
-            cache = CacheService(card_id)
-            t_cols = cache.get_table_info(node.source_id, node.node_id)['columns']
+            t_cols = cache.get_table_info(
+                node.source_id, node.node_id)['columns']
 
             for col in t_cols:
                 cols_types[u'{0}.{1}.{2}'.format(
@@ -597,6 +565,7 @@ class DataSourceService(object):
 
         return cols_types
 
+    # FIXME old realization of method, redo
     @classmethod
     def retitle_table_column(cls, source, table, column, title):
         """
@@ -633,17 +602,6 @@ class DataSourceService(object):
             local_instance, table_name, db)
 
     @classmethod
-    def check_existing_table(cls, table_name):
-        """
-        проверка существования таблицы с именем при создании
-        :param table_name:
-        :return:
-        """
-        # FIXME: Описать
-        from django.db import connection
-        return table_name in connection.introspection.table_names()
-
-    @classmethod
     def get_source_connection(cls, source):
         """
         Получить объект соединения источника данных
@@ -663,6 +621,7 @@ class DataSourceService(object):
         """
         return LocalDatabaseService()
 
+    # FIXME old method
     @staticmethod
     def update_collections_stats(collections_names, last_key):
         """
@@ -687,6 +646,7 @@ class DataSourceService(object):
                     pipe.set(collection, json.dumps(table_info))
             pipe.execute()
 
+    # FIXME old method
     @staticmethod
     def update_datasource_meta(key, source, cols,
                                tables_info_for_meta, last_row, dataset_id):
@@ -810,50 +770,48 @@ class DataSourceService(object):
 
             tree['columns'] = columns_info
 
-    @classmethod
-    def split_nodes_by_source_types(cls, sub_trees):
+    # TODO надо сплитить по всему, не только по файлам, redo
+    # TODO maybe transfer to TTRepo
+    def split_nodes_by_source_types(self, sub_trees):
         """
         Если связки типа файл, то делим дальше, до примитива,
         если связка типа бд, то связку таблиц оставляем, как единую сущность
         """
-
         new_sub_trees = []
 
         for sub_tree in sub_trees:
             sid = sub_tree['sid']
             source = Datasource.objects.get(id=sid)
-            source_service = DataSourceService.get_source_service(source)
+            source_service = self.get_source_service(source)
 
             if isinstance(source_service, DatabaseService):
                 sub_tree['type'] = 'db'
                 new_sub_trees += [sub_tree, ]
 
             elif isinstance(source_service, FileService):
-                new_sub_trees += cls.split_file_sub_tree(sub_tree)
+                new_sub_trees += self.split_file_sub_tree(sub_tree)
 
         return new_sub_trees
 
-    @classmethod
     def prepare_sub_trees(
-            cls, tree_structure, columns, card_id, meta_tables_info):
+            self, tree_structure, columns, card_id, meta_tables_info):
         """
         Подготавливает список отдельных сущностей для закачки в монго
         """
         subs_by_sid = TTRepo.split_nodes_by_sources(
             tree_structure)
-        subs_by_type = cls.split_nodes_by_source_types(
+        subs_by_type = self.split_nodes_by_source_types(
             subs_by_sid)
 
-        cls.extract_columns(subs_by_type, columns)
+        self.extract_columns(subs_by_type, columns)
 
-        cls.create_hash_names(subs_by_type, card_id)
+        self.create_hash_names(subs_by_type)
 
-        cls.build_columns_info(subs_by_type, meta_tables_info)
+        self.build_columns_info(subs_by_type, meta_tables_info)
 
         return subs_by_type
 
-    @staticmethod
-    def create_hash_names(items, card_id):
+    def create_hash_names(self, items):
         """
         Для каждого набора, учитывая таблицы/листы и колонки высчитывает хэш
         """
@@ -864,7 +822,7 @@ class DataSourceService(object):
                               [u"{0}-{1}".format(x['table'], x['col'])
                                for x in sorted_cols], u'')
             item['collection_hash'] = generate_table_key(
-                card_id, item['sid'], cols_str)
+                self.cache.card_id, item['sid'], cols_str)
 
     @staticmethod
     def build_columns_info(items, meta_tables_info):
@@ -958,26 +916,23 @@ class DataSourceService(object):
 
         return relations
 
-    @classmethod
-    def get_node(cls, card_id, node_id):
+    def get_node(self, node_id):
         """
         Получение данных по узлу
-
         Arguments:
             card_id(int): id карточки
             node_id(int): id узла
-
         Returns:
             Node
         """
         node = None
 
-        if not cls.check_node_id_in_remains(card_id, node_id):
-            sel_tree = cls.get_tree(card_id)
+        if not self.check_node_id_in_remains(node_id):
+            sel_tree = self.get_tree()
             node = sel_tree.get_node(node_id)
         else:
-            builder_data = CacheService(card_id).card_builder_data
-            for remain in TTRepo.remains_nodes(builder_data):
+            remains = self.remains_nodes()
+            for remain in remains:
                 if int(remain.node_id) == int(node_id):
                     node = remain
                     break
@@ -985,11 +940,10 @@ class DataSourceService(object):
             raise Exception("Bull shit!")
         return node
 
-    @classmethod
-    def get_node_info(cls, card_id, node_id):
-        node = cls.get_node(card_id, node_id)
+    def get_node_info(self, node_id):
+        node = self.get_node(node_id)
         table, source_id = node.val, node.source_id
-        table_info = CacheService(card_id).get_table_info(source_id, node.node_id)
+        table_info = self.cache.get_table_info(source_id, node.node_id)
 
         return dict(
             node_id=node.node_id,
@@ -998,15 +952,14 @@ class DataSourceService(object):
             val=table,
             cols=[{'col_name': x['name'], 'col_title': x.get('title', None),}
                   for x in table_info['columns']
-                 ])
+                  ])
 
-    @classmethod
-    def check_node_id_in_remains(cls, card_id, node_id):
+    def check_node_id_in_remains(self, node_id):
         """
         Проверяет есть ли данный id в билдере карты в остатках
         """
         node_id = int(node_id)
-        b_data = CacheService(card_id).card_builder_data
+        b_data = self.cache.card_builder_data
 
         for sid in b_data:
             s_data = b_data[sid]
@@ -1016,13 +969,12 @@ class DataSourceService(object):
                     return True
         return False
 
-    @classmethod
-    def check_node_id_in_builder(cls, card_id, node_id, in_remain=True):
+    def check_node_id_in_builder(self, node_id, in_remain=True):
         """
         Проверяет есть ли данный id в билдере карты в активных или остатках
         """
         node_id = int(node_id)
-        b_data = CacheService(card_id).card_builder_data
+        b_data = self.cache.card_builder_data
 
         for sid in b_data:
             s_data = b_data[sid]
@@ -1082,11 +1034,11 @@ class DataSourceService(object):
                 if table_id is None:
                     uncached_tables.append((sid, table))
                 else:
-                    table_info_str = cache.cache_keys.get_active_table(
-                        self.card_id, sid, table_id
+                    table_info_key = cache.cache_keys.get_active_table(
+                        cache.card_id, sid, table_id
                     )
                     # нет информации о таблице
-                    if not cache.r_exists(table_info_str):
+                    if not cache.r_exists(table_info_key):
                         uncached_keys.append((sid, table))
                     else:
                         table_info = cache.get_table_info(sid, table_id)

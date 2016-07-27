@@ -625,6 +625,30 @@ class TableTreeRepository(object):
         return remains
 
     @classmethod
+    def get_remain_node(cls, builder_data, node_id):
+        """
+        Получение узла
+        """
+        node_id = int(node_id)
+        remain_nodes = cls.remains_nodes(builder_data)
+
+        for node in remain_nodes:
+            if node.node_id == node_id:
+                return node
+        return None
+
+    @classmethod
+    def extract_tail(cls, nodes_info, node_id):
+        """
+        Из остатков или активов определяет последнюю несвязанную ноду
+        remains - список диктов [{}, {}, ...]
+        """
+        for node in nodes_info:
+            if str(node["node_id"]) == str(node_id):
+                nodes_info.remove(node)
+                return node
+
+    @classmethod
     def get_joins(cls, tree, parent_id, child_id):
         """
         Получение информацию по связям узлов

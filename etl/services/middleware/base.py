@@ -51,15 +51,6 @@ def generate_columns_string_NEW(sources):
     return cols_str
 
 
-def extract_tables_info(columns):
-
-    tables_dict = {}
-
-    for sid, tables in columns.iteritems():
-        tables_dict[sid] = tables.keys()
-    return tables_dict
-
-
 def generate_table_name_key(source, cols_str):
     """Генерация ключа для названия промежуточной таблицы
 
