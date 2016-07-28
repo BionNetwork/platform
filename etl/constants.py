@@ -64,4 +64,4 @@ FDW = 'fdw_'
 MONGODB = 'mongodb'
 
 RDBMS_SERVER = 'rdbms_server'
-CSV_SERVER = 'csv_server'
+CSV_SERVER = 'csv_srv'

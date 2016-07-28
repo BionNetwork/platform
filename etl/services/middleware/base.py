@@ -42,8 +42,8 @@ def generate_columns_string_NEW(sources):
     result = []
     for sid, tables in sources.iteritems():
         for table, cols in tables.iteritems():
-            cols.sort()
-            result.append('{0}-{1};'.format(table, ','.join(cols)))
+
+            result.append('{0}-{1};'.format(table, ','.join(sorted(cols))))
 
     result.sort()
     cols_str = ''.join(result)

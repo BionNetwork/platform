@@ -828,14 +828,14 @@ class DataSourceService(object):
     def build_columns_info(items, meta_tables_info):
         """
         1) Образует списки ['table__column', ]
-        2) Образует списки [{'table__column': {type: , length: }, ]
+        2) Образует списки [{name:, type: , length:}, ... ]
         Добавляет эти списки каждому поддереву
         """
         for item in items:
 
             sid = str(item['sid'])
             joined_columns = []
-            columns_types = {}
+            columns_types = []
 
             for col_info in item["columns"]:
                 t = col_info['table']
@@ -847,10 +847,11 @@ class DataSourceService(object):
                 table_columns = meta_tables_info[sid][t]['columns']
                 for t_col in table_columns:
                     if t_col["name"] == c:
-                        columns_types[col_joined] = {
+                        columns_types.append({
+                            'name': col_joined,
                             'type': t_col['type'],
                             'max_length': t_col['max_length'],
-                        }
+                        })
                         break
 
             item['joined_columns'] = joined_columns
@@ -870,7 +871,8 @@ class DataSourceService(object):
             hash_ = sub['collection_hash']
 
             for column in sub['joined_columns']:
-                name = u"{0}__{1}".format(sid, column)
+                # name = u"{0}__{1}".format(sid, column)
+                name = u"{0}__{1}__{2}".format(sid, sub['val'], column)
                 tables_hash_map[name] = hash_
 
         # голова дерева без связей

@@ -328,6 +328,15 @@ class CardViewSet(viewsets.ViewSet):
         # columns = json.loads(post.get('columns'))
 
         columns_info = {
+            '5':
+                {
+                    "Таблица1": ['name', 'gender', 'age'],
+                    "Таблица2": ['name']
+                },
+            '3':
+                {
+                    'shops': ['name']
+                }
             # '8':
             #     {
             #         "mrk_reference": ["pubmedid", "creation_date"],
@@ -417,8 +426,8 @@ class CardViewSet(viewsets.ViewSet):
 
         cols_type = {}
         for tree in sub_trees:
-            for k, v in tree['columns_types'].iteritems():
-                cols_type.update({k: v})
+            for col in tree['columns_types']:
+                cols_type.update({col['name']: col['type']})
 
         # Параметры для задач
         load_args = {

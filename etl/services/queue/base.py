@@ -320,8 +320,8 @@ def get_single_task(task_def, context):
     # task_id, channel = TaskService(task_name).add_task(
     #     arguments=params)
     task_id, channel = None, None
-    return task_def.apply_async((task_id, channel, context),), [channel]
-    # return task_def(task_id, channel, context), [channel]
+    # return task_def.apply_async((task_id, channel, context),), [channel]
+    return task_def(task_id, channel, context), [channel]
 
 
 class RowKeysCreator(object):

@@ -35,6 +35,8 @@ from core.models import (
 from etl.services.queue.base import *
 from etl.services.middleware.base import EtlEncoder
 
+import pandas as pd
+
 logger = logging.getLogger(__name__)
 
 ASC = 1
@@ -228,7 +230,8 @@ def create_foreign_table(sub_tree, is_mongodb=True):
     """
     Создание Удаленной таблицы
     """
-    fdw = RdbmsForeignTable(tree=sub_tree)
+    # fdw = RdbmsForeignTable(tree=sub_tree)
+    fdw = CsvForeignTable(tree=sub_tree)
     fdw.create()
 
 
@@ -448,13 +451,13 @@ class RdbmsForeignTable(BaseForeignTable):
             self.server_name, table_options, self.tree['columns_types'])
 
 
-class CsvForeiginTable(BaseForeignTable):
+class CsvForeignTable(BaseForeignTable):
     """
     Создание "удаленной таблицы" для файлов типа csv
     """
 
     def __init__(self, tree):
-        super(CsvForeiginTable, self).__init__(tree)
+        super(CsvForeignTable, self).__init__(tree)
 
     @property
     def server_name(self):
@@ -462,7 +465,23 @@ class CsvForeiginTable(BaseForeignTable):
 
     @property
     def db_url(self):
-        pass
+        sid = int(self.tree['sid'])
+        source = Datasource.objects.get(id=sid)
+        return source.file.path
+
+    def create(self):
+        csv_file_name = '{file_name}.csv'.format(file_name=os.path.splitext(self.db_url)[0])
+        data_xls = pd.read_excel(self.db_url, self.tree['val'], index_col=False)
+        data_xls.to_csv(csv_file_name, header=self.tree['joined_columns'], encoding='utf-8', index=None)
+
+        table_options = {
+            'filename': csv_file_name,
+            'skip_header': '1',
+            'delimiter': ','
+        }
+
+        self.service.create_foreign_table(self.name,
+            self.server_name, table_options, self.tree['columns_types'])
 
 
 class MongoForeignTable(BaseForeignTable):

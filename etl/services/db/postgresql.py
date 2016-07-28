@@ -174,29 +174,34 @@ class Postgresql(Database):
 
         return query
 
-    def foreign_table_create_query(self, server_name, options, cols_meta):
+    def foreign_table_create_query(self, name, server_name, options, cols_meta):
         """
         Создание "удаленной таблицы"
         Args:
+            name(str): Название таблицы
             server_name(str): Название сервера
-            table_name(str): Название таблицы
+            options(dict): Параметры запроса
             cols_meta(dict): Информация о колонках
             ::
-            'cols_meta': {
-                <column_name>:
-                    'type': int,
+            'cols_meta':
+            [
+                {
+                    'name': str,
+                    'type': str,
+                    'max_length: int,
+                },
                     ...
-            }
+            ]
 
         Returns:
             str: строка запроса для создания удаленной таблицы (foreign table)
         """
         col_names = []
-        for field_name, field in cols_meta.iteritems():
+        for field in cols_meta:
             col_names.append(u'"{0}" {1}'.format(
-                field_name, field['type']))
+                field['name'], field['type']))
 
-        table_name = 'schema_17.sttm__1_8_2675133954039524792'
+        table_name = name
 
         options = ', '.join("{name} '{value}'".format(name=key, value=value)
                             for key, value in options.iteritems())
@@ -221,12 +226,12 @@ class Postgresql(Database):
         query_column = []
         time_joins_map = {}
         for index, column in enumerate(columns):
-            if columns[column]['type'] in ['date', 'datetime', 'timestamp']:
-                time_joins_map.update({index: column})
-                s = 't{index}."time_id" as "{column_name}"'.format(index=index, column_name=column)
+            if column['type'] in ['date', 'datetime', 'timestamp']:
+                time_joins_map.update({index: column['name']})
+                s = 't{index}."time_id" as "{column_name}"'.format(index=index, column_name=column['name'])
                 query_column.append(s)
             else:
-                query_column.append('"{table}"."{column}"'.format(table=table_name, column=column))
+                query_column.append('"{table}"."{column}"'.format(table=table_name, column=column['name']))
 
         select_line = ', '.join(query_column)
 
