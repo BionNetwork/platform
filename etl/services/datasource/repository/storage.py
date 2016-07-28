@@ -496,6 +496,7 @@ class RedisSourceService(object):
         return cls.r_get(counter_str)
 
     @classmethod
+    @classmethod
     def get_active_table_list(cls, source_key):
         """
         Возвращает список коллекций юзера
@@ -909,6 +910,7 @@ class CardCacheService(object):
         s_remains = b_data[sid]['remains']
         s_actives = b_data[sid]['actives']
 
+        # FIXME проверку перенести отсюда
         if table not in s_remains:
             raise Exception("Table not in remains!")
         if s_remains[table] != node_id:

@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import json
 from itertools import groupby
 import operator
+from collections import defaultdict
 
 from django.db import transaction
 
@@ -16,7 +17,7 @@ from etl.services.datasource.repository.storage import (
     RedisSourceService, CardCacheService)
 from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
-from etl.services.middleware.base import generate_table_key
+from etl.services.middleware.base import HashEncoder
 
 
 RedisSS = RedisSourceService
@@ -748,28 +749,6 @@ class DataSourceService(object):
 
         return items
 
-    @staticmethod
-    def extract_columns(sub_trees, columns):
-        """
-        Достает список диктов с инфой о таблице/листе и ее колонке
-        """
-        for tree in sub_trees:
-            tables = columns[str(tree['sid'])]
-            t_name = tree['val']
-            columns_info = [{"table": t_name, "col": x} for x in tables[t_name]]
-            childs = tree['childs']
-
-            while childs:
-                new_childs = []
-                for child in childs:
-                    t_name = child['val']
-                    columns_info += [
-                        {"table": t_name, "col": x} for x in tables[t_name]]
-                    new_childs.extend(child['childs'])
-                childs = new_childs
-
-            tree['columns'] = columns_info
-
     # TODO надо сплитить по всему, не только по файлам, redo
     # TODO maybe transfer to TTRepo
     def split_nodes_by_source_types(self, sub_trees):
@@ -793,69 +772,75 @@ class DataSourceService(object):
 
         return new_sub_trees
 
-    def prepare_sub_trees(
-            self, tree_structure, columns, card_id, meta_tables_info):
+    def prepare_sub_trees(self, sources_info):
         """
         Подготавливает список отдельных сущностей для закачки в монго
+        columns_info = {
+            '5':
+                {
+                    "Таблица1": ['name', 'gender', 'age'],
+                    "Таблица2": ['name']
+                },
+            '3':
+                {
+                    'shops': ['name']
+                }
+        }
         """
-        subs_by_sid = TTRepo.split_nodes_by_sources(
-            tree_structure)
-        subs_by_type = self.split_nodes_by_source_types(
-            subs_by_sid)
+        # разделение дерева по нодам
+        tree_structure = self.cache.active_tree_structure
+        tree = TTRepo.build_tree_by_structure(tree_structure)
+        sub_trees = tree.nodes_structures
 
-        self.extract_columns(subs_by_type, columns)
+        # инфа о колонках для каджой ноды, инфа о датах
+        self.prepare_sub_tree_info(sub_trees, sources_info)
 
-        self.create_hash_names(subs_by_type)
+        # хэш для каждой ноды
+        self.create_sub_tree_hash_names(sub_trees)
 
-        self.build_columns_info(subs_by_type, meta_tables_info)
+        return sub_trees
 
-        return subs_by_type
+    # FIXME потом где-нить убирать ненужные типы (бинари)
+    def prepare_sub_tree_info(self, sub_trees, sources_info):
+        """
+        порядок колонок выставляем как в источнике,
+        достаем информацию о типе, длине колонке,
+        достаем информацию о датах
+        """
+        cache = self.cache
 
-    def create_hash_names(self, items):
+        for sub_tree in sub_trees:
+
+            sid = sub_tree['sid']
+            table_id = sub_tree['node_id']
+            table = sub_tree['val']
+
+            table_info = cache.get_table_info(sid, table_id)
+
+            # инфа о датах
+            sub_tree['date_intervals'] = table_info['date_intervals']
+
+            # инфа о колонках
+            columns = list()
+            come_columns = sources_info[str(sid)][table]
+            for col_ind, col_info in enumerate(table_info['columns']):
+                if col_info['name'] in come_columns:
+                    col_info['zorrorder'] = col_ind
+                    columns.append(col_info)
+
+            sub_tree['columns'] = columns
+
+    def create_sub_tree_hash_names(self, sub_trees):
         """
         Для каждого набора, учитывая таблицы/листы и колонки высчитывает хэш
         """
-        for item in items:
-            sorted_cols = sorted(
-                item['columns'], key=operator.itemgetter('table', 'col'))
-            cols_str = reduce(operator.add,
-                              [u"{0}-{1}".format(x['table'], x['col'])
-                               for x in sorted_cols], u'')
-            item['collection_hash'] = generate_table_key(
-                self.cache.card_id, item['sid'], cols_str)
+        for sub_tree in sub_trees:
 
-    @staticmethod
-    def build_columns_info(items, meta_tables_info):
-        """
-        1) Образует списки ['table__column', ]
-        2) Образует списки [{name:, type: , length:}, ... ]
-        Добавляет эти списки каждому поддереву
-        """
-        for item in items:
-
-            sid = str(item['sid'])
-            joined_columns = []
-            columns_types = []
-
-            for col_info in item["columns"]:
-                t = col_info['table']
-                c = col_info['col']
-                # col_joined = u"{0}__{1}".format(t, c)
-                col_joined = u"{0}".format(c)
-                joined_columns.append(col_joined)
-
-                table_columns = meta_tables_info[sid][t]['columns']
-                for t_col in table_columns:
-                    if t_col["name"] == c:
-                        columns_types.append({
-                            'name': col_joined,
-                            'type': t_col['type'],
-                            'max_length': t_col['max_length'],
-                        })
-                        break
-
-            item['joined_columns'] = joined_columns
-            item['columns_types'] = columns_types
+            table_hash = HashEncoder.encode(sub_tree['val'])
+            key = (table_hash if table_hash > 0
+                   else '_{0}'.format(abs(table_hash)))
+            sub_tree['collection_hash'] = (
+                u"{0}_{1}_{2}".format(self.cache.card_id, sub_tree['sid'], key))
 
     @staticmethod
     def prepare_relations(sub_trees):
@@ -868,11 +853,11 @@ class DataSourceService(object):
 
         for sub in sub_trees:
             sid = sub['sid']
+            table = sub['val']
             hash_ = sub['collection_hash']
 
-            for column in sub['joined_columns']:
-                # name = u"{0}__{1}".format(sid, column)
-                name = u"{0}__{1}__{2}".format(sid, sub['val'], column)
+            for column in sub['columns']:
+                name = u"{0}__{1}__{2}".format(sid, table, column['name'])
                 tables_hash_map[name] = hash_
 
         # голова дерева без связей
@@ -882,35 +867,38 @@ class DataSourceService(object):
         })
 
         for sub in sub_trees[1:]:
-
+            table = sub['val']
             join = sub["joins"][0]
-            left_table = join["left"]
-            left_sid = left_table['sid']
+            # ищем другую таблицу-родителя, с которой связана table
+            parent_info = (join["left"] if join['left']['table'] != table
+                           else join['right'])
 
-            hash_str = "{0}__{1}__{2}".format(
-                left_sid, left_table["table"], left_table["column"])
+            parent_hash_str = "{0}__{1}__{2}".format(
+                parent_info['sid'], parent_info["table"], parent_info["column"])
 
-            table_hash = sub['collection_hash']
+            child_hash = sub['collection_hash']
 
             rel = {
-                "table_hash": table_hash,
+                "table_hash": child_hash,
                 "type": join["join"]["type"],
                 "conditions": [],
             }
             # хэш таблицы, с котрой он связан
-            parent_hash = tables_hash_map[hash_str]
+            parent_hash = tables_hash_map[parent_hash_str]
 
             # условия соединений таблиц
             for join in sub["joins"]:
 
-                left_table = join["left"]
-                right_table = join["right"]
+                parent, child = (
+                    (join["left"], join["right"])
+                    if join['left']['table'] != table
+                    else (join['right'], join["left"]))
 
                 rel["conditions"].append({
-                    "l": '"sttm__{0}"."{1}__{2}"'.format(
-                        parent_hash, left_table["table"], left_table["column"]),
-                    "r": '"sttm__{0}"."{1}__{2}"'.format(
-                        table_hash, right_table["table"], right_table["column"]),
+                    "l": '"sttm_{0}"."{1}"'.format(
+                        parent_hash, parent["column"]),
+                    "r": '"sttm_{0}"."{1}"'.format(
+                        child_hash, child["column"]),
                     "operation": join["join"]["value"],
                 })
 
@@ -1018,7 +1006,7 @@ class DataSourceService(object):
 
         return uncached
 
-    def check_tables_columns_exist(self, columns_info):
+    def check_cached_data(self, sources_info):
         """
         Проверяем наличие таблиц, ключей и колонок в кэше
         """
@@ -1029,7 +1017,7 @@ class DataSourceService(object):
         uncached_keys = []
         uncached_columns = []
 
-        for sid, info in columns_info.iteritems():
+        for sid, info in sources_info.iteritems():
             for table, columns in info.iteritems():
                 table_id = cache.get_table_id(sid, table, data=data)
                 # таблицы нет в билдере
@@ -1086,21 +1074,3 @@ class DataSourceService(object):
         range_ = [table_tupl for table_tupl in tree_table_names if
                   table_tupl not in came_table_names]
         return range_
-
-    def exclude_types(self, columns_info):
-        """
-        убираем колонки с ненужными типами
-        """
-        cache = self.cache
-        data = cache.card_builder_data
-
-        for sid, info in columns_info.items():
-            for table, columns in info.items():
-                table_id = cache.get_table_id(sid, table, data=data)
-                table_info = cache.get_table_info(sid, table_id)
-                for column in columns[:]:
-                    for cached_column in table_info["columns"]:
-                        if (cached_column["name"] == column and
-                                cached_column["type"] in self.EXCLUDE_TYPES):
-                            columns.remove(column)
-        return columns_info

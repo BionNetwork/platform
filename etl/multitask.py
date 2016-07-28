@@ -77,8 +77,7 @@ class LoadMongodbMulti(TaskProcessing):
         # создание таблицы дат
         local_db_service = DataSourceService.get_local_instance()
         local_db_service.create_date_tables(
-            "time_table_name", json.loads(self.context['meta_info']), False
-        )
+            "time_table_name", sub_trees, False)
 
         # параллель из последований, в конце колбэк
         # chord(

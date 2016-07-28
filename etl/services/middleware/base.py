@@ -7,8 +7,6 @@ import decimal
 import datetime
 import operator
 
-from core.helpers import HashEncoder
-
 
 class EtlEncoder:
     @staticmethod
@@ -20,6 +18,23 @@ class EtlEncoder:
         elif isinstance(obj, decimal.Decimal):
             return float(obj)
         return obj
+
+
+class HashEncoder(object):
+    """
+    Базовый класс для хэширования данных
+    """
+
+    @staticmethod
+    def encode(data):
+        """
+        Кодирование данных
+        Args:
+            data(object): list, dict, str данные для кодирования
+        Returns:
+            object(int): integer представление
+        """
+        return hash(data)
 
 
 def generate_columns_string(columns):
@@ -77,20 +92,6 @@ def generate_cube_key(cols_str, cube_id):
     key = HashEncoder.encode(
         reduce(operator.add, [str(cube_id), cols_str], ''))
     return str(key) if key > 0 else '_{0}'.format(abs(key))
-
-
-def generate_table_key(cube_id, source_id, cols_str):
-    """
-    Генерация ключа для каждой таблицы в монго
-    cols_str(str): Строка с названием столбцов
-    """
-    key = HashEncoder.encode(
-        reduce(operator.add,
-               [str(cube_id), str(source_id), cols_str],
-               '')
-    )
-    key = str(key) if key > 0 else '_{0}'.format(abs(key))
-    return u"{0}_{1}_{2}".format(cube_id, source_id, key)
 
 
 def get_table_name(prefix, key):

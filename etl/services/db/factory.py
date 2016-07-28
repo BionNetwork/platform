@@ -501,24 +501,15 @@ class LocalDatabaseService(object):
         self.execute(query)
         return query
 
-    def create_date_tables(self, time_table_name, meta_info, is_update):
+    def create_date_tables(self, time_table_name, sub_trees, is_update):
         """
         Создание таблиц дат
         """
-        date_intervals_info = []
-        for sid, data in meta_info.iteritems():
-            date_intervals_info.extend(
-            [t_info['date_intervals']
-              for (t_name, t_info) in data.iteritems()])
+        intervals = []
+        for sub_tree in sub_trees:
+            intervals.extend(sub_tree['date_intervals'])
 
         date_tables = {}
-        #
-        # date_intervals_info = [(t_name, t_info['date_intervals'])
-        #                        for (t_name, t_info) in date_intervals.iteritems()]
-
-        # список всех интервалов
-        intervals = reduce(
-            lambda x, y: x+y, date_intervals_info, [])
 
         if not intervals:
             return date_tables

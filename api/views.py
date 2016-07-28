@@ -287,8 +287,8 @@ class CardViewSet(viewsets.ViewSet):
         data = request.data
 
         data = [
-            {"source_id": 2, "table_name": u'auth_group', },
-            {"source_id": 2, "table_name": u'auth_group_permissions', },
+            # {"source_id": 2, "table_name": u'auth_group', },
+            # {"source_id": 2, "table_name": u'auth_group_permissions', },
             # {"source_id": 2, "table_name": u'auth_permission', },
             # {"source_id": 2, "table_name": u'auth_permission2', },
             # {"source_id": 2, "table_name": u'card_card', },
@@ -327,16 +327,16 @@ class CardViewSet(viewsets.ViewSet):
 
         # columns = json.loads(post.get('columns'))
 
-        columns_info = {
-            '5':
-                {
-                    "Таблица1": ['name', 'gender', 'age'],
-                    "Таблица2": ['name']
-                },
-            '3':
-                {
-                    'shops': ['name']
-                }
+        sources_info = {
+            # '5':
+            #     {
+            #         "Таблица1": ['name', 'gender', 'age'],
+            #         "Таблица2": ['name']
+            #     },
+            # '3':
+            #     {
+            #         'shops': ['name']
+            #     }
             # '8':
             #     {
             #         "mrk_reference": ["pubmedid", "creation_date"],
@@ -344,14 +344,14 @@ class CardViewSet(viewsets.ViewSet):
             # '1':
             #     {
             #         "Лист1": [
-            #             "name2", "пол", "auth_group_id", "Date", "Floata", ],
+            #             "name2", "пол", "auth_group_id", "Floata", ],
+            #         "List3": ["name2", "some_id", ],
             #     },
             # '2':
             #     {
-            #         "auth_group": ["id", "name", ],
+            #         "auth_group": ["name", "id", ],
             #         "auth_group_permissions": [
             #             "id", "group_id", "permission_id",],
-            #         # 'asdf': ['asdf'],
             #     },
             # '31':
             #     {
@@ -363,7 +363,7 @@ class CardViewSet(viewsets.ViewSet):
         }
 
         # TODO возможно валидацию перенести в отдельный файл
-        if not columns_info:
+        if not sources_info:
             return Response(
                 {"message": "Data is empty!"})
 
@@ -373,17 +373,17 @@ class CardViewSet(viewsets.ViewSet):
         # убираем ненужные типы (бинари)
 
         # группируем по соурс id на всякий
-        columns_info = group_by_source(columns_info)
+        sources_info = group_by_source(sources_info)
 
         # проверяем наличие соурс id в кэше
-        uncached = worker.check_sids_exist(columns_info.keys())
+        uncached = worker.check_sids_exist(sources_info.keys())
         if uncached:
             return Response(
                 {"message": "Uncached source IDs: {0}!".format(uncached)})
 
         # проверяем наличие ключей, таблиц, колонок в кэше
         uncached_tables, uncached_keys, uncached_columns = (
-            worker.check_tables_columns_exist(columns_info))
+            worker.check_cached_data(sources_info))
 
         if any([uncached_tables, uncached_keys, uncached_columns]):
             message = ""
@@ -397,7 +397,7 @@ class CardViewSet(viewsets.ViewSet):
             return Response({"message": message})
 
         # проверка наличия всех таблиц из дерева в пришедших нам
-        range_ = worker.check_tables_with_tree_structure(columns_info)
+        range_ = worker.check_tables_with_tree_structure(sources_info)
         if range_:
             return Response({
                 "message": "Tables {0} in tree, but didn't come! ".format(
@@ -405,39 +405,22 @@ class CardViewSet(viewsets.ViewSet):
 
         # TODO проверить пришедшие точно лежат в активных, не в остатках
 
-        # убираем колонки с ненужными типами, например бинари
-        columns_info = worker.exclude_types(columns_info)
+        # cols_str = generate_columns_string_NEW(columns_info)
+        # cube_key = generate_cube_key(cols_str, pk)
 
-        cols_str = generate_columns_string_NEW(columns_info)
-        cube_key = generate_cube_key(cols_str, pk)
+        # список структур со всей инфой для загрузки
+        sub_trees = worker.prepare_sub_trees(sources_info)
 
-        cache = worker.cache
-
-        tree_structure = cache.active_tree_structure
-
-        tables = extract_tables_info(columns_info)
-        # достаем инфу колонок (статистика, типы, )
-        meta_tables_info = cache.tables_info_for_metasource(tables)
-
-        sub_trees = worker.prepare_sub_trees(
-            tree_structure, columns_info, pk, meta_tables_info)
-
+        # строим связи между таблицами
         relations = worker.prepare_relations(sub_trees)
-
-        cols_type = {}
-        for tree in sub_trees:
-            for col in tree['columns_types']:
-                cols_type.update({col['name']: col['type']})
 
         # Параметры для задач
         load_args = {
-            'meta_info': json.dumps(meta_tables_info),
             'card_id': pk,
-            'cols_type': json.dumps(cols_type),
             'is_update': False,
-            'tree_structure': tree_structure,
             'sub_trees': sub_trees,
-            'cube_key': cube_key,
+            # TODO решить как должен выглядеть cube_key, пока card_id
+            'cube_key': pk,
             "relations": relations,
         }
 

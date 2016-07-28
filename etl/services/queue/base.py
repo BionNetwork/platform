@@ -17,13 +17,12 @@ from core.models import (QueueList, Queue, QueueStatus, Datasource,
                          DatasourceSettings)
 from etl.services.middleware.base import get_table_name
 from core.exceptions import TaskError
-from core.helpers import HashEncoder
 import json
 import datetime
 from itertools import izip
 from bson import binary
 
-from etl.services.middleware.base import datetime_now_str
+from etl.services.middleware.base import datetime_now_str, HashEncoder
 from . import client, settings
 
 # __all__ = [

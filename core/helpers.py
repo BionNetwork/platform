@@ -109,22 +109,3 @@ def users_file_upload_path(instance, filename):
         user(core.models.User): объект пользователь
     """
     return os.path.join('users', 'files', str(instance.id), filename)
-
-
-class HashEncoder(object):
-    """
-    Базовый класс для хэширования данных
-    """
-
-    @staticmethod
-    def encode(data):
-        """
-        Кодирование данных
-
-        Args:
-            data(object): list, dict, str данные для кодирования
-
-        Returns:
-            object(int): integer представление
-        """
-        return hash(data)

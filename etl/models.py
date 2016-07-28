@@ -76,6 +76,22 @@ class Node(object):
                 })
         return node_joins
 
+    @property
+    def node_structure(self):
+        """
+        Представление ноды как словаря
+        """
+        node_info = {
+            'val': self.val,
+            'childs': [],
+            'joins': list(self.joins),
+            'join_type': self.join_type if self.joins else None,
+            'sid': self.source_id,
+            'node_id': self.node_id,
+        }
+
+        return node_info
+
     def api_info(self):
         """
         Публичная информация об узле
@@ -181,14 +197,23 @@ class TablesTree(object):
         :param root: Node
         :return: dict
         """
-        root_info = {'val': root.val, 'childs': [], 'joins': list(root.joins),
-                     'sid': root.source_id, 'node_id': root.node_id, }
-        root_info['join_type'] = (
-            None if not root_info['joins'] else root.join_type)
+        root_info = root.node_structure
 
         for ch in root.childs:
             root_info['childs'].append(cls._get_tree_structure(ch))
         return root_info
+
+    @property
+    def nodes_structures(self):
+        """
+        Возвращает список структур всех нодов дерева
+        [{'val': root.val, 'childs': [], 'joins': list(root.joins),
+                     'sid': root.source_id, 'node_id': root.node_id, }, ...]
+        """
+        nodes = self.ordered_nodes
+        structures = [node.node_structure for node in nodes]
+
+        return structures
 
     def build(self, table, source_id,  node_id, tables_info):
         remain = self._build(
