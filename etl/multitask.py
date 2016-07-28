@@ -229,8 +229,8 @@ def create_foreign_table(sub_tree, is_mongodb=True):
     """
     Создание Удаленной таблицы
     """
-    # fdw = RdbmsForeignTable(tree=sub_tree)
-    fdw = CsvForeignTable(tree=sub_tree)
+    fdw = RdbmsForeignTable(tree=sub_tree)
+    # fdw = CsvForeignTable(tree=sub_tree)
     fdw.create()
 
 
@@ -375,7 +375,7 @@ class ForeignDataWrapper(object):
         }
 
         self.service.create_foreign_table(
-            self.server_name, table_options, self.tree['columns_types'])
+            self.server_name, table_options, self.tree['columns'])
 
     def create(self, source=None):
         """
@@ -447,7 +447,8 @@ class RdbmsForeignTable(BaseForeignTable):
         }
 
         self.service.create_foreign_table(
-            self.server_name, table_options, self.tree['columns_types'])
+            self.name, self.server_name, table_options,
+            self.tree['columns'])
 
 
 class CsvForeignTable(BaseForeignTable):
@@ -479,8 +480,9 @@ class CsvForeignTable(BaseForeignTable):
             'delimiter': ','
         }
 
-        self.service.create_foreign_table(self.name,
-            self.server_name, table_options, self.tree['columns_types'])
+        self.service.create_foreign_table(
+            self.name, self.server_name, table_options,
+            self.tree['columns'])
 
 
 class MongoForeignTable(BaseForeignTable):

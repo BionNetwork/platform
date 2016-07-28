@@ -221,7 +221,7 @@ class Postgresql(Database):
         view_name = 'view__{view_hash}'.format(view_hash=sub_tree['collection_hash'])
         table_name = 'sttm__{view_hash}'.format(view_hash=sub_tree['collection_hash'])
 
-        columns = sub_tree['columns_types']
+        columns = sub_tree['columns']
 
         query_column = []
         time_joins_map = {}
@@ -243,7 +243,6 @@ class Postgresql(Database):
         query = """DROP VIEW IF EXISTS  {view_name} CASCADE; CREATE VIEW {view_name} AS SELECT {select} FROM {table_name} {joins};""".format(
             view_name=view_name, select=select_line, table_name=table_name, joins=joins_line)
         return query
-
 
     def create_materialized_view_query(self, name, relations):
         """

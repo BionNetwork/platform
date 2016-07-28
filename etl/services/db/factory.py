@@ -427,7 +427,8 @@ class LocalDatabaseService(object):
         """
         Создание удаленную таблицу к Mongodb
         """
-        query = self.datasource.foreign_table_create_query(name, server_name, options, cols)
+        query = self.datasource.foreign_table_create_query(
+            name, server_name, options, cols)
         self.execute(query)
 
     def create_foreign_view(self, sub_tree):
