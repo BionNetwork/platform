@@ -229,8 +229,11 @@ def create_foreign_table(sub_tree, is_mongodb=True):
     """
     Создание Удаленной таблицы
     """
-    fdw = RdbmsForeignTable(tree=sub_tree)
-    # fdw = CsvForeignTable(tree=sub_tree)
+    source = Datasource.objects.get(id=int(sub_tree['sid']))
+    if source.get_source_type() in ['Excel', 'Csv']:
+        fdw = CsvForeignTable(tree=sub_tree)
+    else:
+        fdw = RdbmsForeignTable(tree=sub_tree)
     fdw.create()
 
 
@@ -261,130 +264,6 @@ def mongo_callback(context):
         'my_view4', context['relations'])
 
     print 'results', context
-
-
-class ForeignDataWrapper(object):
-    """
-    Закачка данных из сторонней базы (db, file, mongodb)
-
-    Attributes:
-        tree(dict): Мета-информация об извлекаемых данных
-        service(`LocalDatabaseService`): объект сервиса работы с локальной БД
-        is_mongodb(bool): Привязка "удаленной таблицы" к кокальному mongodb
-    """
-
-    def __init__(self, tree, is_mongodb=False):
-        """
-        Args:
-            tree(dict): Мета-информация об извлекаемых данных
-            is_mongodb(bool): Привязка "удаленной таблицы" к кокальному mongodb
-        """
-
-        self.tree = tree
-        self.is_mongodb = is_mongodb
-        self.service = LocalDatabaseService()
-
-    @property
-    def table(self):
-        """
-        Название создаваемой таблицы
-        """
-        key = self.tree["collection_hash"]
-        return '{0}_{1}'.format(STTM, key)
-
-    @property
-    def server_name(self):
-        """
-        Название создаваемого сервера
-        """
-        key = self.tree["collection_hash"]
-        return '{0}_{1}'.format(FDW, key)
-
-    def generate_params(self, source=None):
-        """
-        Подготовка контекста для создания "удаленной таблицы"
-        Args:
-            source(`Datasource`): объект источника
-
-        Returns:
-            dict: данные об источнике
-        """
-        if self.is_mongodb:
-            return {
-                "source_type": MONGODB,
-                "connection": {
-                    "address": '127.0.0.1',
-                    'port': '27017',
-                },
-                "user": {
-                    'user': 'bi_user',
-                    'password': 'bi_user'
-                }
-            }
-
-        if not source:
-            raise Exception(u'Не указан источник')
-
-        return {
-            "source_type": source.conn_type,
-            "connection": {
-                "host": source.host,
-                'port': source.port,
-                'dbname': source.db,
-            },
-            "user": {
-                'user': source.login,
-                'password': source.password
-            }
-        }
-
-    def create_server(self, source_params):
-        """
-        Создание fdw-сервера
-
-        Args:
-            source_params(dict): Данные для создания сервера
-            ::
-            'source_params': {
-                'source_type': 'Mongodb'
-                'connection': {
-                    'address': '127.0.0.1',
-                    'port': '27017'
-                    ...
-                    },
-                'user': {
-                    'user': 'bi_user',
-                    'password': 'bi_user'
-                }
-            }
-
-        Returns:
-            str: строка запроса для создания fdw-сервера
-        """
-        self.service.create_fdw_server(self.server_name, source_params)
-
-    def create_foreign_table(self):
-
-        """
-        Создание "удаленной таблицы"
-        """
-
-        table_options = {
-            'schema_name': 'mgd',
-            'table_name': 'mrk_reference'
-        }
-
-        self.service.create_foreign_table(
-            self.server_name, table_options, self.tree['columns'])
-
-    def create(self, source=None):
-        """
-        Процесс создания сервера и таблицы
-        Args:
-            source(`Datasource`): тип источника
-        """
-        self.create_server(self.generate_params(source))
-        self.create_foreign_table()
 
 
 class BaseForeignTable(object):
@@ -446,9 +325,8 @@ class RdbmsForeignTable(BaseForeignTable):
             'db_url': self.db_url
         }
 
-        self.service.create_foreign_table(
-            self.name, self.server_name, table_options,
-            self.tree['columns'])
+        self.service.create_foreign_table(self.name,
+            self.server_name, table_options, self.tree['columns'])
 
 
 class CsvForeignTable(BaseForeignTable):
@@ -470,9 +348,12 @@ class CsvForeignTable(BaseForeignTable):
         return source.file.path
 
     def create(self):
-        csv_file_name = '{file_name}.csv'.format(file_name=os.path.splitext(self.db_url)[0])
-        data_xls = pd.read_excel(self.db_url, self.tree['val'], index_col=False)
-        data_xls.to_csv(csv_file_name, header=self.tree['joined_columns'], encoding='utf-8', index=None)
+        indexes = [x['zorrorder'] for x in self.tree['columns']]
+        sheet_name = HashEncoder.encode(self.tree['val'])
+        csv_file_name = '{file_name}__{sheet_name}.csv'.format(
+            file_name=os.path.splitext(self.db_url)[0], sheet_name=sheet_name)
+        data_xls = pd.read_excel(self.db_url, self.tree['val'], parse_cols=indexes, index_col=False)
+        data_xls.to_csv(csv_file_name, header=indexes, encoding='utf-8', index=None)
 
         table_options = {
             'filename': csv_file_name,
@@ -480,9 +361,8 @@ class CsvForeignTable(BaseForeignTable):
             'delimiter': ','
         }
 
-        self.service.create_foreign_table(
-            self.name, self.server_name, table_options,
-            self.tree['columns'])
+        self.service.create_foreign_table(self.name,
+            self.server_name, table_options, self.tree['columns'])
 
 
 class MongoForeignTable(BaseForeignTable):
