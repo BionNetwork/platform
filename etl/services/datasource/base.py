@@ -40,6 +40,8 @@ class DataSourceService(object):
         # ConnectionChoices.TXT,
     ]
 
+    DIMENSION_TYPES = ["text", "date", "time", "timestamp", ]
+    MEASURE_TYPES = ["integer", "boolean", ]
     EXCLUDE_TYPES = ["binary", ]
 
     def __init__(self, card_id):
@@ -842,11 +844,63 @@ class DataSourceService(object):
             sub_tree['collection_hash'] = (
                 u"{0}_{1}_{2}".format(self.cache.card_id, sub_tree['sid'], key))
 
-    @staticmethod
-    def prepare_relations(sub_trees):
+    def prepare_relations(self, sub_trees):
         """
-        Строит список связей таблиц из Postgres
+        Из Foreign таблиц в последствии строятся вьюхи,
+        Для них строим список связей Foreign таблиц из Postgres,
+        и достаем для каждой вьюхи список колонок,
+        делим колонки на меры и размерности
+
+        Возвращает
+        [{u'columns': [u'"view_1_2_915339346089779332"."id"',
+                           u'"view_1_2_915339346089779332"."name"'],
+             u'dimension_columns': [u'"view_1_2_915339346089779332"."name"'],
+             u'measure_columns': [u'"view_1_2_915339346089779332"."id"'],
+             u'view_name': u'view_1_2_915339346089779332'
+            },
+            {u'columns': [u'"view_1_2_4284056851867979717"."id"',
+                          u'"view_1_2_4284056851867979717"."group_id"',
+                        u'"view_1_2_4284056851867979717"."permission_id"'],
+            u'conditions': [{u'l': u'"view_1_2_915339346089779332"."id"',
+                            u'operation': u'eq',
+                            u'r': u'"view_1_2_4284056851867979717"."group_id"'}],
+            u'dimension_columns': [],
+            u'measure_columns': [u'"view_1_2_4284056851867979717"."id"',
+                                 u'"view_1_2_4284056851867979717"."group_id"',
+                                 u'"view_1_2_4284056851867979717"."permission_id"'],
+            u'type': u'inner',
+            u'view_name': u'view_1_2_4284056851867979717'}]
         """
+
+        def dim_meas_columns(tree, types):
+            """
+            Возвращает список колонок вьюхи либо для мер, либо для размерностей
+            в зависимости от типа
+            """
+            return [
+                VIEW_COL_SEL.format(
+                    VIEW_PREFIX, tree['collection_hash'], column['name'])
+                for column in tree['columns'] if column['type'] in types]
+
+        def extract_columns(tree):
+            """
+            Возвращает список всех колонок вьюхи
+            """
+            return [
+                VIEW_COL_SEL.format(
+                    VIEW_PREFIX, tree['collection_hash'], column['name'])
+                for column in tree['columns']]
+
+        # префикс для названия вьюхи, осздаваемая на foreign table
+        VIEW_PREFIX = "view_"
+        # название вьюхи
+        VIEW_NAME = "view_{0}"
+        # вспомогательный ключ для определения хэша таблицы для ее колонки
+        HASH_STR = "{0}_{1}_{2}"
+        # строка названия вьюхи и ее колонки для селекта
+        VIEW_COL_SEL = '"{0}{1}"."{2}" as "{1}__{2}"'
+        # строка названия вьюхи и ее колонки для джойнов
+        VIEW_COL_JOIN = '"{0}{1}"."{2}"'
 
         tables_hash_map = {}
         relations = []
@@ -857,13 +911,18 @@ class DataSourceService(object):
             hash_ = sub['collection_hash']
 
             for column in sub['columns']:
-                name = u"{0}__{1}__{2}".format(sid, table, column['name'])
+                name = HASH_STR.format(sid, table, column['name'])
                 tables_hash_map[name] = hash_
 
         # голова дерева без связей
         main = sub_trees[0]
+        main_hash = main['collection_hash']
+
         relations.append({
-            "table_hash": main['collection_hash']
+            "view_name": VIEW_NAME.format(main_hash),
+            "dimension_columns": dim_meas_columns(main, self.DIMENSION_TYPES),
+            "measure_columns": dim_meas_columns(main, self.MEASURE_TYPES),
+            "columns": extract_columns(main),
         })
 
         for sub in sub_trees[1:]:
@@ -873,14 +932,17 @@ class DataSourceService(object):
             parent_info = (join["left"] if join['left']['table'] != table
                            else join['right'])
 
-            parent_hash_str = "{0}__{1}__{2}".format(
+            parent_hash_str = HASH_STR.format(
                 parent_info['sid'], parent_info["table"], parent_info["column"])
 
             child_hash = sub['collection_hash']
 
             rel = {
-                "table_hash": child_hash,
+                "view_name": VIEW_NAME.format(child_hash),
                 "type": join["join"]["type"],
+                "dimension_columns": dim_meas_columns(sub, self.DIMENSION_TYPES),
+                "measure_columns": dim_meas_columns(sub, self.MEASURE_TYPES),
+                "columns": extract_columns(sub),
                 "conditions": [],
             }
             # хэш таблицы, с котрой он связан
@@ -895,10 +957,10 @@ class DataSourceService(object):
                     else (join['right'], join["left"]))
 
                 rel["conditions"].append({
-                    "l": '"sttm_{0}"."{1}"'.format(
-                        parent_hash, parent["column"]),
-                    "r": '"sttm_{0}"."{1}"'.format(
-                        child_hash, child["column"]),
+                    "l": VIEW_COL_JOIN.format(
+                        VIEW_PREFIX, parent_hash, parent["column"]),
+                    "r": VIEW_COL_JOIN.format(
+                        VIEW_PREFIX, child_hash, child["column"]),
                     "operation": join["join"]["value"],
                 })
 

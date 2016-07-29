@@ -1,5 +1,7 @@
 # coding: utf-8
 
+from __future__ import unicode_literals
+
 # Разделитель
 FIELD_NAME_SEP = '__'
 
@@ -65,3 +67,7 @@ MONGODB = 'mongodb'
 
 RDBMS_SERVER = 'rdbms_server'
 CSV_SERVER = 'csv_srv'
+
+# Префиксы названий MATERIALIZED VIEW для мер/размерностей
+MEASURES_MV = 'mv_measures_{0}'
+DIMENSIONS_MV = 'mv_dimensions_{0}'

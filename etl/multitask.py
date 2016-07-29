@@ -260,10 +260,14 @@ def mongo_callback(context):
     # если какой нить таск упал, то сюда не дойдет
     # нужны декораторы на обработку ошибок
     local_service = DataSourceService.get_local_instance()
+    cube_key = context["cube_key"]
     local_service.create_materialized_view(
-        'my_view4', context['relations'])
+        DIMENSIONS_MV.format(cube_key),
+        MEASURES_MV.format(cube_key),
+        context['relations']
+    )
 
-    print 'results', context
+    print 'MEASURES AND DIMENSIONS ARE MADE!'
 
 
 class BaseForeignTable(object):
@@ -277,7 +281,7 @@ class BaseForeignTable(object):
             tree(dict): Метаинформация о создаваемой таблице
         """
         self.tree = tree
-        self.name = '{0}_{1}'.format(STTM, self.tree["collection_hash"])
+        self.name = '{0}{1}'.format(STTM, self.tree["collection_hash"])
         self.service = LocalDatabaseService()
 
     @property
@@ -352,8 +356,10 @@ class CsvForeignTable(BaseForeignTable):
         sheet_name = HashEncoder.encode(self.tree['val'])
         csv_file_name = '{file_name}__{sheet_name}.csv'.format(
             file_name=os.path.splitext(self.db_url)[0], sheet_name=sheet_name)
-        data_xls = pd.read_excel(self.db_url, self.tree['val'], parse_cols=indexes, index_col=False)
-        data_xls.to_csv(csv_file_name, header=indexes, encoding='utf-8', index=None)
+        data_xls = pd.read_excel(
+            self.db_url, self.tree['val'], parse_cols=indexes, index_col=False)
+        data_xls.to_csv(
+            csv_file_name, header=indexes, encoding='utf-8', index=None)
 
         table_options = {
             'filename': csv_file_name,

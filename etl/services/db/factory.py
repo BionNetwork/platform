@@ -439,17 +439,18 @@ class LocalDatabaseService(object):
 
         Returns: FIXME: Описать
         """
-        view_name = 'view_name'
-        query = self.datasource.create_foreign_view_query('test_view', sub_tree)
+        query = self.datasource.create_foreign_view_query(sub_tree)
         self.execute(query)
 
-    def create_materialized_view(self, name, relations):
+    def create_materialized_view(self, dimensions_mv, measures_mv, relations):
         """"
         Создание материализованного представления
         """
+        dim_mv_query, meas_mv_query = self.datasource.create_materialized_view_query(
+            dimensions_mv, measures_mv, relations)
 
-        query = self.datasource.create_materialized_view_query(name, relations)
-        self.execute(query)
+        self.execute(dim_mv_query)
+        self.execute(meas_mv_query)
 
     def check_table_exists_query(self, local_instance, table, db):
         """
