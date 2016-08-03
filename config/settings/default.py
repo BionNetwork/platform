@@ -50,7 +50,7 @@ INSTALLED_APPS = (
     'card',
     'rest_framework',
     'rest_framework.authtoken',
-    # 'rest_framework_swagger',
+    'django_jenkins',
 )
 
 MIDDLEWARE_CLASSES = (
@@ -64,6 +64,14 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.security.SecurityMiddleware',
     'core.middleware.http.HttpResponseNotAllowedMiddleware',
     'core.middleware.thread_local.ThreadLocalMiddleware'
+)
+
+
+JENKINS_TASKS = (
+    # 'django_jenkins.tasks.run_pylint',
+    # 'django_jenkins.tasks.run_pep8',
+    'django_jenkins.tasks.run_pyflakes',
+    # 'django_jenkins.tasks.django_tests',
 )
 
 ROOT_URLCONF = 'config.urls'

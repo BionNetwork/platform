@@ -18,6 +18,9 @@ Pillow
 djangorestframework==3.3.2
 pandas==0.18.1
 drf-nested-routers==0.11.1
-SQLAlchemy
+SQLAlchemy==1.0.14
+django-jenkins==0.19.0
+pep8==1.7.0
+pyflakes==1.2.3
 
 #git+ssh://git@gitlab.etton.ru/bi/pymondrian.git@dev
