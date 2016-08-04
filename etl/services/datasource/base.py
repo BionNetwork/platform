@@ -827,7 +827,7 @@ class DataSourceService(object):
             come_columns = sources_info[str(sid)][table]
             for col_ind, col_info in enumerate(table_info['columns']):
                 if col_info['name'] in come_columns:
-                    col_info['zorrorder'] = col_ind
+                    col_info['order'] = col_ind
                     columns.append(col_info)
 
             sub_tree['columns'] = columns

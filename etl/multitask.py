@@ -8,30 +8,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
 
-import json
 import time
-import logging
-import random
-
-from django.conf import settings
-
-from itertools import groupby, izip
-from datetime import datetime
-from djcelery import celery
 from celery import Celery, chord, chain
 from kombu import Queue
 from bisect import bisect_left
 
 from etl.constants import *
-from etl.services.datasource.base import DataSourceService
-from etl.services.queue.base import *
-from etl.services.db.factory import DatabaseService, LocalDatabaseService
-from etl.services.file.factory import FileService
-from etl.helpers import *
-from core.models import (
-    Datasource, Dimension, Measure, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
-    DatasetStateChoices, DatasourcesTrigger, DatasourcesJournal)
 from etl.services.queue.base import *
 from etl.services.middleware.base import EtlEncoder
 
@@ -231,7 +213,7 @@ def create_foreign_table(sub_tree, is_mongodb=True):
     """
     source = Datasource.objects.get(id=int(sub_tree['sid']))
     if source.get_source_type() in ['Excel', 'Csv']:
-        fdw = CsvForeignTable(tree=sub_tree)
+        fdw = XlsForeignTable(tree=sub_tree)
     else:
         fdw = RdbmsForeignTable(tree=sub_tree)
     fdw.create()
@@ -332,14 +314,26 @@ class RdbmsForeignTable(BaseForeignTable):
         self.service.create_foreign_table(self.name,
             self.server_name, table_options, self.tree['columns'])
 
+    def update(self):
+        """
+        При работе с РСУБД реализация обновления не нужна
+        Returns:
+
+        """
+        pass
+
 
 class CsvForeignTable(BaseForeignTable):
+    pass
+
+
+class XlsForeignTable(CsvForeignTable):
     """
     Создание "удаленной таблицы" для файлов типа csv
     """
 
     def __init__(self, tree):
-        super(CsvForeignTable, self).__init__(tree)
+        super(XlsForeignTable, self).__init__(tree)
 
     @property
     def server_name(self):
@@ -351,8 +345,14 @@ class CsvForeignTable(BaseForeignTable):
         source = Datasource.objects.get(id=sid)
         return source.file.path
 
-    def create(self):
-        indexes = [x['zorrorder'] for x in self.tree['columns']]
+    def _xls_convert(self):
+        """
+        Преобразует excel лист в csv
+        Returns:
+            str: Название csv-файла
+
+        """
+        indexes = [x['order'] for x in self.tree['columns']]
         sheet_name = HashEncoder.encode(self.tree['val'])
         csv_file_name = '{file_name}__{sheet_name}.csv'.format(
             file_name=os.path.splitext(self.db_url)[0], sheet_name=sheet_name)
@@ -360,6 +360,16 @@ class CsvForeignTable(BaseForeignTable):
             self.db_url, self.tree['val'], parse_cols=indexes, index_col=False)
         data_xls.to_csv(
             csv_file_name, header=indexes, encoding='utf-8', index=None)
+        return csv_file_name
+
+    def create(self):
+        """
+        Делаем конвертацию xls -> csv. В дальнейшем работаем с csv
+        Returns:
+
+        """
+
+        csv_file_name = self._xls_convert()
 
         table_options = {
             'filename': csv_file_name,
@@ -370,14 +380,14 @@ class CsvForeignTable(BaseForeignTable):
         self.service.create_foreign_table(self.name,
             self.server_name, table_options, self.tree['columns'])
 
+    def update(self):
+        pass
+
 
 class MongoForeignTable(BaseForeignTable):
     """
     Создание "удаленной таблицы" для Mongodb
     """
-
-
-
 
 # write in console: python manage.py celery -A etl.multitask worker
 #                   --loglevel=info --concurrency=10
