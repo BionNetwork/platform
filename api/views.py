@@ -328,15 +328,15 @@ class CardViewSet(viewsets.ViewSet):
         # columns = json.loads(post.get('columns'))
 
         sources_info = {
-            '5':
-                {
-                    "Таблица1": ['name', 'gender', 'age'],
-                    "Таблица2": ['name', 'country2']
-                },
-            '3':
-                {
-                    'shops': ['name']
-                }
+            # '5':
+            #     {
+            #         "Таблица1": ['name', 'gender', 'age'],
+            #         "Таблица2": ['name', 'country2']
+            #     },
+            # '3':
+            #     {
+            #         'shops': ['name']
+            #     }
             # '8':
             #     {
             #         "mrk_reference": ["pubmedid", "creation_date"],
