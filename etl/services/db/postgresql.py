@@ -215,7 +215,8 @@ class Postgresql(Database):
             server_name=server_name, table_name=table_name,
             options=options, cols=','.join(col_names))
 
-    def create_foreign_view_query(self, sub_tree):
+    @staticmethod
+    def create_foreign_view_query(sub_tree):
         """
         Запрос на создание представления
         Args: sub_tree
@@ -320,6 +321,38 @@ class Postgresql(Database):
 
         return dim_mv_query, meas_mv_query
 
+    @staticmethod
+    def create_sttm_select_query(relations):
+        """
+        Формирование запроса для объединения удаленных таблиц
+        Args:
+            relations: Информация о связях таблиц
+
+        Returns:
+
+        """
+        query = """SELECT {columns} FROM {first_table}"""
+
+        select = ','.join(
+            reduce(list.__add__, [x["dimension_columns"] for x in relations], []))
+        select += ','.join(
+            reduce(list.__add__, [x["measure_columns"] for x in relations], []))
+
+        for node in relations[1:]:
+            query += u' INNER JOIN "{view_name}" ON {condition}'.format(
+                view_name=node['view_name'],
+                condition=u'{l}{operation}{r}'.format(
+                    l=node['conditions'][0]['l'],
+                    operation=Operations.values[
+                        node['conditions'][0]['operation']],
+                    r=node['conditions'][0]['r'])
+            )
+
+        main = relations[0]
+
+        return query.format(columns=select, first_table=main["view_name"])
+
+    @staticmethod
     def create_schema_query(self, card_id):
 
         return self.db_map.create_schema_query.format(card_id=card_id)

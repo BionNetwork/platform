@@ -330,7 +330,7 @@ class CardViewSet(viewsets.ViewSet):
         sources_info = {
             '5':
                 {
-                    "Таблица1": ['name', 'gender', 'age'],
+                    "Таблица1": ['name', 'gender'],
                     "Таблица2": ['name', 'country2']
                 },
             '3':

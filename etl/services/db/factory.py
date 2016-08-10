@@ -17,6 +17,7 @@ from etl.services.source import DatasourceApi
 
 
 class DatabaseService(DatasourceApi):
+
     """Сервис для источников данных"""
 
     def execute(self, query, args=None, many=False):
@@ -444,13 +445,30 @@ class LocalDatabaseService(object):
 
     def create_materialized_view(self, dimensions_mv, measures_mv, relations):
         """"
-        Создание материализованного представления
+        Создание материализованного представления для мер и разменостей
         """
         dim_mv_query, meas_mv_query = self.datasource.create_materialized_view_query(
             dimensions_mv, measures_mv, relations)
 
         self.execute(dim_mv_query)
         self.execute(meas_mv_query)
+
+    def create_sttm_select_query(self, file_name, relations):
+        """
+        Создание запроса на получение данных для конечной таблицы
+        Args:
+            file_name(str): Название файла
+            relations:
+
+        Returns:
+            str: Строка запроса
+
+        """
+        select_query = self.datasource.create_sttm_select_query(relations)
+
+        copy_query = """COPY ({select_query}) TO '/tmp/{file_name}.csv' With CSV;""".format(
+            select_query=select_query, file_name=file_name)
+        self.execute(copy_query)
 
     def check_table_exists_query(self, local_instance, table, db):
         """

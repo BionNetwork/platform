@@ -4,6 +4,8 @@ from __future__ import unicode_literals, division
 import os
 import sys
 
+import requests
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
@@ -76,7 +78,9 @@ class LoadMongodbMulti(TaskProcessing):
             create_foreign_table(sub_tree, is_mongodb=False)
             create_view(sub_tree)
 
-        mongo_callback(self.context)
+        # create_csv(self.context)
+        # mongo_callback(self.context)
+        ClickHouseLoad(self.context).run()
 
 
 def create_schema(tree):
@@ -252,6 +256,20 @@ def mongo_callback(context):
     print 'MEASURES AND DIMENSIONS ARE MADE!'
 
 
+def create_csv(context):
+    """
+    Создание csv-файла с итоговыми данными
+    Args:
+        context:
+
+    Returns:
+
+    """
+    file_name = 'my-csv'
+    local_service = DataSourceService.get_local_instance()
+    local_service.create_sttm_select_query(file_name, context['relations'])
+
+
 class BaseForeignTable(object):
     """
     Базовый класс для создания "удаленной таблицы"
@@ -283,9 +301,6 @@ class RdbmsForeignTable(BaseForeignTable):
     """
     Создание "удаленной таблицы" для РСУБД (Postgresql, MySQL, Oracle...)
     """
-    def __init__(self, tree):
-
-        super(RdbmsForeignTable, self).__init__(tree)
 
     @property
     def db_url(self):
@@ -331,9 +346,6 @@ class XlsForeignTable(CsvForeignTable):
     """
     Создание "удаленной таблицы" для файлов типа csv
     """
-
-    def __init__(self, tree):
-        super(XlsForeignTable, self).__init__(tree)
 
     @property
     def server_name(self):
@@ -388,6 +400,74 @@ class MongoForeignTable(BaseForeignTable):
     """
     Создание "удаленной таблицы" для Mongodb
     """
+
+
+class ClickHouseLoad(object):
+    """
+    Загрузка в ClickHouse
+    """
+
+    field_map = {
+        'text': 'String',
+        'integer': 'Int16',
+        'datetime': 'DateTime',
+        'date': 'Date',
+    }
+
+    def __init__(self, context, db_url='http://localhost:8123/'):
+        self.context = context
+        self.db_url = db_url
+        self.table_name = self.context["cube_key"]
+
+    def create_csv(self):
+        file_name = self.table_name
+        local_service = DataSourceService.get_local_instance()
+        local_service.create_sttm_select_query(file_name, self.context['relations'])
+        return self
+
+    def create_table(self):
+        """
+        Запрос на создание таблицы
+
+        """
+        col_types = []
+        columns = []
+        for tree in self.context['sub_trees']:
+            for col in tree['columns']:
+                col['name'] += tree['collection_hash']
+                columns.append(col)
+        for field in columns:
+            col_types.append(u'{0} {1}'.format(
+                field['name'], self.field_map[field['type']]))
+
+        query = """CREATE TABLE t_{table_name} ({columns}) engine = Log""".format(
+            table_name=self.table_name, columns=','.join(col_types))
+        self._send(query)
+
+    def load_csv(self):
+        """
+        Загрузка данных из csv в Clickhouse
+
+        """
+        os.system(
+            "cat /tmp/{file_name}.csv | curl 'http://localhost:8123/?query=INSERT%20INTO%20t_{table_name}%20FORMAT%20CSV'".format(
+                file_name=self.table_name, table_name=self.table_name
+            ))
+
+    def _send(self, data, settings=None, stream=False):
+        r = requests.post(self.db_url, data=data, stream=stream)
+        if r.status_code != 200:
+            raise Exception(r.text)
+        return r
+
+    def run(self):
+        self.create_csv()
+        self.create_table()
+        self.load_csv()
+        a = 4
+
+
+
 
 # write in console: python manage.py celery -A etl.multitask worker
 #                   --loglevel=info --concurrency=10
