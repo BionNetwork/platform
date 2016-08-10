@@ -4,13 +4,15 @@ from __future__ import unicode_literals, division
 import os
 import sys
 
-import requests
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
 
 import time
+import json
+import requests
+# from requests import exceptions
+import socket
 from celery import Celery, chord, chain
 from kombu import Queue
 from bisect import bisect_left
@@ -29,6 +31,51 @@ ASC = 1
 # FIXME chord на amqp бомбашится, паэтаму redis
 app = Celery('multi', backend='redis://localhost:6379/0',
              broker='redis://localhost:6379/0')
+
+
+class Pusher(object):
+    """
+    Уведомитель PHP сервера о ходе загрузки
+    """
+    def __init__(self, card_id):
+        """
+        card_id - идентификатор канала
+        php_url - канал
+        """
+        self.card_id = card_id
+        self.php_url = "{0}:{1}".format(settings.PHP_HOST, settings.PHP_PORT)
+
+    def push(self, msg):
+        # FIXME temporary structure of data
+        data = {
+            'card_id': self.card_id,
+            'msg': msg,
+        }
+        try:
+            resp = requests.post(self.php_url, json.dumps(data))
+        except requests.exceptions.ConnectionError as e:
+            print "Problem with notification push: {0}".format(e.message)
+
+    def push_foreign_table(self, table):
+        """
+        Уведомление о создании foreign table
+        """
+        msg = "{0}: Загружено во временную таблицу!".format(table)
+        self.push(msg)
+
+    def push_view(self, table):
+        """
+        Уведомление о создании view
+        """
+        msg = "{0}: Создано view!".format(table)
+        self.push(msg)
+
+    def push_dim_meas(self):
+        """
+        Уведомление о создании мер и размерностей
+        """
+        msg = "Созданы меры и размерности!"
+        self.push(msg)
 
 
 @app.task(name=CREATE_DATASET_MULTI)
@@ -55,7 +102,9 @@ class LoadMongodbMulti(TaskProcessing):
     """
     def processing(self):
 
-        sub_trees = self.context['sub_trees']
+        context = self.context
+        pusher = Pusher(context['card_id'])
+        sub_trees = context['sub_trees']
 
         # FIXME проверить работу таблицы дат
         # создание таблицы дат
@@ -76,11 +125,14 @@ class LoadMongodbMulti(TaskProcessing):
 
         for sub_tree in sub_trees:
             create_foreign_table(sub_tree, is_mongodb=False)
+            pusher.push_foreign_table(sub_tree['val'])
             create_view(sub_tree)
+            pusher.push_view(sub_tree['val'])
 
         # create_csv(self.context)
         # mongo_callback(self.context)
         ClickHouseLoad(self.context).run()
+        pusher.push_dim_meas()
 
 
 def create_schema(tree):

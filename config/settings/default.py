@@ -282,6 +282,12 @@ REDIS_LOCK_TIMEOUT = 500
 AVATAR_SIZES = (160, 160)
 SMALL_AVATAR_SIZES = (40, 40)
 
+
+# PHP server
+PHP_HOST = None  # "http://localhost"
+PHP_PORT = None  # 8070
+
+
 try:
     from .local import *
 except ImportError:
