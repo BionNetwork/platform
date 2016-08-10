@@ -335,7 +335,7 @@ class Postgresql(Database):
 
         select = ','.join(
             reduce(list.__add__, (
-                [x["dimension_columns"] for x in relations]+
+                [x["dimension_columns"] for x in relations] +
                 [x["measure_columns"] for x in relations]), []))
 
         for node in relations[1:]:
