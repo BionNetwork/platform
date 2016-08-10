@@ -334,9 +334,9 @@ class Postgresql(Database):
         query = """SELECT {columns} FROM {first_table}"""
 
         select = ','.join(
-            reduce(list.__add__, [x["dimension_columns"] for x in relations], []))
-        select += ','.join(
-            reduce(list.__add__, [x["measure_columns"] for x in relations], []))
+            reduce(list.__add__, (
+                [x["dimension_columns"] for x in relations]+
+                [x["measure_columns"] for x in relations]), []))
 
         for node in relations[1:]:
             query += u' INNER JOIN "{view_name}" ON {condition}'.format(
