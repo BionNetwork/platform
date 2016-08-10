@@ -66,8 +66,6 @@ class TableDataSerializer(serializers.Serializer):
     table = serializers.CharField(max_length=200)
 
 
-
-
 class SchemasListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cube

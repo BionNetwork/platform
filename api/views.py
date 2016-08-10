@@ -281,6 +281,16 @@ class CardViewSet(viewsets.ViewSet):
 
     serializer_class = TreeSerializer
 
+    @detail_route(methods=['post'])
+    def clear_cache(self, request, pk):
+        """
+        Очистка инфы карточки из редиса
+        """
+        worker = DataSourceService(card_id=pk)
+        worker.cache.clear_card_cache()
+
+        return Response()
+
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
     def create_tree(self, request, pk):
 
@@ -328,15 +338,15 @@ class CardViewSet(viewsets.ViewSet):
         # columns = json.loads(post.get('columns'))
 
         sources_info = {
-            '5':
-                {
-                    "Таблица1": ['name', 'gender'],
-                    "Таблица2": ['name', 'country2']
-                },
-            '3':
-                {
-                    'shops': ['name']
-                }
+            # '5':
+            #     {
+            #         "Таблица1": ['name', 'gender', 'age'],
+            #         "Таблица2": ['name', 'country2']
+            #     },
+            # '3':
+            #     {
+            #         'shops': ['name']
+            #     }
             # '8':
             #     {
             #         "mrk_reference": ["pubmedid", "creation_date"],
