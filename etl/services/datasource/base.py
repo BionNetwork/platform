@@ -82,48 +82,6 @@ class DataSourceService(object):
         """
         RedisSourceService.delete_datasource(source)
 
-    def tree_full_clean(self):
-        """
-        Redis
-        Удаляет информацию о таблицах, джоинах, дереве
-
-        Args:
-            card_id(int): id карточки
-        """
-        self.cache.tree_full_clean()
-
-    @classmethod
-    def get_source_tables(cls, source):
-        """
-        Возвращает информацию об источнике + таблицы истоника
-
-        :type source: Datasource
-
-        Args:
-            source(core.models.Datasource): Источник данных
-
-        Returns:
-            dict: {
-                db: <str>,
-                host: <str>,
-                source_id:
-                user_id:
-                .........
-                tables: [{'name': <table_name_1>, 'name': <table_name_2>}]
-            }
-
-        """
-        service = cls.get_source_service(source)
-        tables = service.get_tables()
-        # кладем список таблиц в редис
-        RedisSourceService.set_tables(source.id, tables)
-
-        # информация о источнике для фронта
-        source_info = source.get_source_info()
-        source_info["tables"] = tables
-
-        return source_info
-
     @staticmethod
     def check_connection(post):
         """
@@ -406,37 +364,6 @@ class DataSourceService(object):
         # кладем информацию в Redis
         return cache.fill_cache(source_id, table, info)
 
-    # FIXME Если оставлять, то надо переделать
-    @classmethod
-    def remove_tables_from_tree(cls, card_id, tables):
-        """
-        Redis
-        удаление таблиц из дерева
-
-        Args:
-            source(core.models.Datasource): Источник
-            tables(): Описать
-        """
-        # получаем дерево
-        sel_tree = cls.get_tree()
-
-        r_val = sel_tree.root.val
-        source_id = sel_tree.root.source_id
-
-        if (r_val, source_id) in tables:
-            CardCacheService(card_id).tree_full_clean()
-            sel_tree.root = None
-        else:
-            sel_tree.delete_nodes_NEW(tables)
-
-        if sel_tree.root:
-            RedisSS.delete_tables_NEW(card_id, tables)
-
-            ordered_nodes = sel_tree.ordered_nodes
-            structure = sel_tree.structure
-            RedisSS.save_tree_builder(structure, ordered_nodes,
-                                      card_id, update_joins=False)
-
     def get_columns_and_joins(self, parent_id, child_id):
         """
         """
@@ -525,24 +452,6 @@ class DataSourceService(object):
 
         return {}
 
-    # FIXME remove
-    @staticmethod
-    def get_collections_names(source, tables):
-        """
-        Redis
-        Получение списка имен коллекций
-
-        Args:
-            source(core.models.Datasource): Источник
-            tables(list): Список названий таблиц
-
-        Return:
-            (list): Описать
-        """
-        # FIXME: Описать
-        return [RedisSourceService.get_collection_name(source, table)
-                for table in tables]
-
     def get_columns_types(self, parent, child):
         """
         Redis
@@ -568,42 +477,6 @@ class DataSourceService(object):
 
         return cols_types
 
-    # FIXME old realization of method, redo
-    @classmethod
-    def retitle_table_column(cls, source, table, column, title):
-        """
-        Redis
-        Переименовываем заголовка(title) колонки для схемы куба
-
-        Args:
-            source(core.models.Datasource): Источник
-            table(): Описать
-            column(): Описать
-            title(): Описать
-
-        Returns:
-            Описать
-        """
-        table_info = json.loads(
-                RedisSourceService.get_table_full_info(source, table))
-
-        for col in table_info['columns']:
-            if col['name'] == column:
-                col['title'] = title
-                break
-
-        collection_name = RedisSourceService.get_collection_name(source, table)
-
-        r_server.set(collection_name, json.dumps(table_info))
-
-    # FIXME Удалить
-    @classmethod
-    def check_table_exists_query(cls, local_instance, table_name, db):
-        # FIXME: Описать
-        service = LocalDatabaseService()
-        return service.check_table_exists_query(
-            local_instance, table_name, db)
-
     @classmethod
     def get_source_connection(cls, source):
         """
@@ -624,112 +497,7 @@ class DataSourceService(object):
         """
         return LocalDatabaseService()
 
-    # FIXME old method
-    @staticmethod
-    def update_collections_stats(collections_names, last_key):
-        """
-        Redis
-        Описать
-        """
-        # FIXME: Перенести в RedisSourceService
-
-        pipe = r_server.pipeline()
-
-        for collection in collections_names:
-            info_str = r_server.get(collection)
-            if info_str:
-                table_info = json.loads(info_str)
-                if table_info['stats']:
-                    table_info['stats'].update({
-                        'last_row': {
-                            'cdc_key': last_key,
-                        }
-                    })
-
-                    pipe.set(collection, json.dumps(table_info))
-            pipe.execute()
-
-    # FIXME old method
-    @staticmethod
-    def update_datasource_meta(key, source, cols,
-                               tables_info_for_meta, last_row, dataset_id):
-        """
-        Создание DatasourceMeta для Datasource
-
-        Args:
-            dataset_id(int): data set identifier
-            key(str): Ключ
-            source(Datasource): Источник данных
-            cols(list): Список колонок
-            last_row(str or None): Последняя запись
-            tables_info_for_meta: Данные о таблицах
-
-        Returns:
-            DatasourceMeta: Объект мета-данных
-
-        """
-        res = dict()
-        for table, col_group in groupby(cols, lambda x: x['table']):
-            with transaction.atomic():
-                try:
-                    source_meta = DatasourceMeta.objects.get(
-                        datasource_id=source.id,
-                        collection_name=table,
-                    )
-                except DatasourceMeta.DoesNotExist:
-                    source_meta = DatasourceMeta(
-                        datasource_id=source.id,
-                        collection_name=table,
-                    )
-                stats = {
-                    'tables_stat': {},
-                    'row_key': [],
-                    'row_key_value': []
-                }
-                fields = {'columns': [], }
-
-                table_info = tables_info_for_meta[table]
-                stats['date_intervals'] = table_info['date_intervals']
-
-                stats['tables_stat'] = table_info['stats']
-                t_cols = table_info['columns']
-
-                for sel_col in col_group:
-                    for col in t_cols:
-                        # cols info
-                        if sel_col['col'] == col['name']:
-                            fields['columns'].append(col)
-
-                            # primary keys
-                            if hasattr(col, 'is_primary') and col['is_primary']:
-                                stats['row_key'].append(col['name'])
-
-                if last_row and stats['row_key']:
-                    # корневая таблица
-                    mapped = filter(
-                        lambda x: x[0]['table'] == table, zip(cols, last_row))
-
-                    for (k, v) in mapped:
-                        if k['col'] in stats['row_key']:
-                            stats['row_key_value'].append({k['col']: v})
-
-                source_meta.fields = json.dumps(fields)
-                source_meta.stats = json.dumps(stats)
-                source_meta.save()
-                DatasourceMetaKeys.objects.get_or_create(
-                    meta=source_meta,
-                    value=key,
-                )
-                # связываем Dataset и мета информацию
-                DatasetToMeta.objects.get_or_create(
-                    meta_id=source_meta.id,
-                    dataset_id=dataset_id,
-                )
-                res.update({
-                    table: source_meta.id
-                })
-        return res
-
+    # FIXME not used
     @staticmethod
     def split_file_sub_tree(sub_tree):
         """
@@ -751,8 +519,7 @@ class DataSourceService(object):
 
         return items
 
-    # TODO надо сплитить по всему, не только по файлам, redo
-    # TODO maybe transfer to TTRepo
+    # FIXME not used
     def split_nodes_by_source_types(self, sub_trees):
         """
         Если связки типа файл, то делим дальше, до примитива,
@@ -1086,7 +853,7 @@ class DataSourceService(object):
                 if table_id is None:
                     uncached_tables.append((sid, table))
                 else:
-                    table_info_key = cache.cache_keys.get_active_table(
+                    table_info_key = cache.cache_keys.table_key(
                         cache.card_id, sid, table_id
                     )
                     # нет информации о таблице

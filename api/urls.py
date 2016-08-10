@@ -12,10 +12,13 @@ router.register(r'datasources', views.DatasourceViewSet, 'Datasource')
 # router.register(r'datasource/(?P<source_id>\d+)/tables', views.TablesViewSet, 'tables')
 
 router.register(r'cards', views.CardViewSet, 'cards')
+# nodes
 card_router = routers.NestedSimpleRouter(router, r'cards', lookup='card')
 card_router.register(r'nodes', views.NodeViewSet, base_name='card-nodes')
+# joins
 node_router = routers.NestedSimpleRouter(card_router, r'nodes', lookup='node')
 node_router.register(r'joins', views.JoinViewSet, base_name='node-joins')
+
 
 urlpatterns = [
     # url(r'^schema/import$', views.ImportSchemaView.as_view(), name='import_schema'),
