@@ -2,27 +2,25 @@
 from __future__ import unicode_literals
 
 import binascii
+import requests
 from contextlib import closing
 import pymongo
 from pymongo import IndexModel
 import logging
 from psycopg2 import Binary
-
-from etl.constants import TYPES_MAP
-from etl.services.datasource.base import DataSourceService
-from etl.services.db.factory import LocalDatabaseService
-from etl.services.db.interfaces import BaseEnum
-from etl.services.datasource.repository.storage import RedisSourceService
-from core.models import (QueueList, Queue, QueueStatus, Datasource,
-                         DatasourceSettings)
-from etl.services.middleware.base import get_table_name
-from core.exceptions import TaskError
 import json
 import datetime
 from itertools import izip
 from bson import binary
 
-from etl.services.middleware.base import datetime_now_str, HashEncoder
+from etl.constants import TYPES_MAP
+from etl.services.db.interfaces import BaseEnum
+from etl.services.datasource.repository.storage import RedisSourceService
+from core.models import (QueueList, Queue, QueueStatus)
+from core.exceptions import TaskError
+
+from etl.services.middleware.base import (
+    datetime_now_str, HashEncoder, get_table_name)
 from . import client, settings
 
 # __all__ = [
@@ -183,6 +181,51 @@ class TaskProcessing(object):
         RedisSourceService.delete_queue(self.task_id)
         # удаляем канал из списка каналов юзера
         RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
+
+
+class Pusher(object):
+    """
+    Уведомитель PHP сервера о ходе загрузки
+    """
+    def __init__(self, card_id):
+        """
+        card_id - идентификатор канала
+        php_url - канал
+        """
+        self.card_id = card_id
+        self.php_url = "{0}:{1}".format(settings.PHP_HOST, settings.PHP_PORT)
+
+    def push(self, msg):
+        # FIXME temporary structure of data
+        data = {
+            'card_id': self.card_id,
+            'msg': msg,
+        }
+        try:
+            resp = requests.post(self.php_url, json.dumps(data))
+        except requests.exceptions.ConnectionError as e:
+            print "Problem with notification push: {0}".format(e.message)
+
+    def push_foreign_table(self, table):
+        """
+        Уведомление о создании foreign table
+        """
+        msg = "{0}: Загружено во временную таблицу!".format(table)
+        self.push(msg)
+
+    def push_view(self, table):
+        """
+        Уведомление о создании view
+        """
+        msg = "{0}: Создано view!".format(table)
+        self.push(msg)
+
+    def push_dim_meas(self):
+        """
+        Уведомление о создании мер и размерностей
+        """
+        msg = "Созданы меры и размерности!"
+        self.push(msg)
 
 
 class QueueStorage(object):
