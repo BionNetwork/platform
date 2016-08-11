@@ -334,9 +334,7 @@ class Postgresql(Database):
         query = """SELECT {columns} FROM {first_table}"""
 
         select = ','.join(
-            reduce(list.__add__, (
-                [x["dimension_columns"] for x in relations] +
-                [x["measure_columns"] for x in relations]), []))
+            reduce(list.__add__, ([x["columns"] for x in relations]), []))
 
         for node in relations[1:]:
             query += u' INNER JOIN "{view_name}" ON {condition}'.format(
@@ -356,7 +354,3 @@ class Postgresql(Database):
     def create_schema_query(self, card_id):
 
         return self.db_map.create_schema_query.format(card_id=card_id)
-
-
-
-

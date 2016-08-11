@@ -83,7 +83,6 @@ class LoadMongodbMulti(TaskProcessing):
             create_view(sub_tree)
             pusher.push_view(sub_tree['val'])
 
-        # create_csv(self.context)
         # mongo_callback(self.context)
         ClickHouseLoad(self.context).run()
         pusher.push_dim_meas()
@@ -262,20 +261,6 @@ def mongo_callback(context):
     print 'MEASURES AND DIMENSIONS ARE MADE!'
 
 
-def create_csv(context):
-    """
-    Создание csv-файла с итоговыми данными
-    Args:
-        context:
-
-    Returns:
-
-    """
-    file_name = 'my-csv'
-    local_service = DataSourceService.get_local_instance()
-    local_service.create_sttm_select_query(file_name, context['relations'])
-
-
 class BaseForeignTable(object):
     """
     Базовый класс для создания "удаленной таблицы"
@@ -446,33 +431,38 @@ class ClickHouseLoad(object):
             col_types.append(u'{0} {1}'.format(
                 field['name'], self.field_map[field['type']]))
 
-        query = """CREATE TABLE t_{table_name} ({columns}) engine = Log""".format(
+        drop_query = """DROP TABLE IF EXISTS t_{table_name}""".format(
+            table_name=self.table_name)
+
+        create_query = """CREATE TABLE t_{table_name} ({columns}) engine = Log
+            """.format(
             table_name=self.table_name, columns=','.join(col_types))
-        self._send(query)
+
+        self._send([drop_query, create_query])
 
     def load_csv(self):
         """
         Загрузка данных из csv в Clickhouse
-
         """
         os.system(
-            "cat /tmp/{file_name}.csv | curl 'http://localhost:8123/?query=INSERT%20INTO%20t_{table_name}%20FORMAT%20CSV'".format(
-                file_name=self.table_name, table_name=self.table_name
-            ))
+            """
+            cat /tmp/{file}.csv |
+            clickhouse-client --query="INSERT INTO t_{table} FORMAT CSV"
+            """.format(
+                file=self.table_name, table=self.table_name))
 
     def _send(self, data, settings=None, stream=False):
-        r = requests.post(self.db_url, data=data, stream=stream)
-        if r.status_code != 200:
-            raise Exception(r.text)
-        return r
+        """
+        """
+        for query in data:
+            r = requests.post(self.db_url, data=query, stream=stream)
+            if r.status_code != 200:
+                raise Exception(r.text)
 
     def run(self):
         self.create_csv()
         self.create_table()
         self.load_csv()
-        a = 4
-
-
 
 
 # write in console: python manage.py celery -A etl.multitask worker
