@@ -453,10 +453,11 @@ class LocalDatabaseService(object):
         self.execute(dim_mv_query)
         self.execute(meas_mv_query)
 
-    def create_sttm_select_query(self, file_name, relations):
+    def create_sttm_select_query(self, file_path, file_name, relations):
         """
         Создание запроса на получение данных для конечной таблицы
         Args:
+            file_path(str): Путь к директории
             file_name(str): Название файла
             relations:
 
@@ -466,8 +467,8 @@ class LocalDatabaseService(object):
         """
         select_query = self.datasource.create_sttm_select_query(relations)
 
-        copy_query = """COPY ({select_query}) TO '/tmp/{file_name}.csv' With CSV;""".format(
-            select_query=select_query, file_name=file_name)
+        copy_query = """COPY ({select_query}) TO '{file_path}{file_name}.csv' With CSV;""".format(
+            select_query=select_query, file_path=file_path, file_name=file_name)
         self.execute(copy_query)
 
     def check_table_exists_query(self, local_instance, table, db):

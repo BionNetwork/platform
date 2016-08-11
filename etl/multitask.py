@@ -405,21 +405,23 @@ class ClickHouseLoad(object):
         'date': 'Date',
     }
 
-    def __init__(self, context, db_url='http://localhost:8123/'):
+    def __init__(self, context, file_path='/tmp/', db_url='http://localhost:8123/'):
         self.context = context
         self.db_url = db_url
+        self.file_path = file_path
         self.table_name = self.context["cube_key"]
 
     def create_csv(self):
+        """
+        Создание csv-файла из запроса в Postgres
+        """
         file_name = self.table_name
         local_service = DataSourceService.get_local_instance()
-        local_service.create_sttm_select_query(file_name, self.context['relations'])
-        return self
+        local_service.create_sttm_select_query(self.file_path, file_name, self.context['relations'])
 
     def create_table(self):
         """
-        Запрос на создание таблицы
-
+        Запрос на создание таблицы в Сlickhouse
         """
         col_types = []
         columns = []

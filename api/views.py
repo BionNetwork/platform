@@ -327,6 +327,21 @@ class CardViewSet(viewsets.ViewSet):
 
         return Response(info)
 
+    @detail_route(['post'])
+    def exchange_file(self, request, pk):
+        pass
+
+    @detail_route(['post'] )
+    def update_data(self, request, pk):
+        """
+        Обновление данных
+        Args:
+            request:
+            pk: id карточки
+
+        """
+        return Response()
+
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
         """
