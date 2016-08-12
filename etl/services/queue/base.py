@@ -206,25 +206,25 @@ class Pusher(object):
         except requests.exceptions.ConnectionError as e:
             print "Problem with notification push: {0}".format(e.message)
 
-    def push_foreign_table(self, table):
+    def foreign_table_created(self, table):
         """
         Уведомление о создании foreign table
         """
         msg = "{0}: Загружено во временную таблицу!".format(table)
         self.push(msg)
 
-    def push_view(self, table):
+    def view_created(self, table):
         """
         Уведомление о создании view
         """
         msg = "{0}: Создано view!".format(table)
         self.push(msg)
 
-    def push_dim_meas(self):
+    def warehouse_create(self):
         """
         Уведомление о создании мер и размерностей
         """
-        msg = "Созданы меры и размерности!"
+        msg = "Данные загружены в хранилище!"
         self.push(msg)
 
 

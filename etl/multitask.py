@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 ASC = 1
 
 
-# FIXME chord на amqp бомбашится, паэтаму redis
+# FIXME chord на amqp не работает, поэтому redis
 app = Celery('multi', backend='redis://localhost:6379/0',
              broker='redis://localhost:6379/0')
 
@@ -57,14 +57,10 @@ class LoadMongodbMulti(TaskProcessing):
     def processing(self):
 
         context = self.context
+        card_id = context['card_id']
         pusher = Pusher(context['card_id'])
         sub_trees = context['sub_trees']
 
-        # FIXME проверить работу таблицы дат
-        # создание таблицы дат
-        local_db_service = DataSourceService.get_local_instance()
-        local_db_service.create_date_tables(
-            "time_table_name", sub_trees, False)
 
         # параллель из последований, в конце колбэк
         # chord(
@@ -79,191 +75,259 @@ class LoadMongodbMulti(TaskProcessing):
 
         for sub_tree in sub_trees:
             create_foreign_table(sub_tree, is_mongodb=False)
-            pusher.push_foreign_table(sub_tree['val'])
+            pusher.foreign_table_created(sub_tree['val'])
             create_view(sub_tree)
-            pusher.push_view(sub_tree['val'])
+            pusher.view_created(sub_tree['val'])
 
         # mongo_callback(self.context)
-        ClickHouseLoad(self.context).run()
-        pusher.push_dim_meas()
+        ClickHouse(self.context).run()
+        pusher.warehouse_create()
 
 
-def create_schema(tree):
-    """
-    Создание схемы
-    Args:
-        tree:
-
-    Returns:
-
-    """
-
-    service = LocalDatabaseService()
-    service.create_schema('schema_17')
-
-
-@app.task(name=MONGODB_DATA_LOAD_MONO)
-def load_to_mongo(sub_tree):
-    """
-    """
-    t1 = time.time()
-
-    limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
-
-    page = 1
-    sid = sub_tree['sid']
-
-    source = Datasource.objects.get(id=sid)
-    source_service = DataSourceService.get_source_service(source)
-
-    col_names = ['_id', '_state', ]
-    col_names += sub_tree["joined_columns"]
-
-    key = sub_tree["collection_hash"]
-
-    _ID, _STATE = '_id', '_state'
-
-    # создаем коллекцию и индексы в Mongodb
-    collection = MongodbConnection(
-        '{0}_{1}'.format(STTM, key),
-        indexes=[(_ID, ASC), (_STATE, ASC), ]
-        ).collection
-
-    loaded_count = 0
-
-    columns = sub_tree['columns']
-
-    while True:
-        rows = source_service.get_source_rows(
-            sub_tree, cols=columns, limit=limit, offset=(page-1)*limit)
-
-        if not rows:
-            break
-
-        keys = []
-        key_records = {}
-
-        for ind, record in enumerate(rows, start=1):
-            row_key = simple_key_for_row(record, (page - 1) * limit + ind)
-            keys.append(row_key)
-
-            record_normalized = (
-                [row_key, TRSE.NEW, ] +
-                [EtlEncoder.encode(rec_field) for rec_field in record])
-
-            key_records[row_key] = dict(izip(col_names, record_normalized))
-
-        exist_docs = collection.find({_ID: {'$in': keys}}, {_ID: 1})
-        exist_ids = map(lambda x: x[_ID], exist_docs)
-        exists_len = len(exist_ids)
-
-        # при докачке, есть совпадения
-        if exist_ids:
-            # fixme либо сеты, либо бинари сёрч
-            # на 5000 элементах вроде скорость одинакова
-            # если что потом проверить и заменить
-            # not_exist = set(keys) - set(exist_ids)
-            # data_to_insert = [key_records[id_] for id_ in not_exist]
-
-            data_to_insert = []
-            exist_ids.sort()
-
-            for id_ in keys:
-                ind = bisect_left(exist_ids, id_)
-                if ind == exists_len or not exist_ids[ind] == id_:
-                    data_to_insert.append(key_records[id_])
-
-            # смена статусов предыдущих на NEW
-            collection.update_many(
-                {_ID: {'$in': exist_ids}}, {'$set': {_STATE: TRSE.NEW}, }
-            )
-
-        # вся пачка новых
-        else:
-            data_to_insert = [key_records[id_] for id_ in keys]
-
-        if data_to_insert:
-            try:
-                collection.insert_many(data_to_insert, ordered=False)
-                loaded_count += ind
-                print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-                    ind, loaded_count, 'rows_count')
-            except Exception as e:
-                print 'Exception', loaded_count, loaded_count + ind, e.message
-
-        page += 1
-
-        # FIXME у файлов прогон 1 раз
-        # Fixme not true
-        # Fixme подумать над пагинацией
-        if sub_tree['type'] == 'file':
-            break
-
-    t2 = time.time()
-    print 'xrange', t2 - t1
-
-    # удаление всех со статусом PREV
-    collection.delete_many({_STATE: TRSE.PREV},)
-
-    # проставление всем статуса PREV
-    collection.update_many({}, {'$set': {_STATE: TRSE.PREV}, })
-
-    t3 = time.time()
-    print 'xrange2', t3 - t2
-    print 'xrange3', t3 - t1
-
-    return sub_tree
+@app.tasks(name=CREATE_DATE_TABLE)
+def create_date_tables(card_id, sub_trees):
+    #FIXME: реализовать через EtlBase
+        local_db_service = DataSourceService.get_local_instance()
+        local_db_service.create_date_tables(
+            "time_table_name", sub_trees, False)
 
 
 @app.task(name=PSQL_FOREIGN_TABLE)
-def create_foreign_table(sub_tree, is_mongodb=True):
+def create_foreign_table(card_id, sub_tree, is_mongodb=True):
     """
-    Создание Удаленной таблицы
+    Создание Обертку над внешней таблицей
+    Args:
+        card_id(int): id карточки
+        sub_tree(dict): Описать
     """
-    source = Datasource.objects.get(id=int(sub_tree['sid']))
-    if source.get_source_type() in ['Excel', 'Csv']:
-        fdw = XlsForeignTable(tree=sub_tree)
-    else:
-        fdw = RdbmsForeignTable(tree=sub_tree)
-    fdw.create()
+    CreateForeignTable(task_id=2, card_id=card_id, context=sub_tree)
 
 
 @app.task(name=PSQL_VIEW)
-def create_view(sub_tree):
+def create_view(card_id, sub_tree):
     """
-    Создание View для Foreign Table со ссылкой на Дату
+    Создание View для Foreign Table для внешнего источника
     Args:
-        sub_tree(): Описать
-
-    Returns:
+        card_id(int): id карточки
+        sub_tree(dict): Данные о таблице источника
     """
-    local_service = DataSourceService.get_local_instance()
-
-    local_service.create_foreign_view(sub_tree)
+    CreateView(task_id=4, card_id=card_id, context=sub_tree).run()
 
 
-@app.task(name=MONGODB_DATA_LOAD_CALLBACK)
-def mongo_callback(context):
+@app.task(name=WAREHOUSE_LOAD)
+def warehouse_load(card_id, context):
     """
-    Работа после создания
+    Загрузка данных в Хранилище данных
+    Args:
+        card_id(int): id карточки
+        context(dict): Данные о загружаемых таблицах всех источников
     """
-    # fixme needs to check status of all subtasks
-    # если какой нить таск упал, то сюда не дойдет
-    # нужны декораторы на обработку ошибок
-    local_service = DataSourceService.get_local_instance()
-    cube_key = context["cube_key"]
-    local_service.create_materialized_view(
-        DIMENSIONS_MV.format(cube_key),
-        MEASURES_MV.format(cube_key),
-        context['relations']
-    )
-
-    print 'MEASURES AND DIMENSIONS ARE MADE!'
+    LoadWarehouse(task_id=3, card_id=card_id, context=context).run()
 
 
+# ------ Tasks ------------
+
+class EtlBaseTask(object):
+    """
+    Основной класс задач ETL-процесса
+    """
+
+    def __init__(self, task_id, card_id, context, pusher=None):
+        """
+        Args:
+            task_id(int): id Задачи
+            context(dict): контекст задачи
+            pusher(Pusher): Отправитель сообщений на клиент
+        """
+        self.task_id = task_id
+        self.context = context
+        self.pusher = pusher or Pusher(card_id)
+
+    def pre(self):
+        """
+        Подготовка данных в рамках задачи
+        """
+        pass
+
+    def post(self):
+        """
+        Постобработка
+        """
+        pass
+
+    def run(self):
+        try:
+            self.pre()
+            self.process()
+            self.post()
+        except:
+            raise Exception
+
+    def process(self):
+        """
+        Основное тело задачи
+        """
+        raise NotImplementedError
+
+
+class CreateForeignTable(EtlBaseTask):
+    """
+    Создание обертки над подключенными внешними таблицами
+    """
+    def process(self):
+        source = Datasource.objects.get(id=int(self.context['sid']))
+        if source.get_source_type() in ['Excel', 'Csv']:
+            fdw = XlsForeignTable(tree=self.context)
+        else:
+            fdw = RdbmsForeignTable(tree=self.context)
+        fdw.create()
+
+    def post(self):
+        self.pusher.push_view(self.context['val'])
+
+
+class CreateView(EtlBaseTask):
+    """
+    Создание представления над foreign table
+    """
+
+    def process(self):
+        local_service = DataSourceService.get_local_instance()
+        local_service.create_foreign_view(self.context)
+
+    def post(self):
+        self.pusher.push_view(self.context['val'])
+
+
+class LoadWarehouse(EtlBaseTask):
+    """
+    Загрузка данных в конечное хранилище
+    """
+
+    def process(self):
+        """
+        Загрузка в Clickhouse. Возможно следует реальзовать и вариант с созданием
+        материализованных представлений для мер и размерностей в Postgres
+        """
+        ClickHouse(context=self.context).run()
+
+    def post(self):
+        self.pusher.warehouse_create()
+
+
+class LoadMongoDB(EtlBaseTask):
+    """
+    Загрузка в MongoDB
+    """
+
+    def process(self):
+
+        limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
+
+        page = 1
+        sid = self.context['sid']
+
+        source = Datasource.objects.get(id=sid)
+        source_service = DataSourceService.get_source_service(source)
+
+        col_names = ['_id', '_state', ]
+        col_names += self.context["joined_columns"]
+
+        key = self.context["collection_hash"]
+
+        _ID, _STATE = '_id', '_state'
+
+        # создаем коллекцию и индексы в Mongodb
+        collection = MongodbConnection(
+            '{0}_{1}'.format(STTM, key),
+            indexes=[(_ID, ASC), (_STATE, ASC), ]
+            ).collection
+
+        loaded_count = 0
+
+        columns = self.context['columns']
+
+        while True:
+            rows = source_service.get_source_rows(
+                self.context, cols=columns, limit=limit, offset=(page-1)*limit)
+
+            if not rows:
+                break
+
+            keys = []
+            key_records = {}
+
+            for ind, record in enumerate(rows, start=1):
+                row_key = simple_key_for_row(record, (page - 1) * limit + ind)
+                keys.append(row_key)
+
+                record_normalized = (
+                    [row_key, TRSE.NEW, ] +
+                    [EtlEncoder.encode(rec_field) for rec_field in record])
+
+                key_records[row_key] = dict(izip(col_names, record_normalized))
+
+            exist_docs = collection.find({_ID: {'$in': keys}}, {_ID: 1})
+            exist_ids = map(lambda x: x[_ID], exist_docs)
+            exists_len = len(exist_ids)
+
+            # при докачке, есть совпадения
+            if exist_ids:
+                # fixme либо сеты, либо бинари сёрч
+                # на 5000 элементах вроде скорость одинакова
+                # если что потом проверить и заменить
+                # not_exist = set(keys) - set(exist_ids)
+                # data_to_insert = [key_records[id_] for id_ in not_exist]
+
+                data_to_insert = []
+                exist_ids.sort()
+
+                for id_ in keys:
+                    ind = bisect_left(exist_ids, id_)
+                    if ind == exists_len or not exist_ids[ind] == id_:
+                        data_to_insert.append(key_records[id_])
+
+                # смена статусов предыдущих на NEW
+                collection.update_many(
+                    {_ID: {'$in': exist_ids}}, {'$set': {_STATE: TRSE.NEW}, }
+                )
+
+            # вся пачка новых
+            else:
+                data_to_insert = [key_records[id_] for id_ in keys]
+
+            if data_to_insert:
+                try:
+                    collection.insert_many(data_to_insert, ordered=False)
+                    loaded_count += ind
+                    print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                        ind, loaded_count, 'rows_count')
+                except Exception as e:
+                    print 'Exception', loaded_count, loaded_count + ind, e.message
+
+            page += 1
+
+            # FIXME у файлов прогон 1 раз
+            # Fixme not true
+            # Fixme подумать над пагинацией
+            if self.context['type'] == 'file':
+                break
+
+        # удаление всех со статусом PREV
+        collection.delete_many({_STATE: TRSE.PREV},)
+
+        # проставление всем статуса PREV
+        collection.update_many({}, {'$set': {_STATE: TRSE.PREV}, })
+
+        return self.context
+
+# ------ !Tasks ------------
+
+
+# ------ Foreign Tables ------------
 class BaseForeignTable(object):
     """
-    Базовый класс для создания "удаленной таблицы"
+    Базовый класс обертки над внешними источниками
     """
 
     def __init__(self, tree):
@@ -285,7 +349,13 @@ class BaseForeignTable(object):
         raise NotImplementedError
 
     def create(self):
+        """
+        Создание ForeignTable в зависимости от типа источника
+        """
         raise NotImplementedError
+
+    def update(self):
+        pass
 
 
 class RdbmsForeignTable(BaseForeignTable):
@@ -330,7 +400,26 @@ class RdbmsForeignTable(BaseForeignTable):
 
 
 class CsvForeignTable(BaseForeignTable):
-    pass
+    """
+    Обертка над csv-файлами
+    """
+    # FIXME: Требует реализации
+
+    @property
+    def server_name(self):
+        return CSV_SERVER
+
+    @property
+    def db_url(self):
+        """
+        В качестве адреса базы данных полный путь до файла
+        Return:
+            str: Путь до файла
+        """
+        return ''
+
+    def create(self):
+        pass
 
 
 class XlsForeignTable(CsvForeignTable):
@@ -386,14 +475,27 @@ class XlsForeignTable(CsvForeignTable):
     def update(self):
         pass
 
+# ------ !Foreign Tables ----------
 
-class MongoForeignTable(BaseForeignTable):
+
+# ------ Warehouse Load ----------
+
+class WareHouse(object):
     """
-    Создание "удаленной таблицы" для Mongodb
+    Базовый класс, описывающий хранилище данных
     """
+    def __init__(self, context):
+        """
+        Args:
+            context(dict): Контекст выполнения
+        """
+        self.context = context
+
+    def run(self):
+        raise NotImplementedError
 
 
-class ClickHouseLoad(object):
+class ClickHouse(WareHouse):
     """
     Загрузка в ClickHouse
     """
@@ -406,10 +508,10 @@ class ClickHouseLoad(object):
     }
 
     def __init__(self, context, file_path='/tmp/', db_url='http://localhost:8123/'):
-        self.context = context
         self.db_url = db_url
         self.file_path = file_path
         self.table_name = self.context["cube_key"]
+        super(ClickHouse, self).__init__(context=context)
 
     def create_csv(self):
         """
@@ -465,6 +567,31 @@ class ClickHouseLoad(object):
         self.create_csv()
         self.create_table()
         self.load_csv()
+
+
+class MaterializedView(WareHouse):
+    """
+    Класс описывает материализованное представление.
+
+    !!Загрузка в материализованное представление на данный момент является
+    альтернативой загрузки в clickhouse
+    """
+
+    def run(self):
+        # fixme needs to check status of all subtasks
+        # если какой нить таск упал, то сюда не дойдет
+        # нужны декораторы на обработку ошибок
+        local_service = DataSourceService.get_local_instance()
+        cube_key = self.context["cube_key"]
+        local_service.create_materialized_view(
+            DIMENSIONS_MV.format(cube_key),
+            MEASURES_MV.format(cube_key),
+            self.context['relations']
+    )
+
+    print 'MEASURES AND DIMENSIONS ARE MADE!'
+
+# ------ Warehouse Load ----------
 
 
 # write in console: python manage.py celery -A etl.multitask worker
