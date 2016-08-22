@@ -183,6 +183,16 @@ class TaskProcessing(object):
         RedisSourceService.delete_user_subscriber(self.user_id, self.task_id)
 
 
+class PusherCodes(object):
+    """
+    Список кодов
+    """
+    FT = 1001
+    VIEW = 1002
+    DM = 1003
+    FINAL = 1004
+
+
 class Pusher(object):
     """
     Уведомитель PHP сервера о ходе загрузки
@@ -193,16 +203,19 @@ class Pusher(object):
         php_url - канал
         """
         self.card_id = card_id
-        self.php_url = "{0}:{1}".format(settings.PHP_HOST, settings.PHP_PORT)
+        self.php_url = "{0}{1}:{2}".format(
+            settings.PHP_SCHEMA, settings.PHP_HOST, settings.PHP_PORT)
 
-    def push(self, msg):
+    def push(self, code, msg=None, data=None):
         # FIXME temporary structure of data
-        data = {
+        info = {
             'card_id': self.card_id,
+            'code': code,
             'msg': msg,
+            'data': data,
         }
         try:
-            resp = requests.post(self.php_url, json.dumps(data))
+            resp = requests.post(self.php_url, json.dumps(info))
         except requests.exceptions.ConnectionError as e:
             print "Problem with notification push: {0}".format(e.message)
 
@@ -211,21 +224,27 @@ class Pusher(object):
         Уведомление о создании foreign table
         """
         msg = "{0}: Загружено во временную таблицу!".format(table)
-        self.push(msg)
+        self.push(PusherCodes.FT, msg)
 
     def push_view(self, table):
         """
         Уведомление о создании view
         """
         msg = "{0}: Создано view!".format(table)
-        self.push(msg)
+        self.push(PusherCodes.VIEW, msg)
 
     def push_dim_meas(self):
         """
         Уведомление о создании мер и размерностей
         """
         msg = "Созданы меры и размерности!"
-        self.push(msg)
+        self.push(PusherCodes.DM, msg)
+
+    def push_final(self, data):
+        """
+        Возвращает инфу о загруженных таблицах и колонках
+        """
+        self.push(PusherCodes.FINAL, data=data)
 
 
 class QueueStorage(object):

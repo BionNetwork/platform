@@ -298,8 +298,10 @@ class CardViewSet(viewsets.ViewSet):
 
         data = [
             # for server
-            {"source_id": 4, "table_name": u'auth_group', },
-            {"source_id": 4, "table_name": u'auth_group_permissions', },
+            # {"source_id": 4, "table_name": u'auth_group', },
+            # {"source_id": 4, "table_name": u'auth_group_permissions', },
+            # {"source_id": 2, "table_name": u'auth_group', },
+            # {"source_id": 2, "table_name": u'auth_group_permissions', },
             # {"source_id": 2, "table_name": u'auth_permission', },
             # {"source_id": 2, "table_name": u'auth_permission2', },
             # {"source_id": 2, "table_name": u'card_card', },
@@ -367,18 +369,18 @@ class CardViewSet(viewsets.ViewSet):
             #     {
             #         "mrk_reference": ["pubmedid", "creation_date"],
             #     },
+            # '4':
+            #     {
+            #         "auth_group": ["name", "id", ],
+            #         "auth_group_permissions": [
+            #             "id", "group_id", "permission_id",],
+            #     },
             # '1':
             #     {
             #         "Лист1": [
             #             "name2", "пол", "auth_group_id", "Floata", ],
             #         "List3": ["name2", "some_id", ],
             #     },
-            '4':
-                {
-                    "auth_group": ["name", "id", ],
-                    "auth_group_permissions": [
-                        "id", "group_id", "permission_id",],
-                },
             # '2':
             #     {
             #         "auth_group": ["name", "id", ],
