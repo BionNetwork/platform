@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 import json
 import logging
 
+import requests
 from django.db import transaction
 
 from rest_framework.exceptions import APIException
@@ -274,6 +275,15 @@ class GetDimensionDataView(BaseViewNoLogin):
         return self.json_response({'data': data, })
 
 
+def send(data, settings=None, stream=False):
+    """
+    """
+    for query in data:
+        r = requests.post('http://localhost:8123/', data=query, stream=stream)
+        if r.status_code != 200:
+            raise Exception(r.text)
+
+
 class CardViewSet(viewsets.ViewSet):
     """
     Реализация методов карточки
@@ -343,6 +353,47 @@ class CardViewSet(viewsets.ViewSet):
 
         """
         return Response()
+
+    @detail_route(['post'])
+    def query(self, request, pk):
+        """
+        Формирование запроса
+        Args:
+            request:
+            pk:
+
+            ::
+[{
+"Y": {"field_name":"price","aggregation": "sum"},
+"X": {"field_name":"time","period":[1, 3],"discrete":"week"},
+"filters": [{"field_name":"company","value": ["etton"]}, {"field_name":"color","value": ["blue"]}]
+}]
+
+        Returns:
+
+        """
+        table = ''
+        data = request.data[0]
+
+        x_field = 'toRelativeWeekNum({field}) AS {field}_week'.format(field=data['X']['field_name'])
+        y_field = '{aggregation}({field})'.format(aggregation=data['Y']['aggregation'], field=data['Y']['field_name'])
+
+        fields = ', '.join([x_field, y_field])
+
+        x_field_name = '{field}_week'.format(field=data['X']['field_name'])
+
+        condition = ' AND '.join(['{field} IN {resolve_fields}'.format(
+                field=fltr['field_name'],
+                resolve_fields=repr(fltr['value']).replace('[', '(').replace(']', ')')) for fltr in data['filters']])
+        # Если есть переодичность, то добавяем секцию BETWEEN
+        if data['X']['period']:
+            condition += ' AND ({field} BETWEEN {left} AND {right})'.format(
+                field=data['X']['field_name'], left=data['X']['period'][0], right=data['X']['period'][1])
+
+        query = "SELECT {fields} FROM {table} WHERE {condition} GROUP BY {group_by_field}".format(
+            fields=fields, table=table, condition=condition, group_by_field=x_field_name)
+
+        send([query])
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
