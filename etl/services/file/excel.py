@@ -6,8 +6,10 @@ import datetime
 import pandas
 from collections import defaultdict
 from itertools import groupby
+from xlrd import XLRDError
 
 from etl.services.file.interfaces import File, process_type
+from etl.services.excepts import SheetExcept
 
 
 class Excel(File):
@@ -59,8 +61,11 @@ class Excel(File):
         for sheet_name in sheets:
 
             indent = indents[sheet_name]
-            sheet_df = pandas.read_excel(
-                excel_path, sheetname=sheet_name, skiprows=indent)
+            try:
+                sheet_df = pandas.read_excel(
+                    excel_path, sheetname=sheet_name, skiprows=indent)
+            except XLRDError as e:
+                raise SheetExcept(message=e.message)
 
             col_names = sheet_df.columns
             for col_name in col_names:
@@ -70,10 +75,7 @@ class Excel(File):
                     "name": col_name,
                     "type": col_type,
                     "origin_type": origin_type,
-                    # "extra": None,
                     "max_length": None,
-                    # "is_unique": None,
-                    # "is_primary": None,
                 })
 
         return columns
@@ -92,12 +94,16 @@ class Excel(File):
 
         statistic = {}
 
-        excel_path = self.source.get_file_path()
+        excel_path = self.file_path
 
         for sheet_name in sheets:
             indent = indents[sheet_name]
-            sheet_df = pandas.read_excel(
-                excel_path, sheetname=sheet_name, skiprows=indent)
+            try:
+                sheet_df = pandas.read_excel(
+                    excel_path, sheetname=sheet_name, skiprows=indent)
+            except XLRDError as e:
+                raise SheetExcept(message=e.message)
+
             height, width = sheet_df.shape
             size = sheet_df.memory_usage(deep=True).sum()
             statistic[sheet_name] = {"count": height, "size": size}
@@ -126,8 +132,13 @@ class Excel(File):
 
         for sheet_name in sheets:
             indent = indents[sheet_name]
-            sheet_df = pandas.read_excel(
-                excel_path, sheetname=sheet_name, skiprows=indent)
+
+            try:
+                sheet_df = pandas.read_excel(
+                    excel_path, sheetname=sheet_name, skiprows=indent)
+            except XLRDError as e:
+                raise SheetExcept(message=e.message)
+
             col_names = sheet_df.columns
             for col_name in col_names:
                 col_df = sheet_df[col_name]

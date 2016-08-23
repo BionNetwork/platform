@@ -39,7 +39,7 @@ class FileService(DatasourceApi):
         elif conn_type == ConnectionChoices.CSV:
             return CSV(source)
         elif conn_type == ConnectionChoices.TXT:
-            return
+            raise ValueError("Not implemented for txt!")
         else:
             raise ValueError("Нефайловый тип подключения!")
 

@@ -1,6 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
+import ntpath
 
 # соответствие типов pandas-a и postgres
 TYPES_MAP = {
@@ -42,3 +43,17 @@ class File(object):
             list: список таблиц
         """
         raise NotImplementedError
+
+    @property
+    def file_name(self):
+        """
+        Ссылка на истодный файл
+        """
+        return ntpath.basename(self.source.file.name)
+
+    @property
+    def file_path(self):
+        """
+        Ссылка на истодный файл
+        """
+        return self.source.get_file_path()
