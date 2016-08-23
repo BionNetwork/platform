@@ -2,29 +2,61 @@
 from __future__ import unicode_literals
 
 import time
-import csv
 import datetime
 import pandas
 from collections import defaultdict
-from itertools import groupby
+from more_itertools import first
 
 from etl.services.file.interfaces import File, process_type
+from etl.services.excepts import SheetExcept
 
 
+# FIXME get delimiter from storage
 class CSV(File):
     """
     Класс для работы с Excel файлами
     """
+    # если что-то пошло не так, ставим default название страницы
+    DEFAULT_SHEET = 'Sheet1'
+
+    @classmethod
+    def check_sheet(cls, func):
+        def inner(*args, **kwargs):
+            inst, sheets = args[:2]
+
+            sheet = inst.get_sheet_name()
+            if sheet not in sheets:
+                raise SheetExcept()
+
+            return func(*args, **kwargs)
+        return inner
+
+    def get_sheet_name(self):
+        """
+        Возвращает название страницы,
+        для csv это будет название файла без формата
+        """
+        sheet_name = first(self.file_name.split('.'), self.DEFAULT_SHEET)
+        return sheet_name
 
     def get_tables(self):
         """
-        Возвращает 1 страницу Лист1
         Returns:
-            list: список таблиц
+            list: список таблиц, для csv это будет 1 страница(название файла)
         """
-        return [{'name': u"Лист 1", }, ]
+        return [{'name': self.get_sheet_name(), }, ]
 
-    def get_columns_info(self, sheets):
+    def get_data(self, sheet_name, indents):
+
+        csv_path = self.file_path
+        indent = indents[sheet_name]
+
+        df = pandas.read_csv(csv_path, skiprows=indent, delimiter=',')
+
+        return df.to_dict(orient='records')
+
+    # обернут в check_sheet
+    def get_columns_info(self, sheets, indents):
         """
         Получение списка колонок в таблицах
         Args:
@@ -37,27 +69,29 @@ class CSV(File):
             "type": col_type,
             "origin_type": origin_type,}, ]
         """
-        columns = defaultdict(list)
-        csv_path = self.source.get_file_path()
 
-        sheet_df = pandas.read_csv(csv_path)
+        sheet = self.get_sheet_name()
+
+        columns = defaultdict(list)
+        csv_path = self.file_path
+        indent = indents[sheet]
+
+        sheet_df = pandas.read_csv(csv_path, skiprows=indent, delimiter=',')
         col_names = sheet_df.columns
         for col_name in col_names:
             origin_type = sheet_df[col_name].dtype.name
             col_type = process_type(origin_type)
-            columns[u"Лист 1"].append({
+            columns[sheet].append({
                 "name": col_name,
                 "type": col_type,
                 "origin_type": origin_type,
-                "extra": None,
                 "max_length": None,
-                "is_unique": None,
-                "is_primary": None,
             })
 
         return columns
 
-    def get_statistic(self, sheets):
+    # обернут в check_sheet
+    def get_statistic(self, sheets, indents):
         """
         возвращает статистику страниц файла
 
@@ -69,17 +103,21 @@ class CSV(File):
             {'sheet_name': ({'count': кол-во строк, 'size': объем памяти строк)}
         """
 
-        statistic = {}
-        csv_path = self.source.get_file_path()
+        sheet = self.get_sheet_name()
 
-        sheet_df = pandas.read_csv(csv_path)
+        statistic = {}
+        csv_path = self.file_path
+        indent = indents[sheet]
+
+        sheet_df = pandas.read_csv(csv_path, skiprows=indent, delimiter=',')
         height, width = sheet_df.shape
         size = sheet_df.memory_usage(deep=True).sum()
-        statistic[u"Лист 1"] = {"count": height, "size": size}
+        statistic[sheet] = {"count": height, "size": size}
 
         return statistic
 
-    def get_intervals(self, sheets):
+    # обернут в check_sheet
+    def get_intervals(self, sheets, indents):
         """
         Возращается список интервалов для полей типа Дата
 
@@ -95,11 +133,14 @@ class CSV(File):
                    'endDate': end_date,}]}
         """
 
+        sheet = self.get_sheet_name()
+
         intervals = defaultdict(list)
         now = time.mktime(datetime.datetime.now().timetuple())
         csv_path = self.source.get_file_path()
+        indent = indents[sheet]
 
-        sheet_df = pandas.read_csv(csv_path)
+        sheet_df = pandas.read_csv(csv_path, skiprows=indent, delimiter=',')
         col_names = sheet_df.columns
         for col_name in col_names:
             col_df = sheet_df[col_name]
@@ -109,7 +150,7 @@ class CSV(File):
                 start_date = col_df.min().strftime("%d.%m.%Y")
                 end_date = col_df.max().strftime("%d.%m.%Y")
 
-                intervals[u"Лист 1"].append({
+                intervals[sheet].append({
                     'last_updated': now,
                     'name': col_name,
                     'startDate': start_date,
@@ -140,3 +181,8 @@ class CSV(File):
         csv_path = self.source.get_file_path()
         sheet_df = pandas.read_csv(csv_path)
         return sheet_df.fillna('').values.tolist()
+
+
+CSV.get_columns_info = CSV.check_sheet(CSV.get_columns_info)
+CSV.get_statistic = CSV.check_sheet(CSV.get_statistic)
+CSV.get_intervals = CSV.check_sheet(CSV.get_intervals)

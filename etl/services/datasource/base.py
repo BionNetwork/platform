@@ -811,6 +811,10 @@ class DataSourceService(object):
 
     @classmethod
     def extract_source_indentation(cls, source_id):
+        """
+        Достает отступы из хранилища
+        Returns: defaultdict(int)
+        """
         indent = RedisSS.get_source_indentation(source_id)
         return indent
 
