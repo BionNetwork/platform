@@ -663,3 +663,12 @@ class LocalDatabaseService(object):
 
         query = self.datasource.create_schema_query(schema_name)
         self.execute(query)
+
+
+class ClickhouseQuery(object):
+    """
+    Работа с запросами к Clickhouse
+    """
+
+    def __init__(self, ):
+        pass

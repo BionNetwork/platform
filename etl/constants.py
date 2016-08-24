@@ -73,3 +73,9 @@ CSV_SERVER = 'csv_srv'
 # Префиксы названий MATERIALIZED VIEW для мер/размерностей
 MEASURES_MV = 'mv_measures_{0}'
 DIMENSIONS_MV = 'mv_dimensions_{0}'
+
+# Название таблицы в ClickHouse
+CLICK_TABLE = "t_{0}"
+# Название колонки в ClickHouse
+# (оригинальное название колонки+хэш таблицы)
+CLICK_COLUMN = "{0}{1}"

@@ -4,7 +4,6 @@ from __future__ import unicode_literals, division
 import os
 import sys
 import time
-from core.models import Datasource
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -14,6 +13,9 @@ os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
 from celery import Celery, chord, chain
 from bisect import bisect_left
 import pandas as pd
+from collections import defaultdict
+
+from core.models import Datasource
 
 from etl.constants import *
 from etl.services.queue.base import *
@@ -38,8 +40,8 @@ def create_dataset_multi(task_id, channel, context):
 
 
 @app.task(name=MONGODB_DATA_LOAD_MULTI)
-def load_mongo_db_multi(task_id, channel, context):
-    return LoadMongodbMulti(task_id, channel, context).load_data()
+def load_to_db_multi(task_id, channel, context):
+    return LoadDbMulti(task_id, channel, context).load_data()
 
 
 class CreateDatasetMulti(TaskProcessing):
@@ -47,10 +49,10 @@ class CreateDatasetMulti(TaskProcessing):
     Создание Dataset
     """
     def processing(self):
-        self.next_task_params = (load_mongo_db_multi, self.context)
+        self.next_task_params = (load_to_db_multi, self.context)
 
 
-class LoadMongodbMulti(TaskProcessing):
+class LoadDbMulti(TaskProcessing):
     """
     Создание Dataset
     """
@@ -83,6 +85,40 @@ class LoadMongodbMulti(TaskProcessing):
         ClickHouse(self.context).run()
         pusher.warehouse_create()
 
+        resp = get_responce(self.context)
+        pusher.push_final(resp)
+
+
+def get_responce(context):
+    """
+    Итоговый ответ о загрузках, включает ориг/хэш названия таблиц,
+    ориг/новые названия колонок
+    """
+    sources_info = {
+        "main_table": CLICK_TABLE.format(context['card_id']),
+        "sources": defaultdict(list),
+    }
+    sources = sources_info["sources"]
+
+    sub_trees = context['sub_trees']
+
+    for sub_tree in sub_trees:
+
+        table_hash = sub_tree["collection_hash"]
+
+        sub_info = {
+            "orig_table": sub_tree["val"],
+            "hash_table": table_hash,
+            "columns": [
+                {
+                    "orig_column": column["name"],
+                    "click_column": column["click_name"],
+                    "type": column["type"],
+                } for column in sub_tree['columns']
+            ],
+        }
+
+        sources[sub_tree["sid"]].append(sub_info)
 
 @app.tasks(name=CREATE_DATE_TABLE)
 def create_date_tables(card_id, sub_trees):
@@ -101,7 +137,6 @@ def create_foreign_table(card_id, sub_tree, is_mongodb=True):
         sub_tree(dict): Описать
     """
     CreateForeignTable(task_id=2, card_id=card_id, context=sub_tree)
-
 
 @app.task(name=PSQL_VIEW)
 def create_view(card_id, sub_tree):
@@ -507,7 +542,9 @@ class ClickHouse(WareHouse):
         'date': 'Date',
     }
 
-    def __init__(self, context, file_path='/tmp/', db_url='http://localhost:8123/'):
+    def __init__(self, context, file_path='/tmp/',
+                 db_url='http://localhost:8123/'):
+        self.context = context
         self.db_url = db_url
         self.file_path = file_path
         self.table_name = self.context["cube_key"]
@@ -519,7 +556,8 @@ class ClickHouse(WareHouse):
         """
         file_name = self.table_name
         local_service = DataSourceService.get_local_instance()
-        local_service.create_sttm_select_query(self.file_path, file_name, self.context['relations'])
+        local_service.create_sttm_select_query(
+            self.file_path, file_name, self.context['relations'])
 
     def create_table(self):
         """
@@ -529,18 +567,20 @@ class ClickHouse(WareHouse):
         columns = []
         for tree in self.context['sub_trees']:
             for col in tree['columns']:
-                col['name'] += tree['collection_hash']
+                col['click_name'] = CLICK_COLUMN.format(
+                    col['name'], tree['collection_hash'])
                 columns.append(col)
         for field in columns:
             col_types.append(u'{0} {1}'.format(
-                field['name'], self.field_map[field['type']]))
+                field['click_name'], self.field_map[field['type']]))
 
         drop_query = """DROP TABLE IF EXISTS t_{table_name}""".format(
             table_name=self.table_name)
 
-        create_query = """CREATE TABLE t_{table_name} ({columns}) engine = Log
+        create_query = """CREATE TABLE {table_name} ({columns}) engine = Log
             """.format(
-            table_name=self.table_name, columns=','.join(col_types))
+            table_name=CLICK_TABLE.format(self.table_name),
+            columns=','.join(col_types))
 
         self._send([drop_query, create_query])
 

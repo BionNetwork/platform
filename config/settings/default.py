@@ -284,7 +284,8 @@ SMALL_AVATAR_SIZES = (40, 40)
 
 
 # PHP server
-PHP_HOST = None  # "http://localhost"
+PHP_SCHEMA = None  # "http://"
+PHP_HOST = None  # "localhost"
 PHP_PORT = None  # 8070
 
 
