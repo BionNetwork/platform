@@ -5,159 +5,110 @@ import os
 import sys
 import time
 
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(BASE_DIR)
-os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
-
 from celery import Celery, chord, chain
 from bisect import bisect_left
 import pandas as pd
 from collections import defaultdict
 
 from core.models import Datasource
-
 from etl.constants import *
 from etl.services.queue.base import *
 from etl.services.middleware.base import EtlEncoder
 from etl.services.datasource.base import DataSourceService
 from etl.services.db.factory import LocalDatabaseService
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
+os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.production"
 
 logger = logging.getLogger(__name__)
 
 ASC = 1
-
 
 # FIXME chord на amqp не работает, поэтому redis
 app = Celery('multi', backend='redis://localhost:6379/0',
              broker='redis://localhost:6379/0')
 
 
-@app.task(name=CREATE_DATASET_MULTI)
 def create_dataset_multi(task_id, channel, context):
-    return CreateDatasetMulti(task_id, channel, context).load_data()
+    return load_data(context)
 
 
-@app.task(name=MONGODB_DATA_LOAD_MULTI)
-def load_to_db_multi(task_id, channel, context):
-    return LoadDbMulti(task_id, channel, context).load_data()
-
-
-class CreateDatasetMulti(TaskProcessing):
-    """
-    Создание Dataset
-    """
-    def processing(self):
-        self.next_task_params = (load_to_db_multi, self.context)
-
-
-class LoadDbMulti(TaskProcessing):
-    """
-    Создание Dataset
-    """
-    def processing(self):
-
-        context = self.context
-        card_id = context['card_id']
-        pusher = Pusher(context['card_id'])
-        sub_trees = context['sub_trees']
-
-
-        # параллель из последований, в конце колбэк
-        # chord(
-        #     chain(
-        #         load_to_mongo.subtask((sub_tree, )),
-        #         # получает, то что вернул load_to_mongo
-        #         create_foreign_table.subtask(),
-        #         create_view.subtask()
-        #     )
-        #     for sub_tree in sub_trees)(
-        #         mongo_callback.subtask(self.context))
-
-        for sub_tree in sub_trees:
-            create_foreign_table(sub_tree, is_mongodb=False)
-            pusher.foreign_table_created(sub_tree['val'])
-            create_view(sub_tree)
-            pusher.view_created(sub_tree['val'])
-
-        # mongo_callback(self.context)
-        ClickHouse(self.context).run()
-        pusher.warehouse_create()
-
-        resp = get_responce(self.context)
-        pusher.push_final(resp)
-
-
-def get_responce(context):
-    """
-    Итоговый ответ о загрузках, включает ориг/хэш названия таблиц,
-    ориг/новые названия колонок
-    """
-    sources_info = {
-        "main_table": CLICK_TABLE.format(context['card_id']),
-        "sources": defaultdict(list),
-    }
-    sources = sources_info["sources"]
-
+def load_data(context):
+    context = context
+    card_id = context['card_id']
+    pusher = Pusher(card_id)
     sub_trees = context['sub_trees']
 
+    # параллель из последований, в конце колбэк
+    # chord(
+    #     chain(
+    #         load_to_mongo.subtask((sub_tree, )),
+    #         # получает, то что вернул load_to_mongo
+    #         create_foreign_table.subtask(),
+    #         create_view.subtask()
+    #     )
+    #     for sub_tree in sub_trees)(
+    #         mongo_callback.subtask(self.context))
+
     for sub_tree in sub_trees:
+        create_foreign_table(card_id, sub_tree, pusher)
+        create_view(card_id, sub_tree, pusher)
 
-        table_hash = sub_tree["collection_hash"]
+    warehouse_load(card_id, context, pusher)
 
-        sub_info = {
-            "orig_table": sub_tree["val"],
-            "hash_table": table_hash,
-            "columns": [
-                {
-                    "orig_column": column["name"],
-                    "click_column": column["click_name"],
-                    "type": column["type"],
-                } for column in sub_tree['columns']
-            ],
-        }
 
-        sources[sub_tree["sid"]].append(sub_info)
-
+# FIXME: реализовать через EtlBase
 @app.tasks(name=CREATE_DATE_TABLE)
-def create_date_tables(card_id, sub_trees):
-    #FIXME: реализовать через EtlBase
-        local_db_service = DataSourceService.get_local_instance()
-        local_db_service.create_date_tables(
-            "time_table_name", sub_trees, False)
+def create_date_tables(sub_trees):
+    """
+    Создание таблицы дат
+    Args:
+        sub_trees:
+
+    Returns:
+
+    """
+
+    local_db_service = DataSourceService.get_local_instance()
+    local_db_service.create_date_tables(
+        "time_table_name", sub_trees, False)
 
 
 @app.task(name=PSQL_FOREIGN_TABLE)
-def create_foreign_table(card_id, sub_tree, is_mongodb=True):
+def create_foreign_table(card_id, sub_tree, pusher):
     """
-    Создание Обертку над внешней таблицей
+    Создание Обертки над внешней таблицей
     Args:
+        pusher(Pusher): Отправитель информации на клиент
         card_id(int): id карточки
         sub_tree(dict): Описать
     """
-    CreateForeignTable(task_id=2, card_id=card_id, context=sub_tree)
+    CreateForeignTable(card_id=card_id, context=sub_tree, pusher=pusher)
+
 
 @app.task(name=PSQL_VIEW)
-def create_view(card_id, sub_tree):
+def create_view(card_id, sub_tree, pusher):
     """
     Создание View для Foreign Table для внешнего источника
     Args:
+        pusher(Pusher): Отправитель информации на клиент
         card_id(int): id карточки
         sub_tree(dict): Данные о таблице источника
     """
-    CreateView(task_id=4, card_id=card_id, context=sub_tree).run()
+    CreateView(card_id=card_id, context=sub_tree, pusher=pusher).run()
 
 
 @app.task(name=WAREHOUSE_LOAD)
-def warehouse_load(card_id, context):
+def warehouse_load(card_id, context, pusher):
     """
     Загрузка данных в Хранилище данных
     Args:
+        pusher(Pusher): Отправитель информации на клиент
         card_id(int): id карточки
         context(dict): Данные о загружаемых таблицах всех источников
     """
-    LoadWarehouse(task_id=3, card_id=card_id, context=context).run()
+    LoadWarehouse(card_id=card_id, context=context, pusher=pusher).run()
 
 
 # ------ Tasks ------------
@@ -166,15 +117,16 @@ class EtlBaseTask(object):
     """
     Основной класс задач ETL-процесса
     """
+    task_name = None
 
-    def __init__(self, task_id, card_id, context, pusher=None):
+    def __init__(self, card_id, context, pusher=None):
         """
         Args:
-            task_id(int): id Задачи
+            card_id(int): id карточки
             context(dict): контекст задачи
             pusher(Pusher): Отправитель сообщений на клиент
         """
-        self.task_id = task_id
+        self.task_id = TaskService(self.task_name).add_task(arguments=context)
         self.context = context
         self.pusher = pusher or Pusher(card_id)
 
@@ -209,6 +161,9 @@ class CreateForeignTable(EtlBaseTask):
     """
     Создание обертки над подключенными внешними таблицами
     """
+
+    task_name = PSQL_FOREIGN_TABLE
+
     def process(self):
         source = Datasource.objects.get(id=int(self.context['sid']))
         if source.get_source_type() in ['Excel', 'Csv']:
@@ -226,6 +181,8 @@ class CreateView(EtlBaseTask):
     Создание представления над foreign table
     """
 
+    task_name = PSQL_VIEW
+
     def process(self):
         local_service = DataSourceService.get_local_instance()
         local_service.create_foreign_view(self.context)
@@ -239,6 +196,8 @@ class LoadWarehouse(EtlBaseTask):
     Загрузка данных в конечное хранилище
     """
 
+    task_name = WAREHOUSE_LOAD
+
     def process(self):
         """
         Загрузка в Clickhouse. Возможно следует реальзовать и вариант с созданием
@@ -246,14 +205,48 @@ class LoadWarehouse(EtlBaseTask):
         """
         ClickHouse(context=self.context).run()
 
+    def get_response(self):
+        """
+        Итоговый ответ о загрузках, включает ориг/хэш названия таблиц,
+        ориг/новые названия колонок
+        """
+        sources_info = {
+            "main_table": CLICK_TABLE.format(self.context['card_id']),
+            "sources": defaultdict(list),
+        }
+        sources = sources_info["sources"]
+
+        sub_trees = self.context['sub_trees']
+
+        for sub_tree in sub_trees:
+            table_hash = sub_tree["collection_hash"]
+
+            sub_info = {
+                "orig_table": sub_tree["val"],
+                "hash_table": table_hash,
+                "columns": [
+                    {
+                        "orig_column": column["name"],
+                        "click_column": column["click_name"],
+                        "type": column["type"],
+                    } for column in sub_tree['columns']
+                    ],
+            }
+
+            sources[sub_tree["sid"]].append(sub_info)
+
+        return sources_info
+
     def post(self):
-        self.pusher.warehouse_create()
+        self.pusher.push_final(data=self.get_response())
 
 
 class LoadMongoDB(EtlBaseTask):
     """
     Загрузка в MongoDB
     """
+
+    task_name = MONGODB_DATA_LOAD_MULTI
 
     def process(self):
 
@@ -276,7 +269,7 @@ class LoadMongoDB(EtlBaseTask):
         collection = MongodbConnection(
             '{0}_{1}'.format(STTM, key),
             indexes=[(_ID, ASC), (_STATE, ASC), ]
-            ).collection
+        ).collection
 
         loaded_count = 0
 
@@ -284,7 +277,7 @@ class LoadMongoDB(EtlBaseTask):
 
         while True:
             rows = source_service.get_source_rows(
-                self.context, cols=columns, limit=limit, offset=(page-1)*limit)
+                self.context, cols=columns, limit=limit, offset=(page - 1) * limit)
 
             if not rows:
                 break
@@ -324,7 +317,7 @@ class LoadMongoDB(EtlBaseTask):
 
                 # смена статусов предыдущих на NEW
                 collection.update_many(
-                    {_ID: {'$in': exist_ids}}, {'$set': {_STATE: TRSE.NEW}, }
+                    {_ID: {'$in': exist_ids}}, {'$set': {_STATE: TRSE.NEW},}
                 )
 
             # вся пачка новых
@@ -349,12 +342,13 @@ class LoadMongoDB(EtlBaseTask):
                 break
 
         # удаление всех со статусом PREV
-        collection.delete_many({_STATE: TRSE.PREV},)
+        collection.delete_many({_STATE: TRSE.PREV}, )
 
         # проставление всем статуса PREV
-        collection.update_many({}, {'$set': {_STATE: TRSE.PREV}, })
+        collection.update_many({}, {'$set': {_STATE: TRSE.PREV},})
 
         return self.context
+
 
 # ------ !Tasks ------------
 
@@ -380,7 +374,6 @@ class BaseForeignTable(object):
 
     @property
     def db_url(self):
-
         raise NotImplementedError
 
     def create(self):
@@ -423,7 +416,7 @@ class RdbmsForeignTable(BaseForeignTable):
         }
 
         self.service.create_foreign_table(self.name,
-            self.server_name, table_options, self.tree['columns'])
+                                          self.server_name, table_options, self.tree['columns'])
 
     def update(self):
         """
@@ -438,6 +431,7 @@ class CsvForeignTable(BaseForeignTable):
     """
     Обертка над csv-файлами
     """
+
     # FIXME: Требует реализации
 
     @property
@@ -505,10 +499,11 @@ class XlsForeignTable(CsvForeignTable):
         }
 
         self.service.create_foreign_table(self.name,
-            self.server_name, table_options, self.tree['columns'])
+                                          self.server_name, table_options, self.tree['columns'])
 
     def update(self):
         pass
+
 
 # ------ !Foreign Tables ----------
 
@@ -519,6 +514,7 @@ class WareHouse(object):
     """
     Базовый класс, описывающий хранилище данных
     """
+
     def __init__(self, context):
         """
         Args:
@@ -627,7 +623,7 @@ class MaterializedView(WareHouse):
             DIMENSIONS_MV.format(cube_key),
             MEASURES_MV.format(cube_key),
             self.context['relations']
-    )
+        )
 
     print 'MEASURES AND DIMENSIONS ARE MADE!'
 

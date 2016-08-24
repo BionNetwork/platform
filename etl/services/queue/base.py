@@ -362,27 +362,23 @@ class RPublish(object):
             ))
 
 
-def get_single_task(task_def, context):
+def set_task(func, context):
     """
     Args:
-        task_name(str): Название задачи
-        task_def(func): Исполняемая функция
-        params(dict): Контекст выполнения
+        func: Исполняемая функция
+        context(dict): Контекст выполнения
 
     Returns:
         `Signature`: Celery-задача к выполнению
         list: Список каналов для сокетов
     """
-    task_name = task_def.name
-
-    print "{0} started!".format(task_name)
+    task_name = func.name
 
     # FIXME подумать чо тут и как тут для мультизагрузки
-    # task_id, channel = TaskService(task_name).add_task(
-    #     arguments=params)
-    task_id, channel = None, None
+    task_id, channel = TaskService(task_name).add_task(
+        arguments=context)
     # return task_def.apply_async((task_id, channel, context),), [channel]
-    return task_def(task_id, channel, context), [channel]
+    return func(task_id, channel, context), [channel]
 
 
 class RowKeysCreator(object):
@@ -623,20 +619,20 @@ class TaskService(object):
 
         task_id = task.id
         # канал для задач
-        new_channel = settings.SOCKET_CHANNEL.format(
-            arguments['user_id'], task_id)
+        # new_channel = settings.SOCKET_CHANNEL.format(
+        #     arguments['user_id'], task_id)
+        #
+        # channel_data = {
+        #     "channel": new_channel,
+        #     "queue_id": task_id,
+        #     "namespace": self.name,
+        #     "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        # }
+        # # добавляем канал подписки в редис
+        # RedisSourceService.set_user_subscribers(
+        #     arguments['user_id'], channel_data)
 
-        channel_data = {
-            "channel": new_channel,
-            "queue_id": task_id,
-            "namespace": self.name,
-            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        # добавляем канал подписки в редис
-        RedisSourceService.set_user_subscribers(
-            arguments['user_id'], channel_data)
-
-        return task_id, new_channel
+        return task_id
 
     @staticmethod
     def get_queue(task_id, user_id):

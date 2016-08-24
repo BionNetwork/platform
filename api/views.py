@@ -21,14 +21,10 @@ from api.serializers import (
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys)
 from core.views import BaseViewNoLogin
-from etl.multitask import create_dataset_multi
-from etl.services.datasource.base import DataSourceService
-from etl.services.middleware.base import (
-    generate_cube_key, generate_columns_string_NEW)
-from etl.helpers import (
-    group_by_source, extract_tables_info)
+from etl.multitask import create_dataset_multi, load_data
+from etl.services.datasource.base import DataSourceService, group_by_source, extract_tables_info
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
-from etl.services.queue.base import get_single_task
+from etl.services.queue.base import set_task
 
 from rest_framework.decorators import detail_route
 
@@ -509,7 +505,7 @@ class CardViewSet(viewsets.ViewSet):
             "relations": relations,
         }
 
-        get_single_task(create_dataset_multi, load_args)
+        load_data(load_args)
 
         return Response({"message": "Loading is started!"})
 
