@@ -15,7 +15,7 @@ from bisect import bisect_left
 import pandas as pd
 from collections import defaultdict
 
-from core.models import Datasource
+from core.models import Datasource, ConnectionChoices as CC
 
 from etl.constants import *
 from etl.services.queue.base import *
@@ -116,7 +116,7 @@ def get_responce(context):
             "columns": [
                 {
                     "orig_column": column["name"],
-                    "click_column": column["click_name"],
+                    "click_column": CLICK_COLUMN.format(column['hash']),
                     "type": column["type"],
                 } for column in sub_tree['columns']
             ],
@@ -260,8 +260,12 @@ def create_foreign_table(sub_tree, is_mongodb=True):
     Создание Удаленной таблицы
     """
     source = Datasource.objects.get(id=int(sub_tree['sid']))
-    if source.get_source_type() in ['Excel', 'Csv']:
+    source_type = source.get_source_type()
+
+    if source_type == CC.values.get(CC.EXCEL):
         fdw = XlsForeignTable(tree=sub_tree)
+    elif source_type == CC.values.get(CC.CSV):
+        fdw = CsvForeignTable(tree=sub_tree)
     else:
         fdw = RdbmsForeignTable(tree=sub_tree)
     fdw.create()
@@ -317,12 +321,16 @@ class BaseForeignTable(object):
         raise NotImplementedError
 
     @property
-    def db_url(self):
+    def source_url(self):
+        raise NotImplementedError
 
+    @property
+    def options(self):
         raise NotImplementedError
 
     def create(self):
-        raise NotImplementedError
+        self.service.create_foreign_table(
+            self.name, self.server_name, self.options, self.tree['columns'])
 
 
 class RdbmsForeignTable(BaseForeignTable):
@@ -331,7 +339,11 @@ class RdbmsForeignTable(BaseForeignTable):
     """
 
     @property
-    def db_url(self):
+    def server_name(self):
+        return RDBMS_SERVER
+
+    @property
+    def source_url(self):
         sid = int(self.tree['sid'])
         source = Datasource.objects.get(id=sid)
         return '{db_type}://{login}:{password}@{host}:{port}/{db}'.format(
@@ -344,30 +356,43 @@ class RdbmsForeignTable(BaseForeignTable):
         )
 
     @property
-    def server_name(self):
-        return RDBMS_SERVER
-
-    def create(self):
-        table_options = {
+    def options(self):
+        return {
             # 'schema': 'mgd',
             'tablename': self.tree['val'],
-            'db_url': self.db_url
+            'db_url': self.source_url,
         }
-
-        self.service.create_foreign_table(self.name,
-            self.server_name, table_options, self.tree['columns'])
 
     def update(self):
         """
         При работе с РСУБД реализация обновления не нужна
         Returns:
-
         """
         pass
 
 
 class CsvForeignTable(BaseForeignTable):
-    pass
+
+    @property
+    def server_name(self):
+        return CSV_SERVER
+
+    @property
+    def source_url(self):
+        sid = int(self.tree['sid'])
+        source = Datasource.objects.get(id=sid)
+        return source.get_file_path()
+
+    @property
+    def options(self):
+        """
+        Returns: dict
+        """
+        return {
+            'filename': self.source_url,
+            'skip_header': '1',
+            'delimiter': ','
+        }
 
 
 class XlsForeignTable(CsvForeignTable):
@@ -375,50 +400,40 @@ class XlsForeignTable(CsvForeignTable):
     Создание "удаленной таблицы" для файлов типа csv
     """
 
-    @property
-    def server_name(self):
-        return CSV_SERVER
-
-    @property
-    def db_url(self):
-        sid = int(self.tree['sid'])
-        source = Datasource.objects.get(id=sid)
-        return source.file.path
-
     def _xls_convert(self):
         """
         Преобразует excel лист в csv
         Returns:
             str: Название csv-файла
-
         """
         indexes = [x['order'] for x in self.tree['columns']]
-        sheet_name = HashEncoder.encode(self.tree['val'])
-        csv_file_name = '{file_name}__{sheet_name}.csv'.format(
-            file_name=os.path.splitext(self.db_url)[0], sheet_name=sheet_name)
+        sheet_name = abs(HashEncoder.encode(self.tree['val']))
+
+        csv_file_name = '{file_name}_{sheet_name}.csv'.format(
+            file_name=os.path.splitext(self.source_url)[0],
+            sheet_name=sheet_name)
+
         data_xls = pd.read_excel(
-            self.db_url, self.tree['val'], parse_cols=indexes, index_col=False)
+            self.source_url, self.tree['val'],
+            parse_cols=indexes, index_col=False)
         data_xls.to_csv(
             csv_file_name, header=indexes, encoding='utf-8', index=None)
+
         return csv_file_name
 
-    def create(self):
+    @property
+    def options(self):
         """
         Делаем конвертацию xls -> csv. В дальнейшем работаем с csv
         Returns:
-
         """
-
         csv_file_name = self._xls_convert()
 
-        table_options = {
+        return {
             'filename': csv_file_name,
             'skip_header': '1',
             'delimiter': ','
         }
-
-        self.service.create_foreign_table(self.name,
-            self.server_name, table_options, self.tree['columns'])
 
     def update(self):
         pass
@@ -463,15 +478,11 @@ class ClickHouseLoad(object):
         Запрос на создание таблицы в Сlickhouse
         """
         col_types = []
-        columns = []
+
         for tree in self.context['sub_trees']:
             for col in tree['columns']:
-                col['click_name'] = CLICK_COLUMN.format(
-                    col['name'], tree['collection_hash'])
-                columns.append(col)
-        for field in columns:
-            col_types.append(u'{0} {1}'.format(
-                field['click_name'], self.field_map[field['type']]))
+                col_types.append(u'{0} {1}'.format(
+                    CLICK_COLUMN.format(col['hash']), self.field_map[col['type']]))
 
         drop_query = """DROP TABLE IF EXISTS t_{table_name}""".format(
             table_name=self.table_name)

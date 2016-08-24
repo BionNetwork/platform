@@ -75,5 +75,5 @@ DIMENSIONS_MV = 'mv_dimensions_{0}'
 # Название таблицы в ClickHouse
 CLICK_TABLE = "t_{0}"
 # Название колонки в ClickHouse
-# (оригинальное название колонки+хэш таблицы)
-CLICK_COLUMN = "{0}{1}"
+# (буква вначале+cube_id+source_id+хэш таблицы+хэш колонки)
+CLICK_COLUMN = "c_{0}"
