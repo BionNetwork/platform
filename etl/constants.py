@@ -16,7 +16,6 @@ TYPES_MAP = {
 }
 
 # Название задач
-CREATE_DATASET = 'etl:database:create_dataset'
 MONGODB_DATA_LOAD = 'etl:load_data:mongo'
 DB_DATA_LOAD = 'etl:cdc:load_data'
 MONGODB_DELTA_LOAD = 'etl:cdc:load_delta'
@@ -51,7 +50,8 @@ DATE_TABLE_COLS_LEN = 9
 
 
 # Название задач MULTI
-CREATE_DATASET_MULTI = 'etl:database:create_dataset_multi'
+
+CREATE_DATASET = 'etl:database:create_dataset'
 MONGODB_DATA_LOAD_MONO = 'etl:load_data:mongo_mono'
 MONGODB_DATA_LOAD_MULTI = 'etl:load_data:mongo_multi'
 MONGODB_DATA_LOAD_CALLBACK = 'etl:load_data:mongo_callback'

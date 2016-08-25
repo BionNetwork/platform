@@ -30,10 +30,6 @@ app = Celery('multi', backend='redis://localhost:6379/0',
              broker='redis://localhost:6379/0')
 
 
-def create_dataset_multi(task_id, channel, context):
-    return load_data(context)
-
-
 def load_data(context):
     context = context
     card_id = context['card_id']
@@ -70,6 +66,14 @@ def create_date_tables(sub_trees):
     local_db_service = DataSourceService.get_local_instance()
     local_db_service.create_date_tables(
         "time_table_name", sub_trees, False)
+
+
+@app.task(name=CREATE_DATASET)
+def create_dataset(card_id, sub_tree, pusher):
+    """
+    Создание хранилища
+    """
+    CreateDataset(card_id, sub_tree, pusher)
 
 
 @app.task(name=PSQL_FOREIGN_TABLE)
@@ -155,12 +159,34 @@ class EtlBaseTask(object):
         raise NotImplementedError
 
 
+class CreateDataset(EtlBaseTask):
+    """
+    Создание основного датасета
+    """
+
+    task_name = CREATE_DATASET
+
+    def process(self):
+        dataset, created = Dataset.objects.get_or_create(key=self.card_id)
+
+        # меняем статус dataset
+        Dataset.update_state(dataset.id, DatasetStateChoices.IDLE)
+
+
 class CreateForeignTable(EtlBaseTask):
     """
     Создание обертки над подключенными внешними таблицами
     """
 
     task_name = PSQL_FOREIGN_TABLE
+
+    def pre(self):
+        """
+
+        """
+        dataset = Dataset.objects.get(key=self.card_id)
+        dataset.state = DatasetStateChoices.DIMCR
+        dataset.save()
 
     def process(self):
         source = Datasource.objects.get(id=int(self.context['sid']))
@@ -185,6 +211,12 @@ class CreateView(EtlBaseTask):
 
     task_name = PSQL_VIEW
 
+    def pre(self):
+        """
+
+        """
+        # FIXME: Обновить Dataset
+
     def process(self):
         local_service = DataSourceService.get_local_instance()
         local_service.create_foreign_view(self.context)
@@ -199,6 +231,12 @@ class LoadWarehouse(EtlBaseTask):
     """
 
     task_name = WAREHOUSE_LOAD
+
+    def pre(self):
+        """
+
+        """
+        # FIXME: Обновить Dataset
 
     def process(self):
         """
@@ -241,20 +279,6 @@ class LoadWarehouse(EtlBaseTask):
 
     def post(self):
         self.pusher.push_final(data=self.get_response())
-
-
-class CreateDataset(EtlBaseTask):
-    """
-    Создание основного датасета
-    """
-
-    task_name = CREATE_DATASET
-
-    def process(self):
-        dataset, created = Dataset.objects.get_or_create(key=self.card_id)
-
-        # меняем статус dataset
-        Dataset.update_state(dataset.id, DatasetStateChoices.IDLE)
 
 
 class ColumnsMetaInfo(EtlBaseTask):
