@@ -20,5 +20,6 @@ SQLAlchemy==1.0.14
 django-jenkins==0.19.0
 pyflakes==1.2.3
 coverage==4.2
+more-itertools==2.2
 
 #git+ssh://git@gitlab.etton.ru/bi/pymondrian.git@dev

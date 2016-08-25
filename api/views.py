@@ -21,10 +21,11 @@ from api.serializers import (
 from core.models import (Cube, User, Datasource, Dimension, Measure,
                          DatasourceMetaKeys)
 from core.views import BaseViewNoLogin
-from etl.multitask import create_dataset_multi, load_data
-from etl.services.datasource.base import DataSourceService, group_by_source, extract_tables_info
+from etl.multitask import load_data
+from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
-from etl.services.queue.base import set_task
+from etl.helpers import group_by_source
+from etl.services.excepts import SheetExcept
 
 from rest_framework.decorators import detail_route
 
@@ -158,7 +159,11 @@ class TablesView(APIView):
 
         indents = DataSourceService.extract_source_indentation(source_id)
 
-        data = service.fetch_tables_columns([table_name], indents)
+        try:
+            data = service.fetch_tables_columns([table_name], indents)
+        except SheetExcept as e:
+            raise APIException(e)
+
         return Response(data)
 
 
@@ -316,6 +321,7 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'Лист2', },
 
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
+            # {"source_id": 36, "table_name": 'auth_group', },
         ]
 
         info = []
@@ -440,6 +446,10 @@ class CardViewSet(viewsets.ViewSet):
             #             "id", "parent_id", "name", "socr", "code", "zipcode",
             #             "gni", "uno", "okato", "status", "level",
             #         ],
+            #     },
+            # '36':
+            #     {
+            #         "auth_group": ["num", "name2", ],
             #     },
         }
 

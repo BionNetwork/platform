@@ -208,6 +208,7 @@ class RedisSourceService(object):
     def get_source_indentation(cls, source_id):
         """
         Достаем отступ для страницы соурса
+        Returns: defaultdict(int)
         """
         indent_key = RKeys.indent_key(source_id)
 

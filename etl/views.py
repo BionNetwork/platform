@@ -27,8 +27,7 @@ from etl.models import TableTreeRepository
 from etl.services.datasource.base import DataSourceService
 from etl.services.datasource.repository.storage import RedisSourceService
 from etl.tasks import create_dataset
-from etl.multitask import create_dataset_multi
-from .services.queue.base import TaskStatusEnum, get_single_task
+from .services.queue.base import TaskStatusEnum
 from .services.middleware.base import (
     generate_columns_string, generate_columns_string_NEW,
     generate_table_name_key, generate_cube_key)
@@ -38,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 SUCCESS = 'success'
 ERROR = 'error'
+
 
 class BaseEtlView(BaseView):
 

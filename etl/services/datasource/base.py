@@ -605,11 +605,15 @@ class DataSourceService(object):
         """
         for sub_tree in sub_trees:
 
-            table_hash = HashEncoder.encode(sub_tree['val'])
-            key = (table_hash if table_hash > 0
-                   else '_{0}'.format(abs(table_hash)))
-            sub_tree['collection_hash'] = (
-                u"{0}_{1}_{2}".format(self.cache.card_id, sub_tree['sid'], key))
+            table_hash = abs(HashEncoder.encode(sub_tree['val']))
+            full_hash = "{0}_{1}_{2}".format(
+                self.cache.card_id, sub_tree['sid'], table_hash)
+
+            sub_tree['collection_hash'] = full_hash
+
+            for column in sub_tree['columns']:
+                column['hash'] = "{0}_{1}".format(
+                    full_hash, abs(HashEncoder.encode(column['name'])))
 
     def prepare_relations(self, sub_trees):
         """
@@ -811,6 +815,10 @@ class DataSourceService(object):
 
     @classmethod
     def extract_source_indentation(cls, source_id):
+        """
+        Достает отступы из хранилища
+        Returns: defaultdict(int)
+        """
         indent = RedisSS.get_source_indentation(source_id)
         return indent
 
