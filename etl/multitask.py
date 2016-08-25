@@ -10,8 +10,7 @@ from bisect import bisect_left
 import pandas as pd
 from collections import defaultdict
 
-from core.models import Datasource, ConnectionChoices as CC
-
+from core.models import Datasource, Dataset, DatasetStateChoices, ConnectionChoices as CC
 from etl.constants import *
 from etl.services.queue.base import *
 from etl.services.middleware.base import EtlEncoder
@@ -124,6 +123,7 @@ class EtlBaseTask(object):
             context(dict): контекст задачи
             pusher(Pusher): Отправитель сообщений на клиент
         """
+        self.card_id = card_id
         self.task_id = TaskService(self.task_name).add_task(arguments=context)
         self.context = context
         self.pusher = pusher or Pusher(card_id)
@@ -165,7 +165,7 @@ class CreateForeignTable(EtlBaseTask):
     def process(self):
         source = Datasource.objects.get(id=int(self.context['sid']))
         source_type = source.get_source_type()
-    
+
         if source_type == CC.values.get(CC.EXCEL):
             fdw = XlsForeignTable(tree=self.context)
         elif source_type == CC.values.get(CC.CSV):
@@ -241,6 +241,27 @@ class LoadWarehouse(EtlBaseTask):
 
     def post(self):
         self.pusher.push_final(data=self.get_response())
+
+
+class CreateDataset(EtlBaseTask):
+    """
+    Создание основного датасета
+    """
+
+    task_name = CREATE_DATASET
+
+    def process(self):
+        dataset, created = Dataset.objects.get_or_create(key=self.card_id)
+
+        # меняем статус dataset
+        Dataset.update_state(dataset.id, DatasetStateChoices.IDLE)
+
+
+class ColumnsMetaInfo(EtlBaseTask):
+    """
+    Сохранение информации о колонках
+    """
+
 
 
 class LoadMongoDB(EtlBaseTask):
@@ -381,7 +402,7 @@ class BaseForeignTable(object):
     @property
     def options(self):
         raise NotImplementedError
-    
+
     def create(self):
         self.service.create_foreign_table(
             self.name, self.server_name, self.options, self.tree['columns'])

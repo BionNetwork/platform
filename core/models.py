@@ -156,6 +156,7 @@ class DatasourceSettings(models.Model):
         return self.value
 
 
+# FIXME: К удалению
 class DatasourceMeta(models.Model):
     """
     Мета информация для источников данных
@@ -476,3 +477,35 @@ class DatasourcesJournal(models.Model):
 
     class Meta:
         db_table = "datasources_journal"
+
+
+class ColumnTypeChoices(DjangoChoices):
+    """
+    Cтатусы для Dataset
+    """
+    STRING = ChoiceItem(1, 'string')
+
+
+class Columns(models.Model):
+    """
+    Колонки в кубе
+    """
+
+    name = models.CharField(verbose_name="Название", max_length=255)
+    dataset = models.ForeignKey(Dataset, verbose_name="Хранилище")
+    original_name = models.CharField(verbose_name="Название в источнике", max_length=255)
+    source = models.ForeignKey(Datasource, verbose_name="Источник")
+    type = models.CharField(
+        verbose_name="Тип", choices=ColumnTypeChoices.choices, default=ColumnTypeChoices.STRING, max_length=20)
+    format_string = models.CharField(verbose_name="размерность", max_length=20)
+    visible = models.BooleanField(default=True)
+    date_created = models.DateTimeField(
+        verbose_name="дата создания", auto_now_add=True)
+    date_updated = models.DateTimeField(
+        verbose_name="дата обновления", auto_now=True)
+
+    class Meta:
+        db_table = 'columns'
+
+    def __str__(self):
+        return "{0}, {1} ({2})".format(self.dataset_id, self.source_id, self.original_name)

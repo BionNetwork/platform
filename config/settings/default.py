@@ -47,7 +47,6 @@ INSTALLED_APPS = (
     'core',
     'etl',
     'api',
-    'card',
     'rest_framework',
     'rest_framework.authtoken',
     'django_jenkins',
