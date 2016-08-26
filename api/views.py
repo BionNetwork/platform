@@ -6,11 +6,13 @@ import logging
 
 import requests
 from django.db import transaction
+from django.http.response import HttpResponse
 
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, mixins
 from rest_framework.views import APIView
+from rest_framework.authtoken.models import Token
 
 from api.serializers import (
     UserSerializer, DatasourceSerializer, SchemasListSerializer,
@@ -34,6 +36,37 @@ logger = logging.getLogger(__name__)
 
 SUCCESS = 'success'
 ERROR = 'error'
+
+
+class ErrorCodes(object):
+    KEY_CODE = 4000
+
+    values = {
+        KEY_CODE: "Invalid key!"
+    }
+
+
+ERRC = ErrorCodes
+
+
+# FIXME потом унаследовать всех от этого класса
+class TokenRequired(APIView):
+
+    def dispatch(self, *args, **kwargs):
+
+        request = args[0]
+        data = getattr(request, request.method)
+
+        key = data.get('api_auth_token', '')
+        token = Token.objects.get()
+
+        if key == token.key:
+            return super(TokenRequired, self).dispatch(*args, **kwargs)
+
+        return HttpResponse(json.dumps({
+            'code': ERRC.KEY_CODE,
+            'message': ERRC.values[ERRC.KEY_CODE],
+        }))
 
 
 class ImportSchemaView(BaseViewNoLogin):
