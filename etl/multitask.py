@@ -3,19 +3,23 @@ from __future__ import unicode_literals, division
 
 import os
 import sys
-import time
 
 from celery import Celery, chord, chain
 from bisect import bisect_left
-import pandas as pd
 from collections import defaultdict
 
-from core.models import Datasource, Dataset, DatasetStateChoices, ConnectionChoices as CC
+from core.models import (
+    Datasource, DatasourceMeta, Dataset, DatasetStateChoices, 
+    ConnectionChoices as CC)
+
 from etl.constants import *
 from etl.services.queue.base import *
 from etl.services.middleware.base import EtlEncoder
 from etl.services.datasource.base import DataSourceService
-from etl.services.db.factory import LocalDatabaseService
+
+from etl.foreign_tables import (
+    RdbmsForeignTable, CsvForeignTable, XlsForeignTable)
+from etl.warehouse import ClickHouse
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
@@ -52,6 +56,7 @@ def load_data(context):
         create_view(card_id, sub_tree, pusher)
 
     warehouse_load(card_id, context, pusher)
+    meta_info_save(card_id, context, pusher)
 
 
 # FIXME: реализовать через EtlBase
@@ -110,6 +115,18 @@ def warehouse_load(card_id, context, pusher):
         context(dict): Данные о загружаемых таблицах всех источников
     """
     LoadWarehouse(card_id=card_id, context=context, pusher=pusher).run()
+
+
+@app.task(name=META_INFO_SAVE)
+def meta_info_save(card_id, context, pusher):
+    """
+    Загрузка данных в Хранилище данных
+    Args:
+        pusher(Pusher): Отправитель информации на клиент
+        card_id(int): id карточки
+        context(dict): Данные о загружаемых таблицах всех источников
+    """
+    MetaInfoSave(card_id=card_id, context=context, pusher=pusher).run()
 
 
 # ------ Tasks ------------
@@ -281,11 +298,13 @@ class LoadWarehouse(EtlBaseTask):
         self.pusher.push_final(data=self.get_response())
 
 
-class ColumnsMetaInfo(EtlBaseTask):
+class MetaInfoSave(EtlBaseTask):
     """
-    Сохранение информации о колонках
+    Сохранение в базе информации о колонках куба
+    Сохранение в базе метаданных о колонках источников
     """
 
+    task_name = META_INFO_SAVE
 
 
 class LoadMongoDB(EtlBaseTask):
@@ -398,274 +417,6 @@ class LoadMongoDB(EtlBaseTask):
 
 
 # ------ !Tasks ------------
-
-
-# ------ Foreign Tables ------------
-class BaseForeignTable(object):
-    """
-    Базовый класс обертки над внешними источниками
-    """
-
-    def __init__(self, tree):
-        """
-        Args:
-            tree(dict): Метаинформация о создаваемой таблице
-        """
-        self.tree = tree
-        self.name = '{0}{1}'.format(STTM, self.tree["collection_hash"])
-        self.service = LocalDatabaseService()
-
-    @property
-    def server_name(self):
-        raise NotImplementedError
-
-    @property
-    def source_url(self):
-        raise NotImplementedError
-
-    @property
-    def options(self):
-        raise NotImplementedError
-
-    def create(self):
-        self.service.create_foreign_table(
-            self.name, self.server_name, self.options, self.tree['columns'])
-
-    def update(self):
-        pass
-
-
-class RdbmsForeignTable(BaseForeignTable):
-    """
-    Создание "удаленной таблицы" для РСУБД (Postgresql, MySQL, Oracle...)
-    """
-
-    @property
-    def server_name(self):
-        return RDBMS_SERVER
-
-    @property
-    def source_url(self):
-        sid = int(self.tree['sid'])
-        source = Datasource.objects.get(id=sid)
-        return '{db_type}://{login}:{password}@{host}:{port}/{db}'.format(
-            db_type='postgresql',  # FIXME: Доделать для остальных типов баз данных
-            login=source.login,
-            password=source.password,
-            host=source.host,
-            port=source.port,
-            db=source.db,
-        )
-
-    @property
-    def server_name(self):
-        return RDBMS_SERVER
-
-    def create(self):
-        table_options = {
-            # 'schema': 'mgd',
-            'tablename': self.tree['val'],
-            'db_url': self.source_url,
-        }
-
-    def update(self):
-        """
-        При работе с РСУБД реализация обновления не нужна
-        Returns:
-        """
-        pass
-
-
-class CsvForeignTable(BaseForeignTable):
-    """
-    Обертка над csv-файлами
-    """
-
-    @property
-    def server_name(self):
-        return CSV_SERVER
-
-    @property
-    def source_url(self):
-        sid = int(self.tree['sid'])
-        source = Datasource.objects.get(id=sid)
-        return source.get_file_path()
-
-    @property
-    def options(self):
-        """
-        Returns: dict
-        """
-        return {
-            'filename': self.source_url,
-            'skip_header': '1',
-            'delimiter': ','
-        }
-
-
-class XlsForeignTable(CsvForeignTable):
-    """
-    Создание "удаленной таблицы" для файлов типа csv
-    """
-
-    def _xls_convert(self):
-        """
-        Преобразует excel лист в csv
-        Returns:
-            str: Название csv-файла
-        """
-        indexes = [x['order'] for x in self.tree['columns']]
-        sheet_name = abs(HashEncoder.encode(self.tree['val']))
-
-        csv_file_name = '{file_name}_{sheet_name}.csv'.format(
-            file_name=os.path.splitext(self.source_url)[0],
-            sheet_name=sheet_name)
-
-        data_xls = pd.read_excel(
-            self.source_url, self.tree['val'],
-            parse_cols=indexes, index_col=False)
-        data_xls.to_csv(
-            csv_file_name, header=indexes, encoding='utf-8', index=None)
-
-        return csv_file_name
-
-    @property
-    def options(self):
-        """
-        Делаем конвертацию xls -> csv. В дальнейшем работаем с csv
-        Returns:
-        """
-        csv_file_name = self._xls_convert()
-
-        return {
-            'filename': csv_file_name,
-            'skip_header': '1',
-            'delimiter': ','
-        }
-
-    def update(self):
-        pass
-
-
-# ------ !Foreign Tables ----------
-
-
-# ------ Warehouse Load ----------
-
-class WareHouse(object):
-    """
-    Базовый класс, описывающий хранилище данных
-    """
-
-    def __init__(self, context):
-        """
-        Args:
-            context(dict): Контекст выполнения
-        """
-        self.context = context
-
-    def run(self):
-        raise NotImplementedError
-
-
-class ClickHouse(WareHouse):
-    """
-    Загрузка в ClickHouse
-    """
-
-    field_map = {
-        'text': 'String',
-        'integer': 'Int16',
-        'datetime': 'DateTime',
-        'date': 'Date',
-    }
-
-    def __init__(self, context, file_path='/tmp/',
-                 db_url='http://localhost:8123/'):
-        self.context = context
-        self.db_url = db_url
-        self.file_path = file_path
-        self.table_name = self.context["cube_key"]
-        super(ClickHouse, self).__init__(context=context)
-
-    def create_csv(self):
-        """
-        Создание csv-файла из запроса в Postgres
-        """
-        file_name = self.table_name
-        local_service = DataSourceService.get_local_instance()
-        local_service.create_sttm_select_query(
-            self.file_path, file_name, self.context['relations'])
-
-    def create_table(self):
-        """
-        Запрос на создание таблицы в Сlickhouse
-        """
-        col_types = []
-
-        for tree in self.context['sub_trees']:
-            for col in tree['columns']:
-                col_types.append(u'{0} {1}'.format(
-                    CLICK_COLUMN.format(col['hash']), self.field_map[col['type']]))
-
-        drop_query = """DROP TABLE IF EXISTS t_{table_name}""".format(
-            table_name=self.table_name)
-
-        create_query = """CREATE TABLE {table_name} ({columns}) engine = Log
-            """.format(
-            table_name=CLICK_TABLE.format(self.table_name),
-            columns=','.join(col_types))
-
-        self._send([drop_query, create_query])
-
-    def load_csv(self):
-        """
-        Загрузка данных из csv в Clickhouse
-        """
-        os.system(
-            """
-            cat /tmp/{file}.csv |
-            clickhouse-client --query="INSERT INTO t_{table} FORMAT CSV"
-            """.format(
-                file=self.table_name, table=self.table_name))
-
-    def _send(self, data, settings=None, stream=False):
-        """
-        """
-        for query in data:
-            r = requests.post(self.db_url, data=query, stream=stream)
-            if r.status_code != 200:
-                raise Exception(r.text)
-
-    def run(self):
-        self.create_csv()
-        self.create_table()
-        self.load_csv()
-
-
-class MaterializedView(WareHouse):
-    """
-    Класс описывает материализованное представление.
-
-    !!Загрузка в материализованное представление на данный момент является
-    альтернативой загрузки в clickhouse
-    """
-
-    def run(self):
-        # fixme needs to check status of all subtasks
-        # если какой нить таск упал, то сюда не дойдет
-        # нужны декораторы на обработку ошибок
-        local_service = DataSourceService.get_local_instance()
-        cube_key = self.context["cube_key"]
-        local_service.create_materialized_view(
-            DIMENSIONS_MV.format(cube_key),
-            MEASURES_MV.format(cube_key),
-            self.context['relations']
-        )
-
-    print 'MEASURES AND DIMENSIONS ARE MADE!'
-
-# ------ Warehouse Load ----------
 
 
 # write in console: python manage.py celery -A etl.multitask worker

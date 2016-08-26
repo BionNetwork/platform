@@ -490,13 +490,17 @@ class Columns(models.Model):
     """
     Колонки в кубе
     """
-
     name = models.CharField(verbose_name="Название", max_length=255)
     dataset = models.ForeignKey(Dataset, verbose_name="Хранилище")
-    original_name = models.CharField(verbose_name="Название в источнике", max_length=255)
+    original_name = models.CharField(
+        verbose_name="Название в источнике", max_length=255)
+    original_table = models.CharField(
+        verbose_name="Название таблицы в источнике",
+        max_length=255, default='')
     source = models.ForeignKey(Datasource, verbose_name="Источник")
     type = models.CharField(
-        verbose_name="Тип", choices=ColumnTypeChoices.choices, default=ColumnTypeChoices.STRING, max_length=20)
+        verbose_name="Тип", choices=ColumnTypeChoices.choices,
+        default=ColumnTypeChoices.STRING, max_length=20)
     format_string = models.CharField(verbose_name="размерность", max_length=20)
     visible = models.BooleanField(default=True)
     date_created = models.DateTimeField(
@@ -508,4 +512,5 @@ class Columns(models.Model):
         db_table = 'columns'
 
     def __str__(self):
-        return "{0}, {1} ({2})".format(self.dataset_id, self.source_id, self.original_name)
+        return "{0}, {1} ({2})".format(
+            self.dataset_id, self.source_id, self.original_name)

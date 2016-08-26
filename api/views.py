@@ -321,7 +321,7 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'Лист2', },
 
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
-            # {"source_id": 36, "table_name": 'auth_group', },
+            {"source_id": 36, "table_name": 'auth_group', },
         ]
 
         info = []
@@ -447,10 +447,10 @@ class CardViewSet(viewsets.ViewSet):
             #             "gni", "uno", "okato", "status", "level",
             #         ],
             #     },
-            # '36':
-            #     {
-            #         "auth_group": ["num", "name2", ],
-            #     },
+            '36':
+                {
+                    "auth_group": ["num", "name2", ],
+                },
         }
 
         # TODO возможно валидацию перенести в отдельный файл

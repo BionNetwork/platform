@@ -59,6 +59,7 @@ PSQL_FOREIGN_TABLE = 'etl:load_data:psql_foreign_table'
 PSQL_VIEW = 'etl:load_data:psql_view'
 WAREHOUSE_LOAD = 'etl:load_data:clickhouse_load'
 CREATE_DATE_TABLE = 'etl:load_data:create_date_table'
+META_INFO_SAVE = 'etl:database:save_meta'
 
 
 # Префиксы названий таблиц
