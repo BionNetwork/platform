@@ -9,8 +9,8 @@ from bisect import bisect_left
 from collections import defaultdict
 
 from core.models import (
-    Datasource, DatasourceMeta, Dataset, DatasetStateChoices, 
-    ConnectionChoices as CC)
+    Datasource, Dataset, DatasetStateChoices,
+    ConnectionChoices as CC, Columns, ColumnTypeChoices as CTC)
 
 from etl.constants import *
 from etl.services.queue.base import *
@@ -51,12 +51,13 @@ def load_data(context):
     #     for sub_tree in sub_trees)(
     #         mongo_callback.subtask(self.context))
 
+    create_dataset(card_id, sub_trees, pusher)
+
     for sub_tree in sub_trees:
         create_foreign_table(card_id, sub_tree, pusher)
         create_view(card_id, sub_tree, pusher)
 
     warehouse_load(card_id, context, pusher)
-    meta_info_save(card_id, context, pusher)
 
 
 # FIXME: реализовать через EtlBase
@@ -78,7 +79,7 @@ def create_dataset(card_id, sub_tree, pusher):
     """
     Создание хранилища
     """
-    CreateDataset(card_id, sub_tree, pusher)
+    CreateDataset(card_id, sub_tree, pusher).run()
 
 
 @app.task(name=PSQL_FOREIGN_TABLE)
@@ -145,7 +146,8 @@ class EtlBaseTask(object):
             pusher(Pusher): Отправитель сообщений на клиент
         """
         self.card_id = card_id
-        self.task_id = TaskService(self.task_name).add_task(arguments=context)
+        # TODO save context and rewrite TaskService and Queue models
+        # self.task_id = TaskService(self.task_name).add_task(arguments=context)
         self.context = context
         self.pusher = pusher or Pusher(card_id)
 
@@ -166,7 +168,8 @@ class EtlBaseTask(object):
             self.pre()
             self.process()
             self.post()
-        except:
+        except Exception as e:
+            print e.message
             raise Exception
 
     def process(self):
@@ -295,6 +298,7 @@ class LoadWarehouse(EtlBaseTask):
         return sources_info
 
     def post(self):
+        meta_info_save(self.card_id, self.context, self.pusher)
         self.pusher.push_final(data=self.get_response())
 
 
@@ -305,6 +309,28 @@ class MetaInfoSave(EtlBaseTask):
     """
 
     task_name = META_INFO_SAVE
+
+    def process(self):
+
+        dataset_id = self.card_id
+
+        sub_trees = self.context['sub_trees']
+
+        # FIXME temporary delete all old meta columns info
+        Columns.objects.filter(dataset_id=dataset_id).delete()
+
+        for sub_tree in sub_trees:
+            orig_table = sub_tree['val']
+            source_id = sub_tree['sid']
+            for column in sub_tree['columns']:
+                Columns.objects.create(
+                    dataset_id=dataset_id,
+                    original_table=orig_table,
+                    original_name=column['name'],
+                    name=CLICK_COLUMN.format(column['hash']),
+                    source_id=source_id,
+                    type=CTC.get_type(column['type']),
+                )
 
 
 class LoadMongoDB(EtlBaseTask):

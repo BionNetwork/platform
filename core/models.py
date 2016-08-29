@@ -483,7 +483,21 @@ class ColumnTypeChoices(DjangoChoices):
     """
     Cтатусы для Dataset
     """
-    STRING = ChoiceItem(1, 'string')
+    STRING = ChoiceItem(1, 'text')
+    INTEGER = ChoiceItem(2, 'integer')
+    DOUBLE = ChoiceItem(3, 'double precision')
+    TIMESTAMP = ChoiceItem(4, 'timestamp')
+    BOOLEAN = ChoiceItem(5, 'bool')
+
+    @classmethod
+    def get_type(cls, type_name):
+        """
+        Возвращает ключ по значению
+        """
+        for k, v in cls.choices:
+            if v == type_name:
+                return k
+        raise Exception("No such type of ColumnChoices")
 
 
 class Columns(models.Model):
