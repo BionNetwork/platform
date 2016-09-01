@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import os
 import datetime
 
 from django.db import models
@@ -61,7 +62,8 @@ class Datasource(models.Model):
     password = models.CharField(max_length=255, null=True, help_text="пароль")
     create_date = models.DateTimeField(
         'create_date', help_text="дата создания", auto_now_add=True, db_index=True)
-    user_id = models.IntegerField(help_text='идентификатор пользователя')
+    # FIXME remove user_id
+    user_id = models.IntegerField(help_text='идентификатор пользователя', null=True)
     conn_type = models.SmallIntegerField(
         verbose_name='Тип подключения', choices=ConnectionChoices.choices,
         default=ConnectionChoices.POSTGRESQL)
@@ -105,6 +107,15 @@ class Datasource(models.Model):
         if self.is_file:
             return self.file.path
 
+    def get_dir_path(self):
+        # возвращает полный путь директории, в которой лежит файл
+        if self.is_file:
+            return os.path.dirname(self.get_file_path())
+
+    def get_temp_dir_path(self):
+        # возвращает полный путь для време
+        return os.path.join(self.get_dir_path(), 'temp')
+
     def get_source_info(self):
         """
         Инфа соурса
@@ -133,9 +144,40 @@ class Datasource(models.Model):
         if 'id' in data:
             self.id = data['id']
 
+    def source_temp_copy(self, new_file):
+        """
+        Сохранение временного файла для замены источника на основе файла
+        """
+        copy = Datasource(conn_type=self.conn_type, user_id=1)
+        temp_file_path = os.path.join(
+            self.get_temp_dir_path(), new_file.name)
+        copy.file.save(temp_file_path, new_file, save=False)
+
+        return copy
+
+    def mark_file_name_as_old(self):
+        """
+        Переименовываем старый файл при замене
+        """
+        if self.is_file and self.file:
+            file_path = self.get_file_path()
+            base_dir = self.get_dir_path()
+            file_name = os.path.basename(file_path)
+            new_file_name = "old-{0}-{1}".format(
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                file_name
+            )
+            os.rename(file_path,
+                      os.path.join(base_dir, new_file_name))
+
+    def remove_temp_file(self):
+        """
+        Удаляет временный файл
+        """
+        os.remove(self.get_file_path())
+
     class Meta:
         db_table = "datasources"
-        unique_together = ('host', 'db', 'user_id')
 
 
 class DatasourceSettings(models.Model):

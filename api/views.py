@@ -127,18 +127,18 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
 
 
+# TODO decorator for existing Datasource pk
 class DatasourceViewSet(viewsets.ModelViewSet):
     model = Datasource
     serializer_class = DatasourceSerializer
 
     def get_queryset(self):
-        return self.model.objects.filter(user_id=self.request.user.id)
+        return self.model.objects.all()
 
     def list(self, request, *args, **kwargs):
         return super(DatasourceViewSet, self).list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
-        request.data.update({'user_id': request.user.id})
         return super(DatasourceViewSet, self).create(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
@@ -146,6 +146,17 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         DataSourceService.delete_datasource(source)
         # DataSourceService.tree_full_clean(source)
         return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
+
+    @detail_route(methods=['post'])
+    def update_source(self, request, pk=None):
+        """
+        Метод изменения источника,
+        предположительно для замены файлов пользователя
+        """
+        source_id = pk
+        DataSourceService.update_datasource(source_id, request)
+
+        return Response()
 
     @detail_route(methods=['get'])
     def tables(self, request, pk=None):

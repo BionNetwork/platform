@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 
+# TODO make codes for exceptions
 class BaseExcept(Exception):
     """
     Базовый для исключений
@@ -21,3 +22,9 @@ class SheetExcept(BaseExcept):
     Ошибка отсутствия страницы в файлах
     """
     MSG = "No such sheet!"
+
+
+class SourceUpdateExcept(BaseExcept):
+    """
+    Ошибка при работе с источником
+    """

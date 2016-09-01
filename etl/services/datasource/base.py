@@ -1,16 +1,7 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
-import json
-from itertools import groupby
-import operator
-from collections import defaultdict
-
-from django.db import transaction
-
-from core.models import (DatasourceMeta, DatasourceMetaKeys, DatasetToMeta,
-                         ConnectionChoices, Datasource)
-from etl.services.datasource.repository import r_server
+from core.models import (ConnectionChoices, Datasource, Columns)
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
 from etl.services.datasource.repository.storage import (
@@ -18,6 +9,7 @@ from etl.services.datasource.repository.storage import (
 from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import HashEncoder
+from etl.services.excepts import SourceUpdateExcept
 
 
 RedisSS = RedisSourceService
@@ -81,6 +73,57 @@ class DataSourceService(object):
             source(core.models.Datasource): Источник данных
         """
         RedisSourceService.delete_datasource(source)
+
+    @classmethod
+    def update_datasource(cls, source_id, request):
+        """
+        Изменение источника,
+        предположительно для замены файлов пользователя
+        """
+        source = Datasource.objects.get(id=source_id)
+
+        if source.is_file:
+            new_file = request.FILES.get('file', None)
+
+            if new_file is None:
+                raise Exception("What to change if file is empty?")
+
+            columns = Columns.objects.filter(source_id=source_id)
+
+            copy = source.source_temp_copy(new_file)
+            service = cls.get_source_service(copy)
+            new_tables = [t['name'] for t in service.get_tables()]
+            saved_tables = columns.values_list(
+                'original_table', flat=True).distinct()
+
+            tables_range = [t for t in saved_tables if t not in new_tables]
+            if tables_range:
+                raise SourceUpdateExcept(
+                    "Tables {0} removed in new file!".format(tables_range))
+
+            indents = DataSourceService.extract_source_indentation(source_id)
+            new_columns = service.fetch_tables_columns(new_tables, indents)
+
+            new_columns = [(t, c['name'])
+                           for t in new_columns for c in new_columns[t]]
+
+            saved_columns = columns.filter(
+                original_table__in=saved_tables).values_list(
+                'original_table', 'original_name')
+
+            columns_range = [tupl for tupl in saved_columns
+                             if tupl not in new_columns]
+
+            if columns_range:
+                raise SourceUpdateExcept(
+                    "Columns {0} removed in new file!".format(columns_range))
+            # если все нормально, то
+            # отметим заменяемый файл как старый
+            source.mark_file_name_as_old()
+            # заменяем файл
+            source.file.save(new_file.name, new_file)
+            # удаляем временную копию
+            copy.remove_temp_file()
 
     @staticmethod
     def check_connection(post):
