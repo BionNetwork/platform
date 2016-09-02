@@ -11,6 +11,7 @@ mock
 easywebdav == 1.2.0
 xmla == 0.7.2
 xmltodict
+xlrd==0.9.4
 kombu==3.0.30
 Pillow
 djangorestframework==3.3.2
