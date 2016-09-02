@@ -35,6 +35,14 @@ app = Celery('multi', backend='redis://localhost:6379/0',
 
 
 def load_data(context):
+    """
+    Сценарий загрузки данных
+    Args:
+        context:
+
+    Returns:
+
+    """
     context = context
     card_id = context['card_id']
     pusher = Pusher(card_id)
@@ -51,13 +59,25 @@ def load_data(context):
     #     for sub_tree in sub_trees)(
     #         mongo_callback.subtask(self.context))
 
-    create_dataset(card_id, sub_trees, pusher)
+    # create_dataset(card_id, sub_trees, pusher)
 
     for sub_tree in sub_trees:
         create_foreign_table(card_id, sub_tree, pusher)
         create_view(card_id, sub_tree, pusher)
 
     warehouse_load(card_id, context, pusher)
+
+
+def update_data(context):
+    """
+    Сценарий обновления данных
+    Args:
+        context:
+
+    Returns:
+
+    """
+    pass
 
 
 # FIXME: реализовать через EtlBase
@@ -147,7 +167,7 @@ class EtlBaseTask(object):
         """
         self.card_id = card_id
         # TODO save context and rewrite TaskService and Queue models
-        # self.task_id = TaskService(self.task_name).add_task(arguments=context)
+        self.task_id = TaskService(self.task_name).add_task(arguments=context)
         self.context = context
         self.pusher = pusher or Pusher(card_id)
 
@@ -271,7 +291,7 @@ class LoadWarehouse(EtlBaseTask):
         ориг/новые названия колонок
         """
         sources_info = {
-            "main_table": CLICK_TABLE.format(self.context['card_id']),
+            "main_table": self.context['warehouse'],
             "sources": defaultdict(list),
         }
         sources = sources_info["sources"]
@@ -287,7 +307,7 @@ class LoadWarehouse(EtlBaseTask):
                 "columns": [
                     {
                         "orig_column": column["name"],
-                        "click_column": CLICK_COLUMN.format(column['hash']),
+                        "click_column": column["click_column"],
                         "type": column["type"],
                     } for column in sub_tree['columns']
                 ],

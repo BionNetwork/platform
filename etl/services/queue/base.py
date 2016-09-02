@@ -614,7 +614,7 @@ class TaskService(object):
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
             app='etl',
-            checksum=arguments.get('checksum', '5555555'),
+            checksum='555555555',
         )
 
         task_id = task.id

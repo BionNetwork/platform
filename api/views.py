@@ -21,13 +21,15 @@ from api.serializers import (
     LoadDataSerializer)
 
 from core.models import (Cube, User, Datasource, Dimension, Measure,
-                         DatasourceMetaKeys)
+                         DatasourceMetaKeys, Dataset, DatasetStateChoices)
 from core.views import BaseViewNoLogin
 from etl.multitask import load_data
 from etl.services.datasource.base import DataSourceService
 from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 from etl.helpers import group_by_source
 from etl.services.excepts import SheetExcept
+
+from etl.constants import *
 
 from rest_framework.decorators import detail_route
 
@@ -492,10 +494,16 @@ class CardViewSet(viewsets.ViewSet):
             #             "gni", "uno", "okato", "status", "level",
             #         ],
             #     },
-            '36':
-                {
-                    "auth_group": ["num", "name2", ],
-                },
+            # '36':
+            #     {
+            #         "auth_group": ["num", "name2", ],
+            #     },
+            '3':
+                {"shops": ['name']},
+            '5': {"Таблица1": ['name'],
+                  "Таблица2": ['country2'],
+                  "Таблица3": ['country']}
+
         }
 
         # TODO возможно валидацию перенести в отдельный файл
@@ -539,30 +547,106 @@ class CardViewSet(viewsets.ViewSet):
                 "message": "Tables {0} in tree, but didn't come! ".format(
                  range_)})
 
-        # TODO проверить пришедшие точно лежат в активных, не в остатках
-
-        # cols_str = generate_columns_string_NEW(columns_info)
-        # cube_key = generate_cube_key(cols_str, pk)
-
-        # список структур со всей инфой для загрузки
-        sub_trees = worker.prepare_sub_trees(sources_info)
-
-        # строим связи между таблицами
-        relations = worker.prepare_relations(sub_trees)
-
-        # Параметры для задач
-        load_args = {
-            'card_id': pk,
-            'is_update': False,
-            'sub_trees': sub_trees,
-            # TODO решить как должен выглядеть cube_key, пока card_id
-            'cube_key': pk,
-            "relations": relations,
-        }
-
-        load_data(load_args)
+        dc = DatasetContext(card_id=pk, sources_info=sources_info)
+        try:
+            dc.create_dataset()
+        except ContextError:
+            Response({"message": "Подобная карточка уже существует"})
+        load_data(dc.context)
 
         return Response({"message": "Loading is started!"})
+
+
+class DatasetContext(object):
+    """
+    Контекст выполениния задач
+    """
+
+    def __init__(self, card_id, is_update=False, sources_info=None):
+        """
+
+        Args:
+            card_id(int): id Карточки
+            is_update(bool): Обновление?
+            sources_info(dict): Данные загрузки
+            ::
+            ['<source_1>':
+                {
+                    "shops": ['<column_1>, <column_2>, <column_3>]
+                },
+            '<source_2>':
+                {
+                    "<table_1>": [<column_1>, <column_2>],
+                    "<table_2": [<column_1>, <column_2>]
+                }
+            ...
+
+        ]
+        """
+        self.card_id = card_id
+        self.is_update = is_update
+        self.sources_info = sources_info
+        self.service = DataSourceService(card_id=card_id)
+
+        try:
+            self.dataset = Dataset.objects.get(key=card_id)
+            self.is_new = False
+        except Dataset.DoesNotExist:
+            self.dataset = Dataset()
+            self.is_new = True
+
+    @property
+    def context(self):
+        """
+        Контекста выполнения задач
+
+        Returns:
+            dict:
+
+        """
+        if self.is_new:
+            sub_trees = self.service.prepare_sub_trees(self.sources_info)
+            for sub_tree in sub_trees:
+                sub_tree.update(
+                    view_name='{type}{view_hash}'.format(
+                        type=VIEW, view_hash=sub_tree['collection_hash']),
+                    table_name='{type}{view_hash}'.format(
+                        type=STTM, view_hash=sub_tree['collection_hash']))
+                for column in sub_tree['columns']:
+                    sub_tree['columns'].update(click_column=CLICK_COLUMN.format(column['hash']))
+
+            relations = self.service.prepare_relations(sub_trees)
+            return {
+                'warehouse': CLICK_TABLE.format(self.card_id),
+                'card_id': self.card_id,
+                'is_update': False,
+                'sub_trees': sub_trees,
+                "relations": relations,
+            }
+        else:
+            return self.dataset.context
+
+    def create_dataset(self):
+        if self.is_new:
+            self.dataset.key = self.card_id
+            self.dataset.context = self.context
+            self.dataset.state = DatasetStateChoices.IDLE
+            self.dataset.save()
+        else:
+            raise ContextError('Dataset already exist')
+
+    @property
+    def state(self):
+        return self.dataset.state
+
+    @state.setter
+    def state(self, value):
+        self.dataset.state = value
+        self.dataset.save()
+
+
+class ContextError(Exception):
+    pass
 
 
 def check_parent(func):

@@ -226,10 +226,8 @@ class Postgresql(Database):
         "sttm_1_2_4284056851867979717"."group_id", "sttm_1_2_4284056851867979717"."permission_id"
         FROM sttm_1_2_4284056851867979717 ;
         """
-        view_name = 'view_{view_hash}'.format(
-            view_hash=sub_tree['collection_hash'])
-        table_name = 'sttm_{view_hash}'.format(
-            view_hash=sub_tree['collection_hash'])
+        view_name = sub_tree['view_name']
+        table_name = sub_tree['table_name']
 
         columns = sub_tree['columns']
 

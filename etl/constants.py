@@ -65,6 +65,7 @@ META_INFO_SAVE = 'etl:database:save_meta'
 # Префиксы названий таблиц
 STTM = 'sttm_'  # Временная загружаемая таблица Mongo
 FDW = 'fdw_'
+VIEW = 'view_'
 
 MONGODB = 'mongodb'
 

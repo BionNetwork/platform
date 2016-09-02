@@ -62,14 +62,14 @@ class ClickHouse(WareHouse):
         for tree in self.context['sub_trees']:
             for col in tree['columns']:
                 col_types.append(u'{0} {1}'.format(
-                    CLICK_COLUMN.format(col['hash']), self.field_map[col['type']]))
+                    col['click_column'], self.field_map[col['type']]))
 
         drop_query = """DROP TABLE IF EXISTS t_{table_name}""".format(
             table_name=self.table_name)
 
         create_query = """CREATE TABLE {table_name} ({columns}) engine = Log
             """.format(
-            table_name=CLICK_TABLE.format(self.table_name),
+            table_name=self.context['warehouse'],
             columns=','.join(col_types))
 
         self._send([drop_query, create_query])

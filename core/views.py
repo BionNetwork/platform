@@ -17,7 +17,7 @@ from django.views.generic import TemplateView, View
 from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponseRedirect
 from django.core.urlresolvers import reverse
-from django.contrib.auth.models import check_password
+# from django.contrib.auth.models import check_password
 from django.conf import settings
 from django.core.mail import send_mail
 from django.http import HttpResponse
