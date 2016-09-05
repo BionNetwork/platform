@@ -3,11 +3,12 @@ from __future__ import unicode_literals
 
 import time
 import datetime
+from dateutil.parser import parse
 import pandas
 from collections import defaultdict
 from more_itertools import first
 
-from etl.services.file.interfaces import File, process_type
+from etl.services.file.interfaces import File, process_type, TIMESTAMP
 from etl.services.excepts import SheetExcept
 
 
@@ -79,8 +80,19 @@ class CSV(File):
         sheet_df = pandas.read_csv(csv_path, skiprows=indent, delimiter=',')
         col_names = sheet_df.columns
         for col_name in col_names:
-            origin_type = sheet_df[col_name].dtype.name
+            col_df = sheet_df[col_name]
+            origin_type = col_df.dtype.name
             col_type = process_type(origin_type)
+
+            # определяем типы дат вручную
+            if col_type != TIMESTAMP:
+                try:
+                    parse(col_df.loc[0])
+                except Exception:
+                    pass
+                else:
+                    col_type = TIMESTAMP
+
             columns[sheet].append({
                 "name": col_name,
                 "type": col_type,

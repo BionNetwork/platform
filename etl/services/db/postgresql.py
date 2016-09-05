@@ -232,27 +232,27 @@ class Postgresql(Database):
         columns = sub_tree['columns']
 
         query_column = []
-        time_joins_map = {}
+        # time_joins_map = {}
         for index, column in enumerate(columns):
-            if column['type'] in ['date', 'datetime', 'timestamp']:
-                time_joins_map.update({index: column['name']})
-                s = 't{index}."time_id" as "{column_name}"'.format(
-                    index=index, column_name=column['name'])
-                query_column.append(s)
-            else:
-                query_column.append('"{table}"."{column}"'.format(
-                    table=table_name, column=column['name']))
+            # if column['type'] in ['date', 'datetime', 'timestamp']:
+            #     time_joins_map.update({index: column['name']})
+            #     s = 't{index}."time_id" as "{column_name}"'.format(
+            #         index=index, column_name=column['name'])
+            #     query_column.append(s)
+            # else:
+            query_column.append('"{table}"."{column}"'.format(
+                table=table_name, column=column['name']))
 
         select_line = ', '.join(query_column)
 
         joins_line = ''
-        if time_joins_map:
-            for index, column in time_joins_map.iteritems():
-                joins_line += '''
-                JOIN time_table_name as t{index} ON
-                "{foreign_table_name}"."{column}"::date =
-                t{index}."the_date"'''.format(
-                    index=index, foreign_table_name=table_name, column=column)
+        # if time_joins_map:
+        #     for index, column in time_joins_map.iteritems():
+        #         joins_line += '''
+        #         JOIN time_table_name as t{index} ON
+        #         "{foreign_table_name}"."{column}"::date =
+        #         t{index}."the_date"'''.format(
+        #             index=index, foreign_table_name=table_name, column=column)
 
         query = """DROP VIEW IF EXISTS  {view_name} CASCADE;
         CREATE VIEW {view_name} AS SELECT {select}

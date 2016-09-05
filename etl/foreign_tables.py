@@ -131,7 +131,11 @@ class XlsForeignTable(CsvForeignTable):
         data_xls = pd.read_excel(
             self.source_url, self.tree['val'],
             parse_cols=indexes, index_col=False)
-        data_xls.to_csv(
+
+        # FIXME temporary drop all empty values
+        dropna_df = data_xls.dropna()
+
+        dropna_df.to_csv(
             csv_file_name, header=indexes, encoding='utf-8', index=None)
 
         return csv_file_name

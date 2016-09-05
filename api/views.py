@@ -369,6 +369,7 @@ class CardViewSet(viewsets.ViewSet):
 
             # {"source_id": 1, "table_name": u'Лист2', },
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
+            # {"source_id": 65, "table_name": 'TDSheet', },
         ]
 
         info = []
@@ -392,7 +393,7 @@ class CardViewSet(viewsets.ViewSet):
     def exchange_file(self, request, pk):
         pass
 
-    @detail_route(['post'] )
+    @detail_route(['post'])
     def update_data(self, request, pk):
         """
         Обновление данных
@@ -422,7 +423,15 @@ class CardViewSet(viewsets.ViewSet):
 
         """
         table = ''
-        data = request.data[0]
+        # data = request.data[0]
+        data = {
+            "Y": {"field_name": "price", "aggregation": "sum"},
+            "X": {"field_name": "time", "period": [1, 3], "discrete": "week"},
+            "filters": [
+                {"field_name": "company","value": ["etton"]},
+                {"field_name": "color", "value": ["blue"]},
+            ]
+        }
 
         x_field = 'toRelativeWeekNum({field}) AS {field}_week'.format(field=data['X']['field_name'])
         y_field = '{aggregation}({field})'.format(aggregation=data['Y']['aggregation'], field=data['Y']['field_name'])
@@ -498,11 +507,25 @@ class CardViewSet(viewsets.ViewSet):
             #     {
             #         "auth_group": ["num", "name2", ],
             #     },
-            '3':
-                {"shops": ['name']},
-            '5': {"Таблица1": ['name'],
-                  "Таблица2": ['country2'],
-                  "Таблица3": ['country']}
+            # '65':
+            #     {
+            #         "TDSheet": [
+            #             "Дата",
+            #             "Организация",
+            #             "Выручка",
+            #             # "ВыручкаБезНДС",
+            #             "НоменклатурнаяГруппа",
+            #             "Контрагент",
+            #             "ДоговорКонтрагента",
+            #             "Регистратор",
+            #             "Проект",
+            #         ],
+            #     },
+            # '3':
+            #     {"shops": ['name']},
+            # '5': {"Таблица1": ['name'],
+            #       "Таблица2": ['country2'],
+            #       "Таблица3": ['country']}
 
         }
 

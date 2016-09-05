@@ -4,10 +4,13 @@ from __future__ import unicode_literals
 import ntpath
 
 # соответствие типов pandas-a и postgres
+
+TIMESTAMP = "timestamp"
+
 TYPES_MAP = {
     "int": "integer",
     "float": "double precision",
-    "datetime": "datetime",
+    "datetime": TIMESTAMP,
     "object": "text",
     "boolean": "boolean"
 }

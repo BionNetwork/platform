@@ -31,8 +31,10 @@ class ClickHouse(WareHouse):
 
     field_map = {
         'text': 'String',
-        'integer': 'Int16',
+        'integer': 'Int64',
         'datetime': 'DateTime',
+        'timestamp': 'DateTime',
+        'double precision': 'Float64',
         'date': 'Date',
     }
 
