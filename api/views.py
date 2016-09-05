@@ -613,9 +613,10 @@ class DatasetContext(object):
                     table_name='{type}{view_hash}'.format(
                         type=STTM, view_hash=sub_tree['collection_hash']))
                 for column in sub_tree['columns']:
-                    sub_tree['columns'].update(click_column=CLICK_COLUMN.format(column['hash']))
+                    column.update(click_column=CLICK_COLUMN.format(column['hash']))
 
             relations = self.service.prepare_relations(sub_trees)
+            self.is_new = False
             return {
                 'warehouse': CLICK_TABLE.format(self.card_id),
                 'card_id': self.card_id,
