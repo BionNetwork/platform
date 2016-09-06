@@ -353,9 +353,9 @@ class CardViewSet(viewsets.ViewSet):
 
         post = request.POST
 
-        # data = json.loads(post.get('data'))
+        data = json.loads(post.get('data'))
 
-        data = [
+        # data = [
             # for server
             # {"source_id": 4, "table_name": u'auth_group', },
             # {"source_id": 4, "table_name": u'auth_group_permissions', },
@@ -372,8 +372,8 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'Лист2', },
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
             # {"source_id": 65, "table_name": 'TDSheet', },
-            {"source_id": 1, "table_name": 'TDSheet', },
-        ]
+            # {"source_id": 1, "table_name": 'TDSheet', },
+        # ]
 
         info = []
 
