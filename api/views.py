@@ -351,9 +351,11 @@ class CardViewSet(viewsets.ViewSet):
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
     def create_tree(self, request, pk):
 
-        data = request.data
+        post = request.POST
 
-        data = [
+        data = json.loads(post.get('data'))
+
+        # data = [
             # for server
             # {"source_id": 4, "table_name": u'auth_group', },
             # {"source_id": 4, "table_name": u'auth_group_permissions', },
@@ -370,13 +372,12 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'Лист2', },
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
             # {"source_id": 65, "table_name": 'TDSheet', },
-        ]
+        # ]
 
         info = []
 
-        serializer = self.serializer_class(data=data, many=True)
+        serializer = self.serializer_class(data=post, many=True)
         if serializer.is_valid():
-
             worker = DataSourceService(card_id=pk)
 
             for each in data:
@@ -462,9 +463,11 @@ class CardViewSet(viewsets.ViewSet):
         if pk is None:
             raise Exception("Card ID is None!")
 
-        # columns = json.loads(post.get('columns'))
+        data = request.data
 
-        sources_info = {
+        sources_info = json.loads(data.get('data'))
+
+        # sources_info = {
             # '5':
             #     {
             #         "Таблица1": ['name', 'gender', 'age'],
@@ -527,7 +530,7 @@ class CardViewSet(viewsets.ViewSet):
             #       "Таблица2": ['country2'],
             #       "Таблица3": ['country']}
 
-        }
+        # }
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:

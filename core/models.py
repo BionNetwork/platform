@@ -449,7 +449,7 @@ class Dataset(models.Model):
         verbose_name="Дата создания", auto_now_add=True, db_index=True)
     update_date = models.DateTimeField(
         verbose_name="Дата обновления", auto_now=True, db_index=True)
-    context = JSONField()
+    context = JSONField(null=True)
     state = models.SmallIntegerField(
         verbose_name='Статус', choices=DatasetStateChoices.choices,
         default=DatasetStateChoices.IDLE, db_index=True)
