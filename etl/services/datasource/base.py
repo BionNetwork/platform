@@ -1,7 +1,10 @@
 # coding: utf-8
 from __future__ import unicode_literals
 
-from core.models import (ConnectionChoices, Datasource, Columns)
+from core.models import (
+    ConnectionChoices, Datasource, Columns, ColumnTypeChoices as ColTC,
+    Dataset,
+)
 from etl.services.db.factory import DatabaseService, LocalDatabaseService
 from etl.services.file.factory import FileService
 from etl.services.datasource.repository.storage import (
@@ -10,6 +13,7 @@ from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import HashEncoder
 from etl.services.excepts import SourceUpdateExcept
+from etl.services.clickhouse.helpers import FILTER_QUERIES
 
 
 RedisSS = RedisSourceService
@@ -954,3 +958,26 @@ class DataSourceService(object):
         range_ = [table_tupl for table_tupl in tree_table_names if
                   table_tupl not in came_table_names]
         return range_
+
+    def get_cube_columns(self):
+        """
+        Список колонок для фильтров куба
+        """
+        cube_id = self.cache.card_id
+
+        filter_types = ColTC.filter_types()
+
+        context = Dataset.objects.get(key=cube_id).context
+        click_table = context['warehouse']
+
+        columns = Columns.objects.filter(
+            dataset__key=cube_id, type__in=filter_types).values(
+            'original_name', 'name', 'original_table', 'type', 'source_id',
+            'dataset__key')
+
+        for col in columns:
+            q = FILTER_QUERIES[ColTC.values[int(col['type'])]]
+            q = q.format(column_name=col['name'], table_name=click_table)
+            col['query'] = q
+
+        return columns
