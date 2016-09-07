@@ -452,19 +452,20 @@ class CardViewSet(viewsets.ViewSet):
         x_field_name = data['X']['field_name']
         condition = ''
         if data.get('filters', None):
-            condition = ' AND '.join(['{field} IN {resolve_fields}'.format(
+            condition = ' AND '.join(['{field} IN ({resolve_fields})'.format(
                     field=fltr['field_name'],
-                    resolve_fields=repr(fltr['value']).replace('[', '(').replace(']', ')')) for fltr in data['filters']])
+                    resolve_fields=', '.join(["'{0}'".format(x) for x in fltr['value']])) for fltr in data['filters']])
         # Если есть переодичность, то добавяем секцию BETWEEN
         if data['X'].get('period', None):
             if data.get('filters', None):
                 condition += ' AND '
-            condition += '(toDate({field}) BETWEEN toDate({left}) AND toDate({right}))'.format(
+            condition += '''(toDate({field}) BETWEEN toDate('{left}') AND toDate('{right}'))'''.format(
                 field=data['X']['field_name'], left=data['X']['period'][0], right=data['X']['period'][1])
 
-        query = "SELECT {fields} FROM {table} WHERE {condition} GROUP BY {group_by_field}".format(
+        query = "SELECT {fields} FROM {table} WHERE {condition} GROUP BY {group_by_field} FORMAT JSON;".format(
             fields=fields, table=table, condition=condition, group_by_field=x_field_name)
 # Select d from buh where project in (30) group by d;
+
         send([query])
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
@@ -587,9 +588,10 @@ class CardViewSet(viewsets.ViewSet):
             dc.create_dataset()
         except ContextError:
             Response({"message": "Подобная карточка уже существует"})
-        load_data(dc.context)
+        load_d = load_data(dc.context)
 
-        return Response({"message": "Loading is started!"})
+        return Response(load_d)
+        # return Response({"message": "Loading is started!"})
 
     @detail_route(['get', ], serializer_class=LoadDataSerializer)
     def get_filters(self, request, pk):

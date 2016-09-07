@@ -67,6 +67,9 @@ def load_data(context):
 
     warehouse_load(card_id, context, pusher)
 
+    return LoadWarehouse(
+        card_id=card_id, context=context, pusher=pusher).get_response()
+
 
 def update_data(context):
     """
