@@ -359,7 +359,7 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
-        data = json.loads(data.get('data'))
+        # data = json.loads(data.get('data'))
 
         # data = [
             # for server
@@ -472,13 +472,10 @@ class CardViewSet(viewsets.ViewSet):
         """
         Начачло загрузки данных
         """
-
         if pk is None:
             raise Exception("Card ID is None!")
 
-        data = request.data
-
-        sources_info = json.loads(data.get('data'))
+        sources_info = request.data
 
         # sources_info = {
             # '5':
