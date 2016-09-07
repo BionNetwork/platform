@@ -359,7 +359,7 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
-        # data = json.loads(post.get('data'))
+        data = json.loads(data.get('data'))
 
         # data = [
             # for server
@@ -478,9 +478,9 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
-        # sources_info = json.loads(data.get('data'))
+        sources_info = json.loads(data.get('data'))
 
-        sources_info = {
+        # sources_info = {
             # '5':
             #     {
             #         "Таблица1": ['name', 'gender', 'age'],
@@ -523,27 +523,26 @@ class CardViewSet(viewsets.ViewSet):
             #     {
             #         "auth_group": ["num", "name2", ],
             #     },
-            '65':
-                {
-                    "TDSheet": [
-                        "Дата",
-                        "Организация",
-                        "Выручка",
-                        # "ВыручкаБезНДС",
-                        "НоменклатурнаяГруппа",
-                        "Контрагент",
-                        "ДоговорКонтрагента",
-                        "Регистратор",
-                        "Проект",
-                    ],
-                },
+            # '65':
+            #     {
+            #         "TDSheet": [
+            #             "Дата",
+            #             "Организация",
+            #             "Выручка",
+            #             # "ВыручкаБезНДС",
+            #             "НоменклатурнаяГруппа",
+            #             "Контрагент",
+            #             "ДоговорКонтрагента",
+            #             "Регистратор",
+            #             "Проект",
+            #         ],
+            #     },
             # '3':
             #     {"shops": ['name']},
             # '5': {"Таблица1": ['name'],
             #       "Таблица2": ['country2'],
             #       "Таблица3": ['country']}
-
-        }
+        # }
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
