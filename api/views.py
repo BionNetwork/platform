@@ -329,6 +329,12 @@ def send(data, settings=None, stream=False):
         r = requests.post('http://localhost:8123/', data=query, stream=stream)
         if r.status_code != 200:
             raise Exception(r.text)
+        try:
+            j = r.json()
+        except Exception as e:
+            print e.message
+        else:
+            return j
 
 
 class CardViewSet(viewsets.ViewSet):
@@ -466,9 +472,9 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
-        sources_info = json.loads(data.get('data'))
+        # sources_info = json.loads(data.get('data'))
 
-        # sources_info = {
+        sources_info = {
             # '5':
             #     {
             #         "Таблица1": ['name', 'gender', 'age'],
@@ -511,27 +517,27 @@ class CardViewSet(viewsets.ViewSet):
             #     {
             #         "auth_group": ["num", "name2", ],
             #     },
-            # '65':
-            #     {
-            #         "TDSheet": [
-            #             "Дата",
-            #             "Организация",
-            #             "Выручка",
-            #             # "ВыручкаБезНДС",
-            #             "НоменклатурнаяГруппа",
-            #             "Контрагент",
-            #             "ДоговорКонтрагента",
-            #             "Регистратор",
-            #             "Проект",
-            #         ],
-            #     },
+            '65':
+                {
+                    "TDSheet": [
+                        "Дата",
+                        "Организация",
+                        "Выручка",
+                        # "ВыручкаБезНДС",
+                        "НоменклатурнаяГруппа",
+                        "Контрагент",
+                        "ДоговорКонтрагента",
+                        "Регистратор",
+                        "Проект",
+                    ],
+                },
             # '3':
             #     {"shops": ['name']},
             # '5': {"Таблица1": ['name'],
             #       "Таблица2": ['country2'],
             #       "Таблица3": ['country']}
 
-        # }
+        }
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
@@ -582,6 +588,31 @@ class CardViewSet(viewsets.ViewSet):
         load_data(dc.context)
 
         return Response({"message": "Loading is started!"})
+
+    @detail_route(['get', ], serializer_class=LoadDataSerializer)
+    def get_filters(self, request, pk):
+        """
+        Список значений для фильтров куба
+        """
+        worker = DataSourceService(card_id=pk)
+
+        filters = []
+        columns = worker.get_cube_columns()
+
+        for column in columns:
+            json_resp = send([column['query']])
+            values = reduce(
+                list.__add__, [k.values() for k in json_resp['data']], [])
+
+            filters.append({
+                'cube_id': column['dataset__key'],
+                'source_id': column['source_id'],
+                'table_name': column['original_table'],
+                'column_name': column['original_name'],
+                'values': values,
+            })
+
+        return Response({"filters": filters})
 
 
 class DatasetContext(object):

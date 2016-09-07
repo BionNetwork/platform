@@ -537,6 +537,8 @@ class ColumnTypeChoices(DjangoChoices):
     TIMESTAMP = ChoiceItem(4, 'timestamp')
     BOOLEAN = ChoiceItem(5, 'bool')
 
+    # FIXME доработать  BOOLEAN, вроде не работает
+
     @classmethod
     def get_type(cls, type_name):
         """
@@ -546,6 +548,13 @@ class ColumnTypeChoices(DjangoChoices):
             if v == type_name:
                 return k
         raise Exception("No such type of ColumnChoices")
+
+    @classmethod
+    def filter_types(cls):
+        """
+        Список колонок для фильтров
+        """
+        return [cls.STRING, cls.TIMESTAMP, cls.BOOLEAN]
 
 
 class Columns(models.Model):
