@@ -353,7 +353,7 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
-        data = [
+        # data = [
             # for server
             # {"source_id": 4, "table_name": u'auth_group', },
             # {"source_id": 4, "table_name": u'auth_group_permissions', },
@@ -370,7 +370,7 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'Лист2', },
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
             # {"source_id": 65, "table_name": 'TDSheet', },
-        ]
+        # ]
 
         info = []
 
@@ -422,35 +422,41 @@ class CardViewSet(viewsets.ViewSet):
         Returns:
 
         """
-        table = ''
-        # data = request.data[0]
-        data = {
-            "Y": {"field_name": "price", "aggregation": "sum"},
-            "X": {"field_name": "time", "period": [1, 3], "discrete": "week"},
-            "filters": [
-                {"field_name": "company","value": ["etton"]},
-                {"field_name": "color", "value": ["blue"]},
-            ]
-        }
+        context = Dataset.objects.get(key=pk).context
+        table = context['warehouse']
+        data = request.data
+        # data = {
+        #     "Y": {"field_name": "price", "aggregation": "sum"},
+        #     "X": {"field_name": "time", "period": [1, 3], "discrete": "week"},
+        #     "filters": [
+        #         {"field_name": "company", "value": ["etton"]},
+        #         {"field_name": "color", "value": ["blue"]},
+        #     ]
+        # }
 
-        x_field = 'toRelativeWeekNum({field}) AS {field}_week'.format(field=data['X']['field_name'])
-        y_field = '{aggregation}({field})'.format(aggregation=data['Y']['aggregation'], field=data['Y']['field_name'])
+        # x_field = 'toRelativeWeekNum({field}) AS {field}_week'.format(field=data['X']['field_name'])
+        x_field = data['X']['field_name']
+        y_field = '{aggregation}({field}) as {aggregation}_{field}'.format(aggregation=data['Y']['aggregation'], field=data['Y']['field_name'])
 
         fields = ', '.join([x_field, y_field])
 
-        x_field_name = '{field}_week'.format(field=data['X']['field_name'])
-
-        condition = ' AND '.join(['{field} IN {resolve_fields}'.format(
-                field=fltr['field_name'],
-                resolve_fields=repr(fltr['value']).replace('[', '(').replace(']', ')')) for fltr in data['filters']])
+        # x_field_name = '{field}_week'.format(field=data['X']['field_name'])
+        x_field_name = data['X']['field_name']
+        condition = ''
+        if data.get('filters', None):
+            condition = ' AND '.join(['{field} IN {resolve_fields}'.format(
+                    field=fltr['field_name'],
+                    resolve_fields=repr(fltr['value']).replace('[', '(').replace(']', ')')) for fltr in data['filters']])
         # Если есть переодичность, то добавяем секцию BETWEEN
-        if data['X']['period']:
-            condition += ' AND ({field} BETWEEN {left} AND {right})'.format(
+        if data['X'].get('period', None):
+            if data.get('filters', None):
+                condition += ' AND '
+            condition += '(toDate({field}) BETWEEN toDate({left}) AND toDate({right}))'.format(
                 field=data['X']['field_name'], left=data['X']['period'][0], right=data['X']['period'][1])
 
         query = "SELECT {fields} FROM {table} WHERE {condition} GROUP BY {group_by_field}".format(
             fields=fields, table=table, condition=condition, group_by_field=x_field_name)
-
+# Select d from buh where project in (30) group by d;
         send([query])
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
@@ -463,6 +469,9 @@ class CardViewSet(viewsets.ViewSet):
             raise Exception("Card ID is None!")
 
         # columns = json.loads(post.get('columns'))
+
+        a = {"10": {"TDSheet": ["Дата", "Организация", "Выручка", "ВыручкаБезНДС", "НоменклатурнаяГруппа", "Контрагент",
+                            "ДоговорКонтрагента", "Проект"]}}
 
         sources_info = {
             # '5':
@@ -507,27 +516,14 @@ class CardViewSet(viewsets.ViewSet):
             #     {
             #         "auth_group": ["num", "name2", ],
             #     },
-            # '65':
-            #     {
-            #         "TDSheet": [
-            #             "Дата",
-            #             "Организация",
-            #             "Выручка",
-            #             # "ВыручкаБезНДС",
-            #             "НоменклатурнаяГруппа",
-            #             "Контрагент",
-            #             "ДоговорКонтрагента",
-            #             "Регистратор",
-            #             "Проект",
-            #         ],
-            #     },
-            # '3':
-            #     {"shops": ['name']},
-            # '5': {"Таблица1": ['name'],
-            #       "Таблица2": ['country2'],
-            #       "Таблица3": ['country']}
-
+        #     '3':
+        #         {"shops": ['name']},
+        #     '5': {"Таблица1": ['name'],
+        #           "Таблица2": ['country2', 'name'],
+        #           "Таблица3": ['country']}
+        #
         }
+        sources_info = request.data
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
