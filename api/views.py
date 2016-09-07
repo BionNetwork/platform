@@ -353,7 +353,7 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
-        data = json.loads(post.get('data'))
+        # data = json.loads(post.get('data'))
 
         # data = [
             # for server
