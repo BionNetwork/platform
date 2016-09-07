@@ -353,6 +353,8 @@ class CardViewSet(viewsets.ViewSet):
 
         data = request.data
 
+        data = json.loads(post.get('data'))
+
         # data = [
             # for server
             # {"source_id": 4, "table_name": u'auth_group', },
@@ -370,13 +372,13 @@ class CardViewSet(viewsets.ViewSet):
             # {"source_id": 1, "table_name": u'Лист2', },
             # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
             # {"source_id": 65, "table_name": 'TDSheet', },
+            # {"source_id": 1, "table_name": 'TDSheet', },
         # ]
 
         info = []
 
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
-
             worker = DataSourceService(card_id=pk)
 
             for each in data:
@@ -468,12 +470,11 @@ class CardViewSet(viewsets.ViewSet):
         if pk is None:
             raise Exception("Card ID is None!")
 
-        # columns = json.loads(post.get('columns'))
+        data = request.data
 
-        a = {"10": {"TDSheet": ["Дата", "Организация", "Выручка", "ВыручкаБезНДС", "НоменклатурнаяГруппа", "Контрагент",
-                            "ДоговорКонтрагента", "Проект"]}}
+        sources_info = json.loads(data.get('data'))
 
-        sources_info = {
+        # sources_info = {
             # '5':
             #     {
             #         "Таблица1": ['name', 'gender', 'age'],
@@ -516,14 +517,27 @@ class CardViewSet(viewsets.ViewSet):
             #     {
             #         "auth_group": ["num", "name2", ],
             #     },
-        #     '3':
-        #         {"shops": ['name']},
-        #     '5': {"Таблица1": ['name'],
-        #           "Таблица2": ['country2', 'name'],
-        #           "Таблица3": ['country']}
-        #
-        }
-        sources_info = request.data
+            # '65':
+            #     {
+            #         "TDSheet": [
+            #             "Дата",
+            #             "Организация",
+            #             "Выручка",
+            #             # "ВыручкаБезНДС",
+            #             "НоменклатурнаяГруппа",
+            #             "Контрагент",
+            #             "ДоговорКонтрагента",
+            #             "Регистратор",
+            #             "Проект",
+            #         ],
+            #     },
+            # '3':
+            #     {"shops": ['name']},
+            # '5': {"Таблица1": ['name'],
+            #       "Таблица2": ['country2'],
+            #       "Таблица3": ['country']}
+
+        # }
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
