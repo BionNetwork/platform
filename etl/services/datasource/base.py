@@ -966,20 +966,29 @@ class DataSourceService(object):
         cube_id = self.cache.card_id
 
         filter_types = ColTC.filter_types()
+        measure_types = ColTC.measure_types()
 
         context = Dataset.objects.get(key=cube_id).context
         click_table = context['warehouse']
 
-        columns = Columns.objects.filter(
-            dataset__key=cube_id, type__in=filter_types).values(
-            'original_name', 'name', 'original_table', 'type', 'source_id',
-            'dataset__key')
+        columns = Columns.objects.filter(dataset__key=cube_id)
 
-        for col in columns:
+        filters = columns.filter(type__in=filter_types).values(
+            'original_name', 'name', 'original_table',
+            'type', 'source_id', 'dataset__key')
+
+        measures = columns.filter(type__in=measure_types).values(
+            'original_name', 'name', 'original_table',
+            'type', 'source_id', 'dataset__key')
+
+        for col in filters:
             type_name = ColTC.values[int(col['type'])]
             q = FILTER_QUERIES[type_name]
             q = q.format(column_name=col['name'], table_name=click_table)
             col['query'] = q
             col['type'] = type_name
 
-        return columns
+        for col in measures:
+            col['type'] = ColTC.values[int(col['type'])]
+
+        return {'filters': filters, 'measures': measures}

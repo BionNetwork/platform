@@ -360,23 +360,10 @@ class CardViewSet(viewsets.ViewSet):
         data = json.loads(request.data.get('data'))
 
         # data = [
-            # for server
-            # {"source_id": 4, "table_name": u'auth_group', },
-            # {"source_id": 4, "table_name": u'auth_group_permissions', },
-            # {"source_id": 2, "table_name": u'auth_group', },
-            # {"source_id": 2, "table_name": u'auth_group_permissions', },
-            # {"source_id": 2, "table_name": u'auth_permission', },
-            # {"source_id": 2, "table_name": u'auth_permission2', },
-            # {"source_id": 2, "table_name": u'card_card', },
-
-            # {"source_id": 1, "table_name": u'Лист1', },
-            # {"source_id": 1, "table_name": u'List3', },
-            # {"source_id": 36, "table_name": 'auth_group', },
-
-            # {"source_id": 1, "table_name": u'Лист2', },
-            # {"source_id": 31, "table_name": 'kladr_kladrgeo', },
-            # {"source_id": 65, "table_name": 'TDSheet', },
-            # {"source_id": 1, "table_name": 'TDSheet', },
+        #     # {"source_id": 2, "table_name": u'auth_group', },
+        #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
+        #     # {"source_id": 2, "table_name": u'auth_permission', },
+        #     {"source_id": 74, "table_name": 'TDSheet', },
         # ]
 
         info = []
@@ -478,67 +465,21 @@ class CardViewSet(viewsets.ViewSet):
         sources_info = json.loads(request.data.get('data'))
 
         # sources_info = {
-            # '5':
-            #     {
-            #         "Таблица1": ['name', 'gender', 'age'],
-            #         "Таблица2": ['name', 'country2']
-            #     },
-            # '3':
-            #     {
-            #         'shops': ['name']
-            #     }
-            # '8':
-            #     {
-            #         "mrk_reference": ["pubmedid", "creation_date"],
-            #     },
-            # '4':
-            #     {
-            #         "auth_group": ["name", "id", ],
-            #         "auth_group_permissions": [
-            #             "id", "group_id", "permission_id",],
-            #     },
-            # '1':
-            #     {
-            #         "Лист1": [
-            #             "name2", "пол", "auth_group_id", "Floata", ],
-            #         "List3": ["name2", "some_id", ],
-            #     },
-            # '2':
-            #     {
-            #         "auth_group": ["name", "id", ],
-            #         "auth_group_permissions": [
-            #             "id", "group_id", "permission_id",],
-            #     },
-            # '31':
-            #     {
-            #         "kladr_kladrgeo": [
-            #             "id", "parent_id", "name", "socr", "code", "zipcode",
-            #             "gni", "uno", "okato", "status", "level",
-            #         ],
-            #     },
-            # '36':
-            #     {
-            #         "auth_group": ["num", "name2", ],
-            #     },
-            # '65':
-            #     {
-            #         "TDSheet": [
-            #             "Дата",
-            #             "Организация",
-            #             "Выручка",
-            #             # "ВыручкаБезНДС",
-            #             "НоменклатурнаяГруппа",
-            #             "Контрагент",
-            #             "ДоговорКонтрагента",
-            #             "Регистратор",
-            #             "Проект",
-            #         ],
-            #     },
-            # '3':
-            #     {"shops": ['name']},
-            # '5': {"Таблица1": ['name'],
-            #       "Таблица2": ['country2'],
-            #       "Таблица3": ['country']}
+        #     '74':
+        #         {
+        #             "TDSheet": [
+        #                 "Дата",
+        #                 "Организация",
+        #                 # "Дебетовый остаток",
+        #                 "Выручка",
+        #                 "ВыручкаБезНДС",
+        #                 "НоменклатурнаяГруппа",
+        #                 "Контрагент",
+        #                 "ДоговорКонтрагента",
+        #                 "Регистратор",
+        #                 "Проект",
+        #             ],
+        #         },
         # }
 
         # TODO возможно валидацию перенести в отдельный файл
@@ -600,9 +541,10 @@ class CardViewSet(viewsets.ViewSet):
         worker = DataSourceService(card_id=pk)
 
         filters = []
-        columns = worker.get_cube_columns()
+        measures = []
+        meta = worker.get_cube_columns()
 
-        for column in columns:
+        for column in meta['filters']:
             json_resp = send([column['query']])
             values = reduce(
                 list.__add__, [k.values() for k in json_resp['data']], [])
@@ -617,7 +559,17 @@ class CardViewSet(viewsets.ViewSet):
                 'values': values,
             })
 
-        return Response({"filters": filters})
+        for column in meta['measures']:
+            measures.append({
+                'cube_id': column['dataset__key'],
+                'source_id': column['source_id'],
+                'table_name': column['original_table'],
+                'column_name': column['original_name'],
+                'click_column_name': column['name'],
+                'column_type': column['type'],
+            })
+
+        return Response({"filters": filters, "measures": measures})
 
 
 class DatasetContext(object):

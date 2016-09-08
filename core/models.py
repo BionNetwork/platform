@@ -556,6 +556,13 @@ class ColumnTypeChoices(DjangoChoices):
         """
         return [cls.STRING, cls.TIMESTAMP, cls.BOOLEAN]
 
+    @classmethod
+    def measure_types(cls):
+        """
+        Список колонок для фильтров
+        """
+        return [cls.INTEGER, cls.DOUBLE]
+
 
 class Columns(models.Model):
     """
