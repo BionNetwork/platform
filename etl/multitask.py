@@ -353,6 +353,7 @@ class MetaInfoSave(EtlBaseTask):
                     original_table=orig_table,
                     original_name=column['name'],
                     name=CLICK_COLUMN.format(column['hash']),
+                    # name=column['name'],
                     source_id=source_id,
                     type=CTC.get_type(column['type']),
                 )

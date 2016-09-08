@@ -697,7 +697,7 @@ class DataSourceService(object):
             """
             return [
                 VIEW_COL_SEL.format(
-                    VIEW_PREFIX, tree['collection_hash'], column['name'])
+                    VIEW_PREFIX, tree['collection_hash'], column['name'], column['click_column'])
                 for column in tree['columns'] if column['type'] in types]
 
         def extract_columns(tree):
@@ -706,7 +706,7 @@ class DataSourceService(object):
             """
             return [
                 VIEW_COL_SEL.format(
-                    VIEW_PREFIX, tree['collection_hash'], column['name'])
+                    VIEW_PREFIX, tree['collection_hash'], column['name'], column['click_column'])
                 for column in tree['columns']]
 
         # префикс для названия вьюхи, осздаваемая на foreign table
@@ -716,7 +716,7 @@ class DataSourceService(object):
         # вспомогательный ключ для определения хэша таблицы для ее колонки
         HASH_STR = "{0}_{1}_{2}"
         # строка названия вьюхи и ее колонки для селекта
-        VIEW_COL_SEL = '"{0}{1}"."{2}" as "{1}__{2}"'
+        VIEW_COL_SEL = '"{0}{1}"."{2}" as "{3}"'
         # строка названия вьюхи и ее колонки для джойнов
         VIEW_COL_JOIN = '"{0}{1}"."{2}"'
 
