@@ -3,11 +3,11 @@ from __future__ import unicode_literals, division
 
 __author__ = 'damir(GDR)'
 
-MIN_MAX_QUERY = """SELECT toDate(MIN({column_name})), toDate(MAX({column_name}))
-                   FROM {table_name} FORMAT JSON;"""
+# 'FORMAT JSON' для сlickhouse
+MIN_MAX_QUERY = """SELECT MIN({column_name}), MAX({column_name}) FROM {table_name};"""
 
-DISTINCT_QUERY = """SELECT DISTINCT {column_name}
-                    FROM {table_name} FORMAT JSON;"""
+# 'FORMAT JSON' для сlickhouse
+DISTINCT_QUERY = """SELECT DISTINCT {column_name} FROM {table_name};"""
 
 FILTER_QUERIES = {
     'timestamp': MIN_MAX_QUERY,

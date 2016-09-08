@@ -968,6 +968,8 @@ class DataSourceService(object):
         filter_types = ColTC.filter_types()
         measure_types = ColTC.measure_types()
 
+        local_service = self.get_local_instance()
+
         context = Dataset.objects.get(key=cube_id).context
         click_table = context['warehouse']
 
@@ -991,4 +993,33 @@ class DataSourceService(object):
         for col in measures:
             col['type'] = ColTC.values[int(col['type'])]
 
-        return {'filters': filters, 'measures': measures}
+        filters2 = []
+        measures2 = []
+
+        for column in filters:
+            json_resp = local_service.fetchall(column['query'])
+            # values = reduce(
+            #     list.__add__, [k.values() for k in json_resp['data']], [])
+            values = [k[0] for k in json_resp]
+
+            filters2.append({
+                'cube_id': column['dataset__key'],
+                'source_id': column['source_id'],
+                'table_name': column['original_table'],
+                'column_name': column['original_name'],
+                'click_column_name': column['name'],
+                'column_type': column['type'],
+                'values': values,
+            })
+
+        for column in measures:
+            measures2.append({
+                'cube_id': column['dataset__key'],
+                'source_id': column['source_id'],
+                'table_name': column['original_table'],
+                'column_name': column['original_name'],
+                'click_column_name': column['name'],
+                'column_type': column['type'],
+            })
+
+        return {'filters': filters2, 'measures': measures2}

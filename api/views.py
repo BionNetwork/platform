@@ -561,32 +561,7 @@ class CardViewSet(viewsets.ViewSet):
         measures = []
         meta = worker.get_cube_columns()
 
-        for column in meta['filters']:
-            json_resp = send([column['query']])
-            values = reduce(
-                list.__add__, [k.values() for k in json_resp['data']], [])
-
-            filters.append({
-                'cube_id': column['dataset__key'],
-                'source_id': column['source_id'],
-                'table_name': column['original_table'],
-                'column_name': column['original_name'],
-                'click_column_name': column['name'],
-                'column_type': column['type'],
-                'values': values,
-            })
-
-        for column in meta['measures']:
-            measures.append({
-                'cube_id': column['dataset__key'],
-                'source_id': column['source_id'],
-                'table_name': column['original_table'],
-                'column_name': column['original_name'],
-                'click_column_name': column['name'],
-                'column_type': column['type'],
-            })
-
-        return Response({"filters": filters, "measures": measures})
+        return Response(meta)
 
 
 class DatasetContext(object):
