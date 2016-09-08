@@ -364,7 +364,7 @@ class CardViewSet(viewsets.ViewSet):
         #     # {"source_id": 2, "table_name": u'auth_group', },
         #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
         #     # {"source_id": 2, "table_name": u'auth_permission', },
-        #     {"source_id": 74, "table_name": 'TDSheet', },
+        #     {"source_id": 82, "table_name": 'TDSheet', },
         # ]
 
         info = []
@@ -465,6 +465,96 @@ class CardViewSet(viewsets.ViewSet):
 
         send([query])
 
+    @detail_route(['post'])
+    def query_new(self, request, pk):
+        """
+        Формирование запроса
+        Args:
+            request:
+            pk:
+        [{
+        "Y": {"field_name":"price","aggregation": "sum"},
+        "X": {"field_name":"time","period":[1, 3],"discrete":"week"},
+        "filters": [{"field_name":"company","value": ["etton"]}, {"field_name":"color","value": ["blue"]}]
+        }]
+        Returns:
+        """
+        context = Dataset.objects.get(key=pk).context
+        table = context['warehouse']
+
+        # data = json.loads(request.data.get('data'))
+
+        data = {
+            "X": {"field_name": "c_2_74_448246359376073858_1951231061259157126",
+                  "period": ["2012-12-01", "2012-12-20"], "interval":
+                      "year",
+                      # "quarter",
+                      # "month"
+               },
+            "Y": {"field_name": "sum(c_2_74_448246359376073858_3606484360407848552) as summy"
+                  },
+            "Organizations": {
+                "field_name": "c_2_74_448246359376073858_1951231061259157126", "values": ["Татмедиа", "Регион"]
+            },
+            "filters": [
+                {"field_name": "c_2_74_448246359376073858_7245817762177945291", "values": ["Wednesday", "Friday"]},
+                {"field_name": "c_2_74_448246359376073858_7245817762177945294", "values": [4]},
+            ],
+        }
+
+        # select part
+        date_name = data['X']['field_name']
+        x_alias = 'date_info'
+
+        interval = data['X'].get('interval', None)
+
+        date_q = "date_trunc('{0}', {1}) as {2}".format('{0}', date_name, x_alias)
+
+        if interval:
+            date_select = date_q.format(interval)
+        else:
+            date_select = "{0}::date as {1}".format(date_name, x_alias)
+
+        sum_name = data['Y']['field_name']
+        y_alias = 'summy'
+        sum_select = "{0} as {1}".format(sum_name, y_alias)
+
+        org_name = data['Organizations']['field_name']
+        org_alias = 'org'
+        org_select = "{0} as {1}".format(org_name, org_alias)
+
+        selects = [date_select, sum_select, org_select]
+        select_q = 'SELECT {0} FROM {1}'.format(' ,'.join(selects), table)
+
+        # where part
+        wheres = []
+
+        period = data['X'].get('period', None)
+        if period:
+            wheres.append("{0} BETWEEN {1} and {2}".format(date_name, period[0], period[1]))
+
+        org_values = data['Organizations'].get('values', None)
+        if org_values:
+            wheres.append("{0} IN ({1})".format(
+                org_name, ', '.join(["'{0}'".format(x) for x in org_values])))
+
+        filters = data.get('filters', None)
+
+        if filters:
+            for filt in filters:
+                wheres.append("{0} IN ({1})".format(
+                    filt['field_name'],
+                    ', '.join(["'{0}'".format(x) for x in filt['values']])))
+
+        where_q = 'WHERE {0}'.format(' AND '.join(wheres)) if wheres else ''
+
+        # groups part
+        groups = [date_select, org_select]
+        group_q = 'GROUP BY {0}'.format(' ,'.join(groups))
+
+        query = '{0} {1} {2};'.format(select_q, where_q, group_q)
+        print query
+
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
         """
@@ -473,30 +563,25 @@ class CardViewSet(viewsets.ViewSet):
         if pk is None:
             raise Exception("Card ID is None!")
 
-        # sources_info = json.loads(request.data.get('data'))
-        sources_info = request.data
+        sources_info = json.loads(request.data.get('data'))
 
         # sources_info = {
-        #     '74':
+        #     '82':
         #         {
         #             "TDSheet": [
         #                 "Дата",
         #                 "Организация",
+        #                 # "Остаток",
         #                 # "Дебетовый остаток",
         #                 "Выручка",
         #                 "ВыручкаБезНДС",
         #                 "НоменклатурнаяГруппа",
         #                 "Контрагент",
         #                 "ДоговорКонтрагента",
-        #                 "Регистратор",
+        #                 # "Регистратор",
         #                 "Проект",
         #             ],
         #         },
-        # '3':
-        #     {"shops": ['name']},
-        # '5': {"Таблица1": ['name'],
-        #       "Таблица2": ['country2'],
-        #       "Таблица3": ['country']}
         # }
 
         # TODO возможно валидацию перенести в отдельный файл
