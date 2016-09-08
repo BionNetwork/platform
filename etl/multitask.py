@@ -19,7 +19,7 @@ from etl.services.datasource.base import DataSourceService
 
 from etl.foreign_tables import (
     RdbmsForeignTable, CsvForeignTable, XlsForeignTable)
-from etl.warehouse import ClickHouse
+from etl.warehouse import ClickHouse, PostgresWarehouse
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
@@ -286,7 +286,7 @@ class LoadWarehouse(EtlBaseTask):
         Загрузка в Clickhouse. Возможно следует реальзовать и вариант с созданием
         материализованных представлений для мер и размерностей в Postgres
         """
-        ClickHouse(context=self.context).run()
+        PostgresWarehouse(context=self.context).run()
 
     def get_response(self):
         """

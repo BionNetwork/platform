@@ -101,6 +101,21 @@ class ClickHouse(WareHouse):
         self.load_csv()
 
 
+class PostgresWarehouse(WareHouse):
+    """
+    Загрузка конечных данных в Postgres
+    """
+
+    def create_table(self):
+        warehouse = self.context['warehouse']
+        local_service = DataSourceService.get_local_instance()
+        local_service.create_posgres_warehouse(
+            warehouse=warehouse, relations=self.context['relations'])
+
+    def run(self):
+        self.create_table()
+
+
 class MaterializedView(WareHouse):
     """
     Класс описывает материализованное представление.

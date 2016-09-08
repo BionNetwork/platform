@@ -471,6 +471,14 @@ class LocalDatabaseService(object):
             select_query=select_query, file_path=file_path, file_name=file_name)
         self.execute(copy_query)
 
+    def create_posgres_warehouse(self, warehouse, relations):
+
+        select_query = self.datasource.create_sttm_select_query(relations)
+
+        create_query = """CREATE MATERIALIZED VIEW {warehouse} AS {select_query}""".format(
+            warehouse=warehouse, select_query=select_query)
+        self.execute(create_query)
+
     def check_table_exists_query(self, local_instance, table, db):
         """
         Проверка на существование таблицы

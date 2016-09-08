@@ -332,7 +332,8 @@ def send(data, settings=None, stream=False):
         try:
             j = r.json()
         except Exception as e:
-            print e.message
+            # print e.message
+            pass
         else:
             return j
 
@@ -490,6 +491,11 @@ class CardViewSet(viewsets.ViewSet):
         #                 "Проект",
         #             ],
         #         },
+        # '3':
+        #     {"shops": ['name']},
+        # '5': {"Таблица1": ['name'],
+        #       "Таблица2": ['country2'],
+        #       "Таблица3": ['country']}
         # }
 
         # TODO возможно валидацию перенести в отдельный файл
