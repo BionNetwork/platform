@@ -417,13 +417,17 @@ class CardViewSet(viewsets.ViewSet):
         """
         context = Dataset.objects.get(key=pk).context
         table = context['warehouse']
-        data = request.data
+        # data = request.data
+        data = json.loads(request.data.get('data'))
+
         # data = {
-        #     "Y": {"field_name": "price", "aggregation": "sum"},
-        #     "X": {"field_name": "time", "period": [1, 3], "discrete": "week"},
+        #     "Y": {"field_name": "c_1_73_448246359376073858_3606484360407848552", "aggregation": "sum"},
+        #     "X": {"field_name": "c_1_73_448246359376073858_1951231061259157126", "period": ["2016-01-01", "2016-01-01"]},
         #     "filters": [
-        #         {"field_name": "company", "value": ["etton"]},
-        #         {"field_name": "color", "value": ["blue"]},
+        #         {"field_name": "c_1_73_448246359376073858_7245817762177945292","value": ["Татмедиа"]}
+        #     ],
+        #     "groups": [
+        #         {"field_name": "c_1_73_448246359376073858_7245817762177945292"}
         #     ]
         # }
 
@@ -447,8 +451,14 @@ class CardViewSet(viewsets.ViewSet):
             condition += '''(toDate({field}) BETWEEN toDate('{left}') AND toDate('{right}'))'''.format(
                 field=data['X']['field_name'], left=data['X']['period'][0], right=data['X']['period'][1])
 
-        query = "SELECT {fields} FROM {table} WHERE {condition} GROUP BY {group_by_field} FORMAT JSON;".format(
-            fields=fields, table=table, condition=condition, group_by_field=x_field_name)
+        # groups part
+        groups = data.get('groups', [])
+        groups = [x['field_name'] for x in groups]
+        groups.append(x_field_name)
+        group_part = 'GROUP BY {0}'.format(' ,'.join(groups))
+
+        query = "SELECT {fields} FROM {table} WHERE {condition} {group_part} FORMAT JSON;".format(
+            fields=fields, table=table, condition=condition, group_part=group_part)
         print query
 # Select d from buh where project in (30) group by d;
 
