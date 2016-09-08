@@ -544,7 +544,7 @@ class CardViewSet(viewsets.ViewSet):
         try:
             dc.create_dataset()
         except ContextError:
-            Response({"message": "Подобная карточка уже существует"})
+            return Response({"message": "Подобная карточка уже существует"})
         load_d = load_data(dc.context)
 
         return Response(load_d)
