@@ -976,8 +976,10 @@ class DataSourceService(object):
             'dataset__key')
 
         for col in columns:
-            q = FILTER_QUERIES[ColTC.values[int(col['type'])]]
+            type_name = ColTC.values[int(col['type'])]
+            q = FILTER_QUERIES[type_name]
             q = q.format(column_name=col['name'], table_name=click_table)
             col['query'] = q
+            col['type'] = type_name
 
         return columns

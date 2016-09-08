@@ -357,9 +357,7 @@ class CardViewSet(viewsets.ViewSet):
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
     def create_tree(self, request, pk):
 
-        data = request.data
-
-        # data = json.loads(data.get('data'))
+        data = json.loads(request.data.get('data'))
 
         # data = [
             # for server
@@ -464,6 +462,7 @@ class CardViewSet(viewsets.ViewSet):
 
         query = "SELECT {fields} FROM {table} WHERE {condition} GROUP BY {group_by_field} FORMAT JSON;".format(
             fields=fields, table=table, condition=condition, group_by_field=x_field_name)
+        print query
 # Select d from buh where project in (30) group by d;
 
         send([query])
@@ -476,7 +475,7 @@ class CardViewSet(viewsets.ViewSet):
         if pk is None:
             raise Exception("Card ID is None!")
 
-        sources_info = request.data
+        sources_info = json.loads(request.data.get('data'))
 
         # sources_info = {
             # '5':
@@ -613,6 +612,8 @@ class CardViewSet(viewsets.ViewSet):
                 'source_id': column['source_id'],
                 'table_name': column['original_table'],
                 'column_name': column['original_name'],
+                'click_column_name': column['name'],
+                'column_type': column['type'],
                 'values': values,
             })
 

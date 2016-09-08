@@ -133,9 +133,9 @@ class XlsForeignTable(CsvForeignTable):
             parse_cols=indexes, index_col=False)
 
         # FIXME temporary drop all empty values
-        dropna_df = data_xls.dropna()
+        # dropna_df = data_xls.dropna()
 
-        dropna_df.to_csv(
+        data_xls.to_csv(
             csv_file_name, header=indexes, encoding='utf-8', index=None)
 
         return csv_file_name
