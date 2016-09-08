@@ -361,9 +361,9 @@ class CardViewSet(viewsets.ViewSet):
         data = json.loads(request.data.get('data'))
 
         # data = [
-        #     # {"source_id": 2, "table_name": u'auth_group', },
-        #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
-        #     # {"source_id": 2, "table_name": u'auth_permission', },
+        # #     # {"source_id": 2, "table_name": u'auth_group', },
+        # #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
+        # #     # {"source_id": 2, "table_name": u'auth_permission', },
         #     {"source_id": 82, "table_name": 'TDSheet', },
         # ]
 
@@ -482,38 +482,38 @@ class CardViewSet(viewsets.ViewSet):
         context = Dataset.objects.get(key=pk).context
         table = context['warehouse']
 
-        # data = json.loads(request.data.get('data'))
+        data = json.loads(request.data.get('data'))
 
-        data = {
-            "X": {"field_name": "c_2_74_448246359376073858_1951231061259157126",
-                  "period": ["2012-12-01", "2012-12-20"], "interval":
-                      "year",
-                      # "quarter",
-                      # "month"
-               },
-            "Y": {"field_name": "sum(c_2_74_448246359376073858_3606484360407848552) as summy"
-                  },
-            "Organizations": {
-                "field_name": "c_2_74_448246359376073858_1951231061259157126", "values": ["Татмедиа", "Регион"]
-            },
-            "filters": [
-                {"field_name": "c_2_74_448246359376073858_7245817762177945291", "values": ["Wednesday", "Friday"]},
-                {"field_name": "c_2_74_448246359376073858_7245817762177945294", "values": [4]},
-            ],
-        }
+        # data = {
+        #     "X": {"field_name": "c_1_82_448246359376073858_1951231061259157126",
+        #           "period": ["2012-12-01", "2017-12-20"], "interval":
+        #               "year",
+        #               # "quarter",
+        #               # "month"
+        #        },
+        #     "Y": {"field_name": "sum(c_1_82_448246359376073858_3606484360407848552)"
+        #           },
+        #     "Organizations": {
+        #         "field_name": "c_1_82_448246359376073858_3863414131424461117", "values": ["Эттон", "Эттон-Центр"]
+        #     },
+        #     "filters": [
+        #         {"field_name": "c_1_82_448246359376073858_9152631202378448554", "values": ["КТМ"]},
+        #         {"field_name": "c_2_74_448246359376073858_7245817762177945294", "values": [4]},
+        #     ],
+        # }
 
         # select part
         date_name = data['X']['field_name']
-        x_alias = 'date_info'
+        date_alias = 'date_info'
 
         interval = data['X'].get('interval', None)
 
-        date_q = "date_trunc('{0}', {1}) as {2}".format('{0}', date_name, x_alias)
+        date_q = "date_trunc('{0}', {1}) as {2}".format('{0}', date_name, date_alias)
 
         if interval:
             date_select = date_q.format(interval)
         else:
-            date_select = "{0}::date as {1}".format(date_name, x_alias)
+            date_select = "{0}::date as {1}".format(date_name, date_alias)
 
         sum_name = data['Y']['field_name']
         y_alias = 'summy'
@@ -531,7 +531,7 @@ class CardViewSet(viewsets.ViewSet):
 
         period = data['X'].get('period', None)
         if period:
-            wheres.append("{0} BETWEEN {1} and {2}".format(date_name, period[0], period[1]))
+            wheres.append("{0} BETWEEN '{1}' and '{2}'".format(date_name, period[0], period[1]))
 
         org_values = data['Organizations'].get('values', None)
         if org_values:
@@ -549,11 +549,17 @@ class CardViewSet(viewsets.ViewSet):
         where_q = 'WHERE {0}'.format(' AND '.join(wheres)) if wheres else ''
 
         # groups part
-        groups = [date_select, org_select]
+        groups = [date_alias, org_alias]
         group_q = 'GROUP BY {0}'.format(' ,'.join(groups))
 
         query = '{0} {1} {2};'.format(select_q, where_q, group_q)
         print query
+
+        worker = DataSourceService(card_id=pk)
+        local_service = worker.get_local_instance()
+        json_resp = local_service.fetchall(query)
+        print json_resp
+        return Response(json_resp)
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
