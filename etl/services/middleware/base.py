@@ -1,11 +1,12 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 # TODO все перенести в helpers.py
 
 import decimal
 import datetime
 import operator
+from functools import reduce
 
 
 class EtlEncoder:
@@ -55,8 +56,8 @@ def generate_columns_string_NEW(sources):
         Генерирует строку из имен таблиц и колонок
     """
     result = []
-    for sid, tables in sources.iteritems():
-        for table, cols in tables.iteritems():
+    for sid, tables in sources.items():
+        for table, cols in tables.items():
 
             result.append('{0}-{1};'.format(table, ','.join(sorted(cols))))
 
@@ -104,7 +105,7 @@ def get_table_name(prefix, key):
     Returns:
         str: Название новой наблицы
     """
-    return u'{0}_{1}'.format(
+    return '{0}_{1}'.format(
         prefix, key)
 
 

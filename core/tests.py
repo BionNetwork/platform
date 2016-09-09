@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 from decimal import Decimal
 from threading import Thread
@@ -157,12 +157,12 @@ class HashTest(BaseCoreTest):
 
     def test_hash(self):
         row_data = [
-            924L, 904L, 399L, 0L, 6L, Decimal('8.1000'), Decimal('2.7540'),
+            924, 904, 399, 0, 6, Decimal('8.1000'), Decimal('2.7540'),
             Decimal('3.0000'), 28320,
         ]
 
         row_data2 = [
-            970L, 945L, 6632L, 621L, 8L, Decimal('12.4400'), Decimal('5.7224'),
+            970, 945, 6632, 621, 8, Decimal('12.4400'), Decimal('5.7224'),
             Decimal('4.0000'), 47845,
         ]
 

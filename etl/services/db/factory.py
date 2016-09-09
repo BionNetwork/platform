@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from __future__ import unicode_literals
+
 import calendar
 from contextlib import closing
 import math
@@ -43,10 +43,10 @@ class DatabaseService(DatasourceApi):
         elif conn_type == ConnectionChoices.MYSQL:
             return mysql.Mysql(source)
         elif conn_type == ConnectionChoices.MS_SQL:
-            import mssql
+            from . import mssql
             return mssql.MsSql(source)
         elif conn_type == ConnectionChoices.ORACLE:
-            import oracle
+            from . import oracle
             return oracle.Oracle(source)
         else:
             raise ValueError("Неизвестный тип подключения!")
@@ -65,7 +65,7 @@ class DatabaseService(DatasourceApi):
             trigger__datasource=source).values_list('name', flat=True)
 
         # фильтруем, не показываем таблицы триггеров
-        tables = filter(lambda x: x['name'] not in trigger_tables, tables)
+        tables = [x for x in tables if x['name'] not in trigger_tables]
         return tables
 
     def get_columns_info(self, tables, indents):
@@ -176,7 +176,7 @@ class DatabaseService(DatasourceApi):
         connection = self.datasource.connection
         cursor = connection.cursor()
 
-        for table, columns in tables_info.iteritems():
+        for table, columns in tables_info.items():
 
             table_name = '_etl_{0}'.format(table)
             tables_str = "('{0}')".format(table_name)
@@ -192,7 +192,7 @@ class DatabaseService(DatasourceApi):
             REQUIRED_INDEXES = self.datasource.get_required_indexes()
 
             required_indexes = {k.format(table_name): v
-                                for k, v in REQUIRED_INDEXES.iteritems()}
+                                for k, v in REQUIRED_INDEXES.items()}
 
             for_triggers = self.datasource.get_processed_for_triggers(columns)
             cols_str = for_triggers['cols_str']
@@ -241,7 +241,7 @@ class DatabaseService(DatasourceApi):
                 # проверка cdc-колонок на существование и типы
                 cdc_required_types = self.datasource.db_map.cdc_required_types
 
-                for cdc_k, v in cdc_required_types.iteritems():
+                for cdc_k, v in cdc_required_types.items():
                     if cdc_k not in existing_cols:
                         cursor.execute(add_col_q.format(
                             table_name, cdc_k, v["type"], "", v["nullable"]))
@@ -312,7 +312,7 @@ class DatabaseService(DatasourceApi):
                 # создание индексов
                 create_index_q = self.datasource.db_map.create_index_query
 
-                for index_name, index_cols in required_indexes.iteritems():
+                for index_name, index_cols in required_indexes.items():
 
                     index_cols = [
                         '{0}{1}{0}'.format(sep, x) for x in index_cols]
@@ -599,7 +599,7 @@ class LocalDatabaseService(object):
             return date_tables
 
         # если в таблице дат имелись записи кроме id = 0
-        max_id = max(exists_dates.itervalues())
+        max_id = max(exists_dates.values())
         dates_list = [x[0] for x in db_exists_dates]
         exist_min_date = min(dates_list)
         exist_max_date = max(dates_list)

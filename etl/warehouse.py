@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals, division
+
 
 import os
 import requests
@@ -63,7 +63,7 @@ class ClickHouse(WareHouse):
 
         for tree in self.context['sub_trees']:
             for col in tree['columns']:
-                col_types.append(u'{0} {1}'.format(
+                col_types.append('{0} {1}'.format(
                     col['click_column'], self.field_map[col['type']]))
 
         drop_query = """DROP TABLE IF EXISTS t_{table_name}""".format(
@@ -136,4 +136,4 @@ class MaterializedView(WareHouse):
             self.context['relations']
         )
 
-    print 'MEASURES AND DIMENSIONS ARE MADE!'
+    print('MEASURES AND DIMENSIONS ARE MADE!')

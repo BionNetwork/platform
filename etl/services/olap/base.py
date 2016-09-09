@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
-from olap.xmla import xmla
-import easywebdav
+# from olap.xmla import xmla
+# import easywebdav
 
 from django.conf import settings
 from requests import ConnectionError

@@ -1,10 +1,11 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 from .interfaces import Database, Operations
 from etl.services.db.maps import postgresql as pgsql_map
 from collections import defaultdict
 from itertools import groupby
 import psycopg2
+from functools import reduce
 
 
 class Postgresql(Database):
@@ -110,7 +111,7 @@ class Postgresql(Database):
         Returns:
             str: Строка на выполнение
         """
-        cols = '(%s)' % ','.join(['%({0})s'.format(i) for i in xrange(
+        cols = '(%s)' % ','.join(['%({0})s'.format(i) for i in range(
                 cols_num)])
         return "INSERT INTO {0} VALUES {1}".format(table_name, cols)
 
@@ -166,14 +167,14 @@ class Postgresql(Database):
         fdw_name = fdw_map[source_type]
         conn_params = ', '.join("{name} '{value}'".format(name=key, value=value)
                                 for key, value in
-                                source_params['connection'].iteritems())
+                                source_params['connection'].items())
         query = self.db_map.fdw_server_create_query.format(
             name=name, fdw_name=fdw_name, conn_params=conn_params)
         # Создаем соответствие пользователей удаленной и нашей базой
         if source_params['user']:
             user_params = ', '.join("{name} '{value}'".format(
                 name=key, value=value)
-                for key, value in source_params['user'].iteritems())
+                for key, value in source_params['user'].items())
             query += self.db_map.fdw_mapping_create_query.format(
                 name=name, user_params=user_params)
 
@@ -203,13 +204,13 @@ class Postgresql(Database):
         """
         col_names = []
         for field in cols_meta:
-            col_names.append(u'"{0}" {1}'.format(
+            col_names.append('"{0}" {1}'.format(
                 field['name'], field['type']))
 
         table_name = name
 
         options = ', '.join("{name} '{value}'".format(name=key, value=value)
-                            for key, value in options.iteritems())
+                            for key, value in options.items())
 
         return self.db_map.foreign_table_create_query.format(
             server_name=server_name, table_name=table_name,
@@ -296,9 +297,9 @@ class Postgresql(Database):
             reduce(list.__add__, [x["measure_columns"] for x in relations], []))
 
         for node in relations[1:]:
-            mv_query += u' INNER JOIN "{view_name}" ON {condition}'.format(
+            mv_query += ' INNER JOIN "{view_name}" ON {condition}'.format(
                 view_name=node['view_name'],
-                condition=u'{l}{operation}{r}'.format(
+                condition='{l}{operation}{r}'.format(
                     l=node['conditions'][0]['l'],
                     operation=Operations.values[
                         node['conditions'][0]['operation']],
@@ -335,9 +336,9 @@ class Postgresql(Database):
             reduce(list.__add__, ([x["columns"] for x in relations]), []))
 
         for node in relations[1:]:
-            query += u' INNER JOIN "{view_name}" ON {condition}'.format(
+            query += ' INNER JOIN "{view_name}" ON {condition}'.format(
                 view_name=node['view_name'],
-                condition=u'{l}{operation}{r}'.format(
+                condition='{l}{operation}{r}'.format(
                     l=node['conditions'][0]['l'],
                     operation=Operations.values[
                         node['conditions'][0]['operation']],

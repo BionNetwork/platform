@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import binascii
 import requests
@@ -10,7 +10,7 @@ import logging
 from psycopg2 import Binary
 import json
 import datetime
-from itertools import izip
+
 from bson import binary
 
 from etl.constants import TYPES_MAP
@@ -21,7 +21,7 @@ from core.exceptions import TaskError
 
 from etl.services.middleware.base import (
     datetime_now_str, HashEncoder, get_table_name)
-from . import client, settings
+from . import settings
 
 # __all__ = [
 #     'TLSE',  'TRSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
@@ -87,7 +87,7 @@ class TaskProcessing(object):
     @staticmethod
     def binary_wrap(data, rules):
         for each in data:
-            for k, v in each.iteritems():
+            for k, v in each.items():
                 if rules.get(k):  # if binary data
                     each[k] = Binary(v)
         return data
@@ -112,7 +112,7 @@ class TaskProcessing(object):
         # FIXME подумать чо делать потом с prepare
         # self.prepare()
         try:
-            print 'Task <"{0}"> started'.format(self.name)
+            print('Task <"{0}"> started'.format(self.name))
             self.processing()
         except Exception as e:
             # В любой непонятной ситуации меняй статус задачи на ERROR
@@ -217,7 +217,7 @@ class Pusher(object):
         try:
             resp = requests.post(self.php_url, json.dumps(info))
         except requests.exceptions.ConnectionError as e:
-            print "Problem with notification push: {0}".format(e.message)
+            print("Problem with notification push: {0}".format(e.message))
 
     def push_foreign_table(self, table):
         """
@@ -287,7 +287,7 @@ class QueueStorage(object):
         self.queue['percent'] = 0
 
     def update(self, **queue_info):
-        for k, v in queue_info.items():
+        for k, v in list(queue_info.items()):
             if k not in self.allowed_keys:
                 raise KeyError('Неверный ключ для словаря информации задачи!')
             self.queue[k] = v
@@ -450,7 +450,7 @@ def process_binary_data(record, binary_types_list, process_func=None):
 
     new_record = list()
 
-    for (rec, is_binary) in izip(record, binary_types_list):
+    for (rec, is_binary) in zip(record, binary_types_list):
         new_record.append(
             process_func(bytes(rec)) if is_binary and rec is not None else rec)
 
@@ -523,7 +523,7 @@ def fetch_date_intervals(meta_info):
     """
     date_intervals_info = [
         (t_name, t_info['date_intervals'])
-        for (t_name, t_info) in meta_info.iteritems()]
+        for (t_name, t_info) in meta_info.items()]
 
     return date_intervals_info
 
@@ -678,11 +678,11 @@ class TaskStatusEnum(BaseEnum):
     IDLE, PROCESSING, ERROR, DONE, DELETED = ('idle', 'processing', 'error',
                                               'done', 'deleted', )
     values = {
-        IDLE: u"В ожидании",
-        PROCESSING: u"В обработке",
-        ERROR: u"Ошибка",
-        DONE: u"Выполнено",
-        DELETED: u"Удалено",
+        IDLE: "В ожидании",
+        PROCESSING: "В обработке",
+        ERROR: "Ошибка",
+        DONE: "Выполнено",
+        DELETED: "Удалено",
     }
 
 
@@ -692,10 +692,10 @@ class TaskLoadingStatusEnum(BaseEnum):
     """
     START, PROCESSING, FINISH, ERROR = ('start', 'processing', 'finish', 'error')
     values = {
-        START: u"Старт",
-        PROCESSING: u"В обработке",
-        FINISH: u"Выполнено",
-        ERROR: u"Ошибка",
+        START: "Старт",
+        PROCESSING: "В обработке",
+        FINISH: "Выполнено",
+        ERROR: "Ошибка",
     }
 
 TLSE = TaskLoadingStatusEnum
@@ -709,8 +709,8 @@ class SourceTableStatusEnum(BaseEnum):
     IDLE, LOADED = ('idle', 'loaded')
 
     values = {
-        IDLE: u"Выполнено",
-        LOADED: u"Загружено"
+        IDLE: "Выполнено",
+        LOADED: "Загружено"
     }
 
 STSE = SourceTableStatusEnum
@@ -723,7 +723,7 @@ class TableRecordStatusEnum(BaseEnum):
     NEW - означает, что запись загружена в нынешней загрузке
     """
 
-    PREV, NEW = range(2)
+    PREV, NEW = list(range(2))
 
 
 TRSE = TableRecordStatusEnum
@@ -737,8 +737,8 @@ class DeltaTableStatusEnum(BaseEnum):
     NEW, SYNCED = ('new', 'synced')
 
     values = {
-        NEW: u"Новое",
-        SYNCED: u"Синхронизировано",
+        NEW: "Новое",
+        SYNCED: "Синхронизировано",
     }
 
 DTSE = DeltaTableStatusEnum
@@ -752,9 +752,9 @@ class AllKeysTableStatusEnum(BaseEnum):
     NEW, DELETED, SYNCED = ('new', 'deleted', 'synced')
 
     values = {
-        NEW: u"Новое",
-        DELETED: u"Удалено",
-        SYNCED: u"Синхронизировано",
+        NEW: "Новое",
+        DELETED: "Удалено",
+        SYNCED: "Синхронизировано",
     }
 
 AKTSE = AllKeysTableStatusEnum
@@ -781,15 +781,15 @@ class DateTableColumnsName(BaseEnum):
         'the_month', 'day_of_month', 'week_of_year', 'quarter')
 
     values = {
-        TIME_ID: u'id',
-        THE_DATE: u'Дата',
-        THE_DAY: u'День недели',
-        THE_YEAR: u'Год',
-        MONTH_THE_YEAR: u'Месяц',
-        THE_MONTH: u'Месяц текст',
-        DAY_OF_MONTH: u'День',
-        WEEK_OF_YEAR: u'Неделя года',
-        QUARTER: u'Квартал',
+        TIME_ID: 'id',
+        THE_DATE: 'Дата',
+        THE_DAY: 'День недели',
+        THE_YEAR: 'Год',
+        MONTH_THE_YEAR: 'Месяц',
+        THE_MONTH: 'Месяц текст',
+        DAY_OF_MONTH: 'День',
+        WEEK_OF_YEAR: 'Неделя года',
+        QUARTER: 'Квартал',
     }
 
     types = [

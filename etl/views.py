@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import json
 from itertools import groupby
@@ -176,7 +176,7 @@ class LoadDataViewMono(BaseEtlView):
         )
 
         if queues_list.exists():
-            raise ResponseError(u'Данная задача уже находится в обработке!', ExceptionCode.ERR_TASK_ALREADY_IN_QUEUE)
+            raise ResponseError('Данная задача уже находится в обработке!', ExceptionCode.ERR_TASK_ALREADY_IN_QUEUE)
 
         tables = json.loads(data.get('tables'))
 
@@ -191,7 +191,7 @@ class LoadDataViewMono(BaseEtlView):
             cdc_type = DatasourceSettings.objects.get(
                     datasource_id=source.id, name=DatasourceSettings.SETTING_CDC_NAME).value
         except DatasourceSettings.DoesNotExist:
-            raise ResponseError(u'Не определен тип дозагрузки данных', ExceptionCode.ERR_CDC_TYPE_IS_NOT_SET)
+            raise ResponseError('Не определен тип дозагрузки данных', ExceptionCode.ERR_CDC_TYPE_IS_NOT_SET)
 
         user_id = request.user.id
         # Параметры для задач

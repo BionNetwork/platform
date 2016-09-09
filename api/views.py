@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import json
 import logging
@@ -273,7 +273,7 @@ class GetMeasureDataView(BaseViewNoLogin):
 
         measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
 
-        data = map(lambda measure:{
+        data = [{
             "id": measure.id,
             "name": measure.name,
             "title": measure.title,
@@ -281,7 +281,7 @@ class GetMeasureDataView(BaseViewNoLogin):
             "aggregator": measure.aggregator,
             "format_string": measure.format_string,
             "visible": measure.visible,
-        }, measures)
+        } for measure in measures]
 
         return self.json_response({'data': data, })
 
@@ -309,7 +309,7 @@ class GetDimensionDataView(BaseViewNoLogin):
 
         dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
 
-        data = map(lambda dimension: {
+        data = [{
             "id": dimension.id,
             "name": dimension.name,
             "title": dimension.title,
@@ -317,7 +317,7 @@ class GetDimensionDataView(BaseViewNoLogin):
             "visible": dimension.visible,
             "high_cardinality": dimension.high_cardinality,
             "data": dimension.data,
-        }, dimensions)
+        } for dimension in dimensions]
 
         return self.json_response({'data': data, })
 
@@ -417,9 +417,10 @@ class CardViewSet(viewsets.ViewSet):
 
         """
         context = Dataset.objects.get(key=pk).context
-        table = context['warehouse']
-        # data = request.data
-        data = json.loads(request.data.get('data'))
+        # table = context['warehouse']
+        table = 'buh'
+        data = request.data
+        # data = json.loads(request.data.get('data'))
 
         # data = {
         #     "Y": {"field_name": "c_1_73_448246359376073858_3606484360407848552", "aggregation": "sum"},
@@ -459,11 +460,11 @@ class CardViewSet(viewsets.ViewSet):
         group_part = 'GROUP BY {0}'.format(' ,'.join(groups))
 
         query = "SELECT {fields} FROM {table} WHERE {condition} {group_part} FORMAT JSON;".format(
-            fields=fields, table=table, condition=condition, group_part=group_part)
-        print query
+            fields=fields, table=table, condition=condition, group_part=group_part).encode('utf-8')
+        print(query)
 # Select d from buh where project in (30) group by d;
 
-        send([query])
+        return Response(send([query]))
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
@@ -513,7 +514,7 @@ class CardViewSet(viewsets.ViewSet):
         sources_info = group_by_source(sources_info)
 
         # проверяем наличие соурс id в кэше
-        uncached = worker.check_sids_exist(sources_info.keys())
+        uncached = worker.check_sids_exist(list(sources_info.keys()))
         if uncached:
             return Response(
                 {"message": "Uncached source IDs: {0}!".format(uncached)})

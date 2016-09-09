@@ -46,7 +46,7 @@ def get_error(using, error_code):
     """
     db_backend = settings.DATABASES[using]['ENGINE'].split('.')[-1]
     errs = RETRY_ERRORS[db_backend]
-    for key, value in errs.iteritems():
+    for key, value in errs.items():
         if error_code in errs[key][0]:
             return True, errs[key][1]
     return False, 0
@@ -63,7 +63,7 @@ def retry_query(using):
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except OperationalError, e:
+            except OperationalError as e:
 
                 lock_error_check, timeout = get_error(using, str(e.args[0]))
                 if lock_error_check:
@@ -71,7 +71,7 @@ def retry_query(using):
                         time.sleep(timeout)
                         try:
                             return func(*args, **kwargs)
-                        except OperationalError, e:
+                        except OperationalError as e:
                             if i == settings.RETRY_COUNT-1:
                                 logger.exception(e.message)
                                 raise

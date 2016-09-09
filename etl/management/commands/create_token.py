@@ -11,4 +11,4 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
 
         token, created = Token.objects.get_or_create(user_id=1)
-        print token.key
+        print(token.key)

@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals, division
+
 
 import os
 import sys
@@ -192,7 +192,7 @@ class EtlBaseTask(object):
             self.process()
             self.post()
         except Exception as e:
-            print e.message
+            print(e.message)
             raise Exception
 
     def process(self):
@@ -286,7 +286,8 @@ class LoadWarehouse(EtlBaseTask):
         Загрузка в Clickhouse. Возможно следует реальзовать и вариант с созданием
         материализованных представлений для мер и размерностей в Postgres
         """
-        PostgresWarehouse(context=self.context).run()
+        # PostgresWarehouse(context=self.context).run()
+        ClickHouse(context=self.context).run()
 
     def get_response(self):
         """
@@ -411,10 +412,10 @@ class LoadMongoDB(EtlBaseTask):
                     [row_key, TRSE.NEW, ] +
                     [EtlEncoder.encode(rec_field) for rec_field in record])
 
-                key_records[row_key] = dict(izip(col_names, record_normalized))
+                key_records[row_key] = dict(zip(col_names, record_normalized))
 
             exist_docs = collection.find({_ID: {'$in': keys}}, {_ID: 1})
-            exist_ids = map(lambda x: x[_ID], exist_docs)
+            exist_ids = [x[_ID] for x in exist_docs]
             exists_len = len(exist_ids)
 
             # при докачке, есть совпадения
@@ -446,10 +447,10 @@ class LoadMongoDB(EtlBaseTask):
                 try:
                     collection.insert_many(data_to_insert, ordered=False)
                     loaded_count += ind
-                    print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-                        ind, loaded_count, 'rows_count')
+                    print('inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                        ind, loaded_count, 'rows_count'))
                 except Exception as e:
-                    print 'Exception', loaded_count, loaded_count + ind, e.message
+                    print('Exception', loaded_count, loaded_count + ind, e.message)
 
             page += 1
 

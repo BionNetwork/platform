@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 from . import r_server
 import json
@@ -24,7 +24,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return u'source:{0}'.format(datasource_id)
+        return 'source:{0}'.format(datasource_id)
 
     @staticmethod
     def get_card_key(card_id):
@@ -34,7 +34,7 @@ class RedisCacheKeys(object):
         :param datasource_id:
         :return:
         """
-        return u'card:{0}'.format(card_id)
+        return 'card:{0}'.format(card_id)
 
     @classmethod
     def card_builder_key(cls, card_id):
@@ -44,7 +44,7 @@ class RedisCacheKeys(object):
         :return: str
         """
         card_key = cls.get_card_key(card_id)
-        return u'{0}:builder'.format(card_key)
+        return '{0}:builder'.format(card_key)
 
     @classmethod
     def table_key(cls, card_id, source_id, table_id):
@@ -53,7 +53,7 @@ class RedisCacheKeys(object):
         """
         card_key = cls.get_card_key(card_id)
         source_key = cls.source_key(source_id)
-        return u'{0}:{1}:collection:{2}'.format(
+        return '{0}:{1}:collection:{2}'.format(
             card_key, source_key, table_id)
 
     @classmethod
@@ -65,21 +65,21 @@ class RedisCacheKeys(object):
         :return:
         """
         card_key = cls.get_card_key(card_id)
-        return u'{0}:active:tree'.format(card_key)
+        return '{0}:active:tree'.format(card_key)
 
     @staticmethod
     def get_user_subscribers(user_id):
         """
         ключ каналов юзера для сокетов
         """
-        return u'user_channels:{0}'.format(user_id)
+        return 'user_channels:{0}'.format(user_id)
 
     @staticmethod
     def get_queue(task_id):
         """
         ключ информации о ходе работы таска
         """
-        return u'queue:{0}'.format(task_id)
+        return 'queue:{0}'.format(task_id)
 
     @classmethod
     def indent_key(cls, source_id):
@@ -87,7 +87,7 @@ class RedisCacheKeys(object):
         Ключ отступа
         """
         source_key = cls.source_key(source_id)
-        return u'{0}:indent'.format(source_key)
+        return '{0}:indent'.format(source_key)
 
 RKeys = RedisCacheKeys
 
@@ -407,8 +407,8 @@ class CardCacheService(object):
         участвующих в карточке
         """
         builder_data = self.card_builder_data
-        for sid, bundle in builder_data.iteritems():
-            t_names = bundle['actives'].values() + bundle['remains'].values()
+        for sid, bundle in builder_data.items():
+            t_names = list(bundle['actives'].values()) + list(bundle['remains'].values())
 
             for table_id in t_names:
                 self.del_table_info(sid, table_id)
@@ -440,7 +440,7 @@ class CardCacheService(object):
         tables_info = defaultdict(dict)
         builder_data = self.card_builder_data
 
-        for sid, table_list in tables.iteritems():
+        for sid, table_list in tables.items():
             sid_format = str(sid)
             collections = builder_data[sid_format]
 
@@ -495,12 +495,12 @@ class CardCacheService(object):
             sid = str(child.source_id)
 
             if sid not in b_data:
-                raise Exception(u'Информация о таблцие не найдена!')
+                raise Exception('Информация о таблцие не найдена!')
 
             collections = b_data[sid]
             # коллекция, участвует в дереве
             if t_name not in collections['actives']:
-                raise Exception(u'Информация о таблцие не найдена!')
+                raise Exception('Информация о таблцие не найдена!')
 
             # достаем по порядковому номеру
             final_info[int(node_id)] = (

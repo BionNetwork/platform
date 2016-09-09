@@ -9,7 +9,7 @@ import xmltodict
 from core.models import User, Datasource, DatasourceSettings, Cube
 from etl import helpers
 from etl.services.datasource.base import DataSourceService
-from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
+# from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +91,11 @@ class SchemasListSerializer(serializers.ModelSerializer):
                         data=data,
                     )
 
-                send_xml(name, cube.id, data)
-        except OlapServerConnectionErrorException as e:
-            logger.error("Can't connect to OLAP Server!\n" + e.message +
-                         "\nCube data:\n" + data)
-            raise APIException(e.message)
+                # send_xml(name, cube.id, data)
+        # except OlapServerConnectionErrorException as e:
+        #     logger.error("Can't connect to OLAP Server!\n" + e.message +
+        #                  "\nCube data:\n" + data)
+        #     raise APIException(e.message)
         except Exception as e:
             logger.error("Error creating cube by key" + name + "\n" +
                          e.message + "\nCube data:\n" + data)
@@ -129,7 +129,7 @@ class TaskSerializer(serializers.Serializer):
     owner = serializers.CharField(max_length=256)
 
     def update(self, instance, validated_data):
-        for field, value in validated_data.items():
+        for field, value in list(validated_data.items()):
             setattr(instance, field, value)
         return instance
 

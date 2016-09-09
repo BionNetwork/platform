@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from __future__ import unicode_literals
+
 import logging
 
 import os
@@ -15,12 +15,12 @@ from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.datasource.base import DataSourceService
 from etl.services.middleware.base import EtlEncoder
-from pymondrian.schema import (
-    Schema, PhysicalSchema, Table, Cube as CubeSchema,
-    Dimension as DimensionSchema, Attribute, Level,
-    Hierarchy, MeasureGroup, Measure as MeasureSchema,
-    Key, Name, ForeignKeyLink, ReferenceLink)
-from pymondrian.generator import generate
+# from pymondrian.schema import (
+#     Schema, PhysicalSchema, Table, Cube as CubeSchema,
+#     Dimension as DimensionSchema, Attribute, Level,
+#     Hierarchy, MeasureGroup, Measure as MeasureSchema,
+#     Key, Name, ForeignKeyLink, ReferenceLink)
+# from pymondrian.generator import generate
 from core.models import (
     Datasource, Dimension, Measure, DatasourceMeta,
     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
@@ -28,7 +28,7 @@ from core.models import (
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from djcelery import celery
-from itertools import groupby, izip
+from itertools import groupby
 from etl.services.queue.base import *
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -162,7 +162,7 @@ class LoadMongodb(TaskProcessing):
 
         tables_key_creator = [
             RowKeysCreator(table=table, cols=cols, meta_data=value)
-            for table, value in meta_info.iteritems()]
+            for table, value in meta_info.items()]
 
         while True:
 
@@ -184,15 +184,15 @@ class LoadMongodb(TaskProcessing):
                 record_normalized = (
                     [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
                     [EtlEncoder.encode(rec_field) for rec_field in new_record])
-                data_to_insert.append(dict(izip(col_names, record_normalized)))
+                data_to_insert.append(dict(zip(col_names, record_normalized)))
                 data_to_current_insert.append(dict(_id=row_key))
             try:
                 collection.insert_many(data_to_insert, ordered=False)
                 current_collection.insert_many(
                     data_to_current_insert, ordered=False)
                 loaded_count += ind
-                print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-                    ind, loaded_count, rows_count)
+                print('inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                    ind, loaded_count, rows_count))
             except Exception as e:
                 self.error_handling(e.message)
 
@@ -301,8 +301,8 @@ class LoadDb(TaskProcessing):
 
                 offset += limit
                 loaded_count += len(rows_dict)
-                print 'inserted %d rows to database. Total inserted %s/%s.' % (
-                    len(rows_dict), loaded_count, rows_count)
+                print('inserted %d rows to database. Total inserted %s/%s.' % (
+                    len(rows_dict), loaded_count, rows_count))
             except Exception as e:
                 self.was_error = True
                 # код и сообщение ошибки
@@ -573,7 +573,7 @@ class LoadDimensions(TaskProcessing):
             rows_dict = []
             for record in rows:
                 temp_dict = {}
-                for ind in xrange(col_nums):
+                for ind in range(col_nums):
                     temp_dict.update({str(ind): record[ind]})
 
                 rows_dict.append(temp_dict)
@@ -581,9 +581,9 @@ class LoadDimensions(TaskProcessing):
             self.local_db_service.local_insert(
                 self.get_table(self.table_prefix), col_nums, rows)
             loaded_count += len(rows_dict)
-            print ('inserted %d %s to database. '
+            print(('inserted %d %s to database. '
                    'Total inserted %s/%s.' % (
-                    len(rows_dict), self.table_prefix, loaded_count, rows_count))
+                    len(rows_dict), self.table_prefix, loaded_count, rows_count)))
             offset += limit
 
             self.queue_storage.update()
@@ -721,7 +721,7 @@ class UpdateMongodb(TaskProcessing):
 
         tables_key_creator = [
             RowKeysCreator(table=table, cols=cols, meta_data=value)
-            for table, value in meta_info.iteritems()]
+            for table, value in meta_info.items()]
 
         # Выявляем новые записи в базе и записываем их в дельта-коллекцию
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
@@ -745,12 +745,12 @@ class UpdateMongodb(TaskProcessing):
                     delta_rows = (
                         [row_key, DTSE.NEW, EtlEncoder.encode(datetime.now())] +
                         [EtlEncoder.encode(rec_field) for rec_field in new_record])
-                    data_to_insert.append(dict(izip(col_names, delta_rows)))
+                    data_to_insert.append(dict(zip(col_names, delta_rows)))
 
                 data_to_current_insert.append(dict(_id=row_key))
             loaded_count += ind
-            print 'updated %d rows to mongodb. Total inserted %s/%s.' % (
-                ind, loaded_count, rows_count)
+            print('updated %d rows to mongodb. Total inserted %s/%s.' % (
+                ind, loaded_count, rows_count))
 
             try:
                 if data_to_insert:
@@ -903,163 +903,163 @@ class CreateTriggers(TaskProcessing):
             })
 
 
-class CreateCube(TaskProcessing):
-
-    """
-    Создание схемы
-    """
-
-    def processing(self):
-
-        dataset_id = self.context['dataset_id']
-        dataset = Dataset.objects.get(id=dataset_id)
-        key = dataset.key
-
-        meta_ids = DatasetToMeta.objects.filter(
-            dataset_id=dataset_id).values_list('meta_id', flat=True)
-
-        dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
-        measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
-
-        if not dimensions.exists() and not measures.exists():
-            pass
-        # <Schema>
-        cube_key = "cube_{key}".format(key=key)
-
-        schema = Schema(name=cube_key,
-                        description='Cube schema')
-
-        physical_schema = PhysicalSchema()
-
-        dimension_table, measure_table = (
-            Table(self.get_table(DIMENSIONS)), Table(self.get_table(MEASURES)))
-        physical_schema.add_tables([dimension_table, measure_table])
-
-        cube = CubeSchema(name=cube_key, caption=cube_key,
-                          visible=True, cache=False, enabled=True)
-
-        dimension = DimensionSchema(
-                name='Dim Table', table=self.get_table(DIMENSIONS), key="Cdc Key")
-        dimension.add_attribute(Attribute(name="Cdc Key", key_column="cdc_key"))
-
-        measure_group = MeasureGroup(
-            name=self.get_table(MEASURES), table=self.get_table(MEASURES))
-
-        for dim in dimensions:
-            # Если не размерность времени, то создаем атрибуты внутри уже
-            #  созданной размености, иначе создаем новые размерости под каждое
-            # временое поле
-            name = dim.name
-            title = dim.title
-
-            if dim.type == 'SD':
-                dim_attribute = Attribute(name=title, key_column=name)
-                dimension.add_attribute(dim_attribute)
-
-                level = Level(
-                    attribute=title, visible=True)
-                hierarchy = Hierarchy(name='Hierarchy %s' % title)
-                hierarchy.add_level(level)
-                dimension.add_hierarchies([hierarchy])
-            else:
-                dim_attribute = Attribute(name=title, key_column='%s_id' % name)
-                dimension.add_attribute(dim_attribute)
-                measure_group.dimension_links.add_dimension_link(
-                    ReferenceLink(
-                        dimension='Time Dim', via_dimension='Dim Table',
-                        via_attribute=title, attribute='Date'))
-
-        time_table_name = self.get_table(TIME_TABLE)
-        time_dim = DimensionSchema(
-            name='Time Dim', table=time_table_name,
-            key='Time Dim Key', type='TIME')
-
-        year = Attribute(
-            name='Year', key_column=DTCN.THE_YEAR, level_type='TimeYears'
-        )
-        quarter = Attribute(
-            name='Quarter', level_type='TimeQuarters',
-            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.QUARTER]),
-            attr_name=Name(columns=[DTCN.QUARTER])
-        )
-        month = Attribute(
-            name='Month', level_type='TimeMonths',
-            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
-            attr_name=Name(columns=[DTCN.MONTH_THE_YEAR])
-        )
-        week = Attribute(
-            name='Week', level_type='TimeWeeks',
-            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.WEEK_OF_YEAR]),
-            attr_name=Name(columns=[DTCN.WEEK_OF_YEAR])
-        )
-        day = Attribute(
-            name='Day', level_type='TimeDays',
-            attr_key=Key(columns=[DTCN.TIME_ID]),
-            attr_name=Name(columns=[DTCN.DAY_OF_MONTH])
-        )
-        month_name = Attribute(
-            name='Month Name',
-            attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
-            attr_name=Name(columns=[DTCN.THE_MONTH])
-        )
-        date = Attribute(
-            name='Date', key_column=DTCN.THE_DATE
-        )
-        time_id = Attribute(
-            name='Time Dim Key', key_column=DTCN.TIME_ID
-        )
-        time_dim.add_attributes([
-            year, quarter, month, week, day, month_name, date, time_id])
-
-        time_hierarchy_1 = Hierarchy(name='Time', has_all=False)
-        for level_name in ['Year', 'Quarter', 'Month']:
-            time_hierarchy_1.add_level(Level(attribute=level_name))
-        time_hierarchy_2 = Hierarchy(name='Weekly', has_all=True)
-        for level_name in ['Year', 'Week', 'Day']:
-            time_hierarchy_2.add_level(Level(attribute=level_name))
-
-        time_dim.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
-
-        cube.add_dimension(time_dim)
-
-        physical_schema.add_table(Table(time_table_name))
-
-        cube.measure_groups.add_measure_group(measure_group)
-
-        measure_group.dimension_links.add_dimension_link(
-                ForeignKeyLink(
-                    dimension='Dim Table', foreign_key_column='cdc_key'))
-
-        for measure in measures:
-            measure_schema = MeasureSchema(
-                name=measure.name, column=measure.name, caption=measure.title,
-                visible=True if measure.visible else False, aggregator='sum')
-            measure_group.measures_tag.add_measures(measure_schema)
-
-        cube.add_dimension(dimension)
-        schema.add_physical_schema(physical_schema)
-        schema.add_cube(cube)
-
-        xml = generate(schema, output=1)
-
-        resp = requests.post('{0}{1}'.format(
-            settings.API_HTTP_HOST, reverse('api:import_schema')),
-            data={'key': cube_key, 'data': xml,
-                  'user_id': self.context['user_id'],
-                  'dataset_id': dataset_id,
-                  }
-        )
-
-        if resp.json()['status'] == 'success':
-            cube_id = resp.json()['id']
-            logger.info('Created cube %s' % cube_id)
-
-            Dataset.update_state(
-                self.context['dataset_id'], DatasetStateChoices.LOADED)
-        else:
-            self.error_handling(json.loads(resp.text)['detail'])
-            logger.error('Error creating cube')
-            logger.error(json.loads(resp.text)['detail'])
-
+# class CreateCube(TaskProcessing):
+#
+#     """
+#     Создание схемы
+#     """
+#
+#     def processing(self):
+#
+#         dataset_id = self.context['dataset_id']
+#         dataset = Dataset.objects.get(id=dataset_id)
+#         key = dataset.key
+#
+#         meta_ids = DatasetToMeta.objects.filter(
+#             dataset_id=dataset_id).values_list('meta_id', flat=True)
+#
+#         dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
+#         measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
+#
+#         if not dimensions.exists() and not measures.exists():
+#             pass
+#         # <Schema>
+#         cube_key = "cube_{key}".format(key=key)
+#
+#         schema = Schema(name=cube_key,
+#                         description='Cube schema')
+#
+#         physical_schema = PhysicalSchema()
+#
+#         dimension_table, measure_table = (
+#             Table(self.get_table(DIMENSIONS)), Table(self.get_table(MEASURES)))
+#         physical_schema.add_tables([dimension_table, measure_table])
+#
+#         cube = CubeSchema(name=cube_key, caption=cube_key,
+#                           visible=True, cache=False, enabled=True)
+#
+#         dimension = DimensionSchema(
+#                 name='Dim Table', table=self.get_table(DIMENSIONS), key="Cdc Key")
+#         dimension.add_attribute(Attribute(name="Cdc Key", key_column="cdc_key"))
+#
+#         measure_group = MeasureGroup(
+#             name=self.get_table(MEASURES), table=self.get_table(MEASURES))
+#
+#         for dim in dimensions:
+#             # Если не размерность времени, то создаем атрибуты внутри уже
+#             #  созданной размености, иначе создаем новые размерости под каждое
+#             # временое поле
+#             name = dim.name
+#             title = dim.title
+#
+#             if dim.type == 'SD':
+#                 dim_attribute = Attribute(name=title, key_column=name)
+#                 dimension.add_attribute(dim_attribute)
+#
+#                 level = Level(
+#                     attribute=title, visible=True)
+#                 hierarchy = Hierarchy(name='Hierarchy %s' % title)
+#                 hierarchy.add_level(level)
+#                 dimension.add_hierarchies([hierarchy])
+#             else:
+#                 dim_attribute = Attribute(name=title, key_column='%s_id' % name)
+#                 dimension.add_attribute(dim_attribute)
+#                 measure_group.dimension_links.add_dimension_link(
+#                     ReferenceLink(
+#                         dimension='Time Dim', via_dimension='Dim Table',
+#                         via_attribute=title, attribute='Date'))
+#
+#         time_table_name = self.get_table(TIME_TABLE)
+#         time_dim = DimensionSchema(
+#             name='Time Dim', table=time_table_name,
+#             key='Time Dim Key', type='TIME')
+#
+#         year = Attribute(
+#             name='Year', key_column=DTCN.THE_YEAR, level_type='TimeYears'
+#         )
+#         quarter = Attribute(
+#             name='Quarter', level_type='TimeQuarters',
+#             attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.QUARTER]),
+#             attr_name=Name(columns=[DTCN.QUARTER])
+#         )
+#         month = Attribute(
+#             name='Month', level_type='TimeMonths',
+#             attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
+#             attr_name=Name(columns=[DTCN.MONTH_THE_YEAR])
+#         )
+#         week = Attribute(
+#             name='Week', level_type='TimeWeeks',
+#             attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.WEEK_OF_YEAR]),
+#             attr_name=Name(columns=[DTCN.WEEK_OF_YEAR])
+#         )
+#         day = Attribute(
+#             name='Day', level_type='TimeDays',
+#             attr_key=Key(columns=[DTCN.TIME_ID]),
+#             attr_name=Name(columns=[DTCN.DAY_OF_MONTH])
+#         )
+#         month_name = Attribute(
+#             name='Month Name',
+#             attr_key=Key(columns=[DTCN.THE_YEAR, DTCN.MONTH_THE_YEAR]),
+#             attr_name=Name(columns=[DTCN.THE_MONTH])
+#         )
+#         date = Attribute(
+#             name='Date', key_column=DTCN.THE_DATE
+#         )
+#         time_id = Attribute(
+#             name='Time Dim Key', key_column=DTCN.TIME_ID
+#         )
+#         time_dim.add_attributes([
+#             year, quarter, month, week, day, month_name, date, time_id])
+#
+#         time_hierarchy_1 = Hierarchy(name='Time', has_all=False)
+#         for level_name in ['Year', 'Quarter', 'Month']:
+#             time_hierarchy_1.add_level(Level(attribute=level_name))
+#         time_hierarchy_2 = Hierarchy(name='Weekly', has_all=True)
+#         for level_name in ['Year', 'Week', 'Day']:
+#             time_hierarchy_2.add_level(Level(attribute=level_name))
+#
+#         time_dim.add_hierarchies([time_hierarchy_1, time_hierarchy_2])
+#
+#         cube.add_dimension(time_dim)
+#
+#         physical_schema.add_table(Table(time_table_name))
+#
+#         cube.measure_groups.add_measure_group(measure_group)
+#
+#         measure_group.dimension_links.add_dimension_link(
+#                 ForeignKeyLink(
+#                     dimension='Dim Table', foreign_key_column='cdc_key'))
+#
+#         for measure in measures:
+#             measure_schema = MeasureSchema(
+#                 name=measure.name, column=measure.name, caption=measure.title,
+#                 visible=True if measure.visible else False, aggregator='sum')
+#             measure_group.measures_tag.add_measures(measure_schema)
+#
+#         cube.add_dimension(dimension)
+#         schema.add_physical_schema(physical_schema)
+#         schema.add_cube(cube)
+#
+#         xml = generate(schema, output=1)
+#
+#         resp = requests.post('{0}{1}'.format(
+#             settings.API_HTTP_HOST, reverse('api:import_schema')),
+#             data={'key': cube_key, 'data': xml,
+#                   'user_id': self.context['user_id'],
+#                   'dataset_id': dataset_id,
+#                   }
+#         )
+#
+#         if resp.json()['status'] == 'success':
+#             cube_id = resp.json()['id']
+#             logger.info('Created cube %s' % cube_id)
+#
+#             Dataset.update_state(
+#                 self.context['dataset_id'], DatasetStateChoices.LOADED)
+#         else:
+#             self.error_handling(json.loads(resp.text)['detail'])
+#             logger.error('Error creating cube')
+#             logger.error(json.loads(resp.text)['detail'])
+#
 
 # write in console: python manage.py celery -A etl.tasks worker --loglevel=info

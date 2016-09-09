@@ -1,19 +1,16 @@
 Django==1.9
 psycopg2
 django-choices==1.4.2
-mysql
+mysqlclient
 redis
 django-celery==3.1.17
 redis-collections==0.1.7
 git+https://github.com/evilkost/brukva.git
 pymongo
 mock
-easywebdav == 1.2.0
-xmla == 0.7.2
 xmltodict
 xlrd==0.9.4
 kombu==3.0.30
-Pillow
 djangorestframework==3.3.2
 pandas==0.18.1
 drf-nested-routers==0.11.1
@@ -22,5 +19,10 @@ django-jenkins==0.19.0
 pyflakes==1.2.3
 coverage==4.2
 more-itertools==2.2
+requests
 
+#easywebdav == 1.2.0
+#xmla == 0.7.2
 #git+ssh://git@gitlab.etton.ru/bi/pymondrian.git@dev
+
+

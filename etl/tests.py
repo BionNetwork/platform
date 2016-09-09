@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import json
 from mock import patch
@@ -352,31 +352,31 @@ class DatasourceTest(BaseCoreTest):
 
     def test_set_from_dict(self):
         self.source.set_from_dict(**self.data)
-        for k, v in self.data.items():
-            self.assertEquals(v, self.source.__dict__[k], "attribute %s does not valid" % k)
+        for k, v in list(self.data.items()):
+            self.assertEqual(v, self.source.__dict__[k], "attribute %s does not valid" % k)
 
     def test_mock_get_columns_info(self):
         with patch('etl.services.db.factory.DatabaseService.get_columns_info') as cols_mock:
             cols_mock.return_value = [
-                ((u'VERSION_BUNDLE', u'NODE_ID', u'varbinary(16)', u'NO', None),
-                 (u'VERSION_BUNDLE', u'BUNDLE_DATA', u'longblob', u'NO', None),
-                 (u'VERSION_BUNDLE', u's', u'varchar(60)', u'YES', None),
+                (('VERSION_BUNDLE', 'NODE_ID', 'varbinary(16)', 'NO', None),
+                 ('VERSION_BUNDLE', 'BUNDLE_DATA', 'longblob', 'NO', None),
+                 ('VERSION_BUNDLE', 's', 'varchar(60)', 'YES', None),
                  ),
-                ((u'VERSION_BUNDLE', u'NODE_ID', u'VERSION_BUNDLE_IDX', u'f', u't'),),
-                ((u'VERSION_BUNDLE', u'NODE_ID', u'VERSION_BUNDLE_IDX', u'UNIQUE', None, None, None, None),),
+                (('VERSION_BUNDLE', 'NODE_ID', 'VERSION_BUNDLE_IDX', 'f', 't'),),
+                (('VERSION_BUNDLE', 'NODE_ID', 'VERSION_BUNDLE_IDX', 'UNIQUE', None, None, None, None),),
             ]
             with patch('etl.services.db.factory.DatabaseService.get_stats_info') as stats_mock:
-                stats_mock.return_value = {u'version_bundle': {u'count': 3, u'size': 16384L}}
+                stats_mock.return_value = {'version_bundle': {'count': 3, 'size': 16384}}
 
-                info = DataSourceService.get_columns_info(self.source, [u'VERSION_BUNDLE', ])
+                info = DataSourceService.get_columns_info(self.source, ['VERSION_BUNDLE', ])
                 expected_info = [
-                    {'dest': None, 'without_bind': False, 'db': u'',
+                    {'dest': None, 'without_bind': False, 'db': '',
                      'cols': [
-                         {'col_title': None, 'col_name': u'NODE_ID'},
-                         {'col_title': None, 'col_name': u'BUNDLE_DATA'},
-                         {'col_title': None, 'col_name': u's'}
+                         {'col_title': None, 'col_name': 'NODE_ID'},
+                         {'col_title': None, 'col_name': 'BUNDLE_DATA'},
+                         {'col_title': None, 'col_name': 's'}
                      ],
-                     'is_root': True, 'host': u'', 'tname': u'VERSION_BUNDLE'}
+                     'is_root': True, 'host': '', 'tname': 'VERSION_BUNDLE'}
                 ]
 
                 self.assertEqual(info, expected_info)
@@ -469,12 +469,12 @@ class RedisKeysTest(BaseCoreTest):
                              {"is_index": True, "name": "queue_id", "is_primary": False, "is_unique": True, "type": "integer"}
                          ],
                          "indexes": [
-                             {u'is_primary': False, u'is_unique': False, u'name': u'test_date_created_index', u'columns': [u'date_created']},
-                             {u'is_primary': False, u'is_unique': True, u'name': u'test_uniq_together_index', u'columns': [u'date_created', u'queue_id']},
-                             {u'is_primary': False, u'is_unique': False, u'name': u'test_queue_id_index', u'columns': [u'queue_id']},
-                             {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
-                             {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}],
-                         "date_intervals": [{u'startDate': None, u'last_updated': None, u'name': u'date_created', u'endDate': None}],
+                             {'is_primary': False, 'is_unique': False, 'name': 'test_date_created_index', 'columns': ['date_created']},
+                             {'is_primary': False, 'is_unique': True, 'name': 'test_uniq_together_index', 'columns': ['date_created', 'queue_id']},
+                             {'is_primary': False, 'is_unique': False, 'name': 'test_queue_id_index', 'columns': ['queue_id']},
+                             {'is_primary': True, 'is_unique': True, 'name': 'test_table_pkey', 'columns': ['id']},
+                             {'is_primary': False, 'is_unique': True, 'name': 'test_table_uniq', 'columns': ['queue_id']}],
+                         "date_intervals": [{'startDate': None, 'last_updated': None, 'name': 'date_created', 'endDate': None}],
                          }
 
         collection1 = json.loads(r_server.get(collection_str))
@@ -484,23 +484,23 @@ class RedisKeysTest(BaseCoreTest):
 
         self.assertEqual(collection1, expected_col1,
                          'Collection сохранен неправильно!')
-        expected_ddl1 = {u'foreigns': [], u'stats': None,
-                         u'columns': [{u'is_index': True, u'name': u'id', u'extra': u'serial',
-                                       u'is_primary': True, u'is_nullable': u'NO', u'is_unique': True, u'type': u'integer'},
-                                      {u'is_index': False, u'name': u'arguments', u'extra': None, u'is_primary': False,
-                                       u'is_nullable': u'NO', u'is_unique': False, u'type': u'text'},
-                                      {u'is_index': True, u'name': u'date_created', u'extra': None, u'is_primary': False,
-                                       u'is_nullable': u'NO', u'is_unique': False, u'type': u'timestamp with time zone'},
-                                      {u'is_index': False, u'name': u'comment', u'extra': None, u'is_primary': False,
-                                       u'is_nullable': u'YES', u'is_unique': False, u'type': u'character varying'},
-                                      {u'is_index': True, u'name': u'queue_id', u'extra': None, u'is_primary': False,
-                                       u'is_nullable': u'NO', u'is_unique': True, u'type': u'integer'}],
-                         u'indexes': [{u'is_primary': False, u'is_unique': False, u'name': u'test_date_created_index', u'columns': [u'date_created']},
-                                      {u'is_primary': False, u'is_unique': True, u'name': u'test_uniq_together_index', u'columns': [u'date_created', u'queue_id']},
-                                      {u'is_primary': False, u'is_unique': False, u'name': u'test_queue_id_index', u'columns': [u'queue_id']},
-                                      {u'is_primary': True, u'is_unique': True, u'name': u'test_table_pkey', u'columns': [u'id']},
-                                      {u'is_primary': False, u'is_unique': True, u'name': u'test_table_uniq', u'columns': [u'queue_id']}],
-                         u'date_intervals': [{u'startDate': None, u'last_updated': None, u'name': u'date_created', u'endDate': None}]
+        expected_ddl1 = {'foreigns': [], 'stats': None,
+                         'columns': [{'is_index': True, 'name': 'id', 'extra': 'serial',
+                                       'is_primary': True, 'is_nullable': 'NO', 'is_unique': True, 'type': 'integer'},
+                                      {'is_index': False, 'name': 'arguments', 'extra': None, 'is_primary': False,
+                                       'is_nullable': 'NO', 'is_unique': False, 'type': 'text'},
+                                      {'is_index': True, 'name': 'date_created', 'extra': None, 'is_primary': False,
+                                       'is_nullable': 'NO', 'is_unique': False, 'type': 'timestamp with time zone'},
+                                      {'is_index': False, 'name': 'comment', 'extra': None, 'is_primary': False,
+                                       'is_nullable': 'YES', 'is_unique': False, 'type': 'character varying'},
+                                      {'is_index': True, 'name': 'queue_id', 'extra': None, 'is_primary': False,
+                                       'is_nullable': 'NO', 'is_unique': True, 'type': 'integer'}],
+                         'indexes': [{'is_primary': False, 'is_unique': False, 'name': 'test_date_created_index', 'columns': ['date_created']},
+                                      {'is_primary': False, 'is_unique': True, 'name': 'test_uniq_together_index', 'columns': ['date_created', 'queue_id']},
+                                      {'is_primary': False, 'is_unique': False, 'name': 'test_queue_id_index', 'columns': ['queue_id']},
+                                      {'is_primary': True, 'is_unique': True, 'name': 'test_table_pkey', 'columns': ['id']},
+                                      {'is_primary': False, 'is_unique': True, 'name': 'test_table_uniq', 'columns': ['queue_id']}],
+                         'date_intervals': [{'startDate': None, 'last_updated': None, 'name': 'date_created', 'endDate': None}]
                          }
         ddl1 = json.loads(r_server.get(ddl_str))
 
@@ -566,7 +566,7 @@ class DimCreateTest(BaseCoreTest):
             datasource=self.source,
             collection_name='table1',
             fields=json.dumps(self.fields_info),
-            stats=json.dumps({u'date_intervals': [], }),
+            stats=json.dumps({'date_intervals': [], }),
         )
 
         self.meta_data = DatasourceMetaKeys.objects.create(
@@ -663,60 +663,60 @@ class DatasourceMetaTest(BaseCoreTest):
 
         # self.tables = ['datasources', u'datasources_meta']
 
-        self.cols = [{u'table': u'datasources', u'col': u'db'},
-                {u'table': u'datasources', u'col': u'host'},
-                {u'table': u'datasources', u'col': u'user_id'},
-                {u'table': u'datasources', u'col': u'id'},
-                {u'table': u'datasources_meta', u'col': u'datasource_id'},
-                {u'table': u'datasources_meta', u'col': u'id'}
+        self.cols = [{'table': 'datasources', 'col': 'db'},
+                {'table': 'datasources', 'col': 'host'},
+                {'table': 'datasources', 'col': 'user_id'},
+                {'table': 'datasources', 'col': 'id'},
+                {'table': 'datasources_meta', 'col': 'datasource_id'},
+                {'table': 'datasources_meta', 'col': 'id'}
                 ]
 
         self.meta_info = {
-            u'datasources': {
-                u'foreigns': [],
-                u'date_intervals': [],
-                u'stats': {
-                    u'count': 2,
-                    u'size': 8192
+            'datasources': {
+                'foreigns': [],
+                'date_intervals': [],
+                'stats': {
+                    'count': 2,
+                    'size': 8192
                 },
-                u'columns': [
-                    {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'db', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'host', u'is_primary': False},
-                    {u'is_index': False, u'is_unique': False, u'type': u'integer', u'name': u'port', u'is_primary': False},
-                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'login', u'is_primary': False},
-                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'password', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': False, u'type': u'timestamp', u'name': u'create_date', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'user_id', u'is_primary': False},
-                    {u'is_index': False, u'is_unique': False, u'type': u'integer', u'name': u'conn_type', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}],
-                u'indexes': [
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_3d8252a0', u'columns': [u'create_date']},
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_67b3dba8', u'columns': [u'host']},
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_host_175fd78a6f0fe936_uniq', u'columns': [u'db', u'host', u'user_id']},
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_host_303054fe224cb4d4_like', u'columns': [u'host']},
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_pkey', u'columns': [u'id']}]},
-            u'datasources_meta': {
-                u'foreigns': [
-                    {u'on_update': u'NO ACTION',
-                     u'source': {u'column': u'datasource_id', u'table': u'datasources_meta'},
-                     u'destination': {u'column': u'id', u'table': u'datasources'},
-                     u'name': u'datasources_me_datasource_id_2bccd05d1d1955f1_fk_datasources_id', u'on_delete': u'NO ACTION'}
+                'columns': [
+                    {'is_index': True, 'is_unique': False, 'type': 'text', 'name': 'db', 'is_primary': False},
+                    {'is_index': True, 'is_unique': False, 'type': 'text', 'name': 'host', 'is_primary': False},
+                    {'is_index': False, 'is_unique': False, 'type': 'integer', 'name': 'port', 'is_primary': False},
+                    {'is_index': False, 'is_unique': False, 'type': 'text', 'name': 'login', 'is_primary': False},
+                    {'is_index': False, 'is_unique': False, 'type': 'text', 'name': 'password', 'is_primary': False},
+                    {'is_index': True, 'is_unique': False, 'type': 'timestamp', 'name': 'create_date', 'is_primary': False},
+                    {'is_index': True, 'is_unique': False, 'type': 'integer', 'name': 'user_id', 'is_primary': False},
+                    {'is_index': False, 'is_unique': False, 'type': 'integer', 'name': 'conn_type', 'is_primary': False},
+                    {'is_index': True, 'is_unique': True, 'type': 'integer', 'name': 'id', 'is_primary': True}],
+                'indexes': [
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_3d8252a0', 'columns': ['create_date']},
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_67b3dba8', 'columns': ['host']},
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_host_175fd78a6f0fe936_uniq', 'columns': ['db', 'host', 'user_id']},
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_host_303054fe224cb4d4_like', 'columns': ['host']},
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_pkey', 'columns': ['id']}]},
+            'datasources_meta': {
+                'foreigns': [
+                    {'on_update': 'NO ACTION',
+                     'source': {'column': 'datasource_id', 'table': 'datasources_meta'},
+                     'destination': {'column': 'id', 'table': 'datasources'},
+                     'name': 'datasources_me_datasource_id_2bccd05d1d1955f1_fk_datasources_id', 'on_delete': 'NO ACTION'}
                 ],
-                u'date_intervals': [],
-                u'stats': {u'count': 10, u'size': 24576},
-                u'columns': [
-                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'collection_name', u'is_primary': False},
-                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'fields', u'is_primary': False},
-                    {u'is_index': False, u'is_unique': False, u'type': u'text', u'name': u'stats', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': False, u'type': u'timestamp', u'name': u'create_date', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': False, u'type': u'timestamp', u'name': u'update_date', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'datasource_id', u'is_primary': False},
-                    {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}],
-                u'indexes': [
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_3d8252a0', u'columns': [u'create_date']},
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_3ec3fa10', u'columns': [u'datasource_id']},
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_41747ca0', u'columns': [u'update_date']},
-                    {u'is_primary': False, u'is_unique': False, u'name': u'datasources_meta_pkey', u'columns': [u'id']}]}}
+                'date_intervals': [],
+                'stats': {'count': 10, 'size': 24576},
+                'columns': [
+                    {'is_index': False, 'is_unique': False, 'type': 'text', 'name': 'collection_name', 'is_primary': False},
+                    {'is_index': False, 'is_unique': False, 'type': 'text', 'name': 'fields', 'is_primary': False},
+                    {'is_index': False, 'is_unique': False, 'type': 'text', 'name': 'stats', 'is_primary': False},
+                    {'is_index': True, 'is_unique': False, 'type': 'timestamp', 'name': 'create_date', 'is_primary': False},
+                    {'is_index': True, 'is_unique': False, 'type': 'timestamp', 'name': 'update_date', 'is_primary': False},
+                    {'is_index': True, 'is_unique': False, 'type': 'integer', 'name': 'datasource_id', 'is_primary': False},
+                    {'is_index': True, 'is_unique': True, 'type': 'integer', 'name': 'id', 'is_primary': True}],
+                'indexes': [
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_meta_3d8252a0', 'columns': ['create_date']},
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_meta_3ec3fa10', 'columns': ['datasource_id']},
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_meta_41747ca0', 'columns': ['update_date']},
+                    {'is_primary': False, 'is_unique': False, 'name': 'datasources_meta_pkey', 'columns': ['id']}]}}
 
         self.last_row = ('biplatform', 'localhost', 11, 4,  4,  37)
 
@@ -731,30 +731,30 @@ class DatasourceMetaTest(BaseCoreTest):
         ds = dm.get(collection_name='datasources')
         dsm = dm.get(collection_name='datasources_meta')
 
-        ds_stats = {'row_key_value': [{u'id': 4}],
-                    'row_key': [u'id'],
-                    'tables_stat': {u'count': 2, u'size': 8192},
+        ds_stats = {'row_key_value': [{'id': 4}],
+                    'row_key': ['id'],
+                    'tables_stat': {'count': 2, 'size': 8192},
                     'date_intervals': []}
         ds_fields = {'columns':
                          [
-                             {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'db', u'is_primary': False},
-                             {u'is_index': True, u'is_unique': False, u'type': u'text', u'name': u'host', u'is_primary': False},
-                             {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'user_id', u'is_primary': False},
-                             {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}
+                             {'is_index': True, 'is_unique': False, 'type': 'text', 'name': 'db', 'is_primary': False},
+                             {'is_index': True, 'is_unique': False, 'type': 'text', 'name': 'host', 'is_primary': False},
+                             {'is_index': True, 'is_unique': False, 'type': 'integer', 'name': 'user_id', 'is_primary': False},
+                             {'is_index': True, 'is_unique': True, 'type': 'integer', 'name': 'id', 'is_primary': True}
                          ]
         }
 
         self.assertEqual(json.loads(ds.stats), ds_stats)
         self.assertEqual(json.loads(ds.fields), ds_fields)
 
-        dsm_stats = {'row_key_value': [{u'id': 37}],
-                     'row_key': [u'id'],
-                     'tables_stat': {u'count': 10, u'size': 24576},
+        dsm_stats = {'row_key_value': [{'id': 37}],
+                     'row_key': ['id'],
+                     'tables_stat': {'count': 10, 'size': 24576},
                      'date_intervals': []}
         dsm_fields = {'columns':
                           [
-                              {u'is_index': True, u'is_unique': False, u'type': u'integer', u'name': u'datasource_id', u'is_primary': False},
-                              {u'is_index': True, u'is_unique': True, u'type': u'integer', u'name': u'id', u'is_primary': True}
+                              {'is_index': True, 'is_unique': False, 'type': 'integer', 'name': 'datasource_id', 'is_primary': False},
+                              {'is_index': True, 'is_unique': True, 'type': 'integer', 'name': 'id', 'is_primary': True}
                           ]
         }
         self.assertEqual(json.loads(dsm.stats), dsm_stats)

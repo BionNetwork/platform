@@ -5,6 +5,7 @@ from django.utils import six
 from django.utils.encoding import smart_text
 from django import forms
 from django.db.models.fields import TextField
+import collections
 """
 Custom model fields
 """
@@ -21,7 +22,7 @@ class XmlField(TextField):
         return 'xml'
 
     def get_default(self):
-        if self.has_default() and not callable(self.default):
+        if self.has_default() and not isinstance(self.default, collections.Callable):
             return self.default
         default = super(XmlField, self).get_default()
         if default == '':

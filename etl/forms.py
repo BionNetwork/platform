@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 from django import forms
 from core.models import Datasource, DatasourceSettings
@@ -30,8 +30,8 @@ class SourceForm(forms.ModelForm):
         }
 
 cdc_type_values = {
-    'apply_triggers': u'На основе триггеров (требуются права на создание триггеров)',
-    'apply_checksum': u'Полное сравнение на основе расчета контрольных сумм'
+    'apply_triggers': 'На основе триггеров (требуются права на создание триггеров)',
+    'apply_checksum': 'Полное сравнение на основе расчета контрольных сумм'
 }
 
 
@@ -45,5 +45,5 @@ class SettingsForm(forms.Form):
 
    )
     cdc_type_field = forms.ChoiceField(
-        label=u'Тип обновления данных', choices=CDC_TYPE)
+        label='Тип обновления данных', choices=CDC_TYPE)
 
