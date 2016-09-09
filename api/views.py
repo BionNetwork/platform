@@ -3,6 +3,8 @@ from __future__ import unicode_literals
 
 import json
 import logging
+from itertools import groupby
+from operator import itemgetter
 
 import requests
 from django.db import transaction
@@ -486,19 +488,23 @@ class CardViewSet(viewsets.ViewSet):
 
         # data = {
         #     "X": {"field_name": "c_1_82_448246359376073858_1951231061259157126",
-        #           "period": ["2012-12-01", "2017-12-20"], "interval":
-        #               "year",
+        #           # "period": ["2012-12-01", "2017-12-20"],
+        #           # "interval":
+        #               # "year",
         #               # "quarter",
         #               # "month"
         #        },
         #     "Y": {"field_name": "sum(c_1_82_448246359376073858_3606484360407848552)"
         #           },
         #     "Organizations": {
-        #         "field_name": "c_1_82_448246359376073858_3863414131424461117", "values": ["Эттон", "Эттон-Центр"]
+        #         "field_name": "c_1_82_448246359376073858_3863414131424461117",
+        #         "values": [
+        #             # "Эттон",
+        #             "Эттон-Центр",
+        #         ]
         #     },
         #     "filters": [
-        #         {"field_name": "c_1_82_448246359376073858_9152631202378448554", "values": ["КТМ"]},
-        #         {"field_name": "c_2_74_448246359376073858_7245817762177945294", "values": [4]},
+        #         # {"field_name": "c_1_82_448246359376073858_9152631202378448554", "values": ["КТМ"]},
         #     ],
         # }
 
@@ -508,10 +514,17 @@ class CardViewSet(viewsets.ViewSet):
 
         interval = data['X'].get('interval', None)
 
-        date_q = "date_trunc('{0}', {1}) as {2}".format('{0}', date_name, date_alias)
+        date_q = "to_char(date_trunc('{0}', {1}), '{3}') as {2}".format(
+            '{0}', date_name, date_alias, '{1}')
+
+        INTER_FORMATS = {
+            "year": 'YYYY',
+            "quarter": 'YYYY-MM',
+            "month": 'YYYY-MM',
+        }
 
         if interval:
-            date_select = date_q.format(interval)
+            date_select = date_q.format(interval, INTER_FORMATS.get(interval))
         else:
             date_select = "{0}::date as {1}".format(date_name, date_alias)
 
@@ -533,12 +546,14 @@ class CardViewSet(viewsets.ViewSet):
         if period:
             wheres.append("{0} BETWEEN '{1}' and '{2}'".format(date_name, period[0], period[1]))
 
-        org_values = data['Organizations'].get('values', None)
-        if org_values:
-            wheres.append("{0} IN ({1})".format(
-                org_name, ', '.join(["'{0}'".format(x) for x in org_values])))
+        org_values = data['Organizations'].get('values', [])
+        if not org_values:
+            org_values = ["Эттон", "Эттон-Центр", "Эттон Груп", ]
 
-        filters = data.get('filters', None)
+        wheres.append("{0} IN ({1})".format(
+            org_name, ', '.join(["'{0}'".format(x) for x in org_values])))
+
+        filters = data.get('filters', [])
 
         if filters:
             for filt in filters:
@@ -552,14 +567,28 @@ class CardViewSet(viewsets.ViewSet):
         groups = [date_alias, org_alias]
         group_q = 'GROUP BY {0}'.format(' ,'.join(groups))
 
-        query = '{0} {1} {2};'.format(select_q, where_q, group_q)
-        print query
+        # order part
+        order_q = 'ORDER BY {0}'.format(' ,'.join([date_alias, org_alias]))
+
+        query = '{0} {1} {2} {3};'.format(select_q, where_q, group_q, order_q)
 
         worker = DataSourceService(card_id=pk)
         local_service = worker.get_local_instance()
-        json_resp = local_service.fetchall(query)
-        print json_resp
-        return Response(json_resp)
+        resp = local_service.fetchall(query)
+
+        # обработка ответа
+        ORG_ORDER = {"Эттон": 0, "Эттон Груп": 1, "Эттон-Центр": 2, }
+
+        result = []
+
+        for date, gr in groupby(resp, key=itemgetter(0)):
+            row = [0, 0, 0, date]
+            # g is like [date, sum, org_name]
+            for g in gr:
+                row[ORG_ORDER[g[2]]] = g[1]
+            result.append(row)
+
+        return Response(result)
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
