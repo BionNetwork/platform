@@ -81,7 +81,7 @@ class Oracle(Database):
         """
         # fixme: повторяет код
         indexes = defaultdict(list)
-        itable_name, icol_names, index_name, primary, unique = xrange(5)
+        itable_name, icol_names, index_name, primary, unique = range(5)
 
         for ikey, igroup in groupby(index_records, lambda x: x[itable_name]):
             for ig in igroup:
@@ -94,7 +94,7 @@ class Oracle(Database):
 
         constraints = defaultdict(list)
         (c_table_name, c_col_name, c_name, c_type,
-         c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
+         c_foreign_table, c_foreign_col, c_update, c_delete) = range(8)
 
         for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
             for ig in igroup:
@@ -111,7 +111,7 @@ class Oracle(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = range(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 

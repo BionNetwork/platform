@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import os
 import json
@@ -49,7 +49,7 @@ def get_utf8_string(value):
     :param value: string
     :return: string
     """
-    return unicode(value)
+    return str(value)
 
 
 class CustomJsonEncoder(json.JSONEncoder):
@@ -79,7 +79,7 @@ def check_redis_lock(func):
                     settings.REDIS_LOCK_TIMEOUT))
                 try:
                     return func(*args, **kwargs)
-                except LockError, e:
+                except LockError as e:
                     if i == settings.RETRY_COUNT-1:
                         logger.exception(e.message)
                         raise

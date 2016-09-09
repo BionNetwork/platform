@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import json
 import logging
@@ -275,7 +275,7 @@ class GetMeasureDataView(BaseViewNoLogin):
 
         measures = Measure.objects.filter(datasources_meta_id__in=meta_ids)
 
-        data = map(lambda measure:{
+        data = [{
             "id": measure.id,
             "name": measure.name,
             "title": measure.title,
@@ -283,7 +283,7 @@ class GetMeasureDataView(BaseViewNoLogin):
             "aggregator": measure.aggregator,
             "format_string": measure.format_string,
             "visible": measure.visible,
-        }, measures)
+        } for measure in measures]
 
         return self.json_response({'data': data, })
 
@@ -311,7 +311,7 @@ class GetDimensionDataView(BaseViewNoLogin):
 
         dimensions = Dimension.objects.filter(datasources_meta_id__in=meta_ids)
 
-        data = map(lambda dimension: {
+        data = [{
             "id": dimension.id,
             "name": dimension.name,
             "title": dimension.title,
@@ -319,7 +319,7 @@ class GetDimensionDataView(BaseViewNoLogin):
             "visible": dimension.visible,
             "high_cardinality": dimension.high_cardinality,
             "data": dimension.data,
-        }, dimensions)
+        } for dimension in dimensions]
 
         return self.json_response({'data': data, })
 
@@ -462,7 +462,7 @@ class CardViewSet(viewsets.ViewSet):
 
         query = "SELECT {fields} FROM {table} WHERE {condition} {group_part} FORMAT JSON;".format(
             fields=fields, table=table, condition=condition, group_part=group_part)
-        print query
+        print(query)
 # Select d from buh where project in (30) group by d;
 
         send([query])
@@ -633,7 +633,7 @@ class CardViewSet(viewsets.ViewSet):
         sources_info = group_by_source(sources_info)
 
         # проверяем наличие соурс id в кэше
-        uncached = worker.check_sids_exist(sources_info.keys())
+        uncached = worker.check_sids_exist(list(sources_info.keys()))
         if uncached:
             return Response(
                 {"message": "Uncached source IDs: {0}!".format(uncached)})

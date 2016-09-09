@@ -1,11 +1,11 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import uuid
 import json
 import logging
 from PIL import Image
-import StringIO
+import io
 from datetime import datetime
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -69,26 +69,26 @@ class JSONMixin(object):
         )
 
     def convert_context_to_json(self, context):
-        u""" This method serialises a Django form and
+        """ This method serialises a Django form and
         returns JSON object with its fields and errors
         """
         forms = {}
-        for form_name, form in context.iteritems():
+        for form_name, form in context.items():
             form = context.get('form')
             to_json = {}
             options = context.get('options', {})
             to_json.update(options=options)
             to_json.update(success=context.get('success', False))
             fields = {}
-            for field_name, field in form.fields.items():
+            for field_name, field in list(form.fields.items()):
                 if isinstance(field, DateField) \
                         and isinstance(form[field_name].value(), datetime.date):
                     fields[field_name] = \
-                        unicode(form[field_name].value().strftime('%d.%m.%Y'))
+                        str(form[field_name].value().strftime('%d.%m.%Y'))
                 else:
                     fields[field_name] = \
                         form[field_name].value() \
-                        and unicode(form[field_name].value()) \
+                        and str(form[field_name].value()) \
                         or form[field_name].value()
             to_json.update(fields=fields)
             if form.errors:
@@ -96,7 +96,7 @@ class JSONMixin(object):
                     'non_field_errors': form.non_field_errors(),
                 }
                 fields = {}
-                for field_name, text in form.errors.items():
+                for field_name, text in list(form.errors.items()):
                     fields[field_name] = text
                 errors.update(fields=fields)
                 to_json.update(errors=errors)
@@ -339,7 +339,7 @@ class UserListView(BaseTemplateView):
         page_count = paginator.num_pages
 
         page = int(get.get('page', 0))
-        if page not in xrange(page_count):
+        if page not in range(page_count):
             page = 0
 
         users = paginator.page(page + 1)
@@ -347,7 +347,7 @@ class UserListView(BaseTemplateView):
         return self.render_to_response(
             {
                 'users': users,
-                'range': range(page_count),
+                'range': list(range(page_count)),
                 'page': page,
                 'max': page_count-1,
                 'search': search or ''
@@ -374,7 +374,7 @@ class UserListViewRest(BaseTemplateView):
         page_count = paginator.num_pages
 
         page = int(get.get('page', 0))
-        if page not in xrange(page_count):
+        if page not in range(page_count):
             page = 0
 
         users = paginator.page(page + 1)
@@ -382,7 +382,7 @@ class UserListViewRest(BaseTemplateView):
         return self.json_response(
             {
                 'users': users,
-                'range': range(page_count),
+                'range': list(range(page_count)),
                 'page': page,
                 'max': page_count-1,
                 'search': search or ''
@@ -468,7 +468,7 @@ class EditUserView(BaseTemplateView):
 
             avatar_img = Image.open(image)
             avatar_img.thumbnail(settings.AVATAR_SIZES, Image.ANTIALIAS)
-            big_img_io = StringIO.StringIO()
+            big_img_io = io.StringIO()
             avatar_img.save(big_img_io, format='JPEG')
             avatar = InMemoryUploadedFile(big_img_io, None, filename,
                                           'image/jpeg', big_img_io.len, None)
@@ -477,7 +477,7 @@ class EditUserView(BaseTemplateView):
 
             small_avatar_img = Image.open(image)
             small_avatar_img.thumbnail(settings.SMALL_AVATAR_SIZES, Image.ANTIALIAS)
-            small_img_io = StringIO.StringIO()
+            small_img_io = io.StringIO()
             small_avatar_img.save(small_img_io, format='JPEG')
             small_avatar = InMemoryUploadedFile(
                 small_img_io, None, sm_filename,

@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import ntpath
 
@@ -21,7 +21,7 @@ def process_type(type_):
     FIXME Возможно надо для Mongo, а не для Postgresql
     Отображение типов Файла в типы Postgresql
     """
-    for k, v in TYPES_MAP.items():
+    for k, v in list(TYPES_MAP.items()):
         if type_.startswith(k):
             return v
     raise ValueError("Необработанный тип для Excel!")

@@ -10,8 +10,8 @@ from etl.services.datasource.base import DataSourceService
 
 class Command(BaseCommand):
 
-    help = u'Удаляет все кубы указанного источника! '\
-           u'Запускать python manage.py deletecubes <datasource_id>!'
+    help = 'Удаляет все кубы указанного источника! '\
+           'Запускать python manage.py deletecubes <datasource_id>!'
 
     def add_arguments(self, parser):
         parser.add_argument('datasource_id', type=int)
@@ -26,11 +26,11 @@ class Command(BaseCommand):
 
         metas = DatasourceMeta.objects.filter(datasource_id=datasource_id)
         meta_ids = metas.values_list('id', flat=True)
-        print 'meta_ids', meta_ids
+        print('meta_ids', meta_ids)
 
         meta_keys = DatasourceMetaKeys.objects.filter(meta_id__in=meta_ids)
         meta_values = meta_keys.values_list('value', flat=True)
-        print 'meta_values', meta_values
+        print('meta_values', meta_values)
 
         for value in meta_values:
             for t_name in ['sttm_datasource_', 'dimensions_', 'measures_']:

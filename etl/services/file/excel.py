@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import time
 import datetime
@@ -29,7 +29,7 @@ class Excel(File):
         excel = pandas.ExcelFile(file_path)
         sheet_names = excel.sheet_names
 
-        return map(lambda x: {'name': x, }, sheet_names)
+        return [{'name': x, } for x in sheet_names]
 
     def get_data(self, sheet_name, indents):
 
