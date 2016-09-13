@@ -557,9 +557,10 @@ class CardViewSet(viewsets.ViewSet):
 
         if filters:
             for filt in filters:
-                wheres.append("{0} IN ({1})".format(
-                    filt['field_name'],
-                    ', '.join(["'{0}'".format(x) for x in filt['values']])))
+                if filt['values']:
+                    wheres.append("{0} IN ({1})".format(
+                        filt['field_name'],
+                        ', '.join(["'{0}'".format(x) for x in filt['values']])))
 
         where_q = 'WHERE {0}'.format(' AND '.join(wheres)) if wheres else ''
 
