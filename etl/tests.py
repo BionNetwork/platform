@@ -13,7 +13,7 @@ from core.models import Datasource, ConnectionChoices, DatasourceMeta, \
     DatasourceMetaKeys, Measure
 from etl.services.queue.base import TaskService
 from etl.constants import GENERATE_DIMENSIONS, GENERATE_MEASURES
-from etl.tasks import LoadDimensions, LoadMeasures
+# from etl.tasks import LoadDimensions, LoadMeasures
 
 """
 Тестирование etl методов

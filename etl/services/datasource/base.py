@@ -12,7 +12,7 @@ from etl.services.datasource.repository.storage import (
 from etl.models import TableTreeRepository as TTRepo
 from core.helpers import get_utf8_string
 from etl.services.middleware.base import HashEncoder
-from etl.services.excepts import SourceUpdateExcept
+from etl.services.exceptions import SourceUpdateExcept
 from etl.services.clickhouse.helpers import FILTER_QUERIES
 from functools import reduce
 
@@ -77,7 +77,7 @@ class DataSourceService(object):
         Args:
             source(core.models.Datasource): Источник данных
         """
-        RedisSourceService.delete_datasource(source)
+        RedisSS.delete_datasource(source)
 
     @classmethod
     def update_datasource(cls, source_id, request):

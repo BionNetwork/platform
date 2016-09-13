@@ -17,22 +17,22 @@ class RedisCacheKeys(object):
     """Ключи для редиса"""
 
     @staticmethod
-    def source_key(datasource_id):
+    def source_key(source_id):
         """
-        соурс юзера
-        :param user_id:
-        :param datasource_id:
-        :return:
+        Источник данных
+
+        Args:
+            source_id(int): id источника
         """
-        return 'source:{0}'.format(datasource_id)
+        return 'source:{0}'.format(source_id)
 
     @staticmethod
     def get_card_key(card_id):
         """
-        соурс юзера
-        :param user_id:
-        :param datasource_id:
-        :return:
+        Карточка
+
+        Args:
+            card_id(int): id источника
         """
         return 'card:{0}'.format(card_id)
 
@@ -40,8 +40,9 @@ class RedisCacheKeys(object):
     def card_builder_key(cls, card_id):
         """
         Счетчик для коллекций пользователя (автоинкрементное значение)
-        :param card_key: str
-        :return: str
+
+        Args:
+            card_id(int): id источника
         """
         card_key = cls.get_card_key(card_id)
         return '{0}:builder'.format(card_key)
@@ -49,7 +50,7 @@ class RedisCacheKeys(object):
     @classmethod
     def table_key(cls, card_id, source_id, table_id):
         """
-        фулл инфа таблицы, которая в дереве
+        Полная информация таблицы, которая в дереве
         """
         card_key = cls.get_card_key(card_id)
         source_key = cls.source_key(source_id)
@@ -60,19 +61,12 @@ class RedisCacheKeys(object):
     def tree_key(cls, card_id):
         """
         Структура дерева
-        :param user_id:
-        :param datasource_id:
-        :return:
+
+        Args:
+            card_id(int): id источника
         """
         card_key = cls.get_card_key(card_id)
         return '{0}:active:tree'.format(card_key)
-
-    @staticmethod
-    def get_user_subscribers(user_id):
-        """
-        ключ каналов юзера для сокетов
-        """
-        return 'user_channels:{0}'.format(user_id)
 
     @staticmethod
     def get_queue(task_id):
@@ -126,65 +120,21 @@ class RedisSourceService(object):
         """
         user_datasource_key = cls.get_user_source(source)
 
-        r_server.delete(user_datasource_key)
+        cls.r_del(user_datasource_key)
 
     @classmethod
     def set_tables(cls, source_id, tables):
         """
         кладем информацию о таблицах в редис
-        :param source: Datasource
+        :param source_id: Datasource
         :param tables: list
         :return: list
         """
         user_datasource_key = cls.get_user_source(source_id)
 
-        r_server.set(user_datasource_key,
+        cls.r_set(user_datasource_key,
                      json.dumps({'tables': tables}))
         r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
-
-    @staticmethod
-    def get_user_subscribers(user_id):
-        """
-        каналы юзера для сокетов
-        :param user_id:
-        :return:
-        """
-        subs_str = RedisCacheKeys.get_user_subscribers(user_id)
-        if not r_server.exists(subs_str):
-            return []
-
-        return r_server.get(subs_str)
-
-    @classmethod
-    def set_user_subscribers(cls, user_id, channel):
-        """
-        добавляем канал юзера для сокетов
-        """
-        subs_str = RedisCacheKeys.get_user_subscribers(user_id)
-        subscribes = cls.get_user_subscribers(user_id)
-        if subscribes:
-            channels = json.loads(cls.get_user_subscribers(user_id))
-        else:
-            channels = []
-        channels.append(channel)
-        r_server.set(subs_str, json.dumps(channels))
-
-    @classmethod
-    def delete_user_subscriber(cls, user_id, task_id):
-        """
-        удаляет канал из каналов для сокетов
-        """
-        subs_str = RedisCacheKeys.get_user_subscribers(user_id)
-        subscribes = cls.get_user_subscribers(user_id)
-        if subscribes:
-            subscribers = json.loads(subscribes)
-        else:
-            subscribers = []
-        for sub in subscribers:
-            if sub['queue_id'] == task_id:
-                subscribers.remove(sub)
-                break
-        r_server.set(subs_str, json.dumps(subscribers))
 
     @staticmethod
     def get_queue_dict(task_id):
@@ -195,19 +145,19 @@ class RedisSourceService(object):
         queue_str = RedisCacheKeys.get_queue(task_id)
         return RedisDict(key=queue_str, redis=r_server, pickler=json)
 
-    @staticmethod
-    def delete_queue(task_id):
+    @classmethod
+    def delete_queue(cls, task_id):
         """
         информация о ходе работы таска
         :param task_id:
         """
-        queue_str = RedisCacheKeys.get_queue(task_id)
-        r_server.delete(queue_str)
+        queue_str = RedisCacheKeys.get_queue(cls, task_id)
+        cls.r_del(queue_str)
 
     @classmethod
     def get_source_indentation(cls, source_id):
         """
-        Достаем отступ для страницы соурса
+        Получаем отступ для страницы источника
         Returns: defaultdict(int)
         """
         indent_key = RKeys.indent_key(source_id)

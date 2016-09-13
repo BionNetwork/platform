@@ -1,7 +1,6 @@
 # coding: utf-8
 
 
-
 # TODO make codes for exceptions
 class BaseExcept(Exception):
     """

@@ -24,9 +24,6 @@ class FileService(DatasourceApi):
         """
         Фабрика для инстанса файлов
 
-        Args:
-            source(core.models.Datasource): Источник данных
-
         Returns:
             etl.services.files.interfaces.File
         """

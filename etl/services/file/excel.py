@@ -10,7 +10,7 @@ from itertools import groupby
 from xlrd import XLRDError
 
 from etl.services.file.interfaces import File, process_type, TIMESTAMP
-from etl.services.excepts import SheetExcept
+from etl.services.exceptions import SheetExcept
 
 
 class Excel(File):

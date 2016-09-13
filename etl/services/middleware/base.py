@@ -51,22 +51,6 @@ def generate_columns_string(columns):
     return cols_str
 
 
-def generate_columns_string_NEW(sources):
-    """
-        Генерирует строку из имен таблиц и колонок
-    """
-    result = []
-    for sid, tables in sources.items():
-        for table, cols in tables.items():
-
-            result.append('{0}-{1};'.format(table, ','.join(sorted(cols))))
-
-    result.sort()
-    cols_str = ''.join(result)
-
-    return cols_str
-
-
 def generate_table_name_key(source, cols_str):
     """Генерация ключа для названия промежуточной таблицы
 
@@ -82,16 +66,6 @@ def generate_table_name_key(source, cols_str):
         reduce(operator.add,
                [source.host, str(source.port),
                 str(source.user_id), cols_str], ''))
-    return str(key) if key > 0 else '_{0}'.format(abs(key))
-
-
-def generate_cube_key(cols_str, cube_id):
-    """
-    Генерация ключа для куба
-    cols_str(str): Строка с названием столбцов
-    """
-    key = HashEncoder.encode(
-        reduce(operator.add, [str(cube_id), cols_str], ''))
     return str(key) if key > 0 else '_{0}'.format(abs(key))
 
 

@@ -9,7 +9,7 @@ from collections import defaultdict
 from more_itertools import first
 
 from etl.services.file.interfaces import File, process_type, TIMESTAMP
-from etl.services.excepts import SheetExcept
+from etl.services.exceptions import SheetExcept
 
 
 # FIXME get delimiter from storage

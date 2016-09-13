@@ -25,7 +25,6 @@ from django.conf.urls import url, include
 urlpatterns = [
     url(r'^admin/', include(admin.site.urls)),
     url(r'', include(core_urls, namespace='core'), name="index"),
-    url(r'^etl/', include('etl.urls', namespace='etl')),
     url(r'^api/v1/', include('api.urls', namespace='api')),
     url(r'^api-auth/', include('rest_framework.urls', namespace='rest_framework'))
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) + \

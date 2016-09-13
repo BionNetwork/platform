@@ -2,12 +2,13 @@
 from django.core.management.base import BaseCommand, CommandError
 from core.models import User
 from etl.services.datasource.repository.storage import RedisSourceService
-from etl import tasks
 
 
 # FIXME запускать либо python manage.py handletasks <user_id>,
 # FIXME либо python manage.py handletasks <user_id> -t <task_id>
 
+
+# FIXME Переписать или удалить
 
 class Command(BaseCommand):
     args = '<>'
