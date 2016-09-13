@@ -9,8 +9,8 @@ from operator import itemgetter
 import pymssql
 from django.conf import settings
 
-from etl.services.datasource.db import mssql as mssql_map
-from .interfaces import Database
+from etl.services.datasource.db.maps import mssql as mssql_map
+from etl.services.datasource.db.interfaces import Database
 
 
 class MsSql(Database):

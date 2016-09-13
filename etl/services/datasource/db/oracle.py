@@ -4,8 +4,8 @@ from itertools import groupby
 
 import cx_Oracle
 
-from etl.services.datasource.db import Database
-from etl.services.datasource.db import oracle as oracle_map
+from etl.services.datasource.db.interfaces import Database
+from etl.services.datasource.db.maps import oracle as oracle_map
 
 
 class Oracle(Database):

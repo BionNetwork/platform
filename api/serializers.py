@@ -9,7 +9,6 @@ import xmltodict
 from core.models import User, Datasource, DatasourceSettings, Cube
 from etl import helpers
 from etl.services.datasource.base import DataSourceService
-from etl.services.olap.base import send_xml, OlapServerConnectionErrorException
 
 logger = logging.getLogger(__name__)
 

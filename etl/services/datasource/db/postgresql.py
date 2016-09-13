@@ -4,8 +4,8 @@ from functools import reduce
 
 import psycopg2
 
-from etl.services.datasource.db import postgresql as pgsql_map
-from .interfaces import Database, Operations
+from etl.services.datasource.db.maps import postgresql as pgsql_map
+from etl.services.datasource.db.interfaces import Database, Operations
 
 
 class Postgresql(Database):

@@ -2,8 +2,8 @@
 
 import MySQLdb
 
-from etl.services.datasource.db import mysql as mysql_map
-from .interfaces import Database
+from etl.services.datasource.db.maps import mysql as mysql_map
+from etl.services.datasource.db.interfaces import Database
 
 
 class Mysql(Database):

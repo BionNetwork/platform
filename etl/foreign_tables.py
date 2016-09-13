@@ -8,7 +8,7 @@ import pandas as pd
 from core.models import Datasource
 from etl.constants import *
 from etl.helpers import HashEncoder
-from etl.services.datasource.db import LocalDatabaseService
+from etl.services.datasource.db.factory import LocalDatabaseService
 
 
 class BaseForeignTable(object):

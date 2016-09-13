@@ -10,12 +10,13 @@ import requests
 from bson import binary
 from pymongo import IndexModel
 
+from django.conf import settings
+
 from core.models import QueueList, QueueStatus
 from etl.constants import TYPES_MAP
 from etl.helpers import datetime_now_str, HashEncoder
-from etl.services.datasource.db import BaseEnum
+from etl.services.datasource.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
-from . import client, settings
 
 logger = logging.getLogger(__name__)
 
@@ -170,33 +171,33 @@ class RPublish(object):
             status(str): Статус задачи
             msg(unicode): Дополнительное сообщение (при ошибке)
         """
-        percent = self.percent
-        if status == TLSE.FINISH or percent >= 100:
-            client.publish(self.channel, json.dumps(
-                {'percent': 100,
-                 'taskId': self.task_id,
-                 'event': TLSE.FINISH}
-            ))
-            self.is_complete = True
-        elif status == TLSE.START:
-            client.publish(self.channel, json.dumps(
-                {'percent': 0,
-                 'taskId': self.task_id,
-                 'event': TLSE.START}
-            ))
-        elif status == TLSE.PROCESSING:
-            client.publish(self.channel, json.dumps(
-                {'percent': percent,
-                 'taskId': self.task_id,
-                 'event': TLSE.PROCESSING}
-            ))
-        else:
-            client.publish(self.channel, json.dumps(
-                {'percent': percent,
-                 'taskId': self.task_id,
-                 'event': TLSE.ERROR,
-                 'msg': msg}
-            ))
+        # percent = self.percent
+        # if status == TLSE.FINISH or percent >= 100:
+        #     client.publish(self.channel, json.dumps(
+        #         {'percent': 100,
+        #          'taskId': self.task_id,
+        #          'event': TLSE.FINISH}
+        #     ))
+        #     self.is_complete = True
+        # elif status == TLSE.START:
+        #     client.publish(self.channel, json.dumps(
+        #         {'percent': 0,
+        #          'taskId': self.task_id,
+        #          'event': TLSE.START}
+        #     ))
+        # elif status == TLSE.PROCESSING:
+        #     client.publish(self.channel, json.dumps(
+        #         {'percent': percent,
+        #          'taskId': self.task_id,
+        #          'event': TLSE.PROCESSING}
+        #     ))
+        # else:
+        #     client.publish(self.channel, json.dumps(
+        #         {'percent': percent,
+        #          'taskId': self.task_id,
+        #          'event': TLSE.ERROR,
+        #          'msg': msg}
+        #     ))
 
 
 def set_task(func, context):
