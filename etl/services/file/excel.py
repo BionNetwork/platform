@@ -38,7 +38,7 @@ class Excel(File):
         indent = indents[sheet_name]
 
         df = pandas.read_excel(excel, sheet_name, skiprows=indent)
-        return df.to_dict(orient='records')
+        return df[:50].to_dict(orient='records')
 
     def get_columns_info(self, sheets, indents):
         """
