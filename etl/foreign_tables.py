@@ -2,13 +2,13 @@
 
 
 import os
+
 import pandas as pd
 
 from core.models import Datasource
-
 from etl.constants import *
-from etl.services.middleware.base import HashEncoder
-from etl.services.db.factory import LocalDatabaseService
+from etl.helpers import HashEncoder
+from etl.services.datasource.db import LocalDatabaseService
 
 
 class BaseForeignTable(object):

@@ -2,37 +2,22 @@
 
 
 import binascii
-import requests
-from contextlib import closing
-import pymongo
-from pymongo import IndexModel
-import logging
-from psycopg2 import Binary
 import json
-import datetime
+import logging
 
+import pymongo
+import requests
 from bson import binary
+from pymongo import IndexModel
 
+from core.models import QueueList, QueueStatus
 from etl.constants import TYPES_MAP
-from etl.services.db.interfaces import BaseEnum
+from etl.helpers import datetime_now_str, HashEncoder
+from etl.services.datasource.db import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService
-from core.models import (QueueList, Queue, QueueStatus)
-from core.exceptions import TaskError
-
-from etl.services.middleware.base import (
-    datetime_now_str, HashEncoder, get_table_name)
 from . import client, settings
 
-# __all__ = [
-#     'TLSE',  'TRSE', 'RPublish', 'RowKeysCreator', 'MongodbConnection',
-#     'calc_key_for_row', 'TaskProcessing',
-#     'DTCN', 'AKTSE', 'DTSE', 'get_single_task', 'get_binary_types_list',
-#     'process_binary_data', 'get_binary_types_dict', 'fetch_date_intervals',
-#     'simple_key_for_row',
-# ]
-
 logger = logging.getLogger(__name__)
-
 
 
 class PusherCodes(object):

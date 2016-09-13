@@ -1,9 +1,11 @@
 # coding: utf-8
 from collections import defaultdict
 from itertools import groupby
-from etl.services.db.interfaces import Database
+
 import cx_Oracle
-from etl.services.db.maps import oracle as oracle_map
+
+from etl.services.datasource.db import Database
+from etl.services.datasource.db import oracle as oracle_map
 
 
 class Oracle(Database):

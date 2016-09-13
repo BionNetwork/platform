@@ -28,7 +28,7 @@ from core.views import BaseViewNoLogin
 from etl.tasks import load_data
 from etl.services.datasource.base import DataSourceService
 from etl.helpers import group_by_source
-from etl.services.exceptions import SheetExcept
+from etl.services.exceptions import SheetException
 
 from etl.constants import *
 
@@ -164,7 +164,7 @@ class TablesView(APIView):
 
         try:
             data = service.fetch_tables_columns([table_name], indents)
-        except SheetExcept as e:
+        except SheetException as e:
             raise APIException(e)
 
         return Response(data)

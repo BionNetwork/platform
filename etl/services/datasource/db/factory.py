@@ -2,18 +2,16 @@
 
 
 import calendar
-from contextlib import closing
 import math
+from contextlib import closing
 from datetime import timedelta, datetime
 
 from django.conf import settings
-from django.db import transaction
 
-from core.models import (ConnectionChoices, DatasourcesJournal, Datasource,
-                         DatasourcesTrigger)
+from core.models import (ConnectionChoices, DatasourcesJournal, Datasource)
 from etl.constants import DATE_TABLE_COLS_LEN
-from etl.services.db import mysql, postgresql
-from etl.services.source import DatasourceApi
+from etl.services.datasource.db import mysql, postgresql
+from etl.services.datasource.source import DatasourceApi
 
 
 class DatabaseService(DatasourceApi):
@@ -311,22 +309,6 @@ class LocalDatabaseService(object):
         query = self.datasource.cdc_key_delete_query(table_name)
         self.execute(query, records)
 
-    def reload_trigger(self, trigger_name, orig_table, new_table, column_names):
-        sep = self.datasource.get_separator()
-        insert_cols = ['NEW.{1}{0}{1}'.format(col, sep) for col in column_names]
-        select_cols = ['{1}{0}{1}'.format(col, sep) for col in column_names]
-        query_params = dict(
-            trigger_name=trigger_name,
-            new_table=new_table,
-            orig_table=orig_table,
-            del_condition="{0}cdc_key{0}=OLD.{0}cdc_key{0}".format(sep),
-            insert_cols=','.join(insert_cols),
-            cols="({0})".format(','.join(select_cols)),
-        )
-        query = self.datasource.reload_datasource_trigger_query(query_params)
-        self.execute(query)
-        return query
-
     def create_date_tables(self, time_table_name, sub_trees, is_update):
         """
         Создание таблиц дат
@@ -468,12 +450,3 @@ class LocalDatabaseService(object):
 
         query = self.datasource.create_schema_query(schema_name)
         self.execute(query)
-
-
-class ClickhouseQuery(object):
-    """
-    Работа с запросами к Clickhouse
-    """
-
-    def __init__(self, ):
-        pass

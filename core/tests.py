@@ -14,7 +14,7 @@ from django.conf import settings
 from core.db.services import retry_query
 from core.models import User
 from core.helpers import convert_milliseconds_to_seconds
-from etl.services.middleware.base import HashEncoder
+from etl.helpers import HashEncoder
 
 
 class BaseCoreTest(TestCase):

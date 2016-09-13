@@ -2,17 +2,19 @@
 
 
 import json
-from mock import patch
 
 from django.db import connections
 from django.test import TestCase
-from etl.services.datasource.repository import r_server
-from etl.services.db.postgresql import Postgresql
-from etl.services.datasource.base import TablesTree, DataSourceService
+from mock import patch
+
 from core.models import Datasource, ConnectionChoices, DatasourceMeta, \
     DatasourceMetaKeys, Measure
-from etl.services.queue.base import TaskService
 from etl.constants import GENERATE_DIMENSIONS, GENERATE_MEASURES
+from etl.services.datasource.base import TablesTree, DataSourceService
+from etl.services.datasource.db import Postgresql
+from etl.services.datasource.repository import r_server
+from etl.services.queue.base import TaskService
+
 # from etl.tasks import LoadDimensions, LoadMeasures
 
 """

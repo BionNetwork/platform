@@ -1,16 +1,17 @@
 # coding: utf-8
 
 
-import time
 import datetime
-from dateutil.parser import parse
-import pandas
+import time
 from collections import defaultdict
 from itertools import groupby
+
+import pandas
+from dateutil.parser import parse
 from xlrd import XLRDError
 
-from etl.services.file.interfaces import File, process_type, TIMESTAMP
-from etl.services.exceptions import SheetExcept
+from etl.services.datasource.file.interfaces import File, process_type, TIMESTAMP
+from etl.services.exceptions import SheetException
 
 
 class Excel(File):
@@ -66,7 +67,7 @@ class Excel(File):
                 sheet_df = pandas.read_excel(
                     excel_path, sheetname=sheet_name, skiprows=indent)
             except XLRDError as e:
-                raise SheetExcept(message=e.message)
+                raise SheetException(message=e.message)
 
             col_names = sheet_df.columns
             for col_name in col_names:
@@ -115,7 +116,7 @@ class Excel(File):
                 sheet_df = pandas.read_excel(
                     excel_path, sheetname=sheet_name, skiprows=indent)
             except XLRDError as e:
-                raise SheetExcept(message=e.message)
+                raise SheetException(message=e.message)
 
             height, width = sheet_df.shape
             size = sheet_df.memory_usage(deep=True).sum()
@@ -150,7 +151,7 @@ class Excel(File):
                 sheet_df = pandas.read_excel(
                     excel_path, sheetname=sheet_name, skiprows=indent)
             except XLRDError as e:
-                raise SheetExcept(message=e.message)
+                raise SheetException(message=e.message)
 
             col_names = sheet_df.columns
             for col_name in col_names:

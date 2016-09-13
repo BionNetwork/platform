@@ -1,10 +1,9 @@
 # coding: utf-8
 
-from .interfaces import Database
 import MySQLdb
-from collections import defaultdict
-from itertools import groupby
-from etl.services.db.maps import mysql as mysql_map
+
+from etl.services.datasource.db import mysql as mysql_map
+from .interfaces import Database
 
 
 class Mysql(Database):

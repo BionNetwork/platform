@@ -1,21 +1,21 @@
 # coding: utf-8
 
 
+from functools import reduce
+
+from core.helpers import get_utf8_string
 from core.models import (
     ConnectionChoices, Datasource, Columns, ColumnTypeChoices as ColTC,
     Dataset,
 )
-from etl.services.db.factory import DatabaseService, LocalDatabaseService
-from etl.services.file.factory import FileService
+from etl.helpers import HashEncoder
+from etl.models import TableTreeRepository as TTRepo
+from etl.services.clickhouse.helpers import FILTER_QUERIES
+from etl.services.datasource.db.factory import DatabaseService, LocalDatabaseService
+from etl.services.datasource.file.factory import FileService
 from etl.services.datasource.repository.storage import (
     RedisSourceService, CardCacheService)
-from etl.models import TableTreeRepository as TTRepo
-from core.helpers import get_utf8_string
-from etl.services.middleware.base import HashEncoder
-from etl.services.exceptions import SourceUpdateExcept
-from etl.services.clickhouse.helpers import FILTER_QUERIES
-from functools import reduce
-
+from etl.services.exceptions import SourceUpdateException
 
 RedisSS = RedisSourceService
 
@@ -103,7 +103,7 @@ class DataSourceService(object):
 
             tables_range = [t for t in saved_tables if t not in new_tables]
             if tables_range:
-                raise SourceUpdateExcept(
+                raise SourceUpdateException(
                     "Tables {0} removed in new file!".format(tables_range))
 
             indents = DataSourceService.extract_source_indentation(source_id)
@@ -120,7 +120,7 @@ class DataSourceService(object):
                              if tupl not in new_columns]
 
             if columns_range:
-                raise SourceUpdateExcept(
+                raise SourceUpdateException(
                     "Columns {0} removed in new file!".format(columns_range))
             # если все нормально, то
             # отметим заменяемый файл как старый

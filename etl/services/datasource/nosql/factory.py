@@ -2,8 +2,8 @@
 
 
 
-from etl.services.nosql.mongodb import Mongodb
-from etl.services.source import DatasourceApi
+from etl.services.datasource.nosql import Mongodb
+from etl.services.datasource.source import DatasourceApi
 
 
 class NoSqlService(DatasourceApi):

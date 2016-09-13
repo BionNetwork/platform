@@ -3,10 +3,9 @@
 
 import operator
 from collections import defaultdict
-
 from functools import reduce
 
-from etl.services.db.interfaces import JoinTypes, Operations
+from etl.services.datasource.db import JoinTypes, Operations
 
 
 class Node(object):

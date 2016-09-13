@@ -1,8 +1,8 @@
 # coding: utf-8
 
 from core.models import ConnectionChoices as ConnType
-from etl.services.db.factory import DatabaseService
-from etl.services.file.factory import FileService
+from etl.services.datasource.db import DatabaseService
+from etl.services.datasource.file.factory import FileService
 
 
 def get_source_service(source):

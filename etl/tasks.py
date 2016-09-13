@@ -14,7 +14,7 @@ from core.models import (
 
 from etl.constants import *
 from etl.services.queue.base import *
-from etl.services.middleware.base import EtlEncoder
+from etl.helpers import EtlEncoder
 from etl.services.datasource.base import DataSourceService
 
 from etl.foreign_tables import (

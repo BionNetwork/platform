@@ -2,15 +2,15 @@
 
 __author__ = 'damir(GDR)'
 
-from django.conf import settings
-from contextlib import closing
-from .interfaces import Database
-import pymssql
-
 from collections import defaultdict
 from itertools import groupby
 from operator import itemgetter
-from etl.services.db.maps import mssql as mssql_map
+
+import pymssql
+from django.conf import settings
+
+from etl.services.datasource.db import mssql as mssql_map
+from .interfaces import Database
 
 
 class MsSql(Database):

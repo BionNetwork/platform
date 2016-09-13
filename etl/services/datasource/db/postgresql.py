@@ -1,11 +1,11 @@
 # coding: utf-8
 
-from .interfaces import Database, Operations
-from etl.services.db.maps import postgresql as pgsql_map
-from collections import defaultdict
-from itertools import groupby
-import psycopg2
 from functools import reduce
+
+import psycopg2
+
+from etl.services.datasource.db import postgresql as pgsql_map
+from .interfaces import Database, Operations
 
 
 class Postgresql(Database):
