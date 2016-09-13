@@ -101,7 +101,7 @@ class MsSql(Database):
         :return: tuple
         """
         indexes = defaultdict(list)
-        itable_name, index_name, primary, unique, icol_name, = xrange(5)
+        itable_name, index_name, primary, unique, icol_name, = range(5)
         grouper = itemgetter(itable_name, index_name, primary, unique)
 
         for key, igroup in groupby(index_records, grouper):
@@ -118,7 +118,7 @@ class MsSql(Database):
 
         constraints = defaultdict(list)
         (c_table_name, c_col_name, c_name, c_type,
-         c_foreign_table, c_foreign_col, c_update, c_delete) = xrange(8)
+         c_foreign_table, c_foreign_col, c_update, c_delete) = range(8)
 
         for ikey, igroup in groupby(const_records, lambda x: x[c_table_name]):
             for ig in igroup:
@@ -135,7 +135,7 @@ class MsSql(Database):
         columns = defaultdict(list)
         foreigns = defaultdict(list)
 
-        table_name, col_name, col_type, is_nullable, extra_, max_length = xrange(6)
+        table_name, col_name, col_type, is_nullable, extra_, max_length = range(6)
 
         for key, group in groupby(col_records, lambda x: x[table_name]):
 

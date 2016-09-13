@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
+
 
 import six
 
@@ -29,7 +29,7 @@ class CustomDeleteQuery(sql.DeleteQuery):
     def delete_batch(self, fields_values, using, field=None):
 
         self.where = self.where_class()
-        for field, value in fields_values.items():
+        for field, value in list(fields_values.items()):
             self.add_q(Q(**{field + '__in': [value, ]}))
 
         self.do_query(self.get_meta().db_table, self.where, using=using)
@@ -47,7 +47,7 @@ class CustomDeleteCollector(Collector):
         """
 
         # sort instance collections
-        (model, instance_set) = self.data.items()[0]
+        (model, instance_set) = list(self.data.items())[0]
         instance = list(instance_set)[0]
         self.sort()
         with transaction.atomic(using=self.using, savepoint=False):

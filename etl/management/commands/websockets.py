@@ -41,15 +41,15 @@ class Command(BaseCommand):
                     settings.REDIS_HOST, int(settings.REDIS_PORT))
 
                 def channel_to_publish(new_channel):
-                    print new_channel
+                    print(new_channel)
                     self.protocol_ins.subscribe(new_channel)
                     return "It's ok"
 
-                yield self.register(channel_to_publish, u'set_publish_channel')
+                yield self.register(channel_to_publish, 'set_publish_channel')
 
         runner = ApplicationRunner(
-            u"ws://{0}:{1}/ws".format(settings.SOCKET_HOST, settings.SOCKET_PORT),
-            u"realm1",
+            "ws://{0}:{1}/ws".format(settings.SOCKET_HOST, settings.SOCKET_PORT),
+            "realm1",
         )
         runner.run(Component)
 

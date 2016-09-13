@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
+
 
 import os
 import datetime
@@ -190,9 +190,9 @@ class DatasourceSettings(models.Model):
     TRIGGERS = 'apply_triggers'
     CHECKSUM = 'apply_checksum'
     SETTING_CDC_NAME = 'cdc_type'
-    name = models.CharField(max_length=255, verbose_name=u'Название', db_index=True)
-    value = models.CharField(max_length=255, verbose_name=u'Значение')
-    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник', related_name='settings')
+    name = models.CharField(max_length=255, verbose_name='Название', db_index=True)
+    value = models.CharField(max_length=255, verbose_name='Значение')
+    datasource = models.ForeignKey(Datasource, verbose_name='Источник', related_name='settings')
 
     class Meta:
         db_table = "datasources_settings"
@@ -230,8 +230,8 @@ class DatasourceMetaKeys(models.Model):
     Ключ к динамически создаваемым таблицам
     """
     meta = models.ForeignKey(
-        DatasourceMeta, verbose_name=u'Метаданные', related_name=u'meta_keys')
-    value = models.CharField(verbose_name=u'Ключ', max_length=255)
+        DatasourceMeta, verbose_name='Метаданные', related_name='meta_keys')
+    value = models.CharField(verbose_name='Ключ', max_length=255)
 
     class Meta:
         db_table = 'datasources_meta_keys'
@@ -289,7 +289,7 @@ class Dimension(models.Model):
         verbose_name="дата создания", auto_now_add=True, db_index=True)
     update_date = models.DateTimeField(
         verbose_name="дата обновления", auto_now=True, db_index=True)
-    user = models.ForeignKey(User, verbose_name=u'Пользователь')
+    user = models.ForeignKey(User, verbose_name='Пользователь')
     datasources_meta = models.ForeignKey(
         DatasourceMeta, related_name='dimension')
 
@@ -346,7 +346,7 @@ class Measure(models.Model):
         verbose_name="дата создания", auto_now_add=True, db_index=True)
     update_date = models.DateTimeField(
         verbose_name="дата обновления", auto_now=True, db_index=True)
-    user = models.ForeignKey(User, verbose_name=u'Пользователь')
+    user = models.ForeignKey(User, verbose_name='Пользователь')
     datasources_meta = models.ForeignKey(
         DatasourceMeta, related_name='measure')
 
@@ -420,8 +420,8 @@ class Cube(models.Model):
         verbose_name="дата создания", auto_now_add=True, db_index=True)
     update_date = models.DateTimeField(
         verbose_name="дата обновления", auto_now=True, db_index=True)
-    user = models.ForeignKey(User, verbose_name=u'Пользователь')
-    dataset = models.ForeignKey('Dataset', verbose_name=u'Датасет')
+    user = models.ForeignKey(User, verbose_name='Пользователь')
+    dataset = models.ForeignKey('Dataset', verbose_name='Датасет')
 
     class Meta:
         db_table = "cubes"
@@ -444,7 +444,7 @@ class Dataset(models.Model):
     """
     Модель
     """
-    key = models.TextField(verbose_name=u'Ключ', unique=True)
+    key = models.TextField(verbose_name='Ключ', unique=True)
     date_created = models.DateTimeField(
         verbose_name="Дата создания", auto_now_add=True, db_index=True)
     update_date = models.DateTimeField(
@@ -470,12 +470,12 @@ class DatasetToMeta(models.Model, MultiPrimaryKeyModel):
     Модель связи Мета источника и Dataset
     """
     meta = models.ForeignKey(
-        DatasourceMeta, verbose_name=u'Мета источника')
+        DatasourceMeta, verbose_name='Мета источника')
     # FIXME обманка для Джанги, т.к. 1 primary key быть обязан
     # FIXME всегда при регистрации модели
     # FIXME на самом деле в миграции формируется primary key (meta, dataset)
     dataset = models.ForeignKey(
-        Dataset, verbose_name=u'Данные', primary_key=True)
+        Dataset, verbose_name='Данные', primary_key=True)
 
     def delete(self, using=None):
         MultiPrimaryKeyModel.delete(self, using)
@@ -500,7 +500,7 @@ class DatasourcesTrigger(models.Model):
     src = models.TextField(verbose_name='текст триггера')
     collection_name = models.CharField(
         verbose_name="Название коллекции", max_length=1024, db_index=True)
-    datasource = models.ForeignKey(Datasource, verbose_name=u'Источник')
+    datasource = models.ForeignKey(Datasource, verbose_name='Источник')
 
     class Meta:
         db_table = "datasources_trigger"

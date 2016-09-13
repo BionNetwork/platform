@@ -11,7 +11,7 @@ class Command(BaseCommand):
     help = "Удаление источника данных"
 
     def handle(self, *args, **options):
-        print "Searching datasources by args: %s" % json.dumps(args)
+        print("Searching datasources by args: %s" % json.dumps(args))
         filter_cond = dict()
         values = (arg.split('=') for arg in args if len(arg.split('=')) > 1)
 
@@ -22,7 +22,7 @@ class Command(BaseCommand):
 
         if len(filter_cond) == 0:
             while ask_deletion not in ['Y', 'n']:
-                ask_deletion = raw_input("Вы действительно хотите удалить все источники? (Y/n) ")
+                ask_deletion = input("Вы действительно хотите удалить все источники? (Y/n) ")
                 delete = ask_deletion == 'Y'
 
         if not delete:
@@ -32,7 +32,7 @@ class Command(BaseCommand):
         if sources.exists():
             for source in sources:
                 source.delete()
-                print 'Deleted datasource %d' % source['id']
+                print('Deleted datasource %d' % source['id'])
         else:
-            print 'No datasources found by condition'
+            print('No datasources found by condition')
 

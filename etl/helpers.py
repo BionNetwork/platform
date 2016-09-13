@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from __future__ import unicode_literals
+
 
 from collections import defaultdict
 
@@ -11,7 +11,7 @@ def group_by_source(columns_info):
     """
     sid_grouped = defaultdict(dict)
 
-    for sid, tables in columns_info.iteritems():
+    for sid, tables in columns_info.items():
         sid_grouped[str(sid)].update(tables)
 
     return dict(sid_grouped)
@@ -21,6 +21,6 @@ def extract_tables_info(columns):
 
     tables_dict = {}
 
-    for sid, tables in columns.iteritems():
-        tables_dict[sid] = tables.keys()
+    for sid, tables in columns.items():
+        tables_dict[sid] = list(tables.keys())
     return tables_dict

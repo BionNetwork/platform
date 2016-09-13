@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 from core.models import (
     ConnectionChoices, Datasource, Columns, ColumnTypeChoices as ColTC,
@@ -14,6 +14,7 @@ from core.helpers import get_utf8_string
 from etl.services.middleware.base import HashEncoder
 from etl.services.excepts import SourceUpdateExcept
 from etl.services.clickhouse.helpers import FILTER_QUERIES
+from functools import reduce
 
 
 RedisSS = RedisSourceService
@@ -457,8 +458,8 @@ class DataSourceService(object):
 
         for j in joins_set:
             l_c, _, r_c = j
-            if (cols_types[u'{0}.{1}.{2}'.format(parent.val, l_c, parent.source_id)] !=
-                    cols_types[u'{0}.{1}.{2}'.format(
+            if (cols_types['{0}.{1}.{2}'.format(parent.val, l_c, parent.source_id)] !=
+                    cols_types['{0}.{1}.{2}'.format(
                         child.val, r_c, child.source_id)]):
                 error_joins.append(j)
             else:
@@ -519,7 +520,7 @@ class DataSourceService(object):
                 node.source_id, node.node_id)['columns']
 
             for col in t_cols:
-                cols_types[u'{0}.{1}.{2}'.format(
+                cols_types['{0}.{1}.{2}'.format(
                     node.val, col['name'], node.source_id)] = col['type']
 
         return cols_types
@@ -834,7 +835,7 @@ class DataSourceService(object):
         for sid in b_data:
             s_data = b_data[sid]
             # проверка в остатках
-            for remain, remain_id in s_data['remains'].iteritems():
+            for remain, remain_id in s_data['remains'].items():
                 if int(remain_id) == node_id:
                     return True
         return False
@@ -850,12 +851,12 @@ class DataSourceService(object):
             s_data = b_data[sid]
             # проверка в остатках
             if in_remain:
-                for remain, remain_id in s_data['remains'].iteritems():
+                for remain, remain_id in s_data['remains'].items():
                     if int(remain_id) == node_id:
                         return True
             # проверка в активных
             else:
-                for active, active_id in s_data['actives'].iteritems():
+                for active, active_id in s_data['actives'].items():
                     if int(active_id) == node_id:
                         return True
         return False
@@ -884,7 +885,7 @@ class DataSourceService(object):
         """
         data = self.cache.card_builder_data
 
-        cached_sids = [str(i) for i in data.keys()]
+        cached_sids = [str(i) for i in list(data.keys())]
         sids = [str(i) for i in sids]
         uncached = [x for x in sids if x not in cached_sids]
 
@@ -901,8 +902,8 @@ class DataSourceService(object):
         uncached_keys = []
         uncached_columns = []
 
-        for sid, info in sources_info.iteritems():
-            for table, columns in info.iteritems():
+        for sid, info in sources_info.items():
+            for table, columns in info.items():
                 table_id = cache.get_table_id(sid, table, data=data)
                 # таблицы нет в билдере
                 if table_id is None:
@@ -916,8 +917,7 @@ class DataSourceService(object):
                         uncached_keys.append((sid, table))
                     else:
                         table_info = cache.get_table_info(sid, table_id)
-                        column_names = map(
-                            lambda x: x["name"], table_info["columns"])
+                        column_names = [x["name"] for x in table_info["columns"]]
                         # нет информации о колонках
                         range_ = [c for c in columns if c not in column_names]
                         if range_:
@@ -952,8 +952,8 @@ class DataSourceService(object):
             (int(node.source_id), node.val) for node in tree_nodes]
         came_table_names = reduce(
             list.__add__,
-            [[(int(sid), t) for t in tables.keys()]
-             for sid, tables in columns_info.iteritems()], [])
+            [[(int(sid), t) for t in list(tables.keys())]
+             for sid, tables in columns_info.items()], [])
 
         range_ = [table_tupl for table_tupl in tree_table_names if
                   table_tupl not in came_table_names]

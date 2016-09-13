@@ -14,4 +14,4 @@ class Command(BaseCommand):
         r_server = redis.StrictRedis(
             host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
         r_server.flushdb()
-        print 'Cleaned cache!'
+        print('Cleaned cache!')

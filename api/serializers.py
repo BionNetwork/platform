@@ -129,7 +129,7 @@ class TaskSerializer(serializers.Serializer):
     owner = serializers.CharField(max_length=256)
 
     def update(self, instance, validated_data):
-        for field, value in validated_data.items():
+        for field, value in list(validated_data.items()):
             setattr(instance, field, value)
         return instance
 

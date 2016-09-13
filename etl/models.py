@@ -1,5 +1,5 @@
 # coding: utf-8
-from __future__ import unicode_literals
+
 
 import operator
 from collections import defaultdict
@@ -24,7 +24,7 @@ class Node(object):
         self.join_type = join_type
 
     def __str__(self):
-        return u'Node: %s, parent=%s, sid=%s' % (
+        return 'Node: %s, parent=%s, sid=%s' % (
             self.val, self.parent, self.source_id)
 
     def get_node_joins_info(self):
@@ -135,12 +135,12 @@ class TablesTree(object):
 
     def display(self):
         if self.root:
-            print(self.root.val, self.root.joins)
+            print((self.root.val, self.root.joins))
             r_chs = [x for x in self.root.childs]
             print([(x.val, x.joins) for x in r_chs])
             for c in r_chs:
                 print([x.val for x in c.childs])
-            print(80*'*')
+            print((80*'*'))
         else:
             print('Empty Tree!!!')
 
@@ -580,9 +580,9 @@ class TableTreeRepository(object):
         :return: list
         """
         counts = {}
-        for tr_name, tree in trees.iteritems():
+        for tr_name, tree in trees.items():
             counts[tr_name] = tree.nodes_count_for_levels
-        root_table = max(counts.iteritems(), key=operator.itemgetter(1))[0]
+        root_table = max(iter(counts.items()), key=operator.itemgetter(1))[0]
         return trees[root_table]
 
     @classmethod
@@ -643,7 +643,7 @@ class TableTreeRepository(object):
         """
         remains = []
         for sid in builder_data:
-            for remain, remain_id in builder_data[sid]['remains'].iteritems():
+            for remain, remain_id in builder_data[sid]['remains'].items():
                 remains.append(
                     RemainNode(remain, sid, remain_id)
                 )

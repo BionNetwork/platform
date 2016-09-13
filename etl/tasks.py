@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from __future__ import unicode_literals
+
 import logging
 
 import os
@@ -28,7 +28,7 @@ from core.models import (
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from djcelery import celery
-from itertools import groupby, izip
+from itertools import groupby
 from etl.services.queue.base import *
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -162,7 +162,7 @@ class LoadMongodb(TaskProcessing):
 
         tables_key_creator = [
             RowKeysCreator(table=table, cols=cols, meta_data=value)
-            for table, value in meta_info.iteritems()]
+            for table, value in meta_info.items()]
 
         while True:
 
@@ -184,15 +184,15 @@ class LoadMongodb(TaskProcessing):
                 record_normalized = (
                     [row_key, STSE.IDLE, EtlEncoder.encode(datetime.now())] +
                     [EtlEncoder.encode(rec_field) for rec_field in new_record])
-                data_to_insert.append(dict(izip(col_names, record_normalized)))
+                data_to_insert.append(dict(zip(col_names, record_normalized)))
                 data_to_current_insert.append(dict(_id=row_key))
             try:
                 collection.insert_many(data_to_insert, ordered=False)
                 current_collection.insert_many(
                     data_to_current_insert, ordered=False)
                 loaded_count += ind
-                print 'inserted %d rows to mongodb. Total inserted %s/%s.' % (
-                    ind, loaded_count, rows_count)
+                print('inserted %d rows to mongodb. Total inserted %s/%s.' % (
+                    ind, loaded_count, rows_count))
             except Exception as e:
                 self.error_handling(e.message)
 
@@ -301,8 +301,8 @@ class LoadDb(TaskProcessing):
 
                 offset += limit
                 loaded_count += len(rows_dict)
-                print 'inserted %d rows to database. Total inserted %s/%s.' % (
-                    len(rows_dict), loaded_count, rows_count)
+                print('inserted %d rows to database. Total inserted %s/%s.' % (
+                    len(rows_dict), loaded_count, rows_count))
             except Exception as e:
                 self.was_error = True
                 # код и сообщение ошибки
@@ -573,7 +573,7 @@ class LoadDimensions(TaskProcessing):
             rows_dict = []
             for record in rows:
                 temp_dict = {}
-                for ind in xrange(col_nums):
+                for ind in range(col_nums):
                     temp_dict.update({str(ind): record[ind]})
 
                 rows_dict.append(temp_dict)
@@ -581,9 +581,9 @@ class LoadDimensions(TaskProcessing):
             self.local_db_service.local_insert(
                 self.get_table(self.table_prefix), col_nums, rows)
             loaded_count += len(rows_dict)
-            print ('inserted %d %s to database. '
+            print(('inserted %d %s to database. '
                    'Total inserted %s/%s.' % (
-                    len(rows_dict), self.table_prefix, loaded_count, rows_count))
+                    len(rows_dict), self.table_prefix, loaded_count, rows_count)))
             offset += limit
 
             self.queue_storage.update()
@@ -721,7 +721,7 @@ class UpdateMongodb(TaskProcessing):
 
         tables_key_creator = [
             RowKeysCreator(table=table, cols=cols, meta_data=value)
-            for table, value in meta_info.iteritems()]
+            for table, value in meta_info.items()]
 
         # Выявляем новые записи в базе и записываем их в дельта-коллекцию
         limit = settings.ETL_COLLECTION_LOAD_ROWS_LIMIT
@@ -745,12 +745,12 @@ class UpdateMongodb(TaskProcessing):
                     delta_rows = (
                         [row_key, DTSE.NEW, EtlEncoder.encode(datetime.now())] +
                         [EtlEncoder.encode(rec_field) for rec_field in new_record])
-                    data_to_insert.append(dict(izip(col_names, delta_rows)))
+                    data_to_insert.append(dict(zip(col_names, delta_rows)))
 
                 data_to_current_insert.append(dict(_id=row_key))
             loaded_count += ind
-            print 'updated %d rows to mongodb. Total inserted %s/%s.' % (
-                ind, loaded_count, rows_count)
+            print('updated %d rows to mongodb. Total inserted %s/%s.' % (
+                ind, loaded_count, rows_count))
 
             try:
                 if data_to_insert:
