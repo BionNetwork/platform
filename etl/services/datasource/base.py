@@ -1000,7 +1000,7 @@ class DataSourceService(object):
             json_resp = local_service.fetchall(column['query'])
             # values = reduce(
             #     list.__add__, [k.values() for k in json_resp['data']], [])
-            values = [{k[0]: k[0]} for k in json_resp]
+            values = [k[0] for k in json_resp]
 
             filters2.append({
                 'cube_id': column['dataset__key'],

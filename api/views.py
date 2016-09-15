@@ -366,7 +366,7 @@ class CardViewSet(viewsets.ViewSet):
         # #     # {"source_id": 2, "table_name": u'auth_group', },
         # #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
         # #     # {"source_id": 2, "table_name": u'auth_permission', },
-        #     {"source_id": 82, "table_name": 'TDSheet', },
+        #     {"source_id": 87, "table_name": 'TDSheet', },
         # ]
 
         info = []
@@ -487,20 +487,21 @@ class CardViewSet(viewsets.ViewSet):
         data = json.loads(request.data.get('data'))
 
         # data = {
-        #     "X": {"field_name": "c_1_82_448246359376073858_1951231061259157126",
+        #     "X": {"field_name": "c_2_87_448246359376073858_1951231061259157126",
         #           # "period": ["2012-12-01", "2017-12-20"],
         #           # "interval":
         #               # "year",
         #               # "quarter",
         #               # "month"
         #        },
-        #     "Y": {"field_name": "sum(c_1_82_448246359376073858_3606484360407848552)"
+        #     "Y": {"field_name": "sum(c_2_87_448246359376073858_3606484360407848552)"
         #           },
         #     "Organizations": {
-        #         "field_name": "c_1_82_448246359376073858_3863414131424461117",
+        #         "field_name": "c_2_87_448246359376073858_3863414131424461117",
         #         "values": [
+        #             "ЭТТОН УРАЛ",
         #             # "Эттон",
-        #             "Эттон-Центр",
+        #             # "Эттон-Центр",
         #         ]
         #     },
         #     "filters": [
@@ -548,7 +549,7 @@ class CardViewSet(viewsets.ViewSet):
 
         org_values = data['Organizations'].get('values', [])
         if not org_values:
-            org_values = ["Эттон", "Эттон-Центр", "Эттон Груп", ]
+            org_values = ["ЭТТОН УРАЛ", "Эттон", "Эттон-Центр", "Эттон Груп", ]
 
         wheres.append("{0} IN ({1})".format(
             org_name, ', '.join(["'{0}'".format(x) for x in org_values])))
@@ -578,12 +579,13 @@ class CardViewSet(viewsets.ViewSet):
         resp = local_service.fetchall(query)
 
         # обработка ответа
-        ORG_ORDER = {"Эттон": 0, "Эттон Груп": 1, "Эттон-Центр": 2, }
+        ORG_ORDER = {
+            "ЭТТОН УРАЛ":0, "Эттон": 1, "Эттон Груп": 2, "Эттон-Центр": 3, }
 
         result = []
 
         for date, gr in groupby(resp, key=itemgetter(0)):
-            row = [0, 0, 0, date]
+            row = [0, 0, 0, 0, date]
             # g is like [date, sum, org_name]
             for g in gr:
                 row[ORG_ORDER[g[2]]] = g[1]
@@ -602,7 +604,7 @@ class CardViewSet(viewsets.ViewSet):
         sources_info = json.loads(request.data.get('data'))
 
         # sources_info = {
-        #     '82':
+        #     '87':
         #         {
         #             "TDSheet": [
         #                 "Дата",
