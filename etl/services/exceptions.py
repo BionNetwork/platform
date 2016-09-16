@@ -2,7 +2,7 @@
 
 
 # TODO make codes for exceptions
-class BaseException(Exception):
+class BaseExcept(Exception):
     """
     Базовый для исключений
     """
@@ -16,14 +16,14 @@ class BaseException(Exception):
         return "{0}: {1}".format(self.__class__.__name__, self.message)
 
 
-class SheetException(BaseException):
+class SheetException(BaseExcept):
     """
     Ошибка отсутствия страницы в файлах
     """
     MSG = "No such sheet!"
 
 
-class SourceUpdateException(BaseException):
+class SourceUpdateException(BaseExcept):
     """
     Ошибка при работе с источником
     """
