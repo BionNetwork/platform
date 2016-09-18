@@ -16,6 +16,36 @@ class QueryGenerate(object):
     """
 
     def __init__(self, card_id, input):
+        """
+        Args:
+            card_id:
+            input: dict
+            Приблизительный словарь с входными данными такой:
+            {"groups":{
+                "<date_group_name>":  // Группировка по дате
+                    "type": "DateGroup"
+                    "field": "Название поля"
+                    "filters": "Фильтры. Пока не реализовано. Да пока и не нужно"
+                    "interval": "Интервал дат"
+                    "range": "Область дат"
+                },
+                "<text_group_name>":{
+                    ...
+                    "match": Значения колонки, которые должны заматчится
+                 },
+            }
+            aggs: {
+            # агригируемые поля
+                 "<aggrigation_field>":{
+                 ...
+                 }
+             }
+
+        при обработке каждого блока группы и агрегации возращается словарь
+        с заполнеными клучевыми словами из "select, group by, where ...". в дальнейшем
+         они собираются единый словарь по ключевым словам. Надо их преобразовать в SQL
+
+        """
         self.card_id = card_id
         self.input = input
         self.key_words = {
