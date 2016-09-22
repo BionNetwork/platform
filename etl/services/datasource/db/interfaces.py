@@ -369,7 +369,7 @@ class Database(object):
         query = self.db_map.table_query.format(self.source.db)
 
         records = self.get_query_result(query)
-        return [{'name': x[0], } for x in records]
+        return [x[0] for x in records]
 
     @staticmethod
     def remote_table_create_query():

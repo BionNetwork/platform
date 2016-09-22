@@ -97,7 +97,7 @@ class DataSourceService(object):
 
             copy = source.source_temp_copy(new_file)
             service = cls.get_source_service(copy)
-            new_tables = [t['name'] for t in service.get_tables()]
+            new_tables = service.get_tables()
             saved_tables = columns.values_list(
                 'original_table', flat=True).distinct()
 
@@ -129,6 +129,19 @@ class DataSourceService(object):
             source.file.save(new_file.name, new_file)
             # удаляем временную копию
             copy.remove_temp_file()
+
+    @classmethod
+    def validate_file(cls, source):
+        """
+        Проверка файла на валидность
+        """
+        if source.is_file:
+
+            source.create_validation_file()
+            service = cls.get_source_service(source)
+            return service.validate()
+
+        return True, None
 
     @staticmethod
     def check_connection(post):
@@ -631,6 +644,9 @@ class DataSourceService(object):
             sid = sub_tree['sid']
             table_id = sub_tree['node_id']
             table = sub_tree['val']
+
+            # отступы
+            sub_tree['indents'] = self.extract_source_indentation(sid)
 
             table_info = cache.get_table_info(sid, table_id)
 

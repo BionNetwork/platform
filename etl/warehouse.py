@@ -33,7 +33,9 @@ class ClickHouse(WareHouse):
         'text': 'String',
         'integer': 'Int64',
         'datetime': 'DateTime',
-        'timestamp': 'DateTime',
+        # FIXME TEMP problems with dates
+        # 'timestamp': 'DateTime',
+        'timestamp': 'Date',
         'double precision': 'Float64',
         'date': 'Date',
     }
@@ -73,6 +75,8 @@ class ClickHouse(WareHouse):
             """.format(
             table_name=self.context['warehouse'],
             columns=','.join(col_types))
+
+        print(create_query)
 
         self._send([drop_query, create_query])
 

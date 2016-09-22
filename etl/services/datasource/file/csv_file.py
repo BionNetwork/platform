@@ -46,7 +46,7 @@ class CSV(File):
         Returns:
             list: список таблиц, для csv это будет 1 страница(название файла)
         """
-        return [{'name': self.get_sheet_name(), }, ]
+        return [self.get_sheet_name(), ]
 
     def get_data(self, sheet_name, indents):
 

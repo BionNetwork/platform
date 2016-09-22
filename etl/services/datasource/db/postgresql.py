@@ -180,41 +180,29 @@ class Postgresql(Database):
 
         return query
 
-    def foreign_table_create_query(self, name, server_name, options, cols_meta):
+    def foreign_table_create_query(self, table_name, server_name,
+                                   options, select_cols):
         """
         Создание "удаленной таблицы"
         Args:
-            name(str): Название таблицы
+            table_name(str): Название таблицы
             server_name(str): Название сервера
             options(dict): Параметры запроса
             cols_meta(dict): Информация о колонках
             ::
             'cols_meta':
             [
-                {
-                    'name': str,
-                    'type': str,
-                    'max_length: int,
-                },
+                '"col_name" col_type',
                     ...
             ]
-
         Returns:
             str: строка запроса для создания удаленной таблицы (foreign table)
         """
-        col_names = []
-        for field in cols_meta:
-            col_names.append('"{0}" {1}'.format(
-                field['name'], field['type']))
-
-        table_name = name
-
         options = ', '.join("{name} '{value}'".format(name=key, value=value)
                             for key, value in options.items())
-
         return self.db_map.foreign_table_create_query.format(
             server_name=server_name, table_name=table_name,
-            options=options, cols=','.join(col_names))
+            options=options, cols=select_cols)
 
     @staticmethod
     def create_foreign_view_query(sub_tree):

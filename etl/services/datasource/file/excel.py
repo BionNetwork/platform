@@ -19,6 +19,20 @@ class Excel(File):
     Класс для работы с Excel файлами
     """
 
+    def read_excel_necols(self, *args, **kwargs):
+        """
+        Открытие файла без пустых колонок(если без title)
+        """
+        df = pandas.read_excel(*args, **kwargs)#.dropna(axis=1, how='all')
+        columns = df.columns
+        ne_columns = [
+            col for col in columns
+            if not (str(col).startswith('Unnamed: ') and
+                    not df[col].notnull().any())
+            ]
+
+        return df[ne_columns]
+
     def get_tables(self):
         """
         Возвращает таблицы источника
@@ -30,16 +44,15 @@ class Excel(File):
         excel = pandas.ExcelFile(file_path)
         sheet_names = excel.sheet_names
 
-        return [{'name': x, } for x in sheet_names]
+        return sheet_names
 
     def get_data(self, sheet_name, indents):
 
-        file_path = self.source.file
-        excel = pandas.ExcelFile(file_path)
+        file_path = self.source.get_file_path()
         indent = indents[sheet_name]
 
-        df = pandas.read_excel(excel, sheet_name, skiprows=indent)
-        return df[:50].fillna('').to_dict(orient='records')
+        df = self.read_excel_necols(file_path, sheet_name, skiprows=indent)
+        return df[:50].fillna('null').to_dict(orient='records')
 
     def get_columns_info(self, sheets, indents):
         """
@@ -77,13 +90,13 @@ class Excel(File):
                 col_type = process_type(origin_type)
 
                 # определяем типы дат вручную
-                if col_type != TIMESTAMP:
-                    try:
-                        parse(col_df.loc[0])
-                    except Exception:
-                        pass
-                    else:
-                        col_type = TIMESTAMP
+                # if col_type != TIMESTAMP:
+                #     try:
+                #         parse(col_df.loc[0])
+                #     except Exception:
+                #         pass
+                #     else:
+                #         col_type = TIMESTAMP
 
                 columns[sheet_name].append({
                     "name": col_name,
@@ -113,13 +126,13 @@ class Excel(File):
         for sheet_name in sheets:
             indent = indents[sheet_name]
             try:
-                sheet_df = pandas.read_excel(
+                sheet_df = self.read_excel_necols(
                     excel_path, sheetname=sheet_name, skiprows=indent)
             except XLRDError as e:
                 raise SheetException(message=e.message)
 
             height, width = sheet_df.shape
-            size = sheet_df.memory_usage(deep=True).sum()
+            size = sheet_df.memory_usage(deep=True).sum().tolist()
             statistic[sheet_name] = {"count": height, "size": size}
 
         return statistic
@@ -148,7 +161,7 @@ class Excel(File):
             indent = indents[sheet_name]
 
             try:
-                sheet_df = pandas.read_excel(
+                sheet_df = self.read_excel_necols(
                     excel_path, sheetname=sheet_name, skiprows=indent)
             except XLRDError as e:
                 raise SheetException(message=e.message)
@@ -240,3 +253,20 @@ class Excel(File):
                 left_df, right_df, how=join_type, on=merge_columns)
 
         return left_df.fillna('').values.tolist()
+
+    def validate_sheets(self, sheets):
+        """
+        Валидация страниц
+        """
+        excel_path = self.source.get_file_path()
+
+        for sheet_name in sheets:
+            try:
+                sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+            except XLRDError as e:
+                raise SheetException(message=e.message)
+
+            col_names = sheet_df.columns
+            for col_name in col_names:
+                col_df = sheet_df[col_name]
+                print(col_name, col_df.dtype.name)

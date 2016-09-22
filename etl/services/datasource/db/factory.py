@@ -49,6 +49,7 @@ class DatabaseService(DatasourceApi):
         else:
             raise ValueError("Неизвестный тип подключения!")
 
+    # FIXME REDO DatasourcesJournal не юзается
     def get_tables(self):
         """
         Возвращает таблицы источника
@@ -63,7 +64,7 @@ class DatabaseService(DatasourceApi):
             trigger__datasource=source).values_list('name', flat=True)
 
         # фильтруем, не показываем таблицы триггеров
-        tables = [x for x in tables if x['name'] not in trigger_tables]
+        tables = [x for x in tables if x not in trigger_tables]
         return tables
 
     def get_columns_info(self, tables, indents):
