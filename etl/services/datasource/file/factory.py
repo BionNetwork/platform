@@ -91,3 +91,13 @@ class FileService(DatasourceApi):
         instance = self.datasource
         columns = instance.get_data(table_name, indents)
         return columns
+
+    def validate(self):
+        """
+        Проверка файла на валидность
+        Возвращает:
+            bool - Валидно или нет
+            File or None - копию невалидного файла или None
+        """
+        sheets = self.get_tables()
+        return self.datasource.validate_sheets(sheets)

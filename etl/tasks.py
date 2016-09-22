@@ -187,13 +187,13 @@ class EtlBaseTask(object):
         pass
 
     def run(self):
-        try:
+        # try:
             self.pre()
             self.process()
             self.post()
-        except Exception as e:
-            print(e.message)
-            raise Exception
+        # except Exception as e:
+        #     print(e.message)
+        #     raise Exception
 
     def process(self):
         """
@@ -244,7 +244,8 @@ class CreateForeignTable(EtlBaseTask):
         fdw.create()
 
     def post(self):
-        self.pusher.push_view(self.context['val'])
+        """"""
+        # self.pusher.push_view(self.context['val'])
 
 
 class CreateView(EtlBaseTask):
@@ -256,7 +257,6 @@ class CreateView(EtlBaseTask):
 
     def pre(self):
         """
-
         """
         # FIXME: Обновить Dataset
 
@@ -265,7 +265,8 @@ class CreateView(EtlBaseTask):
         local_service.create_foreign_view(self.context)
 
     def post(self):
-        self.pusher.push_view(self.context['val'])
+        """"""
+        # self.pusher.push_view(self.context['val'])
 
 
 class LoadWarehouse(EtlBaseTask):
@@ -286,7 +287,8 @@ class LoadWarehouse(EtlBaseTask):
         Загрузка в Clickhouse. Возможно следует реальзовать и вариант с созданием
         материализованных представлений для мер и размерностей в Postgres
         """
-        PostgresWarehouse(context=self.context).run()
+        # PostgresWarehouse(context=self.context).run()
+        ClickHouse(context=self.context).run()
 
     def get_response(self):
         """
@@ -322,7 +324,7 @@ class LoadWarehouse(EtlBaseTask):
 
     def post(self):
         meta_info_save(self.card_id, self.context, self.pusher)
-        self.pusher.push_final(data=self.get_response())
+        # self.pusher.push_final(data=self.get_response())
 
 
 class MetaInfoSave(EtlBaseTask):

@@ -179,6 +179,23 @@ class Datasource(models.Model):
         """
         os.remove(self.get_file_path())
 
+    def validate_file_copy(self):
+        """
+        Путь временной копии файла для валидации
+        """
+        if self.is_file and self.file:
+            path = self.file.path
+            validate_file_path = os.path.join(
+                os.path.dirname(path), 'validate', os.path.basename(path))
+            return validate_file_path
+
+    def create_validation_file(self):
+        """
+        Временная копия файла для валидации
+        """
+        validate_file_path = self.validate_file_copy()
+        self.file.save(validate_file_path, self.file, save=False)
+
     class Meta:
         db_table = "datasources"
 

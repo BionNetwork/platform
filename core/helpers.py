@@ -63,8 +63,9 @@ class CustomJsonEncoder(json.JSONEncoder):
             return obj.strftime('%d.%m.%Y')
         elif isinstance(obj, decimal.Decimal):
             return float(obj)
-        elif isinstance(obj, buffer):
-            return str(obj)
+        # removed for python 3
+        # elif isinstance(obj, buffer):
+        #     return str(obj)
         return json.JSONEncoder.default(self, obj)
 
 

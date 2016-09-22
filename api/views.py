@@ -7,23 +7,21 @@ from itertools import groupby
 from operator import itemgetter
 
 import requests
-from django.db import transaction
 from django.http.response import HttpResponse
 
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
-from rest_framework import viewsets, generics, mixins
+from rest_framework import viewsets, generics, mixins, status
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 
 from api.serializers import (
-    UserSerializer, DatasourceSerializer, SchemasListSerializer,
-    SchemasRetreviewSerializer, NodeSerializer, TreeSerializer,
+    UserSerializer, DatasourceSerializer, NodeSerializer, TreeSerializer,
     TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
     LoadDataSerializer)
 
-from core.models import (Cube, User, Datasource, Dimension, Measure,
-                         DatasourceMetaKeys, Dataset, DatasetStateChoices)
+from core.models import (User, Datasource, Dataset, DatasetStateChoices,
+                         ConnectionChoices as CC)
 from core.views import BaseViewNoLogin
 from etl.tasks import load_data
 from etl.services.datasource.base import DataSourceService
@@ -99,6 +97,16 @@ class DatasourceViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         return super(DatasourceViewSet, self).create(request, *args, **kwargs)
+        # serializer = self.get_serializer(data=request.data)
+        # serializer.is_valid(raise_exception=True)
+        # # instance = serializer.save()
+        #
+        # source = Datasource.objects.get(id=87)
+        # DataSourceService.validate_file(source)
+        #
+        # headers = self.get_success_headers(serializer.data)
+        # return Response(
+        #     serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def destroy(self, request, *args, **kwargs):
         source = self.get_object()
@@ -224,10 +232,8 @@ class CardViewSet(viewsets.ViewSet):
         data = json.loads(request.data.get('data'))
 
         # data = [
-        # #     # {"source_id": 2, "table_name": u'auth_group', },
-        # #     # {"source_id": 2, "table_name": u'auth_group_permissions', },
-        # #     # {"source_id": 2, "table_name": u'auth_permission', },
-        #     {"source_id": 82, "table_name": 'TDSheet', },
+        #     {"source_id": 90, "table_name": 'TDSheet', },
+            # {"source_id": 89, "table_name": 'Sheet1', },
         # ]
 
         info = []
@@ -463,7 +469,7 @@ class CardViewSet(viewsets.ViewSet):
         sources_info = json.loads(request.data.get('data'))
 
         # sources_info = {
-        #     '82':
+        #     '90':
         #         {
         #             "TDSheet": [
         #                 "Дата",
@@ -479,6 +485,14 @@ class CardViewSet(viewsets.ViewSet):
         #                 "Проект",
         #             ],
         #         },
+        #     '89':
+        #         {
+        #             "Sheet1": [
+        #                 "d.1",
+        #                 "Unnamed: 2",
+        #                 4,
+        #             ]
+        #         }
         # }
 
         # TODO возможно валидацию перенести в отдельный файл

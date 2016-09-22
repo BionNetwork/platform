@@ -10,7 +10,8 @@ from redis_collections import Dict as RedisDict
 from core.helpers import CustomJsonEncoder
 
 
-T_S = "T{0}_S{1}"
+# coding for redis client
+UTF = "utf-8"
 
 
 class RedisCacheKeys(object):
@@ -277,7 +278,7 @@ class CardCacheService(object):
 
     @staticmethod
     def r_get(name):
-        return json.loads(r_server.get(name))
+        return json.loads(r_server.get(name).decode(UTF))
 
     @staticmethod
     def r_set(name, structure):
