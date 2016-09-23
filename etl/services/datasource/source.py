@@ -22,6 +22,7 @@ class DatasourceApi(object):
         """
         raise NotImplementedError
 
+    # FIXME NO USAGE
     def get_rows(self, cols, structure):
         """
         Получение значений выбранных колонок из указанных таблиц и

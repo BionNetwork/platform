@@ -154,7 +154,12 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         except Exception:
             raise APIException("Indent is incorrect!")
 
-        DataSourceService.insert_source_indentation(source_id, sheet, indent)
+        header = post.get('header', True)
+
+        assert isinstance(header, bool), "Header isn't bool!"
+
+        DataSourceService.insert_source_indentation(
+            source_id, sheet, indent, header)
 
         return Response('Setted!')
 
@@ -165,13 +170,8 @@ class TablesView(APIView):
         """
         Получение данных о таблице
         """
-        source = Datasource.objects.get(id=source_id)
-        service = DataSourceService.get_source_service(source)
-
-        indents = DataSourceService.extract_source_indentation(source_id)
-
         try:
-            data = service.fetch_tables_columns([table_name], indents)
+            data = DataSourceService.get_source_columns(source_id, table_name)
         except SheetException as e:
             raise APIException(e)
 
@@ -182,14 +182,7 @@ class TablesDataView(APIView):
 
     def get(self, request, source_id, table_name):
 
-        source = Datasource.objects.get(id=source_id)
-        source_service = DataSourceService.get_source_service(source)
-
-        indents = DataSourceService.extract_source_indentation(source_id)
-
-        data = source_service.get_source_table_rows(
-            table_name, limit=1000, offset=0, indents=indents)
-
+        data = DataSourceService.get_source_rows(source_id, table_name)
         return Response(data=data)
 
 
@@ -485,14 +478,15 @@ class CardViewSet(viewsets.ViewSet):
         #                 "Проект",
         #             ],
         #         },
-        #     '89':
-        #         {
-        #             "Sheet1": [
-        #                 "d.1",
-        #                 "Unnamed: 2",
-        #                 4,
-        #             ]
-        #         }
+            # '89':
+            #     {
+            #         "Sheet1": [
+            #             "d.1",
+            #             "Unnamed: 2",
+            #             # 4,
+            #             # "d",
+            #         ]
+            #     }
         # }
 
         # TODO возможно валидацию перенести в отдельный файл

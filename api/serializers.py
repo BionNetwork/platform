@@ -57,6 +57,7 @@ class IndentSerializer(serializers.Serializer):
 
     sheet = serializers.CharField(max_length=200)
     indent = serializers.IntegerField()
+    header = serializers.BooleanField()
 
 
 class TableDataSerializer(serializers.Serializer):

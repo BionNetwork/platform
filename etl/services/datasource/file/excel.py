@@ -4,6 +4,7 @@
 import datetime
 import time
 from collections import defaultdict
+from operator import itemgetter
 from itertools import groupby
 
 import pandas
@@ -33,6 +34,20 @@ class Excel(File):
 
         return df[ne_columns]
 
+    def get_indent_dict(self, indents, sheet_name):
+        """
+        Инфа отступов и титулов
+        """
+        kwargs = {}
+        indent = indents[sheet_name]['indent']
+        header = indents[sheet_name]['header']
+
+        if not header:
+            kwargs['header'] = None
+        if indent is not None:
+            kwargs['skiprows'] = indent
+        return kwargs
+
     def get_tables(self):
         """
         Возвращает таблицы источника
@@ -49,9 +64,9 @@ class Excel(File):
     def get_data(self, sheet_name, indents):
 
         file_path = self.source.get_file_path()
-        indent = indents[sheet_name]
+        kwargs = self.get_indent_dict(indents, sheet_name)
 
-        df = self.read_excel_necols(file_path, sheet_name, skiprows=indent)
+        df = self.read_excel_necols(file_path, sheet_name, **kwargs)
         return df[:50].fillna('null').to_dict(orient='records')
 
     def get_columns_info(self, sheets, indents):
@@ -74,11 +89,11 @@ class Excel(File):
         excel_path = self.source.get_file_path()
 
         for sheet_name in sheets:
+            kwargs = self.get_indent_dict(indents, sheet_name)
 
-            indent = indents[sheet_name]
             try:
-                sheet_df = pandas.read_excel(
-                    excel_path, sheetname=sheet_name, skiprows=indent)
+                sheet_df = self.read_excel_necols(
+                    excel_path, sheet_name, **kwargs)
             except XLRDError as e:
                 raise SheetException(message=e.message)
 
@@ -124,10 +139,10 @@ class Excel(File):
         excel_path = self.file_path
 
         for sheet_name in sheets:
-            indent = indents[sheet_name]
+            kwargs = self.get_indent_dict(indents, sheet_name)
             try:
                 sheet_df = self.read_excel_necols(
-                    excel_path, sheetname=sheet_name, skiprows=indent)
+                    excel_path, sheet_name, **kwargs)
             except XLRDError as e:
                 raise SheetException(message=e.message)
 
@@ -158,11 +173,11 @@ class Excel(File):
         excel_path = self.source.get_file_path()
 
         for sheet_name in sheets:
-            indent = indents[sheet_name]
+            kwargs = self.get_indent_dict(indents, sheet_name)
 
             try:
                 sheet_df = self.read_excel_necols(
-                    excel_path, sheetname=sheet_name, skiprows=indent)
+                    excel_path, sheet_name, **kwargs)
             except XLRDError as e:
                 raise SheetException(message=e.message)
 
@@ -200,6 +215,7 @@ class Excel(File):
             result += self.generate_join(new_childs)
         return result
 
+    # FIXME NO USAGE
     def get_rows(self, columns, structure):
 
         # FIXME недоработанная штука, preview работает чуток тока
@@ -254,15 +270,17 @@ class Excel(File):
 
         return left_df.fillna('').values.tolist()
 
-    def validate_sheets(self, sheets):
+    def validate_sheets(self, sheets, indents):
         """
         Валидация страниц
         """
         excel_path = self.source.get_file_path()
 
         for sheet_name in sheets:
+            kwargs = self.get_indent_dict(indents, sheet_name)
             try:
-                sheet_df = pandas.read_excel(excel_path, sheetname=sheet_name)
+                sheet_df = self.read_excel_necols(
+                    excel_path, sheet_name, **kwargs)
             except XLRDError as e:
                 raise SheetException(message=e.message)
 
@@ -270,3 +288,61 @@ class Excel(File):
             for col_name in col_names:
                 col_df = sheet_df[col_name]
                 print(col_name, col_df.dtype.name)
+
+    DATES = {
+        # FIXME потом '0000-00-00 00:00:00' засунуть for timestamp & datetime
+        "timestamp": {'val': '0000-00-00'},
+        "datetime": {'val': '0000-00-00'},
+        "date": {'val': '0000-00-00'},
+    }
+    DATE_DEFAULT = {'val': '0000-00-00'}
+
+    NUMERIC = {
+        "integer": {'val': 0, 'type': int},
+        "double precision": {'val': 0, 'type': float},
+    }
+    NUMERIC_DEFAULT = {'val': 0, 'type': int}
+
+    def xls_convert_to_csv(self, sheet_name, columns, indents, csv_file_name):
+        """
+        Страницу экселя в csv
+        """
+
+        # indexes = [x['order'] for x in columns]
+        select_cols = [x['name'] for x in sorted(
+            columns, key=itemgetter('order'))]
+
+        dates = [x for x in columns if x['type'] in self.DATES]
+        numeric = [x for x in columns if x['type'] in self.NUMERIC]
+
+        excel_path = self.source.get_file_path()
+        kwargs = self.get_indent_dict(indents, sheet_name)
+
+        # data_xls = self.read_excel_necols(
+        #     excel_path, sheet_name,  parse_cols=indexes,
+        #     index_col=False, **kwargs)
+
+        data_xls = pandas.read_excel(
+            excel_path, sheet_name, **kwargs)
+
+        data_xls = data_xls[select_cols]
+
+        # process columns here for click (dates, timestamps)
+        for dat_col in dates:
+            n = dat_col['name']
+            t = dat_col['type']
+            data_xls[n] = pandas.to_datetime(
+                data_xls[n], errors='coerce').dt.date.fillna(# dt.date for date
+                self.DATES.get(t, self.DATE_DEFAULT)['val'])
+
+        for num_col in numeric:
+            n = num_col['name']
+            t = num_col['type']
+            data_xls[n] = pandas.to_numeric(
+                data_xls[n], errors='coerce').fillna(0).astype(
+                self.NUMERIC.get(t, self.NUMERIC_DEFAULT)['type'])
+
+        data_xls.to_csv(
+            csv_file_name,
+            header=list(range(len(select_cols))),
+            encoding='utf-8', index=False)

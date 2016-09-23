@@ -73,8 +73,7 @@ class FileService(DatasourceApi):
 
     def fetch_tables_columns(self, sheets, indents):
         # возвращает список колонок страниц
-        instance = self.datasource
-        columns = instance.get_columns_info(sheets, indents)
+        columns = self.datasource.get_columns_info(sheets, indents)
         return columns
 
     def get_structure_rows_number(self, structure,  cols):
@@ -88,8 +87,7 @@ class FileService(DatasourceApi):
         Данные по одной таблице источника
         """
         indents = kwargs.get('indents')
-        instance = self.datasource
-        columns = instance.get_data(table_name, indents)
+        columns = self.datasource.get_data(table_name, indents)
         return columns
 
     def validate(self):

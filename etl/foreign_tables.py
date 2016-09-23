@@ -9,6 +9,7 @@ from core.models import Datasource
 from etl.constants import *
 from etl.helpers import HashEncoder
 from etl.services.datasource.db.factory import LocalDatabaseService
+from etl.services.datasource.file.excel import Excel
 
 
 class BaseForeignTable(object):
@@ -109,20 +110,6 @@ class CsvForeignTable(BaseForeignTable):
     Обертка над csv-файлами
     """
 
-    DATES = {
-        # FIXME потом '0000-00-00 00:00:00' засунуть for timestamp & datetime
-        "timestamp": {'val': '0000-00-00'},
-        "datetime": {'val': '0000-00-00'},
-        "date": {'val': '0000-00-00'},
-    }
-    DATE_DEFAULT = {'val': '0000-00-00'}
-
-    NUMERIC = {
-        "integer": {'val': 0, 'type': int},
-        "double precision": {'val': 0, 'type': float},
-    }
-    NUMERIC_DEFAULT = {'val': 0, 'type': int}
-
     @property
     def server_name(self):
         return CSV_SERVER
@@ -161,18 +148,6 @@ class XlsForeignTable(CsvForeignTable):
     """
     Создание "удаленной таблицы" для файлов типа csv
     """
-    def read_excel_necols(self, *args, **kwargs):
-        """
-        Открытие файла без пустых колонок(если без title)
-        """
-        df = pd.read_excel(*args, **kwargs)
-        columns = df.columns
-        ne_columns = [
-            col for col in columns
-            if not (str(col).startswith('Unnamed: ') and
-                    not df[col].notnull().any())
-            ]
-        return df[ne_columns]
 
     def _xls_convert(self):
         """
@@ -182,41 +157,22 @@ class XlsForeignTable(CsvForeignTable):
         """
         columns = self.tree['columns']
 
-        indexes = [x['order'] for x in columns]
-        dates = [x for x in columns if x['type'] in self.DATES]
-        numeric = [x for x in columns if x['type'] in self.NUMERIC]
+        sheet_name = self.tree['val']
+        csv_name = abs(HashEncoder.encode(sheet_name))
 
-        val = self.tree['val']
-        sheet_name = abs(HashEncoder.encode(val))
+        indents = self.tree['indents']
 
         csv_file_name = '{file_name}_{sheet_name}.csv'.format(
             file_name=os.path.splitext(self.source_url)[0],
-            sheet_name=sheet_name)
+            sheet_name=csv_name)
 
-        indent = self.tree['indents'][val]
+        sid = int(self.tree['sid'])
+        source = Datasource.objects.get(id=sid)
 
-        data_xls = self.read_excel_necols(
-            self.source_url, val, skiprows=indent,
-            parse_cols=indexes, index_col=False)
+        excel = Excel(source)
 
-        # process columns here for click (dates, timestamps)
-        for dat_col in dates:
-            n = dat_col['name']
-            t = dat_col['type']
-            data_xls[n] = pd.to_datetime(
-                data_xls[n], errors='coerce').dt.date.fillna(# dt.date for date
-                self.DATES.get(t, self.DATE_DEFAULT)['val'])
-
-        for num_col in numeric:
-            n = num_col['name']
-            t = num_col['type']
-            data_xls[n] = pd.to_numeric(
-                data_xls[n], errors='coerce').fillna(0).astype(
-                self.NUMERIC.get(t, self.NUMERIC_DEFAULT)['type'])
-
-        data_xls.to_csv(
-            csv_file_name, header=indexes, encoding='utf-8', index=None)
-
+        excel.xls_convert_to_csv(
+            sheet_name, columns, indents, csv_file_name)
         return csv_file_name
 
     @property

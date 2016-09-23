@@ -883,16 +883,18 @@ class DataSourceService(object):
         Достает отступы из хранилища
         Returns: defaultdict(int)
         """
-        indent = RedisSS.get_source_indentation(source_id)
-        return indent
+        indents = RedisSS.get_source_indentation(source_id)
+        return indents
 
     @classmethod
-    def insert_source_indentation(cls, source_id, sheet, indent):
+    def insert_source_indentation(cls, source_id, sheet, indent, header):
         """
         Сохраняем отступ для страницы соурса
         """
         indents = RedisSS.get_source_indentation(source_id)
-        indents[sheet] = indent
+        indents[sheet]['indent'] = indent
+        indents[sheet]['header'] = header
+
         RedisSS.set_source_indentation(source_id, indents)
 
     def check_sids_exist(self, sids):
@@ -1039,3 +1041,32 @@ class DataSourceService(object):
             })
 
         return {'filters': filters2, 'measures': measures2}
+
+    @classmethod
+    def get_source_columns(cls, source_id, table_name):
+        """
+        Колонки источника
+        """
+        source = Datasource.objects.get(id=source_id)
+        service = cls.get_source_service(source)
+
+        if isinstance(service, DatabaseService):
+            return service.fetch_tables_columns([table_name, ])
+
+        indents = cls.extract_source_indentation(source_id)
+        return service.fetch_tables_columns([table_name], indents)
+
+    @classmethod
+    def get_source_rows(cls, source_id, table_name):
+        """
+        Данные источника
+        """
+        source = Datasource.objects.get(id=source_id)
+        service = cls.get_source_service(source)
+
+        if isinstance(service, DatabaseService):
+            return service.get_source_table_rows(
+                table_name, limit=1000, offset=0)
+
+        indents = cls.extract_source_indentation(source_id)
+        return service.get_source_table_rows(table_name, indents=indents)

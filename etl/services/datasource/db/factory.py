@@ -89,7 +89,7 @@ class DatabaseService(DatasourceApi):
 
         return columns, indexes, foreigns, statistics, date_intervals
 
-    def fetch_tables_columns(self, tables, indent):
+    def fetch_tables_columns(self, tables):
         # возвращает список колонок таблиц
 
         return self.datasource.get_columns(self.source, tables)

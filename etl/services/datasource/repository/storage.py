@@ -94,7 +94,7 @@ class RedisSourceService(object):
     # FIXME r_get r_set r_del r_exists дублируютс с CardCacheService, предка впаять
     @staticmethod
     def r_get(name):
-        return json.loads(r_server.get(name))
+        return json.loads(r_server.get(name).decode(UTF))
 
     @staticmethod
     def r_set(name, structure):
@@ -162,11 +162,13 @@ class RedisSourceService(object):
         Returns: defaultdict(int)
         """
         indent_key = RKeys.indent_key(source_id)
+        func = lambda: {'indent': None, 'header': True}
 
         if not cls.r_exists(indent_key):
-            return defaultdict(int)
+            # first is indent, second is whether needs header
+            return defaultdict(func)
 
-        return defaultdict(int, cls.r_get(indent_key))
+        return defaultdict(func, cls.r_get(indent_key))
 
     @classmethod
     def set_source_indentation(cls, source_id, indents):
