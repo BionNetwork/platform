@@ -365,9 +365,9 @@ class Excel(File):
         """
         excel_path = self.source.get_file_path()
         kwargs = self.get_indent_dict(indents, sheet_name)
-        offset = self.calc_indent(indents, sheet_name)
 
-        # отступ плюсуем
+        # отступ плюсуем к индексам ошибочных ячеек
+        offset = self.calc_indent(indents, sheet_name)
 
         try:
             sheet_df = pandas.read_excel(
@@ -384,15 +384,21 @@ class Excel(File):
             nulls = col_df.loc[col_df.isnull()].index.tolist()
             to_dates = pandas.to_datetime(col_df, errors='coerce')
             more_nulls = to_dates.loc[to_dates.isnull()].index.tolist()
+            errors = [x+1+offset for x in more_nulls if x not in nulls]
 
         elif typ in [SCT.INT, SCT.DOUBLE]:
             nulls = col_df.loc[col_df.isnull()].index.tolist()
             to_nums = pandas.to_numeric(col_df, errors='coerce')
             more_nulls = to_nums.loc[to_nums.isnull()].index.tolist()
+            errors = [x+1+offset for x in more_nulls if x not in nulls]
+
+        elif typ == SCT.TEXT:
+            errors = []
+        
+        elif typ == SCT.BOOL:
+            raise ColumnException("No implementation for bool!")
 
         else:
             raise ColumnException("Invalid type of column!")
-
-        errors = [x+1+offset for x in more_nulls if x not in nulls]
 
         return errors
