@@ -11,8 +11,9 @@ import pandas
 from dateutil.parser import parse
 from xlrd import XLRDError
 
-from etl.services.datasource.file.interfaces import File, process_type, TIMESTAMP
-from etl.services.exceptions import SheetException
+from etl.services.datasource.file.interfaces import File
+from etl.services.exceptions import (SheetException, ColumnException)
+from etl.services.datasource.source import SourceConvertTypes as SCT
 
 
 class Excel(File):
@@ -47,6 +48,17 @@ class Excel(File):
         if indent is not None:
             kwargs['skiprows'] = indent
         return kwargs
+
+    def calc_indent(self, indents, sheet_name):
+        """
+        Для подкрашивания ячеек, считаем сколько отступов
+        """
+        indent = int(indents[sheet_name]['indent'])
+
+        if indents[sheet_name]['header']:
+            indent += 1
+
+        return indent
 
     def get_tables(self):
         """
@@ -102,7 +114,7 @@ class Excel(File):
 
                 col_df = sheet_df[col_name]
                 origin_type = col_df.dtype.name
-                col_type = process_type(origin_type)
+                col_type = self.process_type(origin_type)
 
                 # определяем типы дат вручную
                 # if col_type != TIMESTAMP:
@@ -184,7 +196,7 @@ class Excel(File):
             col_names = sheet_df.columns
             for col_name in col_names:
                 col_df = sheet_df[col_name]
-                col_type = process_type(col_df.dtype.name)
+                col_type = self.process_type(col_df.dtype.name)
                 if col_type in ["datetime"]:
 
                     start_date = col_df.min().strftime("%d.%m.%Y")
@@ -346,3 +358,41 @@ class Excel(File):
             csv_file_name,
             header=list(range(len(select_cols))),
             encoding='utf-8', index=False)
+
+    def validate_column(self, sheet_name, column, typ, indents):
+        """
+        Проверка колонки на соответствующий тип typ
+        """
+        excel_path = self.source.get_file_path()
+        kwargs = self.get_indent_dict(indents, sheet_name)
+        offset = self.calc_indent(indents, sheet_name)
+
+        # отступ плюсуем
+
+        try:
+            sheet_df = pandas.read_excel(
+                excel_path, sheet_name, **kwargs)
+        except XLRDError as e:
+            raise SheetException(message=e.message)
+
+        if column not in sheet_df.columns:
+            raise ColumnException()
+
+        col_df = sheet_df[column]
+
+        if typ == SCT.DATE:
+            nulls = col_df.loc[col_df.isnull()].index.tolist()
+            to_dates = pandas.to_datetime(col_df, errors='coerce')
+            more_nulls = to_dates.loc[to_dates.isnull()].index.tolist()
+
+        elif typ in [SCT.INT, SCT.DOUBLE]:
+            nulls = col_df.loc[col_df.isnull()].index.tolist()
+            to_nums = pandas.to_numeric(col_df, errors='coerce')
+            more_nulls = to_nums.loc[to_nums.isnull()].index.tolist()
+
+        else:
+            raise ColumnException("Invalid type of column!")
+
+        errors = [x+1+offset for x in more_nulls if x not in nulls]
+
+        return errors

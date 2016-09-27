@@ -9,7 +9,7 @@ import pandas
 from dateutil.parser import parse
 from more_itertools import first
 
-from etl.services.datasource.file.interfaces import File, process_type, TIMESTAMP
+from etl.services.datasource.file.interfaces import File
 from etl.services.exceptions import SheetException
 
 
@@ -83,16 +83,16 @@ class CSV(File):
         for col_name in col_names:
             col_df = sheet_df[col_name]
             origin_type = col_df.dtype.name
-            col_type = process_type(origin_type)
+            col_type = self.process_type(origin_type)
 
             # определяем типы дат вручную
-            if col_type != TIMESTAMP:
-                try:
-                    parse(col_df.loc[0])
-                except Exception:
-                    pass
-                else:
-                    col_type = TIMESTAMP
+            # if col_type != TIMESTAMP:
+            #     try:
+            #         parse(col_df.loc[0])
+            #     except Exception:
+            #         pass
+            #     else:
+            #         col_type = TIMESTAMP
 
             columns[sheet].append({
                 "name": col_name,
@@ -157,7 +157,7 @@ class CSV(File):
         col_names = sheet_df.columns
         for col_name in col_names:
             col_df = sheet_df[col_name]
-            col_type = process_type(col_df.dtype.name)
+            col_type = self.process_type(col_df.dtype.name)
             if col_type in ["datetime"]:
 
                 start_date = col_df.min().strftime("%d.%m.%Y")

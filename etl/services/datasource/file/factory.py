@@ -27,7 +27,6 @@ class FileService(DatasourceApi):
         Returns:
             etl.services.files.interfaces.File
         """
-
         source = self.source
         conn_type = source.conn_type
 
@@ -99,3 +98,9 @@ class FileService(DatasourceApi):
         """
         sheets = self.get_tables()
         return self.datasource.validate_sheets(sheets)
+
+    def validate_column(self, sheet, column, typ, indents):
+        """
+        Проверка колонки на соответствующий тип typ
+        """
+        return self.datasource.validate_column(sheet, column, typ, indents)

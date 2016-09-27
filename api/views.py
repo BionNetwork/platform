@@ -18,10 +18,9 @@ from rest_framework.authtoken.models import Token
 from api.serializers import (
     UserSerializer, DatasourceSerializer, NodeSerializer, TreeSerializer,
     TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
-    LoadDataSerializer)
+    LoadDataSerializer, ColumnValidationSeria)
 
-from core.models import (User, Datasource, Dataset, DatasetStateChoices,
-                         ConnectionChoices as CC)
+from core.models import (User, Datasource, Dataset, DatasetStateChoices)
 from core.views import BaseViewNoLogin
 from etl.tasks import load_data
 from etl.services.datasource.base import DataSourceService
@@ -97,16 +96,6 @@ class DatasourceViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         return super(DatasourceViewSet, self).create(request, *args, **kwargs)
-        # serializer = self.get_serializer(data=request.data)
-        # serializer.is_valid(raise_exception=True)
-        # # instance = serializer.save()
-        #
-        # source = Datasource.objects.get(id=87)
-        # DataSourceService.validate_file(source)
-        #
-        # headers = self.get_success_headers(serializer.data)
-        # return Response(
-        #     serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def destroy(self, request, *args, **kwargs):
         source = self.get_object()
@@ -248,6 +237,30 @@ class CardViewSet(viewsets.ViewSet):
     @detail_route(['post'])
     def exchange_file(self, request, pk):
         pass
+
+    @detail_route(['post'], serializer_class=ColumnValidationSeria)
+    def validate_col(self, request, pk):
+        """
+        Проверка значений колонки на определенный тип
+        """
+        post = request.data
+
+        sid = int(post.get('source_id'))
+        table = post.get('table')
+        column = post.get('column')
+        typ = post.get('type')
+
+        worker = DataSourceService(card_id=pk)
+        errors = worker.validate_column(sid, table, column, typ)
+
+        return Response({
+            "card_id": pk,
+            "source_id": sid,
+            "table": table,
+            "column": column,
+            "type": typ,
+            "errors": errors,
+        })
 
     @detail_route(['post'])
     def update_data(self, request, pk):

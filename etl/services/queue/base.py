@@ -13,7 +13,6 @@ from pymongo import IndexModel
 from django.conf import settings
 
 from core.models import QueueList, QueueStatus
-from etl.constants import TYPES_MAP
 from etl.helpers import datetime_now_str, HashEncoder
 from etl.services.datasource.db.interfaces import BaseEnum
 from etl.services.datasource.repository.storage import RedisSourceService

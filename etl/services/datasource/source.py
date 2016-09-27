@@ -1,6 +1,17 @@
 # coding: utf-8
 
 
+class SourceConvertTypes(object):
+    """
+    Типы для конвертации
+    """
+    INT = "integer"
+    DOUBLE = "double precision"
+    DATE = "timestamp"
+    TEXT = "text"
+    BOOL = "boolean"
+
+
 class DatasourceApi(object):
     """
     Работа с источником данных

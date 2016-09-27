@@ -84,6 +84,15 @@ class RedisCacheKeys(object):
         source_key = cls.source_key(source_id)
         return '{0}:indent'.format(source_key)
 
+    @classmethod
+    def columns_types(cls, card_id, source_id):
+        """
+        Полная информация таблицы, которая в дереве
+        """
+        card_key = cls.get_card_key(card_id)
+        source_key = cls.source_key(source_id)
+        return '{0}:{1}:columns'.format(card_key, source_key)
+
 RKeys = RedisCacheKeys
 
 
@@ -549,3 +558,27 @@ class CardCacheService(object):
             s_remains[table] = node_id
 
         self.set_card_builder(builder)
+
+    def get_columns_types(self, source_id):
+        """
+        Типы колонок, осхраненные пользователем
+        {Table: {Column: Type}}
+        """
+        columns_key = self.cache_keys.columns_types(self.card_id, source_id)
+        func = lambda: defaultdict(lambda: None)
+
+        if not self.r_exists(columns_key):
+            return defaultdict(func)
+
+        return defaultdict(func, self.r_get(columns_key))
+
+    def set_columns_types(self, source_id, table, column, type):
+        """
+        Сохранение типа колонки, чтобы в этом типе посадить ее в хранилище
+        """
+        columns_keys = self.cache_keys.columns_types(self.card_id, source_id)
+
+        columns_types = self.get_columns_types(source_id)
+        columns_types[table][column] = type
+
+        self.r_set(columns_keys, columns_types)

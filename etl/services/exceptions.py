@@ -23,6 +23,13 @@ class SheetException(BaseExcept):
     MSG = "No such sheet!"
 
 
+class ColumnException(BaseExcept):
+    """
+    Ошибка отсутствия страницы в файлах
+    """
+    MSG = "No such column!"
+
+
 class SourceUpdateException(BaseExcept):
     """
     Ошибка при работе с источником

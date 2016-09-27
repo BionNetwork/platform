@@ -1070,3 +1070,22 @@ class DataSourceService(object):
 
         indents = cls.extract_source_indentation(source_id)
         return service.get_source_table_rows(table_name, indents=indents)
+
+    def validate_column(self, source_id, table, column, type):
+        """
+        Проверка колонки на соответствующий тип typ
+        """
+        card_id = self.cache.card_id
+        service = self.get_source_service_by_id(source_id)
+
+        if isinstance(service, DatabaseService):
+            # TODO realize for DBs
+            return service.validate_column(table, column, type)
+
+        indents = self.extract_source_indentation(source_id)
+        errors = service.validate_column(table, column, type, indents)
+        if not errors:
+            # save valid type of column
+            self.cache.set_columns_types(source_id, table, column, type)
+
+        return errors

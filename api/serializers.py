@@ -188,3 +188,12 @@ class ChangeDestinationSerializer(serializers.Serializer):
     """
     """
 
+
+class ColumnValidationSeria(serializers.Serializer):
+    """
+    Проверка аргументов при Проверки значений колонки на определенный тип
+    """
+    source_id = serializers.IntegerField(required=True, allow_null=False)
+    table = serializers.CharField(required=True)
+    column = serializers.CharField(required=True)
+    type = serializers.CharField(required=True)
