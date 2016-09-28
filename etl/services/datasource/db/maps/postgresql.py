@@ -274,5 +274,5 @@ foreign_table_create_query = """
     """
 
 create_schema_query = """
-    CREATE SCHEMA {card_id};
+    CREATE SCHEMA {cube_id};
 """

@@ -12,7 +12,7 @@ class SourceConvertTypes(object):
     BOOL = "boolean"
 
 
-class DatasourceApi(object):
+class BaseSourceService(object):
     """
     Работа с источником данных
     """

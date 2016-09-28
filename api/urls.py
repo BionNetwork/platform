@@ -1,3 +1,4 @@
+# coding: utf-8
 
 
 from django.conf.urls import url, include
@@ -7,16 +8,15 @@ from rest_framework_nested import routers
 
 
 router = routers.SimpleRouter()
-router.register(r'users', views.UserViewSet)
 router.register(r'datasources', views.DatasourceViewSet, 'Datasource')
 # router.register(r'datasource/(?P<source_id>\d+)/tables', views.TablesViewSet, 'tables')
 
-router.register(r'cards', views.CardViewSet, 'cards')
+router.register(r'cubes', views.CubeViewSet, 'cubes')
 # nodes
-card_router = routers.NestedSimpleRouter(router, r'cards', lookup='card')
-card_router.register(r'nodes', views.NodeViewSet, base_name='card-nodes')
+cube_router = routers.NestedSimpleRouter(router, r'cubes', lookup='cube')
+cube_router.register(r'nodes', views.NodeViewSet, base_name='cube-nodes')
 # joins
-node_router = routers.NestedSimpleRouter(card_router, r'nodes', lookup='node')
+node_router = routers.NestedSimpleRouter(cube_router, r'nodes', lookup='node')
 node_router.register(r'joins', views.JoinViewSet, base_name='node-joins')
 
 
@@ -30,7 +30,7 @@ urlpatterns = [
     # url(r'^schema/(?P<id>\d+)/dimensions$', views.GetDimensionDataView.as_view(),
     #     name='dimension_data'),
     url(r'^', include(router.urls)),
-    url(r'^', include(card_router.urls)),
+    url(r'^', include(cube_router.urls)),
     url(r'^', include(node_router.urls)),
     url(r'^datasources/(?P<source_id>\d+)/(?P<table_name>\w+)/$',
         views.TablesView.as_view(), name='tables_data'),

@@ -45,7 +45,7 @@ class ClickHouse(WareHouse):
         self.context = context
         self.db_url = db_url
         self.file_path = file_path
-        self.table_name = self.context["card_id"]
+        self.table_name = self.context["cube_id"]
         super(ClickHouse, self).__init__(context=context)
 
     def create_csv(self):

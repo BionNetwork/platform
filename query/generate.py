@@ -1,3 +1,5 @@
+# coding: utf-8
+
 
 class QueryException(Exception):
     pass
@@ -15,10 +17,10 @@ class QueryGenerate(object):
     Формирование SQL-запроса для получения данных
     """
 
-    def __init__(self, card_id, input):
+    def __init__(self, cube_id, input):
         """
         Args:
-            card_id:
+            cube_id:
             input: dict
             Приблизительный словарь с входными данными такой:
             {"groups":{
@@ -46,7 +48,7 @@ class QueryGenerate(object):
          они собираются единый словарь по ключевым словам. Надо их преобразовать в SQL
 
         """
-        self.card_id = card_id
+        self.cube_id = cube_id
         self.input = input
         self.key_words = {
             SELECT: [],

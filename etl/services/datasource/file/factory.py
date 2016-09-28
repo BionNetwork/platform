@@ -7,10 +7,10 @@ from core.models import ConnectionChoices
 
 from etl.services.datasource.file.csv_file import CSV
 from etl.services.datasource.file.excel import Excel
-from ..source import DatasourceApi
+from ..source import BaseSourceService
 
 
-class FileService(DatasourceApi):
+class FileService(BaseSourceService):
     """Сервис для источников данных на основе файлов"""
 
     def __init__(self, source):

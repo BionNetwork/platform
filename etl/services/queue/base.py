@@ -15,7 +15,7 @@ from django.conf import settings
 from core.models import QueueList, QueueStatus
 from etl.helpers import datetime_now_str, HashEncoder
 from etl.services.datasource.db.interfaces import BaseEnum
-from etl.services.datasource.repository.storage import RedisSourceService
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +34,19 @@ class Pusher(object):
     """
     Уведомитель PHP сервера о ходе загрузки
     """
-    def __init__(self, card_id):
+    def __init__(self, cube_id):
         """
-        card_id - идентификатор канала
+        cube_id - идентификатор канала
         php_url - канал
         """
-        self.card_id = card_id
+        self.cube_id = cube_id
         self.php_url = "{0}{1}:{2}".format(
             settings.PHP_SCHEMA, settings.PHP_HOST, settings.PHP_PORT)
 
     def push(self, code, msg=None, data=None):
         # FIXME temporary structure of data
         info = {
-            'card_id': self.card_id,
+            'cube_id': self.cube_id,
             'code': code,
             'msg': msg,
             'data': data,
@@ -457,17 +457,6 @@ class TaskService(object):
         task_id = task.id
 
         return task_id
-
-    @staticmethod
-    def get_queue(task_id, user_id):
-        """
-        Информация о ходе работы задач
-
-        Returns:
-            QueueStorage: ...
-        """
-        queue_dict = RedisSourceService.get_queue_dict(task_id)
-        return QueueStorage(queue_dict, task_id, user_id)
 
     @staticmethod
     def update_task_status(task_id, status_id, error_code=None, error_msg=None):

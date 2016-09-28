@@ -25,7 +25,10 @@ class Excel(File):
         """
         Открытие файла без пустых колонок(если без title)
         """
-        df = pandas.read_excel(*args, **kwargs)#.dropna(axis=1, how='all')
+        try:
+            df = pandas.read_excel(*args, **kwargs)#.dropna(axis=1, how='all')
+        except XLRDError as e:
+                raise SheetException(message=e.message)
         columns = df.columns
         ne_columns = [
             col for col in columns

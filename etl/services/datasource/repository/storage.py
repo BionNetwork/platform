@@ -3,10 +3,7 @@
 
 from . import r_server
 import json
-from copy import deepcopy
-from django.conf import settings
 from collections import defaultdict
-from redis_collections import Dict as RedisDict
 from core.helpers import CustomJsonEncoder
 
 
@@ -14,279 +11,77 @@ from core.helpers import CustomJsonEncoder
 UTF = "utf-8"
 
 
-class RedisCacheKeys(object):
-    """Ключи для редиса"""
+class SourceCacheKeys(object):
+    """Ключи кэша источника"""
+
+    def __init__(self, source_id):
+        self.source_id = source_id
+
+    @property
+    def source_key(self):
+        """
+        Источник данных
+        """
+        return 'source:{0}'.format(self.source_id)
+
+    def indents_key(self):
+        """
+        Ключ отступа
+        """
+        return '{0}:indents'.format(self.source_key)
+
+
+class CubeCacheKeys(object):
+    """Ключи кэша куба"""
+
+    def __init__(self, cube_id):
+        self.cube_id = cube_id
 
     @staticmethod
     def source_key(source_id):
         """
         Источник данных
-
-        Args:
-            source_id(int): id источника
         """
         return 'source:{0}'.format(source_id)
 
-    @staticmethod
-    def get_card_key(card_id):
+    @property
+    def cube_key(self):
         """
         Карточка
-
-        Args:
-            card_id(int): id источника
         """
-        return 'card:{0}'.format(card_id)
+        return 'cube:{0}'.format(self.cube_id)
 
-    @classmethod
-    def card_builder_key(cls, card_id):
+    def cube_builder_key(self):
         """
         Счетчик для коллекций пользователя (автоинкрементное значение)
-
-        Args:
-            card_id(int): id источника
         """
-        card_key = cls.get_card_key(card_id)
-        return '{0}:builder'.format(card_key)
+        return '{0}:builder'.format(self.cube_key)
 
-    @classmethod
-    def table_key(cls, card_id, source_id, table_id):
+    def table_key(self, source_id, table_id):
         """
         Полная информация таблицы, которая в дереве
         """
-        card_key = cls.get_card_key(card_id)
-        source_key = cls.source_key(source_id)
         return '{0}:{1}:collection:{2}'.format(
-            card_key, source_key, table_id)
+            self.cube_key, self.source_key(source_id), table_id)
 
-    @classmethod
-    def tree_key(cls, card_id):
+    def tree_key(self):
         """
         Структура дерева
+        """
+        return '{0}:active:tree'.format(self.cube_key)
 
-        Args:
-            card_id(int): id источника
+    def cube_so_settings_key(self, source_id):
         """
-        card_key = cls.get_card_key(card_id)
-        return '{0}:active:tree'.format(card_key)
-
-    @staticmethod
-    def get_queue(task_id):
+        Конфиг источника куба
         """
-        ключ информации о ходе работы таска
-        """
-        return 'queue:{0}'.format(task_id)
-
-    @classmethod
-    def indent_key(cls, source_id):
-        """
-        Ключ отступа
-        """
-        source_key = cls.source_key(source_id)
-        return '{0}:indent'.format(source_key)
-
-    @classmethod
-    def columns_types(cls, card_id, source_id):
-        """
-        Полная информация таблицы, которая в дереве
-        """
-        card_key = cls.get_card_key(card_id)
-        source_key = cls.source_key(source_id)
-        return '{0}:{1}:columns'.format(card_key, source_key)
-
-RKeys = RedisCacheKeys
+        return '{0}:{1}:settings'.format(
+            self.cube_key, self.source_key(source_id))
 
 
-class RedisSourceService(object):
+class CacheService(object):
     """
-        Сервис по работе с редисом
+    Базовый класс для работы с кэшом
     """
-    # FIXME r_get r_set r_del r_exists дублируютс с CardCacheService, предка впаять
-    @staticmethod
-    def r_get(name):
-        return json.loads(r_server.get(name).decode(UTF))
-
-    @staticmethod
-    def r_set(name, structure):
-        r_server.set(name, json.dumps(structure))
-
-    @staticmethod
-    def r_del(name):
-        r_server.delete(name)
-
-    @staticmethod
-    def r_exists(name):
-        return r_server.exists(name)
-
-    @staticmethod
-    def get_user_source(source_id):
-        return RKeys.source_key(source_id)
-
-    @classmethod
-    def delete_datasource(cls, source):
-        """
-        удаляет информацию о датасосре из редиса
-        :param cls:
-        :param source: Datasource
-        """
-        user_datasource_key = cls.get_user_source(source)
-
-        cls.r_del(user_datasource_key)
-
-    @classmethod
-    def set_tables(cls, source_id, tables):
-        """
-        кладем информацию о таблицах в редис
-        :param source_id: Datasource
-        :param tables: list
-        :return: list
-        """
-        user_datasource_key = cls.get_user_source(source_id)
-
-        cls.r_set(user_datasource_key,
-                     json.dumps({'tables': tables}))
-        r_server.expire(user_datasource_key, settings.REDIS_EXPIRE)
-
-    @staticmethod
-    def get_queue_dict(task_id):
-        """
-        информация о ходе работы таска
-        :param task_id:
-        """
-        queue_str = RedisCacheKeys.get_queue(task_id)
-        return RedisDict(key=queue_str, redis=r_server, pickler=json)
-
-    @classmethod
-    def delete_queue(cls, task_id):
-        """
-        информация о ходе работы таска
-        :param task_id:
-        """
-        queue_str = RedisCacheKeys.get_queue(cls, task_id)
-        cls.r_del(queue_str)
-
-    @classmethod
-    def get_source_indentation(cls, source_id):
-        """
-        Получаем отступ для страницы источника
-        Returns: defaultdict(int)
-        """
-        indent_key = RKeys.indent_key(source_id)
-        func = lambda: {'indent': None, 'header': True}
-
-        if not cls.r_exists(indent_key):
-            # first is indent, second is whether needs header
-            return defaultdict(func)
-
-        return defaultdict(func, cls.r_get(indent_key))
-
-    @classmethod
-    def set_source_indentation(cls, source_id, indents):
-        """
-        Сохраняем отступ для страницы соурса
-        """
-        indent_key = RKeys.indent_key(source_id)
-        cls.r_set(indent_key, indents)
-
-
-# TODO можно сделать SourceCacheService и передавать ему source_id в ините
-class CardCacheService(object):
-    """
-    Работа с кэш
-    """
-    def __init__(self, card_id):
-        """
-        Args:
-            card_id(int): id карточки
-        """
-        self.card_id = card_id
-        self.cache_keys = RedisCacheKeys
-
-    def get_table_id(self, source_id, table, data=None):
-        """
-        Проверяет таблица уже в кэше или нет!
-        Возвращает id таблицы или None в случае отсутствия!
-        Если вызывается в цикле, то лучше передавать data,
-        во избежании лишних вводов-выводов
-        """
-        builder_data = data or self.card_builder_data
-        s_id = str(source_id)
-
-        if s_id in builder_data:
-            source_colls = builder_data[s_id]
-            # таблица не должна быть в активных
-            if table in source_colls['actives']:
-                return source_colls['actives'][table]
-            elif table in source_colls['remains']:
-                return source_colls['remains'][table]
-        return None
-
-    def check_table_in_actives(self, source_id, table):
-        """
-        Проверяет таблица в активных или нет!
-        """
-        builder_data = self.card_builder_data
-        s_id = str(source_id)
-
-        if s_id in builder_data:
-            source_colls = builder_data[s_id]
-            return table in source_colls['actives']
-
-        return False
-
-    def check_table_in_remains(self, source_id, table):
-        """
-        Проверяет таблица в остатках или нет!
-        """
-        builder_data = self.card_builder_data
-        s_id = str(source_id)
-
-        if s_id in builder_data:
-            source_colls = builder_data[s_id]
-            return table in source_colls['remains']
-
-        return False
-
-    @property
-    def card_builder(self):
-        """
-        Строительная карта дерева
-        """
-        builder_key = self.cache_keys.card_builder_key(self.card_id)
-
-        if not self.r_exists(builder_key):
-            builder = {
-                'data': {},
-                'next_id': 1,
-            }
-            self.r_set(builder_key, builder)
-            return builder
-        return self.r_get(builder_key)
-
-    def set_card_builder(self, actives):
-        """
-        Args:
-            actives object has structure {
-                'data': {},
-                'next_id': 1,
-            }
-        Returns:
-        """
-        builder_key = self.cache_keys.card_builder_key(self.card_id)
-        return self.r_set(builder_key, actives)
-
-    def del_card_builder(self):
-        """
-        Удаляет строительную карта карточки
-        """
-        builder_key = self.cache_keys.card_builder_key(self.card_id)
-        return self.r_del(builder_key)
-
-    @property
-    def card_builder_data(self):
-        """
-        """
-        return self.card_builder['data']
-
     @staticmethod
     def r_get(name):
         return json.loads(r_server.get(name).decode(UTF))
@@ -303,6 +98,140 @@ class CardCacheService(object):
     def r_exists(name):
         return r_server.exists(name)
 
+
+class SourceCacheService(CacheService):
+    """
+    Работа с кэшом  источника
+    """
+    def __init__(self, source_id):
+        """
+        Args:
+            cube_id(int): id карточки
+        """
+        self.source_id = source_id
+        self.cache_keys = SourceCacheKeys(source_id)
+
+    def get_source_indentation(self):
+        """
+        Получаем отступ для страницы источника
+        Returns: defaultdict(int)
+        """
+        indents_key = self.cache_keys.indents_key()
+
+        func = lambda: {'indent': 0, 'header': True}
+
+        if not self.r_exists(indents_key):
+            # first is indent, second is header need
+            return defaultdict(func)
+
+        return defaultdict(func, self.r_get(indents_key))
+
+    def set_source_indentation(self, indents):
+        """
+        Сохраняем отступ для страницы соурса
+        """
+        indents_key = self.cache_keys.indents_key()
+        self.r_set(indents_key, indents)
+
+
+class CubeCacheService(CacheService):
+    """
+    Работа с кэшом куба
+    """
+    def __init__(self, cube_id):
+        """
+        Args:
+            cube_id(int): id карточки
+        """
+        self.cube_id=cube_id
+        self.cache_keys = CubeCacheKeys(cube_id=cube_id)
+
+    def get_table_id(self, source_id, table, data=None):
+        """
+        Проверяет таблица уже в кэше или нет!
+        Возвращает id таблицы или None в случае отсутствия!
+        Если вызывается в цикле, то лучше передавать data,
+        во избежании лишних вводов-выводов
+        """
+        builder_data = data or self.cube_builder_data
+        s_id = str(source_id)
+
+        if s_id in builder_data:
+            source_colls = builder_data[s_id]
+            # таблица не должна быть в активных
+            if table in source_colls['actives']:
+                return source_colls['actives'][table]
+            elif table in source_colls['remains']:
+                return source_colls['remains'][table]
+        return None
+
+    def check_table_in_actives(self, source_id, table):
+        """
+        Проверяет таблица в активных или нет!
+        """
+        builder_data = self.cube_builder_data
+        s_id = str(source_id)
+
+        if s_id in builder_data:
+            source_colls = builder_data[s_id]
+            return table in source_colls['actives']
+
+        return False
+
+    def check_table_in_remains(self, source_id, table):
+        """
+        Проверяет таблица в остатках или нет!
+        """
+        builder_data = self.cube_builder_data
+        s_id = str(source_id)
+
+        if s_id in builder_data:
+            source_colls = builder_data[s_id]
+            return table in source_colls['remains']
+
+        return False
+
+    @property
+    def cube_builder(self):
+        """
+        Строительная карта дерева
+        """
+        builder_key = self.cache_keys.cube_builder_key()
+
+        if not self.r_exists(builder_key):
+            builder = {
+                'data': {},
+                'next_id': 1,
+            }
+            self.r_set(builder_key, builder)
+            return builder
+        return self.r_get(builder_key)
+
+    def set_cube_builder(self, actives):
+        """
+        Args:
+            actives object has structure {
+                'data': {},
+                'next_id': 1,
+            }
+        Returns:
+        """
+        builder_key = self.cache_keys.cube_builder_key()
+        return self.r_set(builder_key, actives)
+
+    def del_cube_builder(self):
+        """
+        Удаляет строительную карта карточки
+        """
+        builder_key = self.cache_keys.cube_builder_key()
+        return self.r_del(builder_key)
+
+    @property
+    def cube_builder_data(self):
+        """
+        """
+        return self.cube_builder['data']
+
     def fill_cache(self, source_id, table, info):
         """
         Заполняем кэш данными для узла
@@ -314,8 +243,7 @@ class CardCacheService(object):
         Returns:
             int: id узла
         """
-
-        builder = self.card_builder
+        builder = self.cube_builder
         next_id = builder['next_id']
         b_data = builder['data']
 
@@ -333,13 +261,12 @@ class CardCacheService(object):
         builder['next_id'] = next_id + 1
 
         # save builder's new state
-        self.set_card_builder(builder)
+        self.set_cube_builder(builder)
 
         return next_id
 
     def get_table_info(self, source_id, table_id):
-        table_key = self.cache_keys.table_key(
-            self.card_id, source_id, table_id)
+        table_key = self.cache_keys.table_key(source_id, table_id)
         return self.r_get(table_key)
 
     def set_table_info(self, source_id, table_id, table_info):
@@ -350,17 +277,14 @@ class CardCacheService(object):
             table_info:
         Returns:
         """
-        table_key = self.cache_keys.table_key(
-            self.card_id, source_id, table_id)
+        table_key = self.cache_keys.table_key(source_id, table_id)
         return self.r_set(table_key, table_info)
 
     def del_table_info(self, source_id, table_id):
         """
         Удаляет из кэша инфу о таблице источника
         """
-        table_key = self.cache_keys.table_key(
-            self.card_id, source_id, table_id)
-
+        table_key = self.cache_keys.table_key(source_id, table_id)
         self.r_del(table_key)
 
     def del_all_tables_info(self):
@@ -368,9 +292,10 @@ class CardCacheService(object):
         Удаляет из кэша инфу всех таблиц источника,
         участвующих в карточке
         """
-        builder_data = self.card_builder_data
+        builder_data = self.cube_builder_data
         for sid, bundle in builder_data.items():
-            t_names = list(bundle['actives'].values()) + list(bundle['remains'].values())
+            t_names = (list(bundle['actives'].values()) +
+                       list(bundle['remains'].values()))
 
             for table_id in t_names:
                 self.del_table_info(sid, table_id)
@@ -382,7 +307,7 @@ class CardCacheService(object):
         Returns:
             unicode
         """
-        tree_key = self.cache_keys.tree_key(self.card_id)
+        tree_key = self.cache_keys.tree_key()
         return self.r_get(tree_key)
 
     def tables_info_for_metasource(self, tables):
@@ -400,7 +325,7 @@ class CardCacheService(object):
             dict: Информация о таблицах
         """
         tables_info = defaultdict(dict)
-        builder_data = self.card_builder_data
+        builder_data = self.cube_builder_data
 
         for sid, table_list in tables.items():
             sid_format = str(sid)
@@ -417,7 +342,7 @@ class CardCacheService(object):
                               child_table, child_sid):
         """
         """
-        actives = self.card_builder_data
+        actives = self.cube_builder_data
 
         of_parent = actives[str(parent_sid)]
         of_child = actives[str(child_sid)]
@@ -448,7 +373,7 @@ class CardCacheService(object):
         информация по таблицам для построения дерева
         """
         final_info = {}
-        b_data = self.card_builder_data
+        b_data = self.cube_builder_data
 
         # инфа таблиц из существующего дерева
         for child in ordered_nodes:
@@ -480,20 +405,15 @@ class CardCacheService(object):
     def check_tree_exists(self):
         """
         Проверяет существование дерева
-
-        Args:
-            card_id(int): id карточки
-        Returns:
-            bool: Наличие 'user_datasource:<user_id>:<source_id>:active:tree'
         """
-        tree_key = self.cache_keys.tree_key(self.card_id)
+        tree_key = self.cache_keys.tree_key()
         return self.r_exists(tree_key)
 
     def transfer_remain_to_actives(self, node):
         """
         сохраняем карту дерева, перенос остатка в активные
         """
-        builder = self.card_builder
+        builder = self.cube_builder
         b_data = builder['data']
 
         table, sid, node_id = node.val, str(node.source_id), node.node_id
@@ -512,15 +432,14 @@ class CardCacheService(object):
         del s_remains[table]
         s_actives[table] = node_id
 
-        self.set_card_builder(builder)
+        self.set_cube_builder(builder)
 
     def save_tree_structure(self, tree):
         """
         сохраняем структуру дерева
         :param tree_structure: string
-        :param source: Datasource
         """
-        tree_key = self.cache_keys.tree_key(self.card_id)
+        tree_key = self.cache_keys.tree_key()
         tree_structure = tree.structure
 
         self.r_set(tree_key, tree_structure)
@@ -529,22 +448,22 @@ class CardCacheService(object):
         """
         Удаляет дерево из хранилища
         """
-        tree_key = self.cache_keys.tree_key(self.card_id)
+        tree_key = self.cache_keys.tree_key()
         self.r_del(tree_key)
 
-    def clear_card_cache(self):
+    def clear_cube_cache(self):
         """
         Удаляет из редиса полную инфу о карточке
         """
         self.remove_tree()
         self.del_all_tables_info()
-        self.del_card_builder()
+        self.del_cube_builder()
 
     def transfer_actives_to_remains(self, to_remain_nodes):
         """
         сохраняем карту дерева, перенос активов в остатки
         """
-        builder = self.card_builder
+        builder = self.cube_builder
         b_data = builder['data']
 
         for node in to_remain_nodes:
@@ -557,28 +476,40 @@ class CardCacheService(object):
             del s_actives[table]
             s_remains[table] = node_id
 
-        self.set_card_builder(builder)
+        self.set_cube_builder(builder)
 
-    def get_columns_types(self, source_id):
+    def get_cube_so_settings(self, source_id):
         """
-        Типы колонок, осхраненные пользователем
-        {Table: {Column: Type}}
+        Конфиг соурса для определенного куба,
+        содержит инфу об отступе, заголовке страницы,
+        типе колонки и ее дефолтном значении
         """
-        columns_key = self.cache_keys.columns_types(self.card_id, source_id)
-        func = lambda: defaultdict(lambda: None)
+        settings_key = self.cache_keys.cube_so_settings_key(source_id)
 
-        if not self.r_exists(columns_key):
+        func = lambda: {
+            'columns': defaultdict(
+                lambda: {
+                    'type': None,
+                    'default': None
+                }),
+        }
+
+        if not self.r_exists(settings_key):
             return defaultdict(func)
 
-        return defaultdict(func, self.r_get(columns_key))
+        return defaultdict(func, self.r_get(settings_key))
 
-    def set_columns_types(self, source_id, table, column, type):
+    def set_cube_so_settings(self, source_id, settings):
+        """
+        Сохранение конфига соурса куба
+        """
+        settings_key = self.cache_keys.cube_so_settings_key(source_id)
+        self.r_set(settings_key, settings)
+
+    def set_cube_so_column_type(self, source_id, table, column, type):
         """
         Сохранение типа колонки, чтобы в этом типе посадить ее в хранилище
         """
-        columns_keys = self.cache_keys.columns_types(self.card_id, source_id)
-
-        columns_types = self.get_columns_types(source_id)
-        columns_types[table][column] = type
-
-        self.r_set(columns_keys, columns_types)
+        settings = self.get_cube_so_settings(source_id)
+        settings[table][column] = type
+        self.set_cube_so_settings(source_id, settings)

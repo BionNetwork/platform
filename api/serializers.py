@@ -47,8 +47,9 @@ class DatasourceSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         instance = super(DatasourceSerializer, self).update(
             instance, validated_data)
-        if settings.USE_REDIS_CACHE:
-            DataSourceService.delete_datasource(instance)
+        # FIXME TODO shit here below
+        # if settings.USE_REDIS_CACHE:
+        #     DataSourceService.delete_datasource(instance)
           #  DataSourceService.tree_full_clean(instance)
         return instance
 

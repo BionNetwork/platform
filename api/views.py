@@ -1,6 +1,5 @@
 # coding: utf-8
 
-
 import json
 import logging
 from itertools import groupby
@@ -23,7 +22,7 @@ from api.serializers import (
 from core.models import (User, Datasource, Dataset, DatasetStateChoices)
 from core.views import BaseViewNoLogin
 from etl.tasks import load_data
-from etl.services.datasource.base import DataSourceService
+from etl.services.datasource.base import DataSourceService, DataCubeService
 from etl.helpers import group_by_source
 from etl.services.exceptions import SheetException
 
@@ -69,21 +68,8 @@ class TokenRequired(APIView):
         }))
 
 
-class ExecuteQueryView(BaseViewNoLogin):
-    """
-    Выполнение mdx запроса к данным
-    """
-
-    def post(self, request, *args, **kwargs):
-        return self.json_response({'status': SUCCESS})
-
-
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer
-
-
 # TODO decorator for existing Datasource pk
+# TODO replace validation of args
 class DatasourceViewSet(viewsets.ModelViewSet):
     model = Datasource
     serializer_class = DatasourceSerializer
@@ -97,32 +83,34 @@ class DatasourceViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         return super(DatasourceViewSet, self).create(request, *args, **kwargs)
 
+    # TODO
     def destroy(self, request, *args, **kwargs):
         source = self.get_object()
         DataSourceService.delete_datasource(source)
         # DataSourceService.tree_full_clean(source)
         return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
 
+    # FIXME проверить (отступы)
     @detail_route(methods=['post'])
     def update_source(self, request, pk=None):
         """
         Метод изменения источника,
         предположительно для замены файлов пользователя
         """
-        source_id = pk
-        DataSourceService.update_datasource(source_id, request)
+        worker = DataSourceService(source_id=pk)
+        worker.update_datasource(request)
 
         return Response()
 
     @detail_route(methods=['get'])
     def tables(self, request, pk=None):
-        source = Datasource.objects.get(id=pk)
+        """
+        Список таблиц или листов
+        """
+        worker = DataSourceService(source_id=pk)
+        tables = worker.get_source_tables()
+        return Response(tables)
 
-        service = DataSourceService.get_source_service(source)
-        data = service.get_tables()
-        return Response(data)
-
-    # FIXME Maybe needed decorator for source_id
     @detail_route(methods=['post'], serializer_class=IndentSerializer)
     def set_indent(self, request, pk):
         """
@@ -130,12 +118,11 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         """
         post = request.data
 
-        source_id = pk
         sheet = post.get('sheet', None)
         if sheet is None:
             raise APIException("Sheet name is needed!")
-        indent = post.get('indent', None)
 
+        indent = post.get('indent', None)
         if indent is None:
             raise APIException("Indent is needed!")
         try:
@@ -147,8 +134,8 @@ class DatasourceViewSet(viewsets.ModelViewSet):
 
         assert isinstance(header, bool), "Header isn't bool!"
 
-        DataSourceService.insert_source_indentation(
-            source_id, sheet, indent, header)
+        worker = DataSourceService(source_id=pk)
+        worker.set_indentation(sheet, indent, header)
 
         return Response('Setted!')
 
@@ -159,8 +146,9 @@ class TablesView(APIView):
         """
         Получение данных о таблице
         """
+        worker = DataSourceService(source_id)
         try:
-            data = DataSourceService.get_source_columns(source_id, table_name)
+            data = worker.get_source_columns(table_name)
         except SheetException as e:
             raise APIException(e)
 
@@ -170,8 +158,15 @@ class TablesView(APIView):
 class TablesDataView(APIView):
 
     def get(self, request, source_id, table_name):
+        """
+        Preview for tables and sheets
+        """
+        worker = DataSourceService(source_id)
+        try:
+            data = worker.get_source_rows(table_name)
+        except SheetException as e:
+            raise APIException(e)
 
-        data = DataSourceService.get_source_rows(source_id, table_name)
         return Response(data=data)
 
 
@@ -191,7 +186,8 @@ def send(data, settings=None, stream=False):
             return j
 
 
-class CardViewSet(viewsets.ViewSet):
+# TODO decorator for existing Cube pk
+class CubeViewSet(viewsets.ViewSet):
     """
     Реализация методов карточки
     """
@@ -203,8 +199,8 @@ class CardViewSet(viewsets.ViewSet):
         """
         Очистка инфы карточки из редиса
         """
-        worker = DataSourceService(card_id=pk)
-        worker.cache.clear_card_cache()
+        worker = DataCubeService(cube_id=pk)
+        worker.cache.clear_cube_cache()
 
         return Response()
 
@@ -222,7 +218,7 @@ class CardViewSet(viewsets.ViewSet):
 
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
-            worker = DataSourceService(card_id=pk)
+            worker = DataCubeService(cube_id=pk)
 
             for each in data:
                 sid, table = each['source_id'], each['table_name']
@@ -250,11 +246,11 @@ class CardViewSet(viewsets.ViewSet):
         column = post.get('column')
         typ = post.get('type')
 
-        worker = DataSourceService(card_id=pk)
+        worker = DataCubeService(cube_id=pk)
         errors = worker.validate_column(sid, table, column, typ)
 
         return Response({
-            "card_id": pk,
+            "cube_id": pk,
             "source_id": sid,
             "table": table,
             "column": column,
@@ -446,8 +442,7 @@ class CardViewSet(viewsets.ViewSet):
 
         query = '{0} {1} {2} {3};'.format(select_q, where_q, group_q, order_q)
 
-        worker = DataSourceService(card_id=pk)
-        local_service = worker.get_local_instance()
+        local_service = DataSourceService.get_local_instance()
         resp = local_service.fetchall(query)
 
         # обработка ответа
@@ -470,7 +465,7 @@ class CardViewSet(viewsets.ViewSet):
         Начачло загрузки данных
         """
         if pk is None:
-            raise Exception("Card ID is None!")
+            raise Exception("Cube ID is None!")
 
         sources_info = json.loads(request.data.get('data'))
 
@@ -507,7 +502,7 @@ class CardViewSet(viewsets.ViewSet):
             return Response(
                 {"message": "Data is empty!"})
 
-        worker = DataSourceService(card_id=pk)
+        worker = DataCubeService(cube_id=pk)
 
         # проверка на пришедшие колонки, лежат ли они в редисе,
         # убираем ненужные типы (бинари)
@@ -543,7 +538,7 @@ class CardViewSet(viewsets.ViewSet):
                 "message": "Tables {0} in tree, but didn't come! ".format(
                  range_)})
 
-        dc = DatasetContext(card_id=pk, sources_info=sources_info)
+        dc = DatasetContext(cube_id=pk, sources_info=sources_info)
         try:
             dc.create_dataset()
         except ContextError:
@@ -558,12 +553,9 @@ class CardViewSet(viewsets.ViewSet):
         """
         Список значений для фильтров куба
         """
-        worker = DataSourceService(card_id=pk)
+        worker = DataCubeService(cube_id=pk)
 
-        filters = []
-        measures = []
         meta = worker.get_cube_columns()
-
         return Response(meta)
 
 
@@ -572,11 +564,11 @@ class DatasetContext(object):
     Контекст выполениния задач
     """
 
-    def __init__(self, card_id, is_update=False, sources_info=None):
+    def __init__(self, cube_id, is_update=False, sources_info=None):
         """
 
         Args:
-            card_id(int): id Карточки
+            cube_id(int): id Карточки
             is_update(bool): Обновление?
             sources_info(dict): Данные загрузки
             ::
@@ -593,13 +585,13 @@ class DatasetContext(object):
 
         ]
         """
-        self.card_id = card_id
+        self.cube_id = cube_id
         self.is_update = is_update
         self.sources_info = sources_info
-        self.service = DataSourceService(card_id=card_id)
+        self.cube_service = DataCubeService(cube_id=cube_id)
 
         try:
-            self.dataset = Dataset.objects.get(key=card_id)
+            self.dataset = Dataset.objects.get(key=cube_id)
             self.is_new = False
         except Dataset.DoesNotExist:
             self.dataset = Dataset()
@@ -615,7 +607,7 @@ class DatasetContext(object):
 
         """
         if self.is_new:
-            sub_trees = self.service.prepare_sub_trees(self.sources_info)
+            sub_trees = self.cube_service.prepare_sub_trees(self.sources_info)
             for sub_tree in sub_trees:
                 sub_tree.update(
                     view_name='{type}{view_hash}'.format(
@@ -625,11 +617,11 @@ class DatasetContext(object):
                 for column in sub_tree['columns']:
                     column.update(click_column=CLICK_COLUMN.format(column['hash']))
 
-            relations = self.service.prepare_relations(sub_trees)
+            relations = self.cube_service.prepare_relations(sub_trees)
             self.is_new = False
             return {
-                'warehouse': CLICK_TABLE.format(self.card_id),
-                'card_id': self.card_id,
+                'warehouse': CLICK_TABLE.format(self.cube_id),
+                'cube_id': self.cube_id,
                 'is_update': False,
                 'sub_trees': sub_trees,
                 "relations": relations,
@@ -639,7 +631,7 @@ class DatasetContext(object):
 
     def create_dataset(self):
         if self.is_new:
-            self.dataset.key = self.card_id
+            self.dataset.key = self.cube_id
             self.dataset.context = self.context
             self.dataset.state = DatasetStateChoices.IDLE
             self.dataset.save()
@@ -666,10 +658,10 @@ def check_parent(func):
     """
     def inner(*args, **kwargs):
         request = args[1]
-        card_id = int(kwargs['card_pk'])
+        cube_id = int(kwargs['cube_pk'])
         parent_id = int(request.data.get('parent_id'))
 
-        worker = DataSourceService(card_id=card_id)
+        worker = DataCubeService(cube_id=cube_id)
 
         if not worker.check_node_id_in_builder(
                 parent_id, in_remain=False):
@@ -688,9 +680,9 @@ def check_child(in_remain):
         def inner(*args, **kwargs):
 
             node_id = int(kwargs['pk'])
-            card_id = int(kwargs['card_pk'])
+            cube_id = int(kwargs['cube_pk'])
 
-            worker = DataSourceService(card_id=card_id)
+            worker = DataCubeService(cube_id=cube_id)
 
             # проверка узла родителя
             if not worker.check_node_id_in_builder(
@@ -709,11 +701,11 @@ class NodeViewSet(viewsets.ViewSet):
 
     serializer_class = NodeSerializer
 
-    def list(self, request, card_pk):
+    def list(self, request, cube_pk):
         """
         Список узлов дерева и остаткa
         """
-        worker = DataSourceService(card_id=card_pk)
+        worker = DataCubeService(cube_id=cube_pk)
         data = worker.get_tree_api()
 
         # FIXME доделать валидатор
@@ -721,12 +713,12 @@ class NodeViewSet(viewsets.ViewSet):
         # if serializer.is_valid():
         return Response(data=data)
 
-    def retrieve(self, request, card_pk=None, pk=None):
+    def retrieve(self, request, cube_pk=None, pk=None):
         """
         Инфа ноды
         """
         try:
-            worker = DataSourceService(card_id=card_pk)
+            worker = DataCubeService(cube_id=cube_pk)
             data = worker.get_node_info(pk)
         except TypeError:
             raise APIException("Узел должен быть частью дерева(не остаток)")
@@ -736,11 +728,11 @@ class NodeViewSet(viewsets.ViewSet):
     @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
     @check_child(in_remain=False)
     @check_parent
-    def reparent(self, request, card_pk, pk):
+    def reparent(self, request, cube_pk, pk):
         """
         Изменение родительского узла, перенос узла с одного места на другое
         Args:
-            card_pk(int): id карточки
+            cube_pk(int): id карточки
             pk(int): id узла
         Returns:
             dict: Информацию об связанных/не связанных узлах дерева и остатка
@@ -749,7 +741,7 @@ class NodeViewSet(viewsets.ViewSet):
         # serializer = self.serializer_class(data=request.data, many=True)
         # if serializer.is_valid(raise_exception=True):
         # try:
-        worker = DataSourceService(card_id=card_pk)
+        worker = DataCubeService(cube_id=cube_pk)
         info = worker.reparent(request.data['parent_id'], pk)
 
         return Response(info)
@@ -758,11 +750,11 @@ class NodeViewSet(viewsets.ViewSet):
 
     @detail_route(methods=['get'])
     @check_child(in_remain=False)
-    def to_remain(self, request, card_pk, pk):
+    def to_remain(self, request, cube_pk, pk):
         """
         Добавлеине узла дерева в остатки
         """
-        worker = DataSourceService(card_id=card_pk)
+        worker = DataCubeService(cube_id=cube_pk)
         info = worker.send_nodes_to_remains(node_id=pk)
 
         return Response(info)
@@ -775,13 +767,13 @@ class NodeViewSet(viewsets.ViewSet):
 
     @detail_route(methods=['get'])
     @check_child(in_remain=True)
-    def remain_whatever(self, request, card_pk, pk):
+    def remain_whatever(self, request, cube_pk, pk):
         """
         Перенос узла из остатков в основное дерево
         в произвольное место
         """
         node_id = pk
-        worker = DataSourceService(card_id=card_pk)
+        worker = DataCubeService(cube_id=cube_pk)
 
         info = worker.add_randomly_from_remains(node_id)
         return Response(info)
@@ -789,13 +781,13 @@ class NodeViewSet(viewsets.ViewSet):
     @detail_route(methods=['post'], serializer_class=ParentIdSerializer)
     @check_child(in_remain=True)
     @check_parent
-    def remain_current(self, request, card_pk, pk):
+    def remain_current(self, request, cube_pk, pk):
         """
         Перенос узла из остатков в основное дерево
         в определенный узел
 
         Args:
-            card_pk(int): id карточки
+            cube_pk(int): id карточки
             pk(int): id узла
 
         Returns:
@@ -806,7 +798,7 @@ class NodeViewSet(viewsets.ViewSet):
         # if serializer.is_valid(raise_exception=True):
         try:
             parent_id = request.data['parent_id']
-            worker = DataSourceService(card_id=card_pk)
+            worker = DataCubeService(cube_id=cube_pk)
             info = worker.from_remain_to_certain(parent_id, pk)
 
             return Response(info)
@@ -819,28 +811,28 @@ class JoinViewSet(viewsets.ViewSet):
     Представление для связей таблиц
     """
 
-    def retrieve(self, request, card_pk=None, node_pk=None, pk=None):
+    def retrieve(self, request, cube_pk=None, node_pk=None, pk=None):
         """
         Получение информации о соединение узлов (join)
         ---
         Args:
-            card_pk(int): id карточки
+            cube_pk(int): id карточки
             node_pk(int): id родительского узла
             pk(int): id дочернего узла
 
         Returns:
         """
-        worker = DataSourceService(card_id=card_pk)
+        worker = DataCubeService(cube_id=cube_pk)
         data = worker.get_columns_and_joins(int(node_pk), int(pk))
 
         return Response(data=data)
 
-    def update(self, request, card_pk=None, node_pk=None, pk=None):
+    def update(self, request, cube_pk=None, node_pk=None, pk=None):
         """
         Обновление связи между узлами
 
         Args:
-            card_pk(int): id карточки
+            cube_pk(int): id карточки
             node_pk(int): id родительского узла
             pk(int): id узла-потомка
 
@@ -854,7 +846,7 @@ class JoinViewSet(viewsets.ViewSet):
 }
         """
 
-        worker = DataSourceService(card_id=card_pk)
+        worker = DataCubeService(cube_id=cube_pk)
 
         left_node = worker.get_node(node_pk)
         right_node = worker.get_node(pk)

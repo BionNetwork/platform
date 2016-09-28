@@ -1,6 +1,5 @@
 # coding: utf-8
 
-
 from functools import reduce
 
 from core.helpers import get_utf8_string
@@ -11,19 +10,17 @@ from core.models import (
 from etl.helpers import HashEncoder
 from etl.models import TableTreeRepository as TTRepo
 from etl.services.clickhouse.helpers import FILTER_QUERIES
-from etl.services.datasource.db.factory import DatabaseService, LocalDatabaseService
+from etl.services.datasource.db.factory import (
+    DatabaseService, LocalDatabaseService)
 from etl.services.datasource.file.factory import FileService
 from etl.services.datasource.repository.storage import (
-    RedisSourceService, CardCacheService)
+    SourceCacheService, CubeCacheService)
 from etl.services.exceptions import SourceUpdateException
 
-RedisSS = RedisSourceService
 
-
-# TODO DataSourceService сделать для работы с соурс, СardService для карты
 class DataSourceService(object):
     """
-        Сервис управляет сервисами БД, Файлов и Редиса!
+        Сервис управляет источниками, сервисами БД, Файлов и Редиса!
     """
     DB_TYPES = [
         ConnectionChoices.POSTGRESQL,
@@ -37,54 +34,54 @@ class DataSourceService(object):
         # ConnectionChoices.TXT,
     ]
 
-    DIMENSION_TYPES = ["text", "date", "time", "timestamp", ]
-    MEASURE_TYPES = ["integer", "boolean", ]
-    EXCLUDE_TYPES = ["binary", ]
-
-    def __init__(self, card_id):
+    def __init__(self, source_id):
         """
         Args:
-            card_id(int): id карточки
+            cube_id(int): id карточки
         """
-        self.cache = CardCacheService(card_id)
+        self.source_id = source_id
+        self.service = self.get_source_service()
+        self.cache = SourceCacheService(source_id)
 
-    # FIXME объеденить get_source_service_by_id  и get_source_service (через id)
-    @classmethod
-    def get_source_service_by_id(cls, source_id):
-        source = Datasource.objects.get(id=source_id)
-        return cls.get_source_service(source)
+    def get_source_service(self):
 
-    @classmethod
-    def get_source_service(cls, source):
-        """
-        В зависимости от типа источника перенаправляет на нужный сервис
-        """
+        source = Datasource.objects.get(id=self.source_id)
         conn_type = source.conn_type
 
-        if conn_type in cls.DB_TYPES:
+        if conn_type in self.DB_TYPES:
             return DatabaseService(source)
-        elif conn_type in cls.FILE_TYPES:
+        elif conn_type in self.FILE_TYPES:
             return FileService(source)
         else:
             raise ValueError("Неизвестный тип подключения!")
 
     @classmethod
-    def delete_datasource(cls, source):
+    def get_local_instance(cls):
         """
-        Redis
+        Возвращает инстанс локального хранилища данных
+        """
+        return LocalDatabaseService()
+
+    # FIXME DO
+    def delete_datasource(self):
+        """
         Удаляет информацию об источнике
-
-        Args:
-            source(core.models.Datasource): Источник данных
         """
-        RedisSS.delete_datasource(source)
+        pass
 
-    @classmethod
-    def update_datasource(cls, source_id, request):
+    def get_source_tables(self):
+        """
+        Список таблиц или листов
+        """
+        return self.service.get_tables()
+
+    # FIXME check method (especially indents)
+    def update_datasource(self, request):
         """
         Изменение источника,
         предположительно для замены файлов пользователя
         """
+        source_id = self.source_id
         source = Datasource.objects.get(id=source_id)
 
         if source.is_file:
@@ -96,7 +93,10 @@ class DataSourceService(object):
             columns = Columns.objects.filter(source_id=source_id)
 
             copy = source.source_temp_copy(new_file)
-            service = cls.get_source_service(copy)
+
+            service = self.service
+            service.source = copy
+
             new_tables = service.get_tables()
             saved_tables = columns.values_list(
                 'original_table', flat=True).distinct()
@@ -106,7 +106,7 @@ class DataSourceService(object):
                 raise SourceUpdateException(
                     "Tables {0} removed in new file!".format(tables_range))
 
-            indents = DataSourceService.extract_source_indentation(source_id)
+            indents = self.get_indentation()
             new_columns = service.fetch_tables_columns(new_tables, indents)
 
             new_columns = [(t, c['name'])
@@ -130,19 +130,18 @@ class DataSourceService(object):
             # удаляем временную копию
             copy.remove_temp_file()
 
-    @classmethod
-    def validate_file(cls, source):
+    # FIXME NO USAGE
+    def validate_file(self, source):
         """
         Проверка файла на валидность
         """
         if source.is_file:
-
             source.create_validation_file()
-            service = cls.get_source_service(source)
-            return service.validate()
+            return self.service.validate()
 
         return True, None
 
+    # TODO remove to DBServices
     @staticmethod
     def check_connection(post):
         """
@@ -159,11 +158,84 @@ class DataSourceService(object):
         }
         return DatabaseService.get_connection_by_dict(conn_info)
 
+    def get_indentation(self):
+        """
+        Достает отступы из хранилища
+        Returns: defaultdict(lambda: {'indent': 0, 'header': True})
+        """
+        return self.cache.get_source_indentation()
+
+    def set_indentation(self, sheet, indent, header):
+        """
+        Сохраняем отступ для страницы соурса
+        """
+        indents = self.cache.get_source_indentation()
+
+        indents[sheet]['indent'] = int(indent)
+        indents[sheet]['header'] = bool(header)
+
+        self.cache.set_source_indentation(indents)
+
+    def get_source_columns(self, table_name):
+        """
+        Колонки источника
+        """
+        service = self.service
+        if isinstance(service, DatabaseService):
+            return service.fetch_tables_columns([table_name, ])
+
+        indents = self.get_indentation()
+        return service.fetch_tables_columns([table_name], indents)
+
+    def get_source_rows(self, table_name):
+        """
+        Данные источника
+        """
+        service = self.service
+        if isinstance(service, DatabaseService):
+            return service.get_source_table_rows(
+                table_name, limit=1000, offset=0)
+
+        indents = self.get_indentation()
+        return service.get_source_table_rows(table_name, indents=indents)
+
+    def validate_column(self, table, column, type):
+        """
+        Проверка колонки на соответствующий тип typ
+        """
+        service = self.service
+
+        if isinstance(service, DatabaseService):
+            # TODO realize for DBs
+            return service.validate_column(table, column, type)
+
+        indents = self.get_indentation()
+        errors = service.validate_column(table, column, type, indents)
+
+        return errors
+
+
+class DataCubeService(object):
+    """
+        Сервис управляет кубом!
+    """
+    # FIXME типы обдумать, особенно даты
+    DIMENSION_TYPES = ["text", "date", "time", "timestamp", ]
+    MEASURE_TYPES = ["integer", "boolean", ]
+    EXCLUDE_TYPES = ["binary", ]
+
+    def __init__(self, cube_id):
+        """
+        Args:
+            cube_id(int): id карточки
+        """
+        self.cache = CubeCacheService(cube_id)
+
     def remains_nodes(self):
         """
         Возвращает из остатков список нодов типа etl.models.RemainNode
         """
-        builder_data = self.cache.card_builder_data
+        builder_data = self.cache.cube_builder_data
         remains = TTRepo.remains_nodes(builder_data)
         return remains
 
@@ -171,7 +243,7 @@ class DataSourceService(object):
         """
         Возвращает по node_id из остатков ноду типа etl.models.RemainNode
         """
-        builder_data = self.cache.card_builder_data
+        builder_data = self.cache.cube_builder_data
         node = TTRepo.get_remain_node(builder_data, node_id)
         return node
 
@@ -231,7 +303,6 @@ class DataSourceService(object):
         """
         sel_tree = self.get_tree()
         cache = self.cache
-        builder_data = cache.card_builder_data
 
         p_node = sel_tree.get_node(parent_id)
         if p_node is None:
@@ -276,7 +347,6 @@ class DataSourceService(object):
         """
         Пытаемся перетащить узел дерева из одного места в другое
         Args:
-            card_id(int): id карточки
             parent_id(int): id родительского узла
             child_id(int): id узла-потомка
         Returns:
@@ -405,12 +475,11 @@ class DataSourceService(object):
         if node_id is not None:
             return node_id
 
-        service = self.get_source_service_by_id(source_id)
-
-        indents = self.extract_source_indentation(source_id)
+        worker = DataSourceService(source_id)
+        indents = worker.get_indentation()
 
         columns, indexes, foreigns, statistics, date_intervals = (
-            service.get_columns_info([table, ], indents))
+            worker.service.get_columns_info([table, ], indents))
 
         info = {
             "value": table,
@@ -451,7 +520,6 @@ class DataSourceService(object):
         Redis
         Проверяет пришедшие джойны на совпадение типов
         Args:
-            card_id(int): id карточки
             parent(Node): родительский узел
             child(RemainNode): дочерний узел
             joins(): Информация о связях
@@ -518,7 +586,6 @@ class DataSourceService(object):
         Redis
         Получение типов колонок таблиц
         Args:
-            card_id(int): id карточки
             parent(Node): родительский узел
             child(RemainNode): дочерний узел
         Returns:
@@ -537,26 +604,6 @@ class DataSourceService(object):
                     node.val, col['name'], node.source_id)] = col['type']
 
         return cols_types
-
-    @classmethod
-    def get_source_connection(cls, source):
-        """
-        Получить объект соединения источника данных
-        :type source: Datasource
-        """
-        # FIXME: Описать
-        service = cls.get_source_service(source)
-        return service.datasource.connection
-
-    @classmethod
-    def get_local_instance(cls):
-        """
-        возвращает инстанс локального хранилища данных
-
-        Returns:
-
-        """
-        return LocalDatabaseService()
 
     # FIXME not used
     @staticmethod
@@ -590,14 +637,14 @@ class DataSourceService(object):
 
         for sub_tree in sub_trees:
             sid = sub_tree['sid']
-            source = Datasource.objects.get(id=sid)
-            source_service = self.get_source_service(source)
+            worker = DataSourceService(sid)
+            service = worker.service
 
-            if isinstance(source_service, DatabaseService):
+            if isinstance(service, DatabaseService):
                 sub_tree['type'] = 'db'
                 new_sub_trees += [sub_tree, ]
 
-            elif isinstance(source_service, FileService):
+            elif isinstance(service, FileService):
                 new_sub_trees += self.split_file_sub_tree(sub_tree)
 
         return new_sub_trees
@@ -646,7 +693,8 @@ class DataSourceService(object):
             table = sub_tree['val']
 
             # отступы
-            sub_tree['indents'] = self.extract_source_indentation(sid)
+            worker = DataSourceService(sid)
+            sub_tree['indents'] = worker.get_indentation()
 
             table_info = cache.get_table_info(sid, table_id)
 
@@ -671,7 +719,7 @@ class DataSourceService(object):
 
             table_hash = abs(HashEncoder.encode(sub_tree['val']))
             full_hash = "{0}_{1}_{2}".format(
-                self.cache.card_id, sub_tree['sid'], table_hash)
+                self.cache.cube_id, sub_tree['sid'], table_hash)
 
             sub_tree['collection_hash'] = full_hash
 
@@ -807,7 +855,6 @@ class DataSourceService(object):
         """
         Получение данных по узлу
         Arguments:
-            card_id(int): id карточки
             node_id(int): id узла
         Returns:
             Node
@@ -846,7 +893,7 @@ class DataSourceService(object):
         Проверяет есть ли данный id в билдере карты в остатках
         """
         node_id = int(node_id)
-        b_data = self.cache.card_builder_data
+        b_data = self.cache.cube_builder_data
 
         for sid in b_data:
             s_data = b_data[sid]
@@ -861,7 +908,7 @@ class DataSourceService(object):
         Проверяет есть ли данный id в билдере карты в активных или остатках
         """
         node_id = int(node_id)
-        b_data = self.cache.card_builder_data
+        b_data = self.cache.cube_builder_data
 
         for sid in b_data:
             s_data = b_data[sid]
@@ -877,31 +924,11 @@ class DataSourceService(object):
                         return True
         return False
 
-    @classmethod
-    def extract_source_indentation(cls, source_id):
-        """
-        Достает отступы из хранилища
-        Returns: defaultdict(int)
-        """
-        indents = RedisSS.get_source_indentation(source_id)
-        return indents
-
-    @classmethod
-    def insert_source_indentation(cls, source_id, sheet, indent, header):
-        """
-        Сохраняем отступ для страницы соурса
-        """
-        indents = RedisSS.get_source_indentation(source_id)
-        indents[sheet]['indent'] = indent
-        indents[sheet]['header'] = header
-
-        RedisSS.set_source_indentation(source_id, indents)
-
     def check_sids_exist(self, sids):
         """
         Проверяем наличие source id в кэше
         """
-        data = self.cache.card_builder_data
+        data = self.cache.cube_builder_data
 
         cached_sids = [str(i) for i in list(data.keys())]
         sids = [str(i) for i in sids]
@@ -909,12 +936,13 @@ class DataSourceService(object):
 
         return uncached
 
+    # FIXME cache_keys тут не место, логику перенести в CubeCacheService
     def check_cached_data(self, sources_info):
         """
         Проверяем наличие таблиц, ключей и колонок в кэше
         """
         cache = self.cache
-        data = cache.card_builder_data
+        data = cache.cube_builder_data
 
         uncached_tables = []
         uncached_keys = []
@@ -927,9 +955,8 @@ class DataSourceService(object):
                 if table_id is None:
                     uncached_tables.append((sid, table))
                 else:
-                    table_info_key = cache.cache_keys.table_key(
-                        cache.card_id, sid, table_id
-                    )
+                    table_info_key = cache.cache_keys.table_key(sid, table_id)
+
                     # нет информации о таблице
                     if not cache.r_exists(table_info_key):
                         uncached_keys.append((sid, table))
@@ -981,7 +1008,7 @@ class DataSourceService(object):
         """
         Список колонок для фильтров куба
         """
-        cube_id = self.cache.card_id
+        cube_id = self.cache.cube_id
 
         filter_types = ColTC.filter_types()
         measure_types = ColTC.measure_types()
@@ -1042,50 +1069,15 @@ class DataSourceService(object):
 
         return {'filters': filters2, 'measures': measures2}
 
-    @classmethod
-    def get_source_columns(cls, source_id, table_name):
-        """
-        Колонки источника
-        """
-        source = Datasource.objects.get(id=source_id)
-        service = cls.get_source_service(source)
-
-        if isinstance(service, DatabaseService):
-            return service.fetch_tables_columns([table_name, ])
-
-        indents = cls.extract_source_indentation(source_id)
-        return service.fetch_tables_columns([table_name], indents)
-
-    @classmethod
-    def get_source_rows(cls, source_id, table_name):
-        """
-        Данные источника
-        """
-        source = Datasource.objects.get(id=source_id)
-        service = cls.get_source_service(source)
-
-        if isinstance(service, DatabaseService):
-            return service.get_source_table_rows(
-                table_name, limit=1000, offset=0)
-
-        indents = cls.extract_source_indentation(source_id)
-        return service.get_source_table_rows(table_name, indents=indents)
-
     def validate_column(self, source_id, table, column, type):
         """
         Проверка колонки на соответствующий тип typ
         """
-        card_id = self.cache.card_id
-        service = self.get_source_service_by_id(source_id)
+        worker = DataSourceService(source_id)
+        errors = worker.validate_column(table, column, type)
 
-        if isinstance(service, DatabaseService):
-            # TODO realize for DBs
-            return service.validate_column(table, column, type)
-
-        indents = self.extract_source_indentation(source_id)
-        errors = service.validate_column(table, column, type, indents)
         if not errors:
-            # save valid type of column
-            self.cache.set_columns_types(source_id, table, column, type)
+            # save valid type of column for source for current cube
+            self.cache.set_cube_so_column_type(source_id, table, column, type)
 
         return errors

@@ -1,12 +1,11 @@
 # coding: utf-8
 
 
-
 from etl.services.datasource.nosql import Mongodb
-from etl.services.datasource.source import DatasourceApi
+from etl.services.datasource.source import BaseSourceService
 
 
-class NoSqlService(DatasourceApi):
+class NoSqlService(BaseSourceService):
 
     def get_source_instance(self):
 

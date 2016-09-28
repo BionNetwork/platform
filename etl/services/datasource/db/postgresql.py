@@ -338,6 +338,6 @@ class Postgresql(Database):
         return query.format(columns=select, first_table=main["view_name"])
 
     @staticmethod
-    def create_schema_query(self, card_id):
+    def create_schema_query(self, cube_id):
 
-        return self.db_map.create_schema_query.format(card_id=card_id)
+        return self.db_map.create_schema_query.format(cube_id=cube_id)

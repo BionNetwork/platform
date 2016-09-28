@@ -44,8 +44,8 @@ def load_data(context):
 
     """
     context = context
-    card_id = context['card_id']
-    pusher = Pusher(card_id)
+    cube_id = context['cube_id']
+    pusher = Pusher(cube_id)
     sub_trees = context['sub_trees']
 
     # параллель из последований, в конце колбэк
@@ -59,16 +59,16 @@ def load_data(context):
     #     for sub_tree in sub_trees)(
     #         mongo_callback.subtask(self.context))
 
-    # create_dataset(card_id, sub_trees, pusher)
+    # create_dataset(cube_id, sub_trees, pusher)
 
     for sub_tree in sub_trees:
-        create_foreign_table(card_id, sub_tree, pusher)
-        create_view(card_id, sub_tree, pusher)
+        create_foreign_table(cube_id, sub_tree, pusher)
+        create_view(cube_id, sub_tree, pusher)
 
-    warehouse_load(card_id, context, pusher)
+    warehouse_load(cube_id, context, pusher)
 
     return LoadWarehouse(
-        card_id=card_id, context=context, pusher=pusher).get_response()
+        cube_id=cube_id, context=context, pusher=pusher).get_response()
 
 
 def update_data(context):
@@ -98,59 +98,59 @@ def create_date_tables(sub_trees):
 
 
 @app.task(name=CREATE_DATASET)
-def create_dataset(card_id, sub_tree, pusher):
+def create_dataset(cube_id, sub_tree, pusher):
     """
     Создание хранилища
     """
-    CreateDataset(card_id, sub_tree, pusher).run()
+    CreateDataset(cube_id, sub_tree, pusher).run()
 
 
 @app.task(name=PSQL_FOREIGN_TABLE)
-def create_foreign_table(card_id, sub_tree, pusher):
+def create_foreign_table(cube_id, sub_tree, pusher):
     """
     Создание Обертки над внешней таблицей
     Args:
         pusher(Pusher): Отправитель информации на клиент
-        card_id(int): id карточки
+        cube_id(int): id карточки
         sub_tree(dict): Описать
     """
-    CreateForeignTable(card_id=card_id, context=sub_tree, pusher=pusher).run()
+    CreateForeignTable(cube_id=cube_id, context=sub_tree, pusher=pusher).run()
 
 
 @app.task(name=PSQL_VIEW)
-def create_view(card_id, sub_tree, pusher):
+def create_view(cube_id, sub_tree, pusher):
     """
     Создание View для Foreign Table для внешнего источника
     Args:
         pusher(Pusher): Отправитель информации на клиент
-        card_id(int): id карточки
+        cube_id(int): id карточки
         sub_tree(dict): Данные о таблице источника
     """
-    CreateView(card_id=card_id, context=sub_tree, pusher=pusher).run()
+    CreateView(cube_id=cube_id, context=sub_tree, pusher=pusher).run()
 
 
 @app.task(name=WAREHOUSE_LOAD)
-def warehouse_load(card_id, context, pusher):
+def warehouse_load(cube_id, context, pusher):
     """
     Загрузка данных в Хранилище данных
     Args:
         pusher(Pusher): Отправитель информации на клиент
-        card_id(int): id карточки
+        cube_id(int): id карточки
         context(dict): Данные о загружаемых таблицах всех источников
     """
-    LoadWarehouse(card_id=card_id, context=context, pusher=pusher).run()
+    LoadWarehouse(cube_id=cube_id, context=context, pusher=pusher).run()
 
 
 @app.task(name=META_INFO_SAVE)
-def meta_info_save(card_id, context, pusher):
+def meta_info_save(cube_id, context, pusher):
     """
     Загрузка данных в Хранилище данных
     Args:
         pusher(Pusher): Отправитель информации на клиент
-        card_id(int): id карточки
+        cube_id(int): id карточки
         context(dict): Данные о загружаемых таблицах всех источников
     """
-    MetaInfoSave(card_id=card_id, context=context, pusher=pusher).run()
+    MetaInfoSave(cube_id=cube_id, context=context, pusher=pusher).run()
 
 
 # ------ Tasks ------------
@@ -161,18 +161,18 @@ class EtlBaseTask(object):
     """
     task_name = None
 
-    def __init__(self, card_id, context, pusher=None):
+    def __init__(self, cube_id, context, pusher=None):
         """
         Args:
-            card_id(int): id карточки
+            cube_id(int): id карточки
             context(dict): контекст задачи
             pusher(Pusher): Отправитель сообщений на клиент
         """
-        self.card_id = card_id
+        self.cube_id = cube_id
         # TODO save context and rewrite TaskService and Queue models
         self.task_id = TaskService(self.task_name).add_task(arguments=context)
         self.context = context
-        self.pusher = pusher or Pusher(card_id)
+        self.pusher = pusher or Pusher(cube_id)
 
     def pre(self):
         """
@@ -210,7 +210,7 @@ class CreateDataset(EtlBaseTask):
     task_name = CREATE_DATASET
 
     def process(self):
-        dataset, created = Dataset.objects.get_or_create(key=self.card_id)
+        dataset, created = Dataset.objects.get_or_create(key=self.cube_id)
 
         # меняем статус dataset
         Dataset.update_state(dataset.id, DatasetStateChoices.IDLE)
@@ -227,7 +227,7 @@ class CreateForeignTable(EtlBaseTask):
         """
 
         """
-        dataset = Dataset.objects.get(key=self.card_id)
+        dataset = Dataset.objects.get(key=self.cube_id)
         dataset.state = DatasetStateChoices.DIMCR
         dataset.save()
 
@@ -323,7 +323,7 @@ class LoadWarehouse(EtlBaseTask):
         return sources_info
 
     def post(self):
-        meta_info_save(self.card_id, self.context, self.pusher)
+        meta_info_save(self.cube_id, self.context, self.pusher)
         # self.pusher.push_final(data=self.get_response())
 
 
@@ -337,7 +337,7 @@ class MetaInfoSave(EtlBaseTask):
 
     def process(self):
 
-        dataset_id = self.card_id
+        dataset_id = self.cube_id
 
         sub_trees = self.context['sub_trees']
 

@@ -11,10 +11,10 @@ from django.conf import settings
 from core.models import (ConnectionChoices, DatasourcesJournal, Datasource)
 from etl.constants import DATE_TABLE_COLS_LEN
 from etl.services.datasource.db import mysql, postgresql
-from etl.services.datasource.source import DatasourceApi
+from etl.services.datasource.source import BaseSourceService
 
 
-class DatabaseService(DatasourceApi):
+class DatabaseService(BaseSourceService):
 
     """Сервис для источников данных"""
 
