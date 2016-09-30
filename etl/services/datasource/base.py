@@ -1013,7 +1013,7 @@ class DataCubeService(object):
         filter_types = ColTC.filter_types()
         measure_types = ColTC.measure_types()
 
-        local_service = self.get_local_instance()
+        local_service = DataSourceService.get_local_instance()
 
         context = Dataset.objects.get(key=cube_id).context
         click_table = context['warehouse']

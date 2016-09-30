@@ -258,6 +258,20 @@ class CubeViewSet(viewsets.ViewSet):
             "errors": errors,
         })
 
+    # @detail_route(['post'], serializer_class=ColumnValidationSeria)
+    # def set_column_default(self, request, pk):
+    #     """
+    #     Проверка значений колонки на определенный тип
+    #     """
+    #     post = request.data
+    #
+    #     sid = int(post.get('source_id'))
+    #     table = post.get('table')
+    #     column = post.get('column')
+    #     default = post.get('default')
+    #     DEF_ENUM_TO_DCS = 1
+
+
     @detail_route(['post'])
     def update_data(self, request, pk):
         """
