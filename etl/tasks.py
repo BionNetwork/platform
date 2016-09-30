@@ -15,16 +15,16 @@ from psycopg2 import errorcodes
 from etl.constants import *
 from etl.services.datasource.base import DataSourceService
 from etl.services.middleware.base import EtlEncoder
-from pymondrian.schema import (
-    Schema, PhysicalSchema, Table, Cube as CubeSchema,
-    Dimension as DimensionSchema, Attribute, Level,
-    Hierarchy, MeasureGroup, Measure as MeasureSchema,
-    Key, Name, ForeignKeyLink, ReferenceLink)
-from pymondrian.generator import generate
-from core.models import (
-    Datasource, Dimension, Measure, DatasourceMeta,
-    DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
-    DatasetStateChoices, DatasourcesTrigger, DatasourcesJournal)
+# from pymondrian.schema import (
+#     Schema, PhysicalSchema, Table, Cube as CubeSchema,
+#     Dimension as DimensionSchema, Attribute, Level,
+#     Hierarchy, MeasureGroup, Measure as MeasureSchema,
+#     Key, Name, ForeignKeyLink, ReferenceLink)
+# from pymondrian.generator import generate
+# from core.models import (
+#     Datasource, Dimension, Measure, DatasourceMeta,
+#     DatasourceMetaKeys, DatasourceSettings, Dataset, DatasetToMeta,
+#     DatasetStateChoices, DatasourcesTrigger, DatasourcesJournal)
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from djcelery import celery

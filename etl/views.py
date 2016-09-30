@@ -26,7 +26,7 @@ from etl.constants import *
 from etl.models import TableTreeRepository
 from etl.services.datasource.base import DataSourceService
 from etl.services.datasource.repository.storage import RedisSourceService
-from etl.tasks import create_dataset
+# from etl.tasks import create_dataset
 from .services.queue.base import TaskStatusEnum
 from .services.middleware.base import (
     generate_columns_string, generate_columns_string_NEW,
@@ -222,10 +222,10 @@ class LoadDataViewMono(BaseEtlView):
                 pass
         load_args.update({'db_update': db_update})
 
-        try:
-            task, channels = get_single_task(
-                CREATE_DATASET, create_dataset, load_args)
-        except TaskError as e:
-            raise ResponseError(e.message)
-
-        return {'channels': channels}
+        # try:
+        #     task, channels = get_single_task(
+        #         CREATE_DATASET, create_dataset, load_args)
+        # except TaskError as e:
+        #     raise ResponseError(e.message)
+        #
+        # return {'channels': channels}
