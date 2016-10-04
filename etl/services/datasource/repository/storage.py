@@ -486,18 +486,18 @@ class CubeCacheService(CacheService):
         """
         settings_key = self.cache_keys.cube_so_settings_key(source_id)
 
-        func = lambda: {
-            'columns': defaultdict(
-                lambda: {
-                    'type': None,
-                    'default': None
-                }),
-        }
+        col_func = lambda: {'type': None, 'default': None}
+        table_func = lambda: defaultdict(col_func)
 
         if not self.r_exists(settings_key):
-            return defaultdict(func)
+            return {'tables': defaultdict(table_func)}
 
-        return defaultdict(func, self.r_get(settings_key))
+        settings = self.r_get(settings_key)
+        tables = settings['tables']
+        for table in tables:
+            tables[table] = defaultdict(col_func, tables[table])
+
+        return {'tables': defaultdict(table_func, tables)}
 
     def set_cube_so_settings(self, source_id, settings):
         """
@@ -511,5 +511,15 @@ class CubeCacheService(CacheService):
         Сохранение типа колонки, чтобы в этом типе посадить ее в хранилище
         """
         settings = self.get_cube_so_settings(source_id)
-        settings[table][column] = type
+
+        settings['tables'][table][column]['type'] = type
+        self.set_cube_so_settings(source_id, settings)
+
+    def set_cube_so_column_default(self, source_id, table, column, default):
+        """
+        Установка дефолтного значения для пустых значений колонки,
+        либо удаление таких строк
+        """
+        settings = self.get_cube_so_settings(source_id)
+        settings['tables'][table][column]['default'] = default
         self.set_cube_so_settings(source_id, settings)

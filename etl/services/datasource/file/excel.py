@@ -13,7 +13,8 @@ from xlrd import XLRDError
 
 from etl.services.datasource.file.interfaces import File
 from etl.services.exceptions import (SheetException, ColumnException)
-from etl.services.datasource.source import SourceConvertTypes as SCT
+from etl.services.datasource.source import (
+    SourceConvertTypes as SCT, EmptyEnum)
 
 
 class Excel(File):
@@ -330,24 +331,25 @@ class Excel(File):
         dates = [x for x in columns if x['type'] in self.DATES]
         numeric = [x for x in columns if x['type'] in self.NUMERIC]
 
+        # выброс строк с пустыми ячеуками в определнных колонках
+        purges = ["~ {0}.isnull()".format(x['name']) for x in columns
+                  if x.get('default', None) == EmptyEnum.REMOVE]
+        purges_query = ' & '.join(purges)
+
         excel_path = self.source.get_file_path()
         kwargs = self.get_indent_dict(indents, sheet_name)
 
-        # data_xls = self.read_excel_necols(
-        #     excel_path, sheet_name,  parse_cols=indexes,
-        #     index_col=False, **kwargs)
-
-        data_xls = pandas.read_excel(
+        data_xls = self.read_excel_necols(
             excel_path, sheet_name, **kwargs)
 
-        data_xls = data_xls[select_cols]
+        data_xls = data_xls[select_cols].query(purges_query)
 
         # process columns here for click (dates, timestamps)
         for dat_col in dates:
             n = dat_col['name']
             t = dat_col['type']
             data_xls[n] = pandas.to_datetime(
-                data_xls[n], errors='coerce').dt.date.fillna(# dt.date for date
+                data_xls[n], errors='coerce').dt.date.fillna(
                 self.DATES.get(t, self.DATE_DEFAULT)['val'])
 
         for num_col in numeric:
@@ -370,10 +372,11 @@ class Excel(File):
         kwargs = self.get_indent_dict(indents, sheet_name)
 
         # отступ плюсуем к индексам ошибочных ячеек
-        offset = self.calc_indent(indents, sheet_name)
+        # offset = self.calc_indent(indents, sheet_name)
 
         try:
-            sheet_df = pandas.read_excel(
+            # sheet_df = pandas.read_excel(
+            sheet_df = self.read_excel_necols(
                 excel_path, sheet_name, **kwargs)
         except XLRDError as e:
             raise SheetException(message=e.message)
@@ -387,21 +390,22 @@ class Excel(File):
             nulls = col_df.loc[col_df.isnull()].index.tolist()
             to_dates = pandas.to_datetime(col_df, errors='coerce')
             more_nulls = to_dates.loc[to_dates.isnull()].index.tolist()
-            errors = [x+1+offset for x in more_nulls if x not in nulls]
+            errors = [x for x in more_nulls if x not in nulls]
 
         elif typ in [SCT.INT, SCT.DOUBLE]:
             nulls = col_df.loc[col_df.isnull()].index.tolist()
             to_nums = pandas.to_numeric(col_df, errors='coerce')
             more_nulls = to_nums.loc[to_nums.isnull()].index.tolist()
-            errors = [x+1+offset for x in more_nulls if x not in nulls]
+            errors = [x for x in more_nulls if x not in nulls]
 
         elif typ == SCT.TEXT:
             errors = []
-        
+            nulls = []
+
         elif typ == SCT.BOOL:
             raise ColumnException("No implementation for bool!")
 
         else:
             raise ColumnException("Invalid type of column!")
 
-        return errors
+        return {'errors': errors, 'nulls': nulls}

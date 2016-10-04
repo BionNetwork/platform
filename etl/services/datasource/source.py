@@ -12,6 +12,16 @@ class SourceConvertTypes(object):
     BOOL = "boolean"
 
 
+class EmptyEnum(object):
+    """
+    Обозначение действий для работы с пустыми значениями в колонках источника
+    """
+    # проставить нули
+    ZERO = 1
+    # убрать строки
+    REMOVE = 2
+
+
 class BaseSourceService(object):
     """
     Работа с источником данных

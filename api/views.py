@@ -10,21 +10,21 @@ from django.http.response import HttpResponse
 
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
-from rest_framework import viewsets, generics, mixins, status
+from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 
 from api.serializers import (
-    UserSerializer, DatasourceSerializer, NodeSerializer, TreeSerializer,
+    DatasourceSerializer, NodeSerializer, TreeSerializer,
     TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
     LoadDataSerializer, ColumnValidationSeria)
 
-from core.models import (User, Datasource, Dataset, DatasetStateChoices)
-from core.views import BaseViewNoLogin
+from core.models import (Datasource, Dataset, DatasetStateChoices)
 from etl.tasks import load_data
-from etl.services.datasource.base import DataSourceService, DataCubeService
+from etl.services.datasource.base import (DataSourceService, DataCubeService)
 from etl.helpers import group_by_source
 from etl.services.exceptions import SheetException
+from etl.services.datasource.source import EmptyEnum
 
 from etl.constants import *
 
@@ -204,6 +204,8 @@ class CubeViewSet(viewsets.ViewSet):
 
         return Response()
 
+    # FIXME подумать передавать ли сюда список колонок,
+    # FIXME все колонки источника нам не нужны
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
     def create_tree(self, request, pk):
 
@@ -246,8 +248,11 @@ class CubeViewSet(viewsets.ViewSet):
         column = post.get('column')
         typ = post.get('type')
 
+        if not all([sid, table, column, typ]):
+            raise APIException("Invalid args for validate_col!")
+
         worker = DataCubeService(cube_id=pk)
-        errors = worker.validate_column(sid, table, column, typ)
+        result = worker.validate_column(sid, table, column, typ)
 
         return Response({
             "cube_id": pk,
@@ -255,22 +260,33 @@ class CubeViewSet(viewsets.ViewSet):
             "table": table,
             "column": column,
             "type": typ,
-            "errors": errors,
+            "errors": result['errors'],
+            "nulls": result['nulls'],
         })
 
-    # @detail_route(['post'], serializer_class=ColumnValidationSeria)
-    # def set_column_default(self, request, pk):
-    #     """
-    #     Проверка значений колонки на определенный тип
-    #     """
-    #     post = request.data
-    #
-    #     sid = int(post.get('source_id'))
-    #     table = post.get('table')
-    #     column = post.get('column')
-    #     default = post.get('default')
-    #     DEF_ENUM_TO_DCS = 1
+    @detail_route(['post'], serializer_class=ColumnValidationSeria)
+    def set_default(self, request, pk):
+        """
+        Установка дефолтного значения для пустых значений колонки,
+        либо удаление таких строк
+        """
+        post = request.data
 
+        sid = int(post.get('source_id'))
+        table = post.get('table')
+        column = post.get('column')
+        default = int(post.get('default', 0))
+
+        if not all([sid, table, column, default]):
+            raise APIException("Invalid args for column_default!")
+
+        if not default in [EmptyEnum.ZERO, EmptyEnum.REMOVE]:
+            raise APIException("Invalid value for default!")
+
+        worker = DataCubeService(cube_id=pk)
+        worker.set_column_default(sid, table, column, default)
+
+        return Response('Setted!')
 
     @detail_route(['post'])
     def update_data(self, request, pk):
@@ -618,7 +634,6 @@ class DatasetContext(object):
 
         Returns:
             dict:
-
         """
         if self.is_new:
             sub_trees = self.cube_service.prepare_sub_trees(self.sources_info)

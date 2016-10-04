@@ -210,9 +210,21 @@ class DataSourceService(object):
             return service.validate_column(table, column, type)
 
         indents = self.get_indentation()
-        errors = service.validate_column(table, column, type, indents)
+        validation_result = service.validate_column(
+            table, column, type, indents)
+        return validation_result
 
-        return errors
+    def get_columns_info(self, tables):
+        """
+        Информация о колонках таблицы или страницы
+        """
+        service = self.service
+
+        if isinstance(service, DatabaseService):
+            return service.get_columns_info(tables)
+
+        indents = self.get_indentation()
+        return service.get_columns_info(tables, indents)
 
 
 class DataCubeService(object):
@@ -467,7 +479,8 @@ class DataCubeService(object):
 
     def cache_columns(self, source_id, table):
         """
-        Пришедшую таблицу кладем в строительную карту дерева
+        Пришедшую таблицу кладем в строительную карту дерева!
+        Если юзер указал заранее другой тип колонки, то заменяем на этот тип
         """
         cache = self.cache
         node_id = cache.get_table_id(source_id, table)
@@ -475,16 +488,33 @@ class DataCubeService(object):
         if node_id is not None:
             return node_id
 
-        worker = DataSourceService(source_id)
-        indents = worker.get_indentation()
+        source_worker = DataSourceService(source_id)
 
-        columns, indexes, foreigns, statistics, date_intervals = (
-            worker.service.get_columns_info([table, ], indents))
+        all_columns, indexes, foreigns, statistics, date_intervals = (
+            source_worker.get_columns_info([table, ]))
+
+        # заменяем типы колонок, указанные заранее
+        all_table_columns = all_columns[table]
+        table_settings = cache.get_cube_so_settings(source_id)['tables'][table]
+
+        # те колонки, которые выбраны для параметров,
+        # для них указан свой тип! проставляем соответствующий тип
+        # так же проставим дефолтные значения для пустых ячеек источника
+        for column in all_table_columns:
+            for col_name in table_settings:
+                if column['name'] == col_name:
+                    setted_type = table_settings[col_name]['type']
+                    if setted_type is not None:
+                        column['type'] = setted_type
+
+                    setted_default = table_settings[col_name]['default']
+                    if setted_default is not None:
+                        column['default'] = setted_default
 
         info = {
             "value": table,
             "sid": source_id,
-            "columns": columns[table],
+            "columns": all_table_columns,
             "indexes": indexes[table],
             "foreigns": foreigns[table],
             "stats": statistics[table],
@@ -677,7 +707,6 @@ class DataCubeService(object):
 
         return sub_trees
 
-    # FIXME потом где-нить убирать ненужные типы (бинари)
     def prepare_sub_tree_info(self, sub_trees, sources_info):
         """
         порядок колонок выставляем как в источнике,
@@ -699,7 +728,7 @@ class DataCubeService(object):
             table_info = cache.get_table_info(sid, table_id)
 
             # инфа о датах
-            sub_tree['date_intervals'] = table_info['date_intervals']
+            # sub_tree['date_intervals'] = table_info['date_intervals']
 
             # инфа о колонках
             columns = list()
@@ -1073,11 +1102,18 @@ class DataCubeService(object):
         """
         Проверка колонки на соответствующий тип typ
         """
-        worker = DataSourceService(source_id)
-        errors = worker.validate_column(table, column, type)
+        source_worker = DataSourceService(source_id)
+        result = source_worker.validate_column(table, column, type)
 
-        if not errors:
+        if not result['errors']:
             # save valid type of column for source for current cube
             self.cache.set_cube_so_column_type(source_id, table, column, type)
 
-        return errors
+        return result
+
+    def set_column_default(self, source_id, table, column, default):
+        """
+        Установка дефолтного значения для пустых значений колонки,
+        либо удаление таких строк
+        """
+        self.cache.set_cube_so_column_default(source_id, table, column, default)

@@ -131,7 +131,7 @@ class CsvForeignTable(BaseForeignTable):
             'delimiter': ','
         }
 
-    # FIXME for files set text type all columns
+    # FIXME for files set TEXT type all columns
     @property
     def cols_list(self):
 

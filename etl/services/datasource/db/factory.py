@@ -67,7 +67,7 @@ class DatabaseService(BaseSourceService):
         tables = [x for x in tables if x not in trigger_tables]
         return tables
 
-    def get_columns_info(self, tables, indents):
+    def get_columns_info(self, tables):
         """
             Получение полной информации о колонках таблиц
         Args:
