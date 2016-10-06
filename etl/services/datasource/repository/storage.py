@@ -24,11 +24,19 @@ class SourceCacheKeys(object):
         """
         return 'source:{0}'.format(self.source_id)
 
+    @property
     def indents_key(self):
         """
         Ключ отступа
         """
         return '{0}:indents'.format(self.source_key)
+
+    @property
+    def cubes_key(self):
+        """
+        Список кубов источника
+        """
+        return '{0}:pseudocubes'.format(self.source_key)
 
 
 class CubeCacheKeys(object):
@@ -116,7 +124,7 @@ class SourceCacheService(CacheService):
         Получаем отступ для страницы источника
         Returns: defaultdict(int)
         """
-        indents_key = self.cache_keys.indents_key()
+        indents_key = self.cache_keys.indents_key
 
         func = lambda: {'indent': 0, 'header': True}
 
@@ -130,8 +138,27 @@ class SourceCacheService(CacheService):
         """
         Сохраняем отступ для страницы соурса
         """
-        indents_key = self.cache_keys.indents_key()
+        indents_key = self.cache_keys.indents_key
         self.r_set(indents_key, indents)
+
+    def get_source_cubes(self):
+        """
+        Список id предкубов, в которых участвует данный источник
+        предкуб - это инфа в кэше до создания куба(дерево, билдер)
+        """
+        cubes_key = self.cache_keys.cubes_key
+        if not self.r_exists(cubes_key):
+            return []
+
+        return self.r_get(cubes_key)
+
+    def set_source_cubes(self, cubes):
+        """
+        Сохранение id предкубов, в которых участвует данный источник
+        предкуб - это инфа в кэше до создания куба(дерево, билдер)
+        """
+        cubes_key = self.cache_keys.cubes_key
+        self.r_set(cubes_key, cubes)
 
 
 class CubeCacheService(CacheService):
@@ -143,7 +170,7 @@ class CubeCacheService(CacheService):
         Args:
             cube_id(int): id карточки
         """
-        self.cube_id=cube_id
+        self.cube_id = cube_id
         self.cache_keys = CubeCacheKeys(cube_id=cube_id)
 
     def get_table_id(self, source_id, table, data=None):
@@ -505,6 +532,13 @@ class CubeCacheService(CacheService):
         """
         settings_key = self.cache_keys.cube_so_settings_key(source_id)
         self.r_set(settings_key, settings)
+
+    def del_cube_so_settings(self, source_id):
+        """
+        Удаление конфига соурса куба
+        """
+        settings_key = self.cache_keys.cube_so_settings_key(source_id)
+        self.r_del(settings_key)
 
     def set_cube_so_column_type(self, source_id, table, column, type):
         """

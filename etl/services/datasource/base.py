@@ -176,6 +176,22 @@ class DataSourceService(object):
 
         self.cache.set_source_indentation(indents)
 
+    def get_source_cubes_relation(self):
+        """
+        связь источника и предкуба
+        предкуб - это инфа в кэше до создания куба(дерево, билдер)
+        """
+        return self.cache.get_source_cubes()
+
+    def set_source_cubes_relation(self, cube_id):
+        """
+        связь источника и предкуба
+        предкуб - это инфа в кэше до создания куба(дерево, билдер)
+        """
+        cubes = self.get_source_cubes_relation()
+        cubes.append(int(cube_id))
+        self.cache.set_source_cubes(cubes)
+
     def get_source_columns(self, table_name):
         """
         Колонки источника
@@ -441,6 +457,20 @@ class DataCubeService(object):
             'remains': remains,
         }
 
+    def purge_nodes_from_remains(self, source_id, nodes):
+        """
+        Удаление из кэша инфы о нодах
+        """
+        builder = self.cache.cube_builder
+        sid = str(source_id)
+        remains = builder['data'][sid]['remains']
+
+        for table_name, node_id in nodes.items():
+            del remains[table_name]
+            self.cache.del_table_info(sid, node_id)
+
+        self.cache.set_cube_builder(builder)
+
     def get_tree(self):
         """
         Получаем дерево
@@ -521,7 +551,11 @@ class DataCubeService(object):
             "date_intervals": date_intervals.get(table, [])
         }
 
-        # кладем информацию в Redis
+        # кладем информацию во временное хранилище о связи источника и предкуба
+        # предкуб - это инфа в кэше до создания куба(дерево, билдер)
+        # source_worker.set_source_cubes_relation(self.cache.cube_id)
+
+        # кладем информацию во временное хранилище о таблице источника
         return cache.fill_cache(source_id, table, info)
 
     def get_columns_and_joins(self, parent_id, child_id):
@@ -1117,3 +1151,40 @@ class DataCubeService(object):
         либо удаление таких строк
         """
         self.cache.set_cube_so_column_default(source_id, table, column, default)
+
+    def purge_cube_source_cache(self, source_id):
+        """
+        Удаление источника из кэша предкуба
+        """
+        sid = str(source_id)
+        b_data = self.cache.cube_builder_data
+
+        if sid in b_data:
+            actives = b_data[sid]['actives']
+            remains = b_data[sid]['remains']
+
+            for node_id in actives.values():
+                if self.check_node_id_in_builder(node_id, in_remain=False):
+                    self.send_nodes_to_remains(node_id)
+
+            all_remains = dict()
+            all_remains.update(actives)
+            all_remains.update(remains)
+
+            self.purge_nodes_from_remains(sid, all_remains)
+
+        self.cache.del_cube_so_settings(sid)
+
+    def delete_source(self, source_id):
+        """
+        Удаление источника из кэша недокуба или же из куба загруженного
+        """
+        # загруженные кубы
+        # cubes = Dataset.objects.filter(
+        #     columns__source=90).distinct().values_list('key', flat=True)
+        # loaded_cubes = [int(key) for key in cubes]
+        # source_worker = DataSourceService(source_id)
+        # # предкубы, в которых участвует данный источник
+        # cached_cubes = source_worker.get_source_cubes_relation()
+
+        self.purge_cube_source_cache(source_id)

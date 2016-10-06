@@ -217,11 +217,13 @@ class CubeViewSet(viewsets.ViewSet):
         data = json.loads(request.data.get('data'))
 
         # data = [
+        #     {"source_id": 92, "table_name": 'Таблица1', },
+        #     {"source_id": 91, "table_name": 'Лист1', },
+        #     {"source_id": 92, "table_name": 'Таблица3', },
+        #     {"source_id": 91, "table_name": 'Лист2', },
         #     {"source_id": 90, "table_name": 'TDSheet', },
-            # {"source_id": 89, "table_name": 'Sheet1', },
+        #     {"source_id": 89, "table_name": 'Sheet1', },
         # ]
-
-        info = []
 
         serializer = self.serializer_class(data=data, many=True)
         if serializer.is_valid():
@@ -233,9 +235,13 @@ class CubeViewSet(viewsets.ViewSet):
 
                 if node_id is None:
                     node_id = worker.cache_columns(sid, table)
-                    info = worker.add_randomly_from_remains(node_id)
+                    worker.add_randomly_from_remains(node_id)
 
-        return Response(info)
+            info = worker.get_tree_api()
+
+            return Response(info)
+
+        raise APIException("Invalid args!")
 
     @detail_route(['post'])
     def exchange_file(self, request, pk):
@@ -302,6 +308,19 @@ class CubeViewSet(viewsets.ViewSet):
             pk: id карточки
 
         """
+        return Response()
+
+    @detail_route(['post'])
+    def delete_source(self, request, pk):
+        """
+        Удаление источника куба
+        """
+        post = request.data
+        sid = int(post.get('source_id'))
+
+        worker = DataCubeService(cube_id=pk)
+        worker.delete_source(source_id=sid)
+
         return Response()
 
     @detail_route(['post'])

@@ -334,7 +334,6 @@ class Excel(File):
         # выброс строк с пустыми ячеуками в определнных колонках
         purges = ["~ {0}.isnull()".format(x['name']) for x in columns
                   if x.get('default', None) == EmptyEnum.REMOVE]
-        purges_query = ' & '.join(purges)
 
         excel_path = self.source.get_file_path()
         kwargs = self.get_indent_dict(indents, sheet_name)
@@ -342,7 +341,11 @@ class Excel(File):
         data_xls = self.read_excel_necols(
             excel_path, sheet_name, **kwargs)
 
-        data_xls = data_xls[select_cols].query(purges_query)
+        if purges:
+            purges_query = ' & '.join(purges)
+            data_xls = data_xls[select_cols].query(purges_query)
+        else:
+            data_xls = data_xls[select_cols]
 
         # process columns here for click (dates, timestamps)
         for dat_col in dates:
