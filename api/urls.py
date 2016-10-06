@@ -7,33 +7,24 @@ from . import views
 from rest_framework_nested import routers
 
 
-router = routers.SimpleRouter()
-router.register(r'datasources', views.DatasourceViewSet, 'Datasource')
-# router.register(r'datasource/(?P<source_id>\d+)/tables', views.TablesViewSet, 'tables')
-
+router = routers.DefaultRouter(trailing_slash=False)
 router.register(r'cubes', views.CubeViewSet, 'cubes')
+router.register(r'datasources', views.DatasourceViewSet, 'datasource')
+
 # nodes
 cube_router = routers.NestedSimpleRouter(router, r'cubes', lookup='cube')
 cube_router.register(r'nodes', views.NodeViewSet, base_name='cube-nodes')
 # joins
 node_router = routers.NestedSimpleRouter(cube_router, r'nodes', lookup='node')
-node_router.register(r'joins', views.JoinViewSet, base_name='node-joins')
+node_router.register(r'child', views.JoinViewSet, base_name='node-child')
 
 
 urlpatterns = [
-    # url(r'^schema/import$', views.ImportSchemaView.as_view(), name='import_schema'),
-    # url(r'^query/execute$', views.ExecuteQueryView.as_view(), name='execute_query'),
-    # url(r'^schema/(?P<pk>\d+)$', views.GetSchemaView.as_view(), name='get_schema'),
-    # url(r'^schema$', views.SchemasListView.as_view(), name='schemas_list'),
-    # url(r'^schema/(?P<id>\d+)/measures$', views.GetMeasureDataView.as_view(),
-    #     name='measure_data'),
-    # url(r'^schema/(?P<id>\d+)/dimensions$', views.GetDimensionDataView.as_view(),
-    #     name='dimension_data'),
     url(r'^', include(router.urls)),
     url(r'^', include(cube_router.urls)),
     url(r'^', include(node_router.urls)),
     url(r'^datasources/(?P<source_id>\d+)/(?P<table_name>\w+)/$',
         views.TablesView.as_view(), name='tables_data'),
     url(r'^datasources/(?P<source_id>\d+)/(?P<table_name>\w+)/preview/$',
-        views.TablesDataView.as_view(), name='tables_data'),
+        views.TablesDataView.as_view(), name='preview'),
     ]

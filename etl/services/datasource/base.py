@@ -199,7 +199,7 @@ class DataSourceService(object):
         indents = self.get_indentation()
         return service.get_source_table_rows(table_name, indents=indents)
 
-    def validate_column(self, table, column, type):
+    def validate_column(self, table, column, col_type):
         """
         Проверка колонки на соответствующий тип typ
         """
@@ -207,11 +207,11 @@ class DataSourceService(object):
 
         if isinstance(service, DatabaseService):
             # TODO realize for DBs
-            return service.validate_column(table, column, type)
+            return service.validate_column(table, column, col_type)
 
         indents = self.get_indentation()
         validation_result = service.validate_column(
-            table, column, type, indents)
+            table, column, col_type, indents)
         return validation_result
 
     def get_columns_info(self, tables):

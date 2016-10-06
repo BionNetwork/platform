@@ -196,6 +196,9 @@ class CubeViewSet(viewsets.ViewSet):
 
     serializer_class = TreeSerializer
 
+    def list(self, request):
+        return Response()
+
     @detail_route(methods=['post'])
     def clear_cache(self, request, pk):
         """
@@ -362,129 +365,6 @@ class CubeViewSet(viewsets.ViewSet):
 
         QueryGenerate(pk, d).parse()
 
-    @detail_route(['post'])
-    def query_new(self, request, pk):
-        """
-        Формирование запроса
-        Args:
-            request:
-            pk:
-        [{
-        "Y": {"field_name":"price","aggregation": "sum"},
-        "X": {"field_name":"time","period":[1, 3],"discrete":"week"},
-        "filters": [{"field_name":"company","value": ["etton"]}, {"field_name":"color","value": ["blue"]}]
-        }]
-        Returns:
-        """
-        context = Dataset.objects.get(key=pk).context
-        table = context['warehouse']
-
-        data = json.loads(request.data.get('data'))
-
-        # data = {
-        #     "X": {"field_name": "c_1_82_448246359376073858_1951231061259157126",
-        #           # "period": ["2012-12-01", "2017-12-20"],
-        #           # "interval":
-        #               # "year",
-        #               # "quarter",
-        #               # "month"
-        #        },
-        #     "Y": {"field_name": "sum(c_1_82_448246359376073858_3606484360407848552)"
-        #           },
-        #     "Organizations": {
-        #         "field_name": "c_1_82_448246359376073858_3863414131424461117",
-        #         "values": [
-        #             # "Эттон",
-        #             "Эттон-Центр",
-        #         ]
-        #     },
-        #     "filters": [
-        #         # {"field_name": "c_1_82_448246359376073858_9152631202378448554", "values": ["КТМ"]},
-        #     ],
-        # }
-
-        # select part
-        date_name = data['X']['field_name']
-        date_alias = 'date_info'
-
-        interval = data['X'].get('interval', None)
-
-        date_q = "to_char(date_trunc('{0}', {1}), '{3}') as {2}".format(
-            '{0}', date_name, date_alias, '{1}')
-
-        INTER_FORMATS = {
-            "year": 'YYYY',
-            "quarter": 'YYYY-MM',
-            "month": 'YYYY-MM',
-        }
-
-        if interval:
-            date_select = date_q.format(interval, INTER_FORMATS.get(interval))
-        else:
-            date_select = "{0}::date as {1}".format(date_name, date_alias)
-
-        sum_name = data['Y']['field_name']
-        y_alias = 'summy'
-        sum_select = "{0} as {1}".format(sum_name, y_alias)
-
-        org_name = data['Organizations']['field_name']
-        org_alias = 'org'
-        org_select = "{0} as {1}".format(org_name, org_alias)
-
-        selects = [date_select, sum_select, org_select]
-        select_q = 'SELECT {0} FROM {1}'.format(' ,'.join(selects), table)
-
-        # where part
-        wheres = []
-
-        period = data['X'].get('period', None)
-        if period:
-            wheres.append("{0} BETWEEN '{1}' and '{2}'".format(date_name, period[0], period[1]))
-
-        org_values = data['Organizations'].get('values', [])
-        if not org_values:
-            org_values = ["Эттон", "Эттон-Центр", "Эттон Груп", ]
-
-        wheres.append("{0} IN ({1})".format(
-            org_name, ', '.join(["'{0}'".format(x) for x in org_values])))
-
-        filters = data.get('filters', [])
-
-        if filters:
-            for filt in filters:
-                if filt['values']:
-                    wheres.append("{0} IN ({1})".format(
-                        filt['field_name'],
-                        ', '.join(["'{0}'".format(x) for x in filt['values']])))
-
-        where_q = 'WHERE {0}'.format(' AND '.join(wheres)) if wheres else ''
-
-        # groups part
-        groups = [date_alias, org_alias]
-        group_q = 'GROUP BY {0}'.format(' ,'.join(groups))
-
-        # order part
-        order_q = 'ORDER BY {0}'.format(' ,'.join([date_alias, org_alias]))
-
-        query = '{0} {1} {2} {3};'.format(select_q, where_q, group_q, order_q)
-
-        local_service = DataSourceService.get_local_instance()
-        resp = local_service.fetchall(query)
-
-        # обработка ответа
-        ORG_ORDER = {"Эттон": 0, "Эттон Груп": 1, "Эттон-Центр": 2, }
-
-        result = []
-
-        for date, gr in groupby(resp, key=itemgetter(0)):
-            row = [0, 0, 0, date]
-            # g is like [date, sum, org_name]
-            for g in gr:
-                row[ORG_ORDER[g[2]]] = g[1]
-            result.append(row)
-
-        return Response(result)
-
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def load_data(self, request, pk):
         """
@@ -585,6 +465,7 @@ class CubeViewSet(viewsets.ViewSet):
         return Response(meta)
 
 
+# TODO: Перенести куда-нибудь
 class DatasetContext(object):
     """
     Контекст выполениния задач

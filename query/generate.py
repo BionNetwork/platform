@@ -61,9 +61,6 @@ class QueryGenerate(object):
                 }]
             }
 
-        при обработке каждого блока группы и агрегации возращается словарь
-        с заполнеными ключевыми словами из "select, group by, where ...". в дальнейшем
-         они собираются единый словарь по ключевым словам. Надо их преобразовать в SQL
 
         """
         self.cube_id = cube_id
@@ -100,12 +97,6 @@ class QueryGenerate(object):
         ).replace('"', "'")
 
         print(requests.post('http://localhost:8123/', data='{0} FORMAT JSON'.format(select_query).encode('utf-8')).text)
-
-        # conn = psycopg2.connect("dbname=apple_test user=apple_test password=apple_test")
-        # cur = conn.cursor()
-        # cur.execute(select_query)
-        # print(cur.fetchall())
-        a = 4
 
     @staticmethod
     def dimension_parser(dim):
@@ -296,29 +287,38 @@ class Filter(object):
         """
         return "{field} {operator} {value}".format(field=self.field, operator=operator, value=value)
 
+    def _match(self, operator, value):
+        """
+        Проверка на совпадение/не совпадение значения
+        Args:
+            operator(str): оператор
+            value(list): Набор фильтруемых значений
+        """
+        # TODO: Привести к общему виду
+        if type(value[0]) is str:
+            return '{field} {operator} ("{match_fields}")'.format(
+                     field=self.field, operator=operator, match_fields='","'.join(value)
+                 )
+        else:
+            return '{field} {operator} ({match_fields})'.format(
+                field=self.field, operator=operator, match_fields=','.join(str(x) for x in value))
+
     def match(self, value):
         """
         Проверка на совпадение значения
         Args:
             value(list): Набор фильтруемых значений
-
-        Returns:
-
         """
-        if type(value[0]) is str:
-            return '{field} IN ("{match_fields}")'.format(
-                     field=self.field, match_fields='","'.join(value)
-                 )
-        else:
-            return '{field} IN ({match_fields})'.format(
-                field=self.field, match_fields=','.join(str(x) for x in value))
+        return self._match('IN', value)
+
+    def not_match(self, value):
+        return self._match('NOT IN', value)
 
     def range(self, value):
         """
         Фильтрация по диапазону значений
         Args:
             value(list): Диапазон значений
-        Returns:
         """
         if len(value) != 2:
             raise QueryException(
@@ -334,6 +334,15 @@ class Filter(object):
 
         """
         return self._compare('=', value)
+
+    def not_eq(self, value):
+        """
+        Не совпадение значений
+        Args:
+            value:
+        """
+
+        return self._compare('<>', value)
 
     def lt(self, value):
         """
@@ -375,7 +384,7 @@ class Filter(object):
 
     def xor(self, value):
         """
-        Сравние 'или'
+        Сравнение 'или'
         Args:
             value(list): Сравниваемые значения
 

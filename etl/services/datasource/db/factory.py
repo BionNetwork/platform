@@ -8,7 +8,7 @@ from datetime import timedelta, datetime
 
 from django.conf import settings
 
-from core.models import (ConnectionChoices, DatasourcesJournal, Datasource)
+from core.models import (ConnectionChoices, Datasource)
 from etl.constants import DATE_TABLE_COLS_LEN
 from etl.services.datasource.db import mysql, postgresql
 from etl.services.datasource.source import BaseSourceService
@@ -48,24 +48,6 @@ class DatabaseService(BaseSourceService):
             return oracle.Oracle(source)
         else:
             raise ValueError("Неизвестный тип подключения!")
-
-    # FIXME REDO DatasourcesJournal не юзается
-    def get_tables(self):
-        """
-        Возвращает таблицы источника
-        Фильтрация таблиц по факту созданных раннее триггеров
-        Returns:
-            list: список таблиц
-        """
-        source = self.source
-        tables = self.datasource.get_tables()
-
-        trigger_tables = DatasourcesJournal.objects.filter(
-            trigger__datasource=source).values_list('name', flat=True)
-
-        # фильтруем, не показываем таблицы триггеров
-        tables = [x for x in tables if x not in trigger_tables]
-        return tables
 
     def get_columns_info(self, tables):
         """

@@ -204,9 +204,6 @@ class DatasourceSettings(models.Model):
     """
     Таблица настроек для источников
     """
-    TRIGGERS = 'apply_triggers'
-    CHECKSUM = 'apply_checksum'
-    SETTING_CDC_NAME = 'cdc_type'
     name = models.CharField(max_length=255, verbose_name='Название', db_index=True)
     value = models.CharField(max_length=255, verbose_name='Значение')
     datasource = models.ForeignKey(Datasource, verbose_name='Источник', related_name='settings')
@@ -215,7 +212,7 @@ class DatasourceSettings(models.Model):
         db_table = "datasources_settings"
 
     def __str__(self):
-        return self.value
+        return "{name}({source}): {value}".format(name=self.name, source=self.datasource.name, value=self.value)
 
 
 # FIXME: К удалению
@@ -282,97 +279,6 @@ class User(AbstractUser):
         verbose_name_plural = 'Пользователи'
 
 
-class Dimension(models.Model):
-    """
-    Размерности для кубов
-    """
-    STANDART_DIMENSION = 'SD'
-    TIME_DIMENSION = 'TD'
-    DIMENSION_TYPE = (
-        (STANDART_DIMENSION, 'OTHER'),
-        (TIME_DIMENSION, 'TIME'),
-    )
-    name = models.CharField(
-        verbose_name="название измерения", max_length=255, db_index=True)
-    title = models.CharField(verbose_name="название", max_length=255)
-    type = models.CharField(
-        verbose_name="тип измерения", max_length=255,
-        choices=DIMENSION_TYPE, default=STANDART_DIMENSION)
-    visible = models.BooleanField(verbose_name="виден", default=True)
-    high_cardinality = models.BooleanField(
-        verbose_name="cardinality", default=False)
-    data = models.TextField(verbose_name="иерархии", null=True, blank=True)
-    create_date = models.DateTimeField(
-        verbose_name="дата создания", auto_now_add=True, db_index=True)
-    update_date = models.DateTimeField(
-        verbose_name="дата обновления", auto_now=True, db_index=True)
-    user = models.ForeignKey(User, verbose_name='Пользователь')
-    datasources_meta = models.ForeignKey(
-        DatasourceMeta, related_name='dimension')
-
-    class Meta:
-        db_table = "dimensions"
-        verbose_name = 'Размерность'
-        verbose_name_plural = 'Размерности'
-
-    def get_dimension_type(self):
-        return ('OTHER' if self.type == self.STANDART_DIMENSION
-            else 'TIME')
-
-
-class Measure(models.Model):
-    """Меры для кубов"""
-    STRING = 'string'
-    INTEGER = 'integer'
-    NUMERIC = 'numeric'
-    BOOLEAN = 'boolean'
-    DATE = 'date'
-    TIME = 'time'
-    TIMESTAMP = 'timestamp'
-    BYTEA = 'bytea'
-    MEASURE_TYPE = (
-        (STRING, 'string'),
-        (INTEGER, 'integer'),
-        (NUMERIC, 'numeric'),
-        (BOOLEAN, 'boolean'),
-        (DATE, 'date'),
-        (TIME, 'time'),
-        (TIMESTAMP, 'timestamp'),
-        (BYTEA, 'bytea'),
-    )
-
-    SUM = 'sum'
-    AGR_FUNCTIONS = (
-        (SUM, 'sum'),
-    )
-
-    name = models.CharField(
-        verbose_name="Название меры", max_length=255, db_index=True)
-    title = models.CharField(verbose_name="Название", max_length=255)
-    type = models.CharField(
-        verbose_name="Тип измерения",
-        choices=MEASURE_TYPE, default=INTEGER, max_length=50)
-    aggregator = models.CharField(
-        verbose_name="Функция агрегирования",
-        choices=AGR_FUNCTIONS, null=True, max_length=50)
-    format_string = models.CharField(
-        verbose_name="Строка форматирования", max_length=255,
-        null=True, blank=True)
-    visible = models.BooleanField(verbose_name="Виден", default=True)
-    create_date = models.DateTimeField(
-        verbose_name="дата создания", auto_now_add=True, db_index=True)
-    update_date = models.DateTimeField(
-        verbose_name="дата обновления", auto_now=True, db_index=True)
-    user = models.ForeignKey(User, verbose_name='Пользователь')
-    datasources_meta = models.ForeignKey(
-        DatasourceMeta, related_name='measure')
-
-    class Meta:
-        db_table = "measures"
-        verbose_name = 'Мера'
-        verbose_name_plural = 'Меры'
-
-
 class QueueStatus(models.Model):
     """
     Статусы очередей
@@ -430,20 +336,6 @@ class QueueList(models.Model):
         index_together = ["queue", "date_created", "queue_status"]
 
 
-class Cube(models.Model):
-    name = models.CharField(max_length=1024, verbose_name="название куба")
-    data = XmlField(verbose_name="xml схема куба", null=False)
-    create_date = models.DateTimeField(
-        verbose_name="дата создания", auto_now_add=True, db_index=True)
-    update_date = models.DateTimeField(
-        verbose_name="дата обновления", auto_now=True, db_index=True)
-    user = models.ForeignKey(User, verbose_name='Пользователь')
-    dataset = models.ForeignKey('Dataset', verbose_name='Датасет')
-
-    class Meta:
-        db_table = "cubes"
-
-
 class DatasetStateChoices(DjangoChoices):
     """
     Cтатусы для Dataset
@@ -480,68 +372,6 @@ class Dataset(models.Model):
 
     class Meta:
         db_table = "datasets"
-
-
-class DatasetToMeta(models.Model, MultiPrimaryKeyModel):
-    """
-    Модель связи Мета источника и Dataset
-    """
-    meta = models.ForeignKey(
-        DatasourceMeta, verbose_name='Мета источника')
-    # FIXME обманка для Джанги, т.к. 1 primary key быть обязан
-    # FIXME всегда при регистрации модели
-    # FIXME на самом деле в миграции формируется primary key (meta, dataset)
-    dataset = models.ForeignKey(
-        Dataset, verbose_name='Данные', primary_key=True)
-
-    def delete(self, using=None):
-        MultiPrimaryKeyModel.delete(self, using)
-
-    # переопределяем save, ставим force_insert=True,
-    # чтобы inst.save() вызывал в бд тока инсерт запрос, а не
-    # апдейт+инсерт
-    def save(self, force_insert=False, force_update=False, using=None,
-             update_fields=None):
-        models.Model.save(self, force_insert=True)
-
-    class Meta:
-        db_table = "datasets_to_meta"
-
-
-class DatasourcesTrigger(models.Model):
-    """
-    Таблица созданных триггеров
-    """
-    name = models.CharField(
-        verbose_name="Название", max_length=1024, db_index=True, null=False)
-    src = models.TextField(verbose_name='текст триггера')
-    collection_name = models.CharField(
-        verbose_name="Название коллекции", max_length=1024, db_index=True)
-    datasource = models.ForeignKey(Datasource, verbose_name='Источник')
-
-    class Meta:
-        db_table = "datasources_trigger"
-
-
-class DatasourcesJournal(models.Model):
-    """
-    Таблица-журнал для триггеров
-    """
-    name = models.CharField(
-        verbose_name="Название таблицы триггера источника",
-        max_length=1024, db_index=True)
-    collection_name = models.CharField(
-        verbose_name="Название коллекции", max_length=1024, db_index=True)
-    date_created = models.DateTimeField(
-        verbose_name="дата создания", auto_now_add=True)
-    date_updated = models.DateTimeField(
-        verbose_name="дата обновления", auto_now=True)
-    rows_read = models.IntegerField(verbose_name='Считано', default=0)
-    rows_written = models.IntegerField(verbose_name='Записано', default=0)
-    trigger = models.ForeignKey(DatasourcesTrigger, verbose_name="Триггер")
-
-    class Meta:
-        db_table = "datasources_journal"
 
 
 class ColumnTypeChoices(DjangoChoices):
