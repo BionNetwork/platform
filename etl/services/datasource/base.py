@@ -1173,6 +1173,8 @@ class DataCubeService(object):
 
             self.purge_nodes_from_remains(sid, all_remains)
 
+        self.cache.del_cube_so_settings(sid)
+
     def delete_source(self, source_id):
         """
         Удаление источника из кэша недокуба или же из куба загруженного

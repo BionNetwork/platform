@@ -533,6 +533,13 @@ class CubeCacheService(CacheService):
         settings_key = self.cache_keys.cube_so_settings_key(source_id)
         self.r_set(settings_key, settings)
 
+    def del_cube_so_settings(self, source_id):
+        """
+        Удаление конфига соурса куба
+        """
+        settings_key = self.cache_keys.cube_so_settings_key(source_id)
+        self.r_del(settings_key)
+
     def set_cube_so_column_type(self, source_id, table, column, type):
         """
         Сохранение типа колонки, чтобы в этом типе посадить ее в хранилище
