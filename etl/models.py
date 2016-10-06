@@ -379,11 +379,11 @@ class TablesTree(object):
         :param r_info:
         :return: list
         """
-        l_t = l_info['value']
-        r_t = r_info['value']
+        l_t = str(l_info['value'])
+        r_t = str(r_info['value'])
 
-        l_sid = l_info['sid']
-        r_sid = r_info['sid']
+        l_sid = str(l_info['sid'])
+        r_sid = str(r_info['sid'])
 
         l_cols = l_info['columns']
         r_cols = r_info['columns']
