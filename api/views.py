@@ -30,6 +30,8 @@ from etl.constants import *
 
 from rest_framework.decorators import detail_route
 
+from query.generate import QueryGenerate
+
 logger = logging.getLogger(__name__)
 
 
@@ -317,54 +319,48 @@ class CubeViewSet(viewsets.ViewSet):
         Returns:
 
         """
-        context = Dataset.objects.get(key=pk).context
-        table = context['warehouse']
-        # data = request.data
-        data = json.loads(request.data.get('data'))
+        d = {
+            "dims": [
+            {
+                "name": "d_name",
+                "type": "DateDim",
+                "field": "d",
+                "filters": {
+                    "range": ["2016-02-28", "2016-03-04"]
+                },
+                "interval": "toMonday",
 
-        # data = {
-        #     "Y": {"field_name": "c_1_73_448246359376073858_3606484360407848552", "aggregation": "sum"},
-        #     "X": {"field_name": "c_1_73_448246359376073858_1951231061259157126", "period": ["2016-01-01", "2016-01-01"]},
-        #     "filters": [
-        #         {"field_name": "c_1_73_448246359376073858_7245817762177945292","value": ["Татмедиа"]}
-        #     ],
-        #     "groups": [
-        #         {"field_name": "c_1_73_448246359376073858_7245817762177945292"}
-        #     ]
-        # }
+            }, {
+                "name": "org",
+                "type": "TextDim",
+                "field": "org",
+                "order": "desc",
+                "visible": True,
+                "filters": {
+                    "match": ['Эттон-Центр', 'Эттон'],
+                    },
+            }, {
+                "name": "project",
+                "type": "TextDim",
+                "field": "project",
+                "filters": {
+                    "match": ['Татмедиа'],
+                },
+            }
+            ],
+            "measures": [
+            {
+                "name": "val_sum",
+                "type": "sum",
+                "field": "val",
+                "visible": True,
+                "filters": {
+                    "lte": 3000
+                },
+            }]
+        }
 
-        # x_field = 'toRelativeWeekNum({field}) AS {field}_week'.format(field=data['X']['field_name'])
-        x_field = data['X']['field_name']
-        y_field = '{aggregation}({field}) as {aggregation}_{field}'.format(aggregation=data['Y']['aggregation'], field=data['Y']['field_name'])
-
-        fields = ', '.join([x_field, y_field])
-
-        # x_field_name = '{field}_week'.format(field=data['X']['field_name'])
-        x_field_name = data['X']['field_name']
-        condition = ''
-        if data.get('filters', None):
-            condition = ' AND '.join(['{field} IN ({resolve_fields})'.format(
-                    field=fltr['field_name'],
-                    resolve_fields=', '.join(["'{0}'".format(x) for x in fltr['value']])) for fltr in data['filters']])
-        # Если есть переодичность, то добавяем секцию BETWEEN
-        if data['X'].get('period', None):
-            if data.get('filters', None):
-                condition += ' AND '
-            condition += '''(toDate({field}) BETWEEN toDate('{left}') AND toDate('{right}'))'''.format(
-                field=data['X']['field_name'], left=data['X']['period'][0], right=data['X']['period'][1])
-
-        # groups part
-        groups = data.get('groups', [])
-        groups = [x['field_name'] for x in groups]
-        groups.append(x_field_name)
-        group_part = 'GROUP BY {0}'.format(' ,'.join(groups))
-
-        query = "SELECT {fields} FROM {table} WHERE {condition} {group_part} FORMAT JSON;".format(
-            fields=fields, table=table, condition=condition, group_part=group_part)
-        print(query)
-# Select d from buh where project in (30) group by d;
-
-        send([query])
+        QueryGenerate(pk, d).parse()
 
     @detail_route(['post'])
     def query_new(self, request, pk):
