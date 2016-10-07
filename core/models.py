@@ -4,6 +4,7 @@
 import os
 import datetime
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.postgres.fields import JSONField
 
@@ -12,7 +13,6 @@ from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
 from djchoices import ChoiceItem, DjangoChoices
-from core.model_helpers import MultiPrimaryKeyModel
 
 from .db.services import RetryQueryset
 from .helpers import (get_utf8_string, users_avatar_upload_path,
@@ -200,11 +200,16 @@ class Datasource(models.Model):
         db_table = "datasources"
 
 
+class SettingNameChoices(DjangoChoices):
+    """Типы подключения"""
+    INDENT = ChoiceItem(1, 'indent')
+
+
 class DatasourceSettings(models.Model):
     """
     Таблица настроек для источников
     """
-    name = models.CharField(max_length=255, verbose_name='Название', db_index=True)
+    name = models.IntegerField(verbose_name='Название', db_index=True, choices=SettingNameChoices.choices)
     value = models.CharField(max_length=255, verbose_name='Значение')
     datasource = models.ForeignKey(Datasource, verbose_name='Источник', related_name='settings')
 
@@ -213,6 +218,11 @@ class DatasourceSettings(models.Model):
 
     def __str__(self):
         return "{name}({source}): {value}".format(name=self.name, source=self.datasource.name, value=self.value)
+
+    def clean(self):
+        # Don't allow draft entries to have a pub_date.
+        if self.name == SettingNameChoices.INDENT and not self.datasource.file:
+            raise ValidationError({'name': 'Draft entries may not have a publication date.'})
 
 
 # FIXME: К удалению
@@ -237,19 +247,6 @@ class DatasourceMeta(models.Model):
 
     class Meta:
         db_table = "datasources_meta"
-
-
-class DatasourceMetaKeys(models.Model):
-    """
-    Ключ к динамически создаваемым таблицам
-    """
-    meta = models.ForeignKey(
-        DatasourceMeta, verbose_name='Метаданные', related_name='meta_keys')
-    value = models.CharField(verbose_name='Ключ', max_length=255)
-
-    class Meta:
-        db_table = 'datasources_meta_keys'
-        unique_together = ('meta', 'value')
 
 
 class User(AbstractUser):

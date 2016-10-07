@@ -1,7 +1,10 @@
 # coding: utf-8
 import logging
+
+from django.core.exceptions import ValidationError
 from rest_framework import serializers
-from core.models import User, Datasource, DatasourceSettings
+from core.models import User, Datasource, DatasourceSettings, ConnectionChoices, SettingNameChoices
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,31 +18,54 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         depth = 1
 
 
-class SettingsField(serializers.RelatedField):
-    def to_representation(self, value):
-        return value.value
+class ChoicesField(serializers.Field):
+    def __init__(self, choices, **kwargs):
+        self._choices = choices
+        super(ChoicesField, self).__init__(**kwargs)
+
+    def to_representation(self, obj):
+        return self._choices.values[obj]
 
     def to_internal_value(self, data):
+        return getattr(self._choices, data.upper())
 
-        return DatasourceSettings(**{'name': 'cdc_key', 'value': data})
+
+class SettingsSerializer(serializers.ModelSerializer):
+    name = ChoicesField(choices=SettingNameChoices)
+
+    class Meta:
+        model = DatasourceSettings
+        fields = ('name', 'value')
 
 
 class DatasourceSerializer(serializers.ModelSerializer):
     """
     Серилизатор для источника
     """
-    settings = SettingsField(
-        many=True, queryset=DatasourceSettings.objects.distinct('name', 'value'))
+    settings = SettingsSerializer(many=True)
+    conn_type = ChoicesField(choices=ConnectionChoices)
 
     class Meta:
         model = Datasource
-        fields = ('id', 'db', 'host', 'port', 'login', 'password',
+        fields = ('id', 'name', 'db', 'host', 'port', 'login', 'password',
                   'conn_type', 'user_id', 'settings', 'file')
 
     def update(self, instance, validated_data):
         instance = super(DatasourceSerializer, self).update(
             instance, validated_data)
         return instance
+
+    def create(self, validated_data):
+        settings_data = validated_data.pop('settings')
+        datasource = Datasource.objects.create(**validated_data)
+        for setting_data in settings_data:
+            try:
+                ds = DatasourceSettings.objects.create(datasource=datasource, **setting_data)
+                ds.full_clean()
+            except ValidationError:
+                raise serializers.ValidationError
+
+        return datasource
 
 
 class IndentSerializer(serializers.Serializer):
@@ -53,36 +79,6 @@ class TableDataSerializer(serializers.Serializer):
 
     source_id = serializers.IntegerField()
     table = serializers.CharField(max_length=200)
-
-# ==========================================
-# TECT
-
-class Task(object):
-    def __init__(self, **kwargs):
-        for field in ('id', 'name', 'owner', 'status'):
-            setattr(self, field, kwargs.get(field, None))
-
-tasks = {
-    1: Task(id=1, name='Demo', owner='xordoquy', status='Done'),
-    2: Task(id=2, name='Model less demo', owner='xordoquy', status='Ongoing'),
-    3: Task(id=3, name='Sleep more', owner='xordoquy', status='New'),
-}
-
-
-class TaskSerializer(serializers.Serializer):
-    id = serializers.IntegerField(read_only=True)
-    name = serializers.CharField(max_length=256)
-    owner = serializers.CharField(max_length=256)
-
-    def update(self, instance, validated_data):
-        for field, value in list(validated_data.items()):
-            setattr(instance, field, value)
-        return instance
-
-    def create(self, validated_data):
-        return Task(id=None, **validated_data)
-
-# =======================================
 
 
 class TableSerializer(serializers.Serializer):

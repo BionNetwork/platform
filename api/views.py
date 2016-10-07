@@ -2,8 +2,6 @@
 
 import json
 import logging
-from itertools import groupby
-from operator import itemgetter
 
 import requests
 from django.http.response import HttpResponse
@@ -199,15 +197,15 @@ class CubeViewSet(viewsets.ViewSet):
     def list(self, request):
         return Response()
 
-    @detail_route(methods=['post'])
-    def clear_cache(self, request, pk):
-        """
-        Очистка инфы карточки из редиса
-        """
-        worker = DataCubeService(cube_id=pk)
-        worker.cache.clear_cube_cache()
-
-        return Response()
+    # @detail_route(methods=['post'])
+    # def clear_cache(self, request, pk):
+    #     """
+    #     Очистка инфы карточки из редиса
+    #     """
+    #     worker = DataCubeService(cube_id=pk)
+    #     worker.cache.clear_cube_cache()
+    #
+    #     return Response()
 
     # FIXME подумать передавать ли сюда список колонок,
     # FIXME все колонки источника нам не нужны
