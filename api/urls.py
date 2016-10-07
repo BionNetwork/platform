@@ -7,7 +7,7 @@ from . import views
 from rest_framework_nested import routers
 
 
-router = routers.DefaultRouter(trailing_slash=False)
+router = routers.DefaultRouter()
 router.register(r'cubes', views.CubeViewSet, 'cubes')
 router.register(r'datasources', views.DatasourceViewSet, 'datasource')
 
