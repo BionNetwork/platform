@@ -3,7 +3,8 @@ import logging
 
 from django.core.exceptions import ValidationError
 from rest_framework import serializers
-from core.models import User, Datasource, DatasourceSettings, ConnectionChoices, SettingNameChoices, Dataset
+from core.models import User, Datasource, DatasourceSettings, ConnectionChoices, SettingNameChoices, Dataset, \
+    DatasetStateChoices
 from etl.services.datasource.base import DataSourceService
 
 logger = logging.getLogger(__name__)
@@ -101,10 +102,12 @@ class DatasetSerializer(serializers.ModelSerializer):
     Серилизатор для источника
     """
     key = serializers.SlugField()
+    # status = serializers.IntegerField(source='state', read_only=True)
+    state = ChoicesField(choices=DatasetStateChoices, read_only=True)
 
     class Meta:
         model = Dataset
-        fields = ('key', 'state')
+        fields = ('id', 'key', 'state')
 
 
 class IndentSerializer(serializers.Serializer):

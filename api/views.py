@@ -175,7 +175,7 @@ def send(data, settings=None, stream=False):
 
 
 # TODO decorator for existing Cube pk
-class CubeViewSet(viewsets.ReadOnlyModelViewSet):
+class CubeViewSet(viewsets.ModelViewSet):
     """
     Реализация методов карточки
     """
@@ -188,7 +188,6 @@ class CubeViewSet(viewsets.ReadOnlyModelViewSet):
     def list(self, request, *args, **kwargs):
         return super(CubeViewSet, self).list(request, *args, **kwargs)
 
-
     # @detail_route(methods=['post'])
     # def clear_cache(self, request, pk):
     #     """
@@ -199,12 +198,17 @@ class CubeViewSet(viewsets.ReadOnlyModelViewSet):
     #
     #     return Response()
 
+    def create(self, request, *args, **kwargs):
+        return super(CubeViewSet, self).create(request, *args, **kwargs)
+
+
     # FIXME подумать передавать ли сюда список колонок,
     # FIXME все колонки источника нам не нужны
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
     def tree(self, request, pk):
 
-        data = json.loads(request.data.get('data'))
+        # data = json.loads(request.data.get('data'))
+        data = requests.data
 
         # data = [
         #     {"source_id": 92, "table_name": 'Таблица1', },

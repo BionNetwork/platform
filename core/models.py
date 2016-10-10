@@ -338,7 +338,6 @@ class DatasetStateChoices(DjangoChoices):
     Cтатусы для Dataset
     """
     IDLE = ChoiceItem(1, 'В ожидании данных')
-
     FILLUP = ChoiceItem(2, 'Наполнение данных')
     FTW = ChoiceItem(6, 'Foreign Table')
     DIMCR = ChoiceItem(3, 'Создание размерностей')
@@ -355,7 +354,7 @@ class Dataset(models.Model):
         verbose_name="Дата создания", auto_now_add=True, db_index=True)
     update_date = models.DateTimeField(
         verbose_name="Дата обновления", auto_now=True, db_index=True)
-    context = JSONField(null=True)
+    context = JSONField(null=True, default='')
     state = models.SmallIntegerField(
         verbose_name='Статус', choices=DatasetStateChoices.choices,
         default=DatasetStateChoices.IDLE, db_index=True)
@@ -369,6 +368,10 @@ class Dataset(models.Model):
 
     class Meta:
         db_table = "datasets"
+
+    def save(self, force_insert=False, force_update=False, using=None,
+             update_fields=None):
+        super(Dataset, self).save()
 
 
 class DatasetSource(models.Model):
