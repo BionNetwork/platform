@@ -1132,7 +1132,7 @@ class DataCubeService(object):
 
         return {'filters': filters2, 'measures': measures2}
 
-    def validate_column(self, source_id, table, column, type):
+    def validate_column(self, source_id, table, column, param, type):
         """
         Проверка колонки на соответствующий тип typ
         """
@@ -1141,7 +1141,8 @@ class DataCubeService(object):
 
         if not result['errors']:
             # save valid type of column for source for current cube
-            self.cache.set_cube_so_column_type(source_id, table, column, type)
+            self.cache.set_cube_so_column_type(
+                source_id, table, column, param, type)
 
         return result
 

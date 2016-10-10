@@ -257,19 +257,21 @@ class CubeViewSet(viewsets.ViewSet):
         sid = int(post.get('source_id'))
         table = post.get('table')
         column = post.get('column')
+        param = post.get('param')
         typ = post.get('type')
 
-        if not all([sid, table, column, typ]):
+        if not all([sid, table, column, param, typ]):
             raise APIException("Invalid args for validate_col!")
 
         worker = DataCubeService(cube_id=pk)
-        result = worker.validate_column(sid, table, column, typ)
+        result = worker.validate_column(sid, table, column, param, typ)
 
         return Response({
             "cube_id": pk,
             "source_id": sid,
             "table": table,
             "column": column,
+            "param": param,
             "type": typ,
             "errors": result['errors'],
             "nulls": result['nulls'],
