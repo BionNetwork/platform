@@ -15,7 +15,7 @@ from rest_framework.authtoken.models import Token
 from api.serializers import (
     DatasourceSerializer, NodeSerializer, TreeSerializer,
     TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
-    LoadDataSerializer, ColumnValidationSeria)
+    LoadDataSerializer, ColumnValidationSeria, DatasetSerializer)
 
 from core.models import (Datasource, Dataset, DatasetStateChoices)
 from etl.tasks import load_data
@@ -89,18 +89,6 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         DataSourceService.delete_datasource(source)
         # DataSourceService.tree_full_clean(source)
         return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
-
-    # FIXME проверить (отступы)
-    @detail_route(methods=['post'])
-    def update_source(self, request, pk=None):
-        """
-        Метод изменения источника,
-        предположительно для замены файлов пользователя
-        """
-        worker = DataSourceService(source_id=pk)
-        worker.update_datasource(request)
-
-        return Response()
 
     @detail_route(methods=['get'])
     def tables(self, request, pk=None):
@@ -187,15 +175,19 @@ def send(data, settings=None, stream=False):
 
 
 # TODO decorator for existing Cube pk
-class CubeViewSet(viewsets.ViewSet):
+class CubeViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Реализация методов карточки
     """
+    model = Dataset
+    serializer_class = DatasetSerializer
 
-    serializer_class = TreeSerializer
+    def get_queryset(self):
+        return self.model.objects.all()
 
-    def list(self, request):
-        return Response()
+    def list(self, request, *args, **kwargs):
+        return super(CubeViewSet, self).list(request, *args, **kwargs)
+
 
     # @detail_route(methods=['post'])
     # def clear_cache(self, request, pk):
@@ -210,7 +202,7 @@ class CubeViewSet(viewsets.ViewSet):
     # FIXME подумать передавать ли сюда список колонок,
     # FIXME все колонки источника нам не нужны
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
-    def create_tree(self, request, pk):
+    def tree(self, request, pk):
 
         data = json.loads(request.data.get('data'))
 
@@ -326,18 +318,7 @@ class CubeViewSet(viewsets.ViewSet):
         """
         Формирование запроса
         Args:
-            request:
             pk:
-
-            ::
-[{
-"Y": {"field_name":"price","aggregation": "sum"},
-"X": {"field_name":"time","period":[1, 3],"discrete":"week"},
-"filters": [{"field_name":"company","value": ["etton"]}, {"field_name":"color","value": ["blue"]}]
-}]
-
-        Returns:
-
         """
         d = {
             "dims": [
@@ -383,7 +364,7 @@ class CubeViewSet(viewsets.ViewSet):
         QueryGenerate(pk, d).parse()
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
-    def load_data(self, request, pk):
+    def data(self, request, pk):
         """
         Начачло загрузки данных
         """

@@ -76,7 +76,7 @@ class DataSourceService(object):
         return self.service.get_tables()
 
     # FIXME check method (especially indents)
-    def update_datasource(self, request):
+    def update_file(self, file):
         """
         Изменение источника,
         предположительно для замены файлов пользователя
@@ -85,12 +85,12 @@ class DataSourceService(object):
         source = Datasource.objects.get(id=source_id)
 
         if source.is_file:
-            new_file = request.FILES.get('file', None)
+            new_file = file
 
             if new_file is None:
                 raise Exception("What to change if file is empty?")
 
-            columns = Columns.objects.filter(source_id=source_id)
+            columns = Columns.objects.filter(source__source_id=source_id)
 
             copy = source.source_temp_copy(new_file)
 
@@ -129,6 +129,7 @@ class DataSourceService(object):
             source.file.save(new_file.name, new_file)
             # удаляем временную копию
             copy.remove_temp_file()
+        return source
 
     # FIXME NO USAGE
     def validate_file(self, source):
@@ -1081,7 +1082,7 @@ class DataCubeService(object):
         context = Dataset.objects.get(key=cube_id).context
         click_table = context['warehouse']
 
-        columns = Columns.objects.filter(dataset__key=cube_id)
+        columns = Columns.objects.filter(source__dataset__key=cube_id)
 
         filters = columns.filter(type__in=filter_types).values(
             'original_name', 'name', 'original_table',

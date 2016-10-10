@@ -3,7 +3,8 @@ import logging
 
 from django.core.exceptions import ValidationError
 from rest_framework import serializers
-from core.models import User, Datasource, DatasourceSettings, ConnectionChoices, SettingNameChoices
+from core.models import User, Datasource, DatasourceSettings, ConnectionChoices, SettingNameChoices, Dataset
+from etl.services.datasource.base import DataSourceService
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ class SettingsSerializer(serializers.ModelSerializer):
         model = DatasourceSettings
         fields = ('name', 'value')
 
+    def update(self, instance, validated_data):
+        return super(SettingsSerializer, self).update(instance, validated_data)
+
 
 class DatasourceSerializer(serializers.ModelSerializer):
     """
@@ -48,11 +52,35 @@ class DatasourceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Datasource
         fields = ('id', 'name', 'db', 'host', 'port', 'login', 'password',
-                  'conn_type', 'user_id', 'settings', 'file')
+                  'conn_type', 'settings', 'file')
 
     def update(self, instance, validated_data):
-        instance = super(DatasourceSerializer, self).update(
-            instance, validated_data)
+
+        worker = DataSourceService(source_id=instance.id)
+        if validated_data.get('file', None):
+            if instance.is_file:
+                new_instance = worker.update_file(validated_data['file'])
+                del(validated_data['file'])
+                instance = new_instance
+            else:
+                raise serializers.ValidationError("Тип источника не позволяет загружать файлы")
+
+        if validated_data:
+            # Сохраняем настройки источника
+            settings = validated_data['settings']
+            for setting in settings:
+                try:
+                    ds, created = DatasourceSettings.objects.get_or_create(
+                        name=setting['name'])
+                    ds.value = setting['value']
+                    ds.save()
+                except DatasourceSettings.MultipleObjectsReturned:
+                    raise serializers.ValidationError(
+                        "Настройки {0} больше одного".format(SettingNameChoices.values[setting['name']]))
+            del(validated_data['settings'])
+
+            # Обновяем сам источник
+            instance = super(DatasourceSerializer, self).update(instance, validated_data)
         return instance
 
     def create(self, validated_data):
@@ -60,12 +88,23 @@ class DatasourceSerializer(serializers.ModelSerializer):
         datasource = Datasource.objects.create(**validated_data)
         for setting_data in settings_data:
             try:
-                ds = DatasourceSettings.objects.create(datasource=datasource, **setting_data)
+                ds = DatasourceSettings.objects.get_or_create(datasource=datasource, **setting_data)
                 ds.full_clean()
             except ValidationError:
                 raise serializers.ValidationError
 
         return datasource
+
+
+class DatasetSerializer(serializers.ModelSerializer):
+    """
+    Серилизатор для источника
+    """
+    key = serializers.SlugField()
+
+    class Meta:
+        model = Dataset
+        fields = ('key', 'state')
 
 
 class IndentSerializer(serializers.Serializer):

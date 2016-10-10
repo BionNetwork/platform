@@ -215,14 +215,14 @@ class DatasourceSettings(models.Model):
 
     class Meta:
         db_table = "datasources_settings"
+        unique_together = ('name', 'datasource')
 
     def __str__(self):
         return "{name}({source}): {value}".format(name=self.name, source=self.datasource.name, value=self.value)
 
     def clean(self):
-        # Don't allow draft entries to have a pub_date.
         if self.name == SettingNameChoices.INDENT and not self.datasource.file:
-            raise ValidationError({'name': 'Draft entries may not have a publication date.'})
+            raise ValidationError({'name': 'Отступ можно установить только для файловых источников'})
 
 
 # FIXME: К удалению
@@ -371,6 +371,18 @@ class Dataset(models.Model):
         db_table = "datasets"
 
 
+class DatasetSource(models.Model):
+    """
+    Связь источника и хранилища
+    """
+
+    dataset = models.ForeignKey(Dataset, name="Хранилище")
+    source = models.ForeignKey(Datasource, name="Источник")
+
+    class Meta:
+        db_table = "dataset_source"
+
+
 class ColumnTypeChoices(DjangoChoices):
     """
     Cтатусы для Dataset
@@ -413,13 +425,12 @@ class Columns(models.Model):
     Колонки в кубе
     """
     name = models.CharField(verbose_name="Название", max_length=255)
-    dataset = models.ForeignKey(Dataset, verbose_name="Хранилище")
     original_name = models.CharField(
         verbose_name="Название в источнике", max_length=255)
     original_table = models.CharField(
         verbose_name="Название таблицы в источнике",
         max_length=255, default='')
-    source = models.ForeignKey(Datasource, verbose_name="Источник")
+    source = models.ForeignKey(DatasetSource, verbose_name="Источник хранилища")
     type = models.CharField(
         verbose_name="Тип", choices=ColumnTypeChoices.choices,
         default=ColumnTypeChoices.STRING, max_length=20)
