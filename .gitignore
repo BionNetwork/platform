@@ -2,6 +2,7 @@
 *.iml
 *.pyc
 config/settings/local.py
+config/settings/default.py
 .crossbar/node.pid
 /media
 data/resources
