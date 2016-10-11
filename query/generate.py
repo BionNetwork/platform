@@ -62,6 +62,28 @@ class QueryGenerate(object):
             }
 
 
+            {"dims": [
+                {
+                    "field": "c_21_21_4864501795689730638_6619553242090680547",
+                    "type": "TextDim",
+                    "name": "date"
+                },
+                {
+                    "field": "c_21_21_4864501795689730638_8261471818073815377",
+                    "type": "TextDim",
+                    "name": "org"
+                }],
+"measures":[
+{
+                    "field": "c_21_21_4864501795689730638_3478212977531136609",
+                    "type": "sum",
+                    "name": "remain"
+                }
+]
+                }
+
+
+
         """
         self.cube_id = cube_id
         self.input = input
@@ -87,16 +109,16 @@ class QueryGenerate(object):
         having_block = 'HAVING %s' % " AND ".join(self.key_words[HAVING]) if self.key_words[HAVING] else ""
         order_block = "ORDER BY %s" % ", ".join(self.key_words[ORDER_BY]) if self.key_words[ORDER_BY] else ""
 
-        select_query = "{select_block} FROM {table} {where_block} {group_block} {having_block} {order_block};".format(
+        select_query = "{select_block} FROM {table} {where_block} {group_block} {having_block} {order_block}".format(
             select_block=select_block,
-            table='buh',
+            table='t_21',
             where_block=where_block,
             group_block=group_block,
             order_block=order_block,
             having_block=having_block
         ).replace('"', "'")
 
-        print(requests.post('http://localhost:8123/', data='{0} FORMAT JSON'.format(select_query).encode('utf-8')).text)
+        return requests.post('http://localhost:8123/', data='{0} FORMAT JSON'.format(select_query).encode('utf-8')).text
 
     @staticmethod
     def dimension_parser(dim):

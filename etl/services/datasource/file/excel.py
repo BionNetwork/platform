@@ -29,7 +29,7 @@ class Excel(File):
         try:
             df = pandas.read_excel(*args, **kwargs)#.dropna(axis=1, how='all')
         except XLRDError as e:
-                raise SheetException(message=e.message)
+                raise SheetException(message=e.args[0])
         columns = df.columns
         ne_columns = [
             col for col in columns

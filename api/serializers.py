@@ -39,6 +39,7 @@ class SettingsSerializer(serializers.ModelSerializer):
         model = DatasourceSettings
         fields = ('name', 'value')
 
+
     def update(self, instance, validated_data):
         return super(SettingsSerializer, self).update(instance, validated_data)
 

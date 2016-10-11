@@ -11,21 +11,24 @@ from rest_framework.response import Response
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
+from rest_framework import status
 
 from api.serializers import (
-    DatasourceSerializer, NodeSerializer, TreeSerializer,
+    DatasourceSerializer, NodeSerializer,
     TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
-    LoadDataSerializer, DatasetSerializer, ColumnsSerializer
+    LoadDataSerializer, DatasetSerializer, ColumnsSerializer, SettingsSerializer
 )
 
 from core.models import (
-    Datasource, Dataset, DatasetStateChoices, EmptyEnum,
+    Datasource, Dataset, DatasetStateChoices, EmptyEnum, DatasourceSettings,
     ColumnTypeChoices as CTC
 )
 from etl.tasks import load_data
 from etl.services.datasource.base import (DataSourceService, DataCubeService)
-from etl.helpers import group_by_source
 from etl.services.exceptions import *
+from etl.helpers import group_by_source, DatasetContext, ContextError
+from etl.services.exceptions import SheetException
+
 from etl.constants import *
 
 from rest_framework.decorators import detail_route
@@ -102,7 +105,7 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         return Response(tables)
 
     @detail_route(methods=['post'], serializer_class=IndentSerializer)
-    def set_indent(self, request, pk):
+    def indent(self, request, pk):
         """
         Отступ в соурсах, предположительно в файлах
         """
@@ -127,7 +130,7 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         worker = DataSourceService(source_id=pk)
         worker.set_indentation(sheet, indent, header)
 
-        return Response('Setted!')
+        return Response(status=status.HTTP_200_OK)
 
 
 class TablesView(APIView):
@@ -176,6 +179,18 @@ def send(data, settings=None, stream=False):
             return j
 
 
+class SettingsViewSet(viewsets.ModelViewSet):
+
+    model = DatasourceSettings
+    serializer_class = SettingsSerializer
+
+    def get_queryset(self):
+        return DatasourceSettings.objects.filter(datasource=self.kwargs['datasource_pk'])
+
+    def list(self, request, *args, **kwargs):
+        return super(SettingsViewSet, self).list(request, *args, **kwargs)
+
+
 # TODO decorator for existing Cube pk
 class CubeViewSet(viewsets.ModelViewSet):
     """
@@ -199,7 +214,7 @@ class CubeViewSet(viewsets.ModelViewSet):
     def tree(self, request, pk):
 
         data = json.loads(request.data.get('data'))
-        # data = requests.data
+        # data = request.data
 
         # data = [
         #     {"source_id": 92, "table_name": 'Таблица1', },
@@ -316,8 +331,8 @@ class CubeViewSet(viewsets.ModelViewSet):
         Формирование запроса
         Args:
             pk:
-        """
-        d = {
+
+        :: {
             "dims": [
             {
                 "name": "d_name",
@@ -357,8 +372,14 @@ class CubeViewSet(viewsets.ModelViewSet):
                 },
             }]
         }
+        """
+        try:
+            data = request.data
 
-        QueryGenerate(pk, d).parse()
+            data = QueryGenerate(pk, data).parse()
+            return Response(json.loads(data))
+        except Exception as e:
+            raise APIException("Ошибка обработки запроса")
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def data(self, request, pk):
@@ -379,35 +400,7 @@ class CubeViewSet(viewsets.ModelViewSet):
         if pk is None:
             raise Exception("Cube ID is None!")
 
-        # sources_info = json.loads(request.data.get('data'))
         sources_info = request.data
-        # sources_info = {
-        #     '90':
-        #         {
-        #             "TDSheet": [
-        #                 "Дата",
-        #                 "Организация",
-        #                 # "Остаток",
-        #                 # "Дебетовый остаток",
-        #                 "Выручка",
-        #                 "ВыручкаБезНДС",
-        #                 "НоменклатурнаяГруппа",
-        #                 "Контрагент",
-        #                 "ДоговорКонтрагента",
-        #                 # "Регистратор",
-        #                 "Проект",
-        #             ],
-        #         },
-            # '89':
-            #     {
-            #         "Sheet1": [
-            #             "d.1",
-            #             "Unnamed: 2",
-            #             # 4,
-            #             # "d",
-            #         ]
-            #     }
-        # }
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
