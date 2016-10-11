@@ -15,15 +15,17 @@ from rest_framework.authtoken.models import Token
 from api.serializers import (
     DatasourceSerializer, NodeSerializer, TreeSerializer,
     TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
-    LoadDataSerializer, ColumnValidationSeria, DatasetSerializer)
+    LoadDataSerializer, DatasetSerializer, ColumnsSerializer
+)
 
-from core.models import (Datasource, Dataset, DatasetStateChoices)
+from core.models import (
+    Datasource, Dataset, DatasetStateChoices, EmptyEnum,
+    ColumnTypeChoices as CTC
+)
 from etl.tasks import load_data
 from etl.services.datasource.base import (DataSourceService, DataCubeService)
 from etl.helpers import group_by_source
-from etl.services.exceptions import SheetException
-from etl.services.datasource.source import EmptyEnum
-
+from etl.services.exceptions import *
 from etl.constants import *
 
 from rest_framework.decorators import detail_route
@@ -201,14 +203,13 @@ class CubeViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         return super(CubeViewSet, self).create(request, *args, **kwargs)
 
-
     # FIXME подумать передавать ли сюда список колонок,
     # FIXME все колонки источника нам не нужны
     @detail_route(['post'], serializer_class=TreeSerializerRequest)
     def tree(self, request, pk):
 
-        # data = json.loads(request.data.get('data'))
-        data = requests.data
+        data = json.loads(request.data.get('data'))
+        # data = requests.data
 
         # data = [
         #     {"source_id": 92, "table_name": 'Таблица1', },
@@ -241,7 +242,7 @@ class CubeViewSet(viewsets.ModelViewSet):
     def exchange_file(self, request, pk):
         pass
 
-    @detail_route(['post'], serializer_class=ColumnValidationSeria)
+    @detail_route(['post'])
     def validate_col(self, request, pk):
         """
         Проверка значений колонки на определенный тип
@@ -271,7 +272,7 @@ class CubeViewSet(viewsets.ModelViewSet):
             "nulls": result['nulls'],
         })
 
-    @detail_route(['post'], serializer_class=ColumnValidationSeria)
+    @detail_route(['post'])
     def set_default(self, request, pk):
         """
         Установка дефолтного значения для пустых значений колонки,
@@ -467,6 +468,133 @@ class CubeViewSet(viewsets.ModelViewSet):
 
         meta = worker.get_cube_columns()
         return Response(meta)
+
+
+class ColumnsViewSet(viewsets.ViewSet):
+    """
+    Колонки куба
+    """
+
+    serializer_class = ColumnsSerializer
+
+    def list(self, request, cube_pk):
+        """
+        Список узлов дерева и остаткa
+        """
+        worker = DataCubeService(cube_id=cube_pk)
+        # data = worker.cube_columns()
+
+        return Response(data=[])
+
+    def create(self, request, cube_pk):
+        """
+        Создание колонки
+        """
+        post = request.data
+
+        sid = int(post.get('source_id'))
+        table = post.get('table')
+        column_name = post.get('column')
+        param = post.get('param')
+        type = post.get('type')
+        default = post.get('default', None)
+
+        info = {
+            "cube_id": cube_pk,
+            "source_id": sid,
+            "table": table,
+            "column": column_name,
+            "param": param,
+            "type": type,
+        }
+
+        if not all([sid, table, column_name, param]):
+            raise APIException("Empty args for validate_col!")
+
+        if type not in CTC.values_list():
+            raise APIException("Invalid type!")
+
+        worker = DataCubeService(cube_id=cube_pk)
+        result = worker.validate_column(sid, table, column_name, type)
+
+        if result['errors']:
+            info["type_errors"] = result['errors']
+            return Response(info)
+
+        if default:
+            default = int(default)
+            if default not in EmptyEnum.keys():
+                raise APIException("Invalid default!")
+            info["default"] = default
+
+        elif result['nulls']:
+            info["nulls"] = result['nulls']
+            return Response(info)
+
+        int_type = CTC.get_int_type(type)
+        try:
+            column = worker.create_column(
+                sid, table, column_name, param, int_type, default)
+        except BaseExcept as ex:
+            raise APIException(ex.message)
+
+        info["id"] = column.id
+
+        return Response(info)
+
+    def update(self, request, cube_pk, pk):
+        """
+        """
+        column_id = pk
+
+        data = request.data
+
+        sid = int(data.get('source_id'))
+        table = data.get('table')
+        column_name = data.get('column')
+        param = data.get('param')
+        type = data.get('type', None)
+        default = data.get('default', None)
+
+        info = {
+            "id": column_id,
+            "cube_id": cube_pk,
+            "source_id": sid,
+            "table": table,
+            "column": column_name,
+            "param": param,
+        }
+
+        worker = DataCubeService(cube_id=cube_pk)
+
+        if not all([sid, table, column_name, param]):
+            raise APIException("Empty args for validate_col!")
+
+        if type:
+            if type not in CTC.values_list():
+                raise APIException("Invalid type!")
+
+            result = worker.validate_column(sid, table, column_name, type)
+            if result['errors']:
+                info["type"] = type
+                info["type_errors"] = result['errors']
+                return Response(info)
+
+        if default:
+            default = int(default)
+            if default not in EmptyEnum.keys():
+                raise APIException("Invalid default!")
+
+        int_type = CTC.get_int_type(type or None)
+        default = default or None
+
+        try:
+            column = worker.update_column(
+                column_id, sid, table, column_name, param, int_type, default)
+        except BaseExcept as ex:
+            raise APIException(ex.message)
+
+        return Response(info)
 
 
 # TODO: Перенести куда-нибудь

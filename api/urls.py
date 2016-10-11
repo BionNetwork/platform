@@ -11,9 +11,13 @@ router = routers.DefaultRouter()
 router.register(r'cubes', views.CubeViewSet, 'cubes')
 router.register(r'datasources', views.DatasourceViewSet, 'datasource')
 
-# nodes
+# cube router
 cube_router = routers.NestedSimpleRouter(router, r'cubes', lookup='cube')
+# nodes
 cube_router.register(r'nodes', views.NodeViewSet, base_name='cube-nodes')
+# columns
+cube_router.register(r'columns', views.ColumnsViewSet, base_name='cube-columns')
+
 # joins
 node_router = routers.NestedSimpleRouter(cube_router, r'nodes', lookup='node')
 node_router.register(r'child', views.JoinViewSet, base_name='node-child')

@@ -139,5 +139,3 @@ class MaterializedView(WareHouse):
             MEASURES_MV.format(cube_key),
             self.context['relations']
         )
-
-    print('MEASURES AND DIMENSIONS ARE MADE!')

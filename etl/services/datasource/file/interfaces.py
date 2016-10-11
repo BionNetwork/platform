@@ -1,7 +1,7 @@
 # coding: utf-8
 
 import ntpath
-from etl.services.datasource.source import SourceConvertTypes as SCT
+from core.models import ColumnTypeChoices as CTC
 
 
 class File(object):
@@ -11,11 +11,11 @@ class File(object):
 
     # соответствие типов pandas-a и postgres
     TYPES_MAP = {
-        "int": SCT.INT,
-        "float": SCT.DOUBLE,
-        "datetime": SCT.DATE,
-        "object": SCT.TEXT,
-        "boolean": SCT.BOOL,
+        "int": CTC.INT,
+        "float": CTC.DOUB,
+        "datetime": CTC.TIME,
+        "object": CTC.TEXT,
+        "boolean": CTC.BOOL,
     }
 
     def __init__(self, source):

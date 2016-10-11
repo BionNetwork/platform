@@ -374,75 +374,107 @@ class Dataset(models.Model):
         super(Dataset, self).save()
 
 
-class DatasetSource(models.Model):
-    """
-    Связь источника и хранилища
-    """
-
-    dataset = models.ForeignKey(Dataset, name="Хранилище")
-    source = models.ForeignKey(Datasource, name="Источник")
-
-    class Meta:
-        db_table = "dataset_source"
+# class DatasetSource(models.Model):
+#     """
+#     Связь источника и хранилища
+#     """
+#
+#     dataset = models.ForeignKey(Dataset, name="Хранилище")
+#     source = models.ForeignKey(Datasource, name="Источник")
+#
+#     class Meta:
+#         db_table = "dataset_source"
 
 
 class ColumnTypeChoices(DjangoChoices):
     """
     Cтатусы для Dataset
     """
-    STRING = ChoiceItem(1, 'text')
-    INTEGER = ChoiceItem(2, 'integer')
-    DOUBLE = ChoiceItem(3, 'double precision')
-    TIMESTAMP = ChoiceItem(4, 'timestamp')
-    BOOLEAN = ChoiceItem(5, 'bool')
+
+    TEXT = 'text'
+    INT = 'integer'
+    DOUB = 'double precision'
+    TIME = 'timestamp'
+    BOOL = "boolean"
+
+    STRING_CH = ChoiceItem(1, TEXT)
+    INTEGER_CH = ChoiceItem(2, INT)
+    DOUBLE_CH = ChoiceItem(3, DOUB)
+    TIMESTAMP_CH = ChoiceItem(4, TIME)
+    BOOLEAN_CH = ChoiceItem(5, BOOL)
 
     # FIXME доработать  BOOLEAN, вроде не работает
 
     @classmethod
-    def get_type(cls, type_name):
+    def get_int_type(cls, type_name):
         """
         Возвращает ключ по значению
         """
         for k, v in cls.choices:
             if v == type_name:
                 return k
-        raise Exception("No such type of ColumnChoices")
+        return None
+
+    @classmethod
+    def values_list(cls):
+        """
+        Возвращает строковые значения
+        """
+        return list(cls.values.values())
 
     @classmethod
     def filter_types(cls):
         """
         Список колонок для фильтров
         """
-        return [cls.STRING, cls.TIMESTAMP, cls.BOOLEAN]
+        return [cls.STRING_CH, cls.TIMESTAMP_CH, cls.BOOLEAN_CH]
 
     @classmethod
     def measure_types(cls):
         """
         Список колонок для фильтров
         """
-        return [cls.INTEGER, cls.DOUBLE]
+        return [cls.INTEGER_CH, cls.DOUBLE_CH]
+
+
+class EmptyEnum(DjangoChoices):
+    """
+    Обозначение действий для работы с пустыми значениями в колонках источника
+    """
+    # проставить нули
+    ZERO = ChoiceItem(1, 'zero')
+    # убрать строки
+    REMOVE = ChoiceItem(2, 'remove')
+
+    @classmethod
+    def keys(cls):
+        return list(cls.values.keys())
 
 
 class Columns(models.Model):
     """
     Колонки в кубе
     """
-    name = models.CharField(verbose_name="Название", max_length=255)
+    name = models.CharField(verbose_name="Название", max_length=255, null=True)
+    dataset = models.ForeignKey(Dataset, verbose_name="Хранилище")
     original_name = models.CharField(
         verbose_name="Название в источнике", max_length=255)
     original_table = models.CharField(
         verbose_name="Название таблицы в источнике",
         max_length=255, default='')
-    source = models.ForeignKey(DatasetSource, verbose_name="Источник хранилища")
+    source = models.ForeignKey(Datasource, verbose_name="Источник")
     type = models.CharField(
         verbose_name="Тип", choices=ColumnTypeChoices.choices,
-        default=ColumnTypeChoices.STRING, max_length=20)
+        default=ColumnTypeChoices.STRING_CH, max_length=20)
     format_string = models.CharField(verbose_name="размерность", max_length=20)
     visible = models.BooleanField(default=True)
     date_created = models.DateTimeField(
         verbose_name="дата создания", auto_now_add=True)
     date_updated = models.DateTimeField(
         verbose_name="дата обновления", auto_now=True)
+    default_val = models.IntegerField(
+        verbose_name="Default value", choices=EmptyEnum.choices,
+        default=EmptyEnum.ZERO)
 
     class Meta:
         db_table = 'columns'
