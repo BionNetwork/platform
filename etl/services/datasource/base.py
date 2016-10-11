@@ -6,7 +6,7 @@ from core.helpers import get_utf8_string
 from core.models import (
     ConnectionChoices, Datasource, Columns, ColumnTypeChoices as ColTC,
     Dataset,
-)
+    DatasourceSettings)
 from etl.helpers import HashEncoder
 from etl.models import TableTreeRepository as TTRepo
 from etl.services.clickhouse.helpers import FILTER_QUERIES
@@ -164,6 +164,9 @@ class DataSourceService(object):
         Достает отступы из хранилища
         Returns: defaultdict(lambda: {'indent': 0, 'header': True})
         """
+        # TODO: корректно получать данные отступа из базы
+        #  value = Datasource.objects.get(id=self.source_id).settings.get(name=1).value
+
         return self.cache.get_source_indentation()
 
     def set_indentation(self, sheet, indent, header):
@@ -524,24 +527,24 @@ class DataCubeService(object):
         all_columns, indexes, foreigns, statistics, date_intervals = (
             source_worker.get_columns_info([table, ]))
 
-        # заменяем типы колонок, указанные заранее
+        # # заменяем типы колонок, указанные заранее
         all_table_columns = all_columns[table]
-        table_settings = cache.get_cube_so_settings(source_id)['tables'][table]
-
-        # те колонки, которые выбраны для параметров,
-        # для них указан свой тип! проставляем соответствующий тип
-        # так же проставим дефолтные значения для пустых ячеек источника
-        for column in all_table_columns:
-            for col_name in table_settings:
-                if column['name'] == col_name:
-                    setted_type = table_settings[col_name]['type']
-                    if setted_type is not None:
-                        column['type'] = setted_type
-
-                    setted_default = table_settings[col_name]['default']
-                    if setted_default is not None:
-                        column['default'] = setted_default
-
+        # table_settings = cache.get_cube_settings()['tables'][table]
+        #
+        # # те колонки, которые выбраны для параметров,
+        # # для них указан свой тип! проставляем соответствующий тип
+        # # так же проставим дефолтные значения для пустых ячеек источника
+        # for column in all_table_columns:
+        #     for col_name in table_settings:
+        #         if column['name'] == col_name:
+        #             setted_type = table_settings[col_name]['type']
+        #             if setted_type is not None:
+        #                 column['type'] = setted_type
+        #
+        #             setted_default = table_settings[col_name]['default']
+        #             if setted_default is not None:
+        #                 column['default'] = setted_default
+        #
         info = {
             "value": table,
             "sid": source_id,

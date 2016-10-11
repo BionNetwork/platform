@@ -450,3 +450,10 @@ class Columns(models.Model):
     def __str__(self):
         return "{0}, {1} ({2})".format(
             self.dataset_id, self.source_id, self.original_name)
+
+
+class JoinTypeChoices(DjangoChoices):
+    """Типы подключения"""
+    left = ChoiceItem(1, 'left')
+    right = ChoiceItem(1, 'right')
+    inner = ChoiceItem(1, 'inner')

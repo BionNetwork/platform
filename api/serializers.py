@@ -4,7 +4,7 @@ import logging
 from django.core.exceptions import ValidationError
 from rest_framework import serializers
 from core.models import User, Datasource, DatasourceSettings, ConnectionChoices, SettingNameChoices, Dataset, \
-    DatasetStateChoices
+    DatasetStateChoices, JoinTypeChoices
 from etl.services.datasource.base import DataSourceService
 
 logger = logging.getLogger(__name__)
@@ -128,15 +128,29 @@ class TableSerializer(serializers.Serializer):
     owner = serializers.CharField(max_length=256)
 
 
+class PareintJoinSerializer(serializers.Serializer):
+    """
+    Информация о связи с родителем
+    """
+    join_type = serializers.CharField()
+    field = serializers.CharField()
+    parent_field = serializers.CharField()
+
+
 class NodeSerializer(serializers.Serializer):
 
-    parent = serializers.CharField(max_length=256, allow_null=True)
+    parent = serializers.CharField(max_length=256, allow_null=True, default=None)
     source_id = serializers.IntegerField()
     val = serializers.CharField(max_length=256)
-    is_bind = serializers.BooleanField()
+    is_bind = serializers.BooleanField(default=False, read_only=True)
+    is_root = serializers.BooleanField(default=False, read_only=True)
+    parent_join = PareintJoinSerializer(allow_null=True, default=None)
+
+    def create(self, validated_data):
+        pass
 
     def update(self, instance, validated_data):
-        pass
+        super(NodeSerializer, self).update(instance, validated_data)
 
 
 class ParentIdSerializer(serializers.Serializer):

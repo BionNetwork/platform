@@ -188,16 +188,6 @@ class CubeViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         return super(CubeViewSet, self).list(request, *args, **kwargs)
 
-    # @detail_route(methods=['post'])
-    # def clear_cache(self, request, pk):
-    #     """
-    #     Очистка инфы карточки из редиса
-    #     """
-    #     worker = DataCubeService(cube_id=pk)
-    #     worker.cache.clear_cube_cache()
-    #
-    #     return Response()
-
     def create(self, request, *args, **kwargs):
         return super(CubeViewSet, self).create(request, *args, **kwargs)
 
@@ -373,12 +363,23 @@ class CubeViewSet(viewsets.ModelViewSet):
     def data(self, request, pk):
         """
         Начачло загрузки данных
+
+        {"21":
+                {
+                    "TDSheet": [
+                        "Дата",
+                        "Организация",
+                        "Остаток",
+                        "Контрагент"
+                    ]
+                }
+}
         """
         if pk is None:
             raise Exception("Cube ID is None!")
 
-        sources_info = json.loads(request.data.get('data'))
-
+        # sources_info = json.loads(request.data.get('data'))
+        sources_info = request.data
         # sources_info = {
         #     '90':
         #         {
@@ -501,12 +502,7 @@ class DatasetContext(object):
         self.sources_info = sources_info
         self.cube_service = DataCubeService(cube_id=cube_id)
 
-        try:
-            self.dataset = Dataset.objects.get(key=cube_id)
-            self.is_new = False
-        except Dataset.DoesNotExist:
-            self.dataset = Dataset()
-            self.is_new = True
+        self.dataset, self.is_new = Dataset.objects.get_or_create(key=cube_id)
 
     @property
     def context(self):
@@ -516,7 +512,7 @@ class DatasetContext(object):
         Returns:
             dict:
         """
-        if self.is_new:
+        if not self.dataset.context:
             sub_trees = self.cube_service.prepare_sub_trees(self.sources_info)
             for sub_tree in sub_trees:
                 sub_tree.update(
@@ -546,7 +542,9 @@ class DatasetContext(object):
             self.dataset.state = DatasetStateChoices.IDLE
             self.dataset.save()
         else:
-            raise ContextError('Dataset already exist')
+            self.dataset.context = self.context
+            self.dataset.save()
+            # raise ContextError('Dataset already exist')
 
     @property
     def state(self):
@@ -607,6 +605,13 @@ def check_child(in_remain):
 class NodeViewSet(viewsets.ViewSet):
     """
     Предстваление для работы с узлами для дерева
+
+    [{
+"val": "TDSheet",
+"is_bind": "false",
+"is_root": "true",
+"source_id": 21
+}]
     """
 
     serializer_class = NodeSerializer
@@ -618,10 +623,26 @@ class NodeViewSet(viewsets.ViewSet):
         worker = DataCubeService(cube_id=cube_pk)
         data = worker.get_tree_api()
 
-        # FIXME доделать валидатор
-        # serializer = NodeSerializer(data=data, many=True)
-        # if serializer.is_valid():
         return Response(data=data)
+
+    def create(self, request, cube_pk):
+        data = request.data
+        serializer = NodeSerializer(data=data, many=True)
+        if serializer.is_valid():
+            worker = DataCubeService(cube_id=cube_pk)
+
+            for each in data:
+                sid, table = each['source_id'], each['val']
+                node_id = worker.cache.get_table_id(sid, table)
+
+                if node_id is None:
+                    node_id = worker.cache_columns(sid, table)
+                    worker.add_randomly_from_remains(node_id)
+
+            info = worker.get_tree_api()
+
+            return Response(info)
+        raise APIException("Invalid args!")
 
     def retrieve(self, request, cube_pk=None, pk=None):
         """
@@ -747,11 +768,12 @@ class JoinViewSet(viewsets.ViewSet):
             pk(int): id узла-потомка
 
         {
+        "join_type": "inner",
         "joins":
         [{
-            "right": "group_id",
-            "join": "eq",
-            "left": "id"
+            "child": "group_id",
+            "operator": "eq",
+            "parent": "id"
         }, {...}]
 }
         """
@@ -760,12 +782,13 @@ class JoinViewSet(viewsets.ViewSet):
 
         left_node = worker.get_node(node_pk)
         right_node = worker.get_node(pk)
+        data = request.data
 
-        join_type = 'inner'
+        join_type = data['type']
 
         joins = []
         for each in request.data['joins']:
-            joins.append([each['left'], each['join'], each['right']])
+            joins.append([each['parent'], each['operator'], each['child']])
 
         data = worker.save_new_joins(
             left_node, right_node, join_type, joins)
