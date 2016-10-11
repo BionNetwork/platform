@@ -11,10 +11,10 @@ import pandas
 from dateutil.parser import parse
 from xlrd import XLRDError
 
+from core.models import EmptyEnum, ColumnTypeChoices as CTC
+
 from etl.services.datasource.file.interfaces import File
 from etl.services.exceptions import (SheetException, ColumnException)
-from etl.services.datasource.source import (
-    SourceConvertTypes as SCT, EmptyEnum)
 
 
 class Excel(File):
@@ -389,23 +389,23 @@ class Excel(File):
 
         col_df = sheet_df[column]
 
-        if typ == SCT.DATE:
+        if typ == CTC.TIME:
             nulls = col_df.loc[col_df.isnull()].index.tolist()
             to_dates = pandas.to_datetime(col_df, errors='coerce')
             more_nulls = to_dates.loc[to_dates.isnull()].index.tolist()
             errors = [x for x in more_nulls if x not in nulls]
 
-        elif typ in [SCT.INT, SCT.DOUBLE]:
+        elif typ in [CTC.INT, CTC.DOUB]:
             nulls = col_df.loc[col_df.isnull()].index.tolist()
             to_nums = pandas.to_numeric(col_df, errors='coerce')
             more_nulls = to_nums.loc[to_nums.isnull()].index.tolist()
             errors = [x for x in more_nulls if x not in nulls]
 
-        elif typ == SCT.TEXT:
+        elif typ == CTC.TEXT:
             errors = []
             nulls = []
 
-        elif typ == SCT.BOOL:
+        elif typ == CTC.BOOL:
             raise ColumnException("No implementation for bool!")
 
         else:

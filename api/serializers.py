@@ -187,9 +187,9 @@ class ChangeDestinationSerializer(serializers.Serializer):
     """
 
 
-class ColumnValidationSeria(serializers.Serializer):
+class ColumnsSerializer(serializers.Serializer):
     """
-    Проверка аргументов при Проверки значений колонки на определенный тип
+    Сериалайзер колонок куба
     """
     source_id = serializers.IntegerField(required=True, allow_null=False)
     table = serializers.CharField(required=True)

@@ -15,7 +15,7 @@ from etl.services.datasource.db.factory import (
 from etl.services.datasource.file.factory import FileService
 from etl.services.datasource.repository.storage import (
     SourceCacheService, CubeCacheService)
-from etl.services.exceptions import SourceUpdateException
+from etl.services.exceptions import *
 
 
 class DataSourceService(object):
@@ -1136,19 +1136,86 @@ class DataCubeService(object):
 
         return {'filters': filters2, 'measures': measures2}
 
-    def validate_column(self, source_id, table, column, param, type):
+    def validate_column(self, source_id, table, column, type):
         """
         Проверка колонки на соответствующий тип typ
         """
         source_worker = DataSourceService(source_id)
         result = source_worker.validate_column(table, column, type)
-
-        if not result['errors']:
-            # save valid type of column for source for current cube
-            self.cache.set_cube_so_column_type(
-                source_id, table, column, param, type)
-
         return result
+
+    def create_column(self, source_id, table, column_name,
+                      param_name, int_type, default):
+        """
+        Сохранение колонки
+        """
+        cube_id = self.cache.cube_id
+        dataset = Dataset.objects.get(key=cube_id)
+
+        # если пришедшая колонка занята другим параметром
+        column_is_busy = Columns.objects.filter(
+            dataset__key=cube_id, source_id=source_id,
+            original_table=table, original_name=column_name
+        )
+        if column_is_busy.exists():
+            raise BaseExcept("Column is busy!")
+
+        param_busy = Columns.objects.filter(
+            dataset=dataset, name=param_name,
+        )
+
+        if param_busy.exists():
+            raise BaseExcept("Parameter is busy!")
+
+        column = Columns(
+            name=param_name,
+            dataset=dataset,
+            original_name=column_name,
+            original_table=table,
+            source_id=source_id,
+            type=int_type,
+        )
+
+        # если имеется, проставим поведение дефолтного значения
+        if default:
+            column.default_val = default
+
+        column.save()
+
+        return column
+
+    def update_column(self, col_id, source_id, table, column_name,
+                      param_name, int_type, default):
+        """
+        Обновление колонки
+        """
+        cube_id = self.cache.cube_id
+
+        # если пришедшая колонка занята другим параметром
+        column_is_busy = Columns.objects.filter(
+            dataset__key=cube_id, source_id=source_id,
+            original_table=table, original_name=column_name
+        ).exclude(id=col_id)
+        if column_is_busy.exists():
+            raise BaseExcept("Column is busy!")
+
+        try:
+            column = Columns.objects.get(id=col_id)
+        except Columns.DoesNotExist:
+            raise BaseExcept("Column is not found!")
+
+        if int_type:
+            column.source_id = source_id
+            column.original_table = table
+            column.original_name = column_name
+            column.type = int_type
+
+        if default:
+            column.default_val = default
+
+        column.save()
+
+        return column
 
     def set_column_default(self, source_id, table, column, default):
         """
