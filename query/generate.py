@@ -152,7 +152,7 @@ class Parse(object):
             node(dict): Входной словарь
         """
 
-        self.name = node['name']
+        self.name = node.get('name', None) or self.generated_name
         self.field = node['field']
         self.type = node['type']
         self.visible = node.get('visible', True)
@@ -163,6 +163,10 @@ class Parse(object):
 
         if self.type not in self.types:
             raise QueryException('Тип узла не соответсвует')
+
+    @property
+    def generated_name(self):
+        return self.field
 
     def run(self):
         raise NotImplementedError
@@ -227,6 +231,9 @@ class MeasureParse(Parse):
     Разбор агрегирующего узла
     """
     types = ['avg', 'sum', 'min', 'max']
+
+    def generated_name(self):
+        return "{agg}_{field}".format(agg=self.type, field=self.field)
 
     def __init__(self, node):
         super(MeasureParse, self).__init__(node)
@@ -346,7 +353,7 @@ class Filter(object):
             raise QueryException(
                 'Число крайних значений диапазона для поля {0} не равно 2'.format(self.field))
         new_value = [{GT: value[0]}, {LT: value[1]}]
-        return self.xand(new_value)
+        return self._and(new_value)
 
     def eq(self, value):
         """
@@ -404,7 +411,7 @@ class Filter(object):
         """
         return self._compare('>=', value)
 
-    def xor(self, value):
+    def _or(self, value):
         """
         Сравнение 'или'
         Args:
@@ -415,7 +422,7 @@ class Filter(object):
         """
         return "("+" OR ".join([self._parse(x) for x in value])+")"
 
-    def xand(self, value):
+    def _and(self, value):
         """
         Сравнение 'и'
         Args:
