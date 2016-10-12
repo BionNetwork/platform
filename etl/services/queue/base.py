@@ -446,7 +446,6 @@ class TaskService(object):
 
         task = QueueList.objects.create(
             queue_id=1,
-            # FIXME раскоментить, когда с мультисоурсами разберемся
             # queue=queue,
             queue_status=QueueStatus.objects.get(title=TaskStatusEnum.IDLE),
             arguments=json.dumps(arguments),
