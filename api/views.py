@@ -20,7 +20,7 @@ from api.serializers import (
 )
 
 from core.models import (
-    Datasource, Dataset, DatasetStateChoices, EmptyEnum, DatasourceSettings,
+    Datasource, Dataset, EmptyEnum, DatasourceSettings,
     ColumnTypeChoices as CTC
 )
 from etl.tasks import load_data
@@ -29,7 +29,6 @@ from etl.services.exceptions import *
 from etl.helpers import group_by_source, DatasetContext, ContextError
 from etl.services.exceptions import SheetException
 
-from etl.constants import *
 
 from rest_framework.decorators import detail_route
 
@@ -632,96 +631,6 @@ class ColumnsViewSet(viewsets.ViewSet):
         return Response("Deleted!")
 
 
-# TODO: Перенести куда-нибудь
-class DatasetContext(object):
-    """
-    Контекст выполениния задач
-    """
-
-    def __init__(self, cube_id, is_update=False, sources_info=None):
-        """
-
-        Args:
-            cube_id(int): id Карточки
-            is_update(bool): Обновление?
-            sources_info(dict): Данные загрузки
-            ::
-            ['<source_1>':
-                {
-                    "shops": ['<column_1>, <column_2>, <column_3>]
-                },
-            '<source_2>':
-                {
-                    "<table_1>": [<column_1>, <column_2>],
-                    "<table_2": [<column_1>, <column_2>]
-                }
-            ...
-
-        ]
-        """
-        self.cube_id = cube_id
-        self.is_update = is_update
-        self.sources_info = sources_info
-        self.cube_service = DataCubeService(cube_id=cube_id)
-
-        self.dataset, self.is_new = Dataset.objects.get_or_create(key=cube_id)
-
-    @property
-    def context(self):
-        """
-        Контекста выполнения задач
-
-        Returns:
-            dict:
-        """
-        if not self.dataset.context:
-            sub_trees = self.cube_service.prepare_sub_trees(self.sources_info)
-            for sub_tree in sub_trees:
-                sub_tree.update(
-                    view_name='{type}{view_hash}'.format(
-                        type=VIEW, view_hash=sub_tree['collection_hash']),
-                    table_name='{type}{view_hash}'.format(
-                        type=STTM, view_hash=sub_tree['collection_hash']))
-                for column in sub_tree['columns']:
-                    column.update(click_column=CLICK_COLUMN.format(column['hash']))
-
-            relations = self.cube_service.prepare_relations(sub_trees)
-            self.is_new = False
-            return {
-                'warehouse': CLICK_TABLE.format(self.cube_id),
-                'cube_id': self.cube_id,
-                'is_update': False,
-                'sub_trees': sub_trees,
-                "relations": relations,
-            }
-        else:
-            return self.dataset.context
-
-    def create_dataset(self):
-        if self.is_new:
-            self.dataset.key = self.cube_id
-            self.dataset.context = self.context
-            self.dataset.state = DatasetStateChoices.IDLE
-            self.dataset.save()
-        else:
-            self.dataset.context = self.context
-            self.dataset.save()
-            # raise ContextError('Dataset already exist')
-
-    @property
-    def state(self):
-        return self.dataset.state
-
-    @state.setter
-    def state(self, value):
-        self.dataset.state = value
-        self.dataset.save()
-
-
-class ContextError(Exception):
-    pass
-
-
 def check_parent(func):
     """
     Проверка ID родителя на существование
@@ -767,14 +676,14 @@ def check_child(in_remain):
 class NodeViewSet(viewsets.ViewSet):
     """
     Предстваление для работы с узлами для дерева
-
-    [{
-"val": "TDSheet",
-"is_bind": "false",
-"is_root": "true",
-"source_id": 21
-}]
     """
+    #
+    # [{
+    #     "val": "TDSheet",
+    #     "is_bind": "false",
+    #     "is_root": "true",
+    #     "source_id": 21
+    # }]
 
     serializer_class = NodeSerializer
 
@@ -956,3 +865,21 @@ class JoinViewSet(viewsets.ViewSet):
             left_node, right_node, join_type, joins)
 
         return Response(data=data)
+
+
+d = \
+    {
+    "22":
+        {
+            "TDSheet": [
+                "Дата",
+                "Организация",
+                "Выручка",
+                "ВыручкаБезНДС",
+                "НоменклатурнаяГруппа",
+                "Контрагент",
+                "ДоговорКонтрагента",
+                "Проект"
+            ]
+        }
+}
