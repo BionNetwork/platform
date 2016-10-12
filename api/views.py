@@ -697,7 +697,7 @@ class NodeViewSet(viewsets.ViewSet):
         return Response(data=data)
 
     def create(self, request, cube_pk):
-        data = request.data
+        data = json.loads(request.data.get('data'))
         serializer = NodeSerializer(data=data, many=True)
         if serializer.is_valid():
             worker = DataCubeService(cube_id=cube_pk)
@@ -853,7 +853,7 @@ class JoinViewSet(viewsets.ViewSet):
 
         left_node = worker.get_node(node_pk)
         right_node = worker.get_node(pk)
-        data = request.data
+        data = json.loads(request.data.get('data'))
 
         join_type = data['type']
 
