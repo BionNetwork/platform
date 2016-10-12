@@ -476,9 +476,40 @@ class ColumnsViewSet(viewsets.ViewSet):
         Список узлов дерева и остаткa
         """
         worker = DataCubeService(cube_id=cube_pk)
-        # data = worker.cube_columns()
+        columns = worker.cube_columns()
 
-        return Response(data=[])
+        data = map(lambda c: {
+            "id": c.id,
+            "cube_id": cube_pk,
+            "source_id": c.source_id,
+            "param": c.name,
+            "table": c.original_table,
+            "column": c.original_name,
+            "type": CTC.values.get(int(c.type)),
+            "default": c.default_val,
+        }, columns)
+
+        return Response(data=data)
+
+    def get(self, request, cube_pk, pk):
+        """
+        Колонка
+        """
+        worker = DataCubeService(cube_id=cube_pk)
+        column = worker.get_column(pk)
+
+        data = {
+            "id": column.id,
+            "cube_id": cube_pk,
+            "source_id": column.source_id,
+            "param": column.name,
+            "table": column.original_table,
+            "column": column.original_name,
+            "type": CTC.values.get(int(column.type)),
+            "default": column.default_val,
+        }
+
+        return Response(data)
 
     def create(self, request, cube_pk):
         """
@@ -589,6 +620,17 @@ class ColumnsViewSet(viewsets.ViewSet):
             raise APIException(ex.message)
 
         return Response(info)
+
+    def delete(self, request, cube_pk, pk):
+        """
+        Удаление колонки
+        """
+        worker = DataCubeService(cube_id=cube_pk)
+        try:
+            worker.delete_column(pk)
+        except BaseExcept as ex:
+            raise APIException(ex.message)
+        return Response("Deleted!")
 
 
 # TODO: Перенести куда-нибудь

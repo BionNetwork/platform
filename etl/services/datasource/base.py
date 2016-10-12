@@ -1144,6 +1144,24 @@ class DataCubeService(object):
         result = source_worker.validate_column(table, column, type)
         return result
 
+    def cube_columns(self):
+        """
+        Колонки куба
+        """
+        cube_id = self.cache.cube_id
+        return Columns.objects.filter(dataset__key=cube_id)
+
+    def get_column(self, col_id):
+        """
+        Инфа колонки
+        """
+        cube_id = self.cache.cube_id
+        try:
+            column = Columns.objects.get(id=col_id, dataset__key=cube_id)
+        except Columns.DoesNotExist:
+            raise BaseExcept("Column is not found!")
+        return column
+
     def create_column(self, source_id, table, column_name,
                       param_name, int_type, default):
         """
@@ -1216,6 +1234,18 @@ class DataCubeService(object):
         column.save()
 
         return column
+
+    def delete_column(self, col_id):
+        """
+        Удаление колонки
+        """
+        cube_id = self.cache.cube_id
+        try:
+            column = Columns.objects.get(id=col_id, dataset__key=cube_id)
+        except Columns.DoesNotExist:
+            raise BaseExcept("Column is not found!")
+
+        column.delete()
 
     def set_column_default(self, source_id, table, column, default):
         """
