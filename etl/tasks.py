@@ -342,7 +342,7 @@ class MetaInfoSave(EtlBaseTask):
         sub_trees = self.context['sub_trees']
 
         # FIXME temporary delete all old meta columns info
-        Columns.objects.filter(source__dataset__key=dataset_id).delete()
+        Columns.objects.filter(dataset__key=dataset_id).delete()
 
         dataset = Dataset.objects.get(key=dataset_id)
 
