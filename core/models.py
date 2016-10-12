@@ -483,6 +483,13 @@ class Columns(models.Model):
         return "{0}, {1} ({2})".format(
             self.dataset_id, self.source_id, self.original_name)
 
+    @property
+    def type_str(self):
+        """
+        Тип колонки в строковом виде
+        """
+        return ColumnTypeChoices.values.get(int(self.type))
+
 
 class JoinTypeChoices(DjangoChoices):
     """Типы подключения"""

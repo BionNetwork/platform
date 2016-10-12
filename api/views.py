@@ -210,38 +210,37 @@ class CubeViewSet(viewsets.ModelViewSet):
 
     # FIXME подумать передавать ли сюда список колонок,
     # FIXME все колонки источника нам не нужны
-    @detail_route(['post'], serializer_class=TreeSerializerRequest)
+    @detail_route(['post'])
     def tree(self, request, pk):
 
-        data = json.loads(request.data.get('data'))
+        # data = json.loads(request.data.get('data'))
         # data = request.data
 
         # data = [
-        #     {"source_id": 92, "table_name": 'Таблица1', },
-        #     {"source_id": 91, "table_name": 'Лист1', },
-        #     {"source_id": 92, "table_name": 'Таблица3', },
-        #     {"source_id": 91, "table_name": 'Лист2', },
-        #     {"source_id": 90, "table_name": 'TDSheet', },
-        #     {"source_id": 89, "table_name": 'Sheet1', },
+        #     {"source_id": 92, "original_table": 'Таблица1', },
+        #     {"source_id": 91, "original_table": 'Лист1', },
+        #     {"source_id": 92, "original_table": 'Таблица3', },
+        #     {"source_id": 91, "original_table": 'Лист2', },
+        #     {"source_id": 90, "original_table": 'TDSheet', },
+        #     {"source_id": 89, "original_table": 'Sheet1', },
         # ]
+        # serializer = self.serializer_class(data=data, many=True)
+        # if serializer.is_valid():
 
-        serializer = self.serializer_class(data=data, many=True)
-        if serializer.is_valid():
-            worker = DataCubeService(cube_id=pk)
+        worker = DataCubeService(cube_id=pk)
+        data = worker.data_for_tree_creation()
 
-            for each in data:
-                sid, table = each['source_id'], each['table_name']
-                node_id = worker.cache.get_table_id(sid, table)
+        for each in data:
+            sid, table = each['source_id'], each['original_table']
+            node_id = worker.cache.get_table_id(sid, table)
 
-                if node_id is None:
-                    node_id = worker.cache_columns(sid, table)
-                    worker.add_randomly_from_remains(node_id)
+            if node_id is None:
+                node_id = worker.cache_columns(sid, table)
+                worker.add_randomly_from_remains(node_id)
 
-            info = worker.get_tree_api()
+        info = worker.get_tree_api()
 
-            return Response(info)
-
-        raise APIException("Invalid args!")
+        return Response(info)
 
     @detail_route(['post'])
     def exchange_file(self, request, pk):

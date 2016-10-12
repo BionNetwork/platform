@@ -5,8 +5,7 @@ from functools import reduce
 from core.helpers import get_utf8_string
 from core.models import (
     ConnectionChoices, Datasource, Columns, ColumnTypeChoices as ColTC,
-    Dataset,
-    DatasourceSettings)
+    Dataset)
 from etl.helpers import HashEncoder
 from etl.models import TableTreeRepository as TTRepo
 from etl.services.clickhouse.helpers import FILTER_QUERIES
@@ -527,28 +526,28 @@ class DataCubeService(object):
         all_columns, indexes, foreigns, statistics, date_intervals = (
             source_worker.get_columns_info([table, ]))
 
-        # # заменяем типы колонок, указанные заранее
-        all_table_columns = all_columns[table]
-        # table_settings = cache.get_cube_settings()['tables'][table]
-        #
-        # # те колонки, которые выбраны для параметров,
-        # # для них указан свой тип! проставляем соответствующий тип
-        # # так же проставим дефолтные значения для пустых ячеек источника
-        # for column in all_table_columns:
-        #     for col_name in table_settings:
-        #         if column['name'] == col_name:
-        #             setted_type = table_settings[col_name]['type']
-        #             if setted_type is not None:
-        #                 column['type'] = setted_type
-        #
-        #             setted_default = table_settings[col_name]['default']
-        #             if setted_default is not None:
-        #                 column['default'] = setted_default
-        #
+        # заменяем типы колонок, указанные заранее
+        source_table_columns = all_columns[table]
+
+        columns_query = Columns.objects.filter(
+            dataset__key=cache.cube_id,
+            source_id=source_id,
+            original_table=table,
+        )
+
+        # те колонки, которые выбраны для параметров,
+        # для них указан свой тип! проставляем соответствующий тип
+        # так же проставим дефолтные значения для пустых ячеек источника
+        for source_column in source_table_columns:
+            for db_col in columns_query:
+                if source_column['name'] == db_col.original_name:
+                    source_column['type'] = db_col.type_str
+                    source_column['default'] = db_col.default_val
+
         info = {
             "value": table,
             "sid": source_id,
-            "columns": all_table_columns,
+            "columns": source_table_columns,
             "indexes": indexes[table],
             "foreigns": foreigns[table],
             "stats": statistics[table],
@@ -1150,6 +1149,13 @@ class DataCubeService(object):
         """
         cube_id = self.cache.cube_id
         return Columns.objects.filter(dataset__key=cube_id)
+
+    def data_for_tree_creation(self):
+        """
+        Инфа для построения дерева
+        """
+        columns = self.cube_columns()
+        return columns.values('source_id', 'original_table').distinct()
 
     def get_column(self, col_id):
         """
