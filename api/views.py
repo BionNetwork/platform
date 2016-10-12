@@ -396,60 +396,60 @@ class CubeViewSet(viewsets.ModelViewSet):
                 }
 }
         """
+        # try:
+        if pk is None:
+            raise APIException("Cube ID is None!")
+
+        sources_info = request.data
+
+        # TODO возможно валидацию перенести в отдельный файл
+        if not sources_info:
+            raise APIException("Data is empty!")
+
+        worker = DataCubeService(cube_id=pk)
+
+        # проверка на пришедшие колонки, лежат ли они в редисе,
+        # убираем ненужные типы (бинари)
+
+        # группируем по соурс id на всякий
+        sources_info = group_by_source(sources_info)
+
+        # проверяем наличие соурс id в кэше
+        uncached = worker.check_sids_exist(list(sources_info.keys()))
+        if uncached:
+            raise APIException("Uncached source IDs: {0}!".format(uncached))
+
+        # проверяем наличие ключей, таблиц, колонок в кэше
+        uncached_tables, uncached_keys, uncached_columns = (
+            worker.check_cached_data(sources_info))
+
+        if any([uncached_tables, uncached_keys, uncached_columns]):
+            message = ""
+            if uncached_tables:
+                message += "Uncached tables: {0}! ".format(uncached_tables)
+            if uncached_keys:
+                message += "No keys for: {0}! ".format(uncached_keys)
+            if uncached_columns:
+                message += "Uncached columns: {0}! ".format(uncached_columns)
+
+            raise APIException(message)
+
+        # проверка наличия всех таблиц из дерева в пришедших нам
+        range_ = worker.check_tables_with_tree_structure(sources_info)
+        if range_:
+            raise APIException("Tables {0} in tree, but didn't come! ".format(
+                 range_))
+
+        dc = DatasetContext(cube_id=pk, sources_info=sources_info)
         try:
-            if pk is None:
-                raise APIException("Cube ID is None!")
+            dc.create_dataset()
+        except ContextError:
+            raise APIException("Подобная карточка уже существует")
+        load_d = load_data(dc.context)
 
-            sources_info = request.data
-
-            # TODO возможно валидацию перенести в отдельный файл
-            if not sources_info:
-                raise APIException("Data is empty!")
-
-            worker = DataCubeService(cube_id=pk)
-
-            # проверка на пришедшие колонки, лежат ли они в редисе,
-            # убираем ненужные типы (бинари)
-
-            # группируем по соурс id на всякий
-            sources_info = group_by_source(sources_info)
-
-            # проверяем наличие соурс id в кэше
-            uncached = worker.check_sids_exist(list(sources_info.keys()))
-            if uncached:
-                raise APIException("Uncached source IDs: {0}!".format(uncached))
-
-            # проверяем наличие ключей, таблиц, колонок в кэше
-            uncached_tables, uncached_keys, uncached_columns = (
-                worker.check_cached_data(sources_info))
-
-            if any([uncached_tables, uncached_keys, uncached_columns]):
-                message = ""
-                if uncached_tables:
-                    message += "Uncached tables: {0}! ".format(uncached_tables)
-                if uncached_keys:
-                    message += "No keys for: {0}! ".format(uncached_keys)
-                if uncached_columns:
-                    message += "Uncached columns: {0}! ".format(uncached_columns)
-
-                raise APIException(message)
-
-            # проверка наличия всех таблиц из дерева в пришедших нам
-            range_ = worker.check_tables_with_tree_structure(sources_info)
-            if range_:
-                raise APIException("Tables {0} in tree, but didn't come! ".format(
-                     range_))
-
-            dc = DatasetContext(cube_id=pk, sources_info=sources_info)
-            try:
-                dc.create_dataset()
-            except ContextError:
-                raise APIException("Подобная карточка уже существует")
-            load_d = load_data(dc.context)
-
-            return Response(load_d)
-        except Exception as err:
-            raise APIException(err)
+        return Response(load_d)
+        # except Exception as err:
+        #     raise APIException(err)
 
     @detail_route(['get', ], serializer_class=LoadDataSerializer)
     def get_filters(self, request, pk):
