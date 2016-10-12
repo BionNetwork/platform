@@ -7,7 +7,6 @@ from core.models import (
     ConnectionChoices, Datasource, Columns, ColumnTypeChoices as ColTC,
     Dataset,
     DatasourceSettings)
-from etl.helpers import HashEncoder
 from etl.models import TableTreeRepository as TTRepo
 from etl.services.clickhouse.helpers import FILTER_QUERIES
 from etl.services.datasource.db.factory import (
@@ -16,6 +15,24 @@ from etl.services.datasource.file.factory import FileService
 from etl.services.datasource.repository.storage import (
     SourceCacheService, CubeCacheService)
 from etl.services.exceptions import *
+
+
+class HashEncoder(object):
+    """
+    Базовый класс для хэширования данных
+    """
+
+    @staticmethod
+    def encode(data):
+        """
+        Кодирование данных
+        Args:
+            data(object): list, dict, str данные для кодирования
+        Returns:
+            object(int): integer представление
+        """
+        return hash(data)
+
 
 
 class DataSourceService(object):

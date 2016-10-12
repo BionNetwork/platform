@@ -20,7 +20,7 @@ from api.serializers import (
 )
 
 from core.models import (
-    Datasource, Dataset, DatasetStateChoices, EmptyEnum, DatasourceSettings,
+    Datasource, Dataset, EmptyEnum, DatasourceSettings,
     ColumnTypeChoices as CTC
 )
 from etl.tasks import load_data
@@ -29,7 +29,6 @@ from etl.services.exceptions import *
 from etl.helpers import group_by_source, DatasetContext, ContextError
 from etl.services.exceptions import SheetException
 
-from etl.constants import *
 
 from rest_framework.decorators import detail_route
 
@@ -867,3 +866,21 @@ class JoinViewSet(viewsets.ViewSet):
             left_node, right_node, join_type, joins)
 
         return Response(data=data)
+
+
+d = \
+    {
+    "22":
+        {
+            "TDSheet": [
+                "Дата",
+                "Организация",
+                "Выручка",
+                "ВыручкаБезНДС",
+                "НоменклатурнаяГруппа",
+                "Контрагент",
+                "ДоговорКонтрагента",
+                "Проект"
+            ]
+        }
+}
