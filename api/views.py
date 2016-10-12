@@ -400,7 +400,7 @@ class CubeViewSet(viewsets.ModelViewSet):
         if pk is None:
             raise APIException("Cube ID is None!")
 
-        sources_info = request.data
+        sources_info = json.loads(request.data.get('data'))
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
