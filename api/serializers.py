@@ -142,7 +142,7 @@ class NodeSerializer(serializers.Serializer):
 
     # parent = serializers.CharField(max_length=256, allow_null=True, default=None)
     source_id = serializers.IntegerField()
-    val = serializers.CharField(max_length=256)
+    table_name = serializers.CharField(max_length=256)
     # is_bind = serializers.BooleanField(default=False, read_only=True)
     # is_root = serializers.BooleanField(default=False, read_only=True)
     # parent_join = PareintJoinSerializer(allow_null=True, default=None)
