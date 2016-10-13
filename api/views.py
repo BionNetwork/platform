@@ -697,7 +697,8 @@ class NodeViewSet(viewsets.ViewSet):
         return Response(data=data)
 
     def create(self, request, cube_pk):
-        data = json.loads(request.data.get('data'))
+        # data = json.loads(request.data.get('data'))
+        data = request.data
         serializer = NodeSerializer(data=data, many=True)
         if serializer.is_valid():
             worker = DataCubeService(cube_id=cube_pk)
