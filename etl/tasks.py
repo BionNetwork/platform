@@ -342,7 +342,7 @@ class MetaInfoSave(EtlBaseTask):
         sub_trees = self.context['sub_trees']
 
         # FIXME temporary delete all old meta columns info
-        Columns.objects.filter(source__dataset__key=dataset_id).delete()
+        Columns.objects.filter(dataset__key=dataset_id).delete()
 
         dataset = Dataset.objects.get(key=dataset_id)
 
@@ -357,7 +357,7 @@ class MetaInfoSave(EtlBaseTask):
                     name=CLICK_COLUMN.format(column['hash']),
                     # name=column['name'],
                     source_id=source_id,
-                    type=CTC.get_type(column['type']),
+                    type=CTC.get_int_type(column['type']),
                 )
 
 

@@ -395,15 +395,15 @@ class CubeViewSet(viewsets.ModelViewSet):
                 }
 }
         """
+        # try:
         if pk is None:
-            raise Exception("Cube ID is None!")
+            raise APIException("Cube ID is None!")
 
-        sources_info = request.data
+        sources_info = json.loads(request.data.get('data'))
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
-            return Response(
-                {"message": "Data is empty!"})
+            raise APIException("Data is empty!")
 
         worker = DataCubeService(cube_id=pk)
 
@@ -416,8 +416,7 @@ class CubeViewSet(viewsets.ModelViewSet):
         # проверяем наличие соурс id в кэше
         uncached = worker.check_sids_exist(list(sources_info.keys()))
         if uncached:
-            return Response(
-                {"message": "Uncached source IDs: {0}!".format(uncached)})
+            raise APIException("Uncached source IDs: {0}!".format(uncached))
 
         # проверяем наличие ключей, таблиц, колонок в кэше
         uncached_tables, uncached_keys, uncached_columns = (
@@ -432,24 +431,24 @@ class CubeViewSet(viewsets.ModelViewSet):
             if uncached_columns:
                 message += "Uncached columns: {0}! ".format(uncached_columns)
 
-            return Response({"message": message})
+            raise APIException(message)
 
         # проверка наличия всех таблиц из дерева в пришедших нам
         range_ = worker.check_tables_with_tree_structure(sources_info)
         if range_:
-            return Response({
-                "message": "Tables {0} in tree, but didn't come! ".format(
-                 range_)})
+            raise APIException("Tables {0} in tree, but didn't come! ".format(
+                 range_))
 
         dc = DatasetContext(cube_id=pk, sources_info=sources_info)
         try:
             dc.create_dataset()
         except ContextError:
-            return Response({"message": "Подобная карточка уже существует"})
+            raise APIException("Подобная карточка уже существует")
         load_d = load_data(dc.context)
 
         return Response(load_d)
-        # return Response({"message": "Loading is started!"})
+        # except Exception as err:
+        #     raise APIException(err)
 
     @detail_route(['get', ], serializer_class=LoadDataSerializer)
     def get_filters(self, request, pk):
@@ -697,13 +696,13 @@ class NodeViewSet(viewsets.ViewSet):
         return Response(data=data)
 
     def create(self, request, cube_pk):
-        data = request.data
+        data = json.loads(request.data.get('data'))
         serializer = NodeSerializer(data=data, many=True)
         if serializer.is_valid():
             worker = DataCubeService(cube_id=cube_pk)
 
             for each in data:
-                sid, table = each['source_id'], each['val']
+                sid, table = each['source_id'], each['table_name']
                 node_id = worker.cache.get_table_id(sid, table)
 
                 if node_id is None:
@@ -853,7 +852,7 @@ class JoinViewSet(viewsets.ViewSet):
 
         left_node = worker.get_node(node_pk)
         right_node = worker.get_node(pk)
-        data = request.data
+        data = json.loads(request.data.get('data'))
 
         join_type = data['type']
 

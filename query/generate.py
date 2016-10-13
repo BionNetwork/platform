@@ -111,7 +111,7 @@ class QueryGenerate(object):
 
         select_query = "{select_block} FROM {table} {where_block} {group_block} {having_block} {order_block}".format(
             select_block=select_block,
-            table='t_21',
+            table='t_{0}'.format(self.cube_id),
             where_block=where_block,
             group_block=group_block,
             order_block=order_block,
