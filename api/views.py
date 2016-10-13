@@ -52,6 +52,13 @@ class ErrorCodes(object):
 ERRC = ErrorCodes
 
 
+def request_data(request):
+    try:
+        return json.loads(request.data.get('data'))
+    except Exception:
+        return request.data
+
+
 # FIXME потом унаследовать всех от этого класса
 class TokenRequired(APIView):
 
@@ -108,7 +115,7 @@ class DatasourceViewSet(viewsets.ModelViewSet):
         """
         Отступ в соурсах, предположительно в файлах
         """
-        post = request.data
+        post = request_data(request)
 
         sheet = post.get('sheet', None)
         if sheet is None:
@@ -373,7 +380,7 @@ class CubeViewSet(viewsets.ModelViewSet):
         }
         """
         try:
-            data = request.data
+            data = request_data(request)
 
             data = QueryGenerate(pk, data).parse()
             return Response(json.loads(data))
@@ -400,7 +407,7 @@ class CubeViewSet(viewsets.ModelViewSet):
         if pk is None:
             raise APIException("Cube ID is None!")
 
-        sources_info = json.loads(request.data.get('data'))
+        sources_info = request_data(request)
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
@@ -570,7 +577,7 @@ class ColumnsViewSet(viewsets.ViewSet):
         """
         column_id = pk
 
-        data = request.data
+        data = request_data(request)
 
         sid = int(data.get('source_id'))
         table = data.get('table')
@@ -697,7 +704,7 @@ class NodeViewSet(viewsets.ViewSet):
         return Response(data=data)
 
     def create(self, request, cube_pk):
-        data = json.loads(request.data.get('data'))
+        data = request_data(request)
         serializer = NodeSerializer(data=data, many=True)
         if serializer.is_valid():
             worker = DataCubeService(cube_id=cube_pk)
@@ -853,7 +860,7 @@ class JoinViewSet(viewsets.ViewSet):
 
         left_node = worker.get_node(node_pk)
         right_node = worker.get_node(pk)
-        data = json.loads(request.data.get('data'))
+        data = request_data(request)
 
         join_type = data['type']
 
