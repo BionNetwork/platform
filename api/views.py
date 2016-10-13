@@ -703,7 +703,7 @@ class NodeViewSet(viewsets.ViewSet):
             worker = DataCubeService(cube_id=cube_pk)
 
             for each in data:
-                sid, table = each['source_id'], each['val']
+                sid, table = each['source_id'], each['table_name']
                 node_id = worker.cache.get_table_id(sid, table)
 
                 if node_id is None:
