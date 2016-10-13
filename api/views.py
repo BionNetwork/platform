@@ -377,8 +377,8 @@ class CubeViewSet(viewsets.ModelViewSet):
 
             data = QueryGenerate(pk, data).parse()
             return Response(json.loads(data))
-        except Exception as e:
-            raise APIException("Ошибка обработки запроса")
+        except Exception as err:
+            raise APIException("Ошибка обработки запроса: {0}".format(err))
 
     @detail_route(['post', ], serializer_class=LoadDataSerializer)
     def data(self, request, pk):
