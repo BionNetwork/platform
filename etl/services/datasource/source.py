@@ -32,3 +32,12 @@ class BaseSourceService(object):
         :return:
         """
         return self.datasource.get_rows(cols, structure)
+
+    def get_tables(self):
+        """
+        Возвращает таблицы источника
+
+        Returns:
+            list: список таблиц
+        """
+        return self.datasource.get_tables()

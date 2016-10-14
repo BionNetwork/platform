@@ -39,15 +39,6 @@ class FileService(BaseSourceService):
         else:
             raise ValueError("Нефайловый тип подключения!")
 
-    def get_tables(self):
-        """
-        Возвращает таблицы источника
-
-        Returns:
-            list: список таблиц
-        """
-        return self.datasource.get_tables()
-
     def get_columns_info(self, sheets, indents):
         """
             Получение полной информации о колонках таблиц
