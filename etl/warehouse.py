@@ -105,6 +105,7 @@ class ClickHouse(WareHouse):
         self.load_csv()
 
 
+# FIXME NO USAGE (ALTERNATIVE FOR CLICKHOUSE)
 class PostgresWarehouse(WareHouse):
     """
     Загрузка конечных данных в Postgres
@@ -120,6 +121,7 @@ class PostgresWarehouse(WareHouse):
         self.create_table()
 
 
+# FIXME NO USAGE (ALTERNATIVE FOR CLICKHOUSE)
 class MaterializedView(WareHouse):
     """
     Класс описывает материализованное представление.

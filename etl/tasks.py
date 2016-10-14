@@ -43,10 +43,11 @@ def load_data(context):
     Returns:
 
     """
-    context = context
+    print(context)
     cube_id = context['cube_id']
     pusher = Pusher(cube_id)
     sub_trees = context['sub_trees']
+    print(sub_trees)
 
     # параллель из последований, в конце колбэк
     # chord(
@@ -61,14 +62,14 @@ def load_data(context):
 
     # create_dataset(cube_id, sub_trees, pusher)
 
-    for sub_tree in sub_trees:
-        create_foreign_table(cube_id, sub_tree, pusher)
-        create_view(cube_id, sub_tree, pusher)
-
-    warehouse_load(cube_id, context, pusher)
-
-    return LoadWarehouse(
-        cube_id=cube_id, context=context, pusher=pusher).get_response()
+    # for sub_tree in sub_trees:
+    #     create_foreign_table(cube_id, sub_tree, pusher)
+    #     create_view(cube_id, sub_tree, pusher)
+    #
+    # warehouse_load(cube_id, context, pusher)
+    #
+    # return LoadWarehouse(
+    #     cube_id=cube_id, context=context, pusher=pusher).get_response()
 
 
 def update_data(context):

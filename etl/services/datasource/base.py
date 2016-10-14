@@ -560,6 +560,7 @@ class DataCubeService(object):
                 if source_column['name'] == db_col.original_name:
                     source_column['type'] = db_col.type_str
                     source_column['default'] = db_col.default_val
+                    continue
 
         info = {
             "value": table,

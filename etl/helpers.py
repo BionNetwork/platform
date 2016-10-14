@@ -30,7 +30,7 @@ def extract_tables_info(columns):
     return tables_dict
 
 
-class EtlEncoder:
+class EtlEncoder(object):
     @staticmethod
     def encode(obj):
         if isinstance(obj, datetime.datetime):
@@ -109,6 +109,7 @@ class DatasetContext(object):
         """
         # if not self.dataset.context:
         sub_trees = self.cube_service.prepare_sub_trees(self.sources_info)
+
         for sub_tree in sub_trees:
             sub_tree.update(
                 view_name='{type}{view_hash}'.format(

@@ -395,11 +395,15 @@ class CubeViewSet(viewsets.ModelViewSet):
                 }
 }
         """
-        # try:
-        if pk is None:
-            raise APIException("Cube ID is None!")
-
-        sources_info = json.loads(request.data.get('data'))
+        sources_info = request.data
+        sources_info = {
+            '90': {
+                "TDSheet": [
+                    "Дата",
+                    "Выручка",
+                ]
+            }
+        }
 
         # TODO возможно валидацию перенести в отдельный файл
         if not sources_info:
