@@ -149,6 +149,7 @@ class DatabaseService(BaseSourceService):
             self.datasource.connection, query, limit=limit, offset=offset)
 
 
+
 class LocalDatabaseService(object):
     """
     Сервис для работы с локальной базой данных

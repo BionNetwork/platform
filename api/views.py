@@ -23,7 +23,7 @@ from core.models import (
     Datasource, Dataset, EmptyEnum, DatasourceSettings,
     ColumnTypeChoices as CTC
 )
-from etl.tasks import load_data
+from etl.tasks import load_data, LoadWarehouse
 from etl.services.datasource.base import (DataSourceService, DataCubeService)
 from etl.services.exceptions import *
 from etl.helpers import group_by_source, DatasetContext, ContextError
@@ -214,41 +214,6 @@ class CubeViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         return super(CubeViewSet, self).create(request, *args, **kwargs)
 
-    # FIXME подумать передавать ли сюда список колонок,
-    # FIXME все колонки источника нам не нужны
-    @detail_route(['post'], serializer_class=TreeSerializerRequest)
-    def tree(self, request, pk):
-
-        data = json.loads(request.data.get('data'))
-        # data = request.data
-
-        # data = [
-        #     {"source_id": 92, "table_name": 'Таблица1', },
-        #     {"source_id": 91, "table_name": 'Лист1', },
-        #     {"source_id": 92, "table_name": 'Таблица3', },
-        #     {"source_id": 91, "table_name": 'Лист2', },
-        #     {"source_id": 90, "table_name": 'TDSheet', },
-        #     {"source_id": 89, "table_name": 'Sheet1', },
-        # ]
-
-        serializer = self.serializer_class(data=data, many=True)
-        if serializer.is_valid():
-            worker = DataCubeService(cube_id=pk)
-
-            for each in data:
-                sid, table = each['source_id'], each['table_name']
-                node_id = worker.cache.get_table_id(sid, table)
-
-                if node_id is None:
-                    node_id = worker.cache_columns(sid, table)
-                    worker.add_randomly_from_remains(node_id)
-
-            info = worker.get_tree_api()
-
-            return Response(info)
-
-        raise APIException("Invalid args!")
-
     @detail_route(['post'])
     def exchange_file(self, request, pk):
         pass
@@ -387,7 +352,7 @@ class CubeViewSet(viewsets.ModelViewSet):
         except Exception as err:
             raise APIException("Ошибка обработки запроса: {0}".format(err))
 
-    @detail_route(['post', ], serializer_class=LoadDataSerializer)
+    @detail_route(['post', 'get'], serializer_class=LoadDataSerializer)
     def data(self, request, pk):
         """
         Начачло загрузки данных
@@ -403,70 +368,67 @@ class CubeViewSet(viewsets.ModelViewSet):
                 }
 }
         """
-        # try:
-        if pk is None:
-            raise APIException("Cube ID is None!")
 
-        sources_info = request_data(request)
+        if request.method == 'POST':
+            if pk is None:
+                raise APIException("Cube ID is None!")
 
-        # TODO возможно валидацию перенести в отдельный файл
-        if not sources_info:
-            raise APIException("Data is empty!")
+            sources_info = request_data(request)
 
-        worker = DataCubeService(cube_id=pk)
+            # TODO возможно валидацию перенести в отдельный файл
+            if not sources_info:
+                raise APIException("Data is empty!")
 
-        # проверка на пришедшие колонки, лежат ли они в редисе,
-        # убираем ненужные типы (бинари)
+            worker = DataCubeService(cube_id=pk)
 
-        # группируем по соурс id на всякий
-        sources_info = group_by_source(sources_info)
+            # проверка на пришедшие колонки, лежат ли они в редисе,
+            # убираем ненужные типы (бинари)
 
-        # проверяем наличие соурс id в кэше
-        uncached = worker.check_sids_exist(list(sources_info.keys()))
-        if uncached:
-            raise APIException("Uncached source IDs: {0}!".format(uncached))
+            # группируем по соурс id на всякий
+            sources_info = group_by_source(sources_info)
 
-        # проверяем наличие ключей, таблиц, колонок в кэше
-        uncached_tables, uncached_keys, uncached_columns = (
-            worker.check_cached_data(sources_info))
+            # проверяем наличие соурс id в кэше
+            uncached = worker.check_sids_exist(list(sources_info.keys()))
+            if uncached:
+                raise APIException("Uncached source IDs: {0}!".format(uncached))
 
-        if any([uncached_tables, uncached_keys, uncached_columns]):
-            message = ""
-            if uncached_tables:
-                message += "Uncached tables: {0}! ".format(uncached_tables)
-            if uncached_keys:
-                message += "No keys for: {0}! ".format(uncached_keys)
-            if uncached_columns:
-                message += "Uncached columns: {0}! ".format(uncached_columns)
+            # проверяем наличие ключей, таблиц, колонок в кэше
+            uncached_tables, uncached_keys, uncached_columns = (
+                worker.check_cached_data(sources_info))
 
-            raise APIException(message)
+            if any([uncached_tables, uncached_keys, uncached_columns]):
+                message = ""
+                if uncached_tables:
+                    message += "Uncached tables: {0}! ".format(uncached_tables)
+                if uncached_keys:
+                    message += "No keys for: {0}! ".format(uncached_keys)
+                if uncached_columns:
+                    message += "Uncached columns: {0}! ".format(uncached_columns)
 
-        # проверка наличия всех таблиц из дерева в пришедших нам
-        range_ = worker.check_tables_with_tree_structure(sources_info)
-        if range_:
-            raise APIException("Tables {0} in tree, but didn't come! ".format(
-                 range_))
+                raise APIException(message)
 
-        dc = DatasetContext(cube_id=pk, sources_info=sources_info)
-        try:
-            dc.create_dataset()
-        except ContextError:
-            raise APIException("Подобная карточка уже существует")
-        load_d = load_data(dc.context)
+            # проверка наличия всех таблиц из дерева в пришедших нам
+            range_ = worker.check_tables_with_tree_structure(sources_info)
+            if range_:
+                raise APIException("Tables {0} in tree, but didn't come! ".format(
+                     range_))
 
-        return Response(load_d)
-        # except Exception as err:
-        #     raise APIException(err)
+            dc = DatasetContext(cube_id=pk, sources_info=sources_info)
+            try:
+                dc.create_dataset()
+            except ContextError:
+                raise APIException("Подобная карточка уже существует")
+            load_d = load_data(dc.context)
 
-    @detail_route(['get', ], serializer_class=LoadDataSerializer)
-    def get_filters(self, request, pk):
-        """
-        Список значений для фильтров куба
-        """
-        worker = DataCubeService(cube_id=pk)
-
-        meta = worker.get_cube_columns()
-        return Response(meta)
+            return Response(load_d)
+        else:
+            try:
+                context = Dataset.objects.get(key=pk).context
+                result = LoadWarehouse(
+                    cube_id=pk, context=context).get_response()
+                return Response(result)
+            except Dataset.DoesNotExist as err:
+                APIException("Активация не создана")
 
 
 class ColumnsViewSet(viewsets.ViewSet):
@@ -811,8 +773,8 @@ class NodeViewSet(viewsets.ViewSet):
             info = worker.from_remain_to_certain(parent_id, pk)
 
             return Response(info)
-        except Exception as ex:
-            raise APIException(ex.message)
+        except Exception as err:
+            raise APIException(err)
 
 
 class JoinViewSet(viewsets.ViewSet):

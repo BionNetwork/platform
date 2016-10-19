@@ -17,6 +17,7 @@ ORDER_BY = "ORDER_BY"
 DATE_DIM = 'DateDim'
 TEXT_DIM = 'TextDim'
 
+
 class QueryGenerate(object):
     """
     Формирование SQL-запроса для получения данных
