@@ -424,9 +424,11 @@ class CubeViewSet(viewsets.ModelViewSet):
         else:
             try:
                 context = Dataset.objects.get(key=pk).context
-                result = LoadWarehouse(
-                    cube_id=pk, context=context).get_response()
-                return Response(result)
+                if context:
+                    result = LoadWarehouse(
+                        cube_id=pk, context=context).get_response()
+                    return Response(result)
+                return Response([])
             except Dataset.DoesNotExist as err:
                 APIException("Активация не создана")
 
