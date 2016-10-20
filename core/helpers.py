@@ -12,6 +12,7 @@ from django.conf import settings
 
 from redis.exceptions import LockError
 
+
 logger = logging.getLogger(__name__)
 
 """

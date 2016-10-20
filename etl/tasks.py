@@ -14,7 +14,7 @@ from core.models import (
 
 from etl.constants import *
 from etl.services.queue.base import *
-from etl.helpers import EtlEncoder
+from etl.helpers import EtlEncoder, create_col_id
 from etl.services.datasource.base import DataSourceService
 
 from etl.foreign_tables import (
@@ -314,6 +314,7 @@ class LoadWarehouse(EtlBaseTask):
                         "orig_column": column["name"],
                         "click_column": column["click_column"],
                         "type": column["type"],
+                        "column_id": create_col_id(sub_tree["val"], column["name"])
                     } for column in sub_tree['columns']
                 ],
             }

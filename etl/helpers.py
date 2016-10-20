@@ -9,6 +9,10 @@ from etl.constants import CLICK_TABLE, CLICK_COLUMN, STTM, VIEW
 from etl.services.datasource.base import DataCubeService
 
 
+def create_col_id(table_name, col_name):
+    return abs(HashEncoder.encode('{0}_{1}'.format(table_name, col_name)))
+
+
 def group_by_source(columns_info):
     """
     Группировка по соурсам, на всякий пожарный перед загрузкой

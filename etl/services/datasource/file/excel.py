@@ -13,6 +13,7 @@ from xlrd import XLRDError
 
 from core.models import EmptyEnum, ColumnTypeChoices as CTC
 
+
 from etl.services.datasource.file.interfaces import File
 from etl.services.exceptions import (SheetException, ColumnException)
 
@@ -99,6 +100,7 @@ class Excel(File):
             "type": col_type,
             "origin_type": origin_type,}, ]
         """
+        from etl.helpers import create_col_id
 
         columns = defaultdict(list)
 
@@ -110,8 +112,8 @@ class Excel(File):
             try:
                 sheet_df = self.read_excel_necols(
                     excel_path, sheet_name, **kwargs)
-            except XLRDError as e:
-                raise SheetException(message=e.message)
+            except XLRDError as err:
+                raise SheetException(err)
 
             col_names = sheet_df.columns
             for col_name in col_names:
@@ -119,6 +121,8 @@ class Excel(File):
                 col_df = sheet_df[col_name]
                 origin_type = col_df.dtype.name
                 col_type = self.process_type(origin_type)
+
+                col_id = create_col_id(sheet_name, col_name)
 
                 # определяем типы дат вручную
                 if col_type != CTC.TIME:
@@ -134,6 +138,7 @@ class Excel(File):
                     "type": col_type,
                     "origin_type": origin_type,
                     "max_length": None,
+                    "column_id": col_id
                 })
 
         return columns
