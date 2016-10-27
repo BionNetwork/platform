@@ -148,7 +148,7 @@ class QueryGenerate(object):
                 orders.update({dim["order"]: dim["name"]})
 
         temp = {}
-        res = {}
+        res = []
         for each in data:
             main_field_value = each[orders["1"]]
             second_field_value = each[orders["2"]]
@@ -165,14 +165,15 @@ class QueryGenerate(object):
                 temp[main_field_value] = {second_field_value: measure_field_value}
 
         for key, value in temp.items():
-            if not res.get(key, None):
-                res.update({key: []})
+            row = [key]
+
             for second_el in uniq_2_level:
                 if second_el in value.keys():
 
-                    res[key].append(value[second_el])
+                    row.append(value[second_el])
                 else:
-                    res[key].append(0)
+                    row.append(0)
+            res.append(row)
 
         return {"fields": uniq_2_level, "data": res}
 
