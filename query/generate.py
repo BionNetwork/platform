@@ -80,7 +80,11 @@ class QueryGenerate(object):
                     "type": "text",
                     "name": "org",
                     "order": "2"
-                }],
+                }, {
+                    "field": "c_21_21_4864501795689730638_7596377657666315819",
+                    "type": "text",
+                    "name": "cont"
+                }]
 "measures":[
 {
                     "field": "c_21_21_4864501795689730638_3478212977531136609",
@@ -157,10 +161,14 @@ class QueryGenerate(object):
             del each[orders["1"]]
             if each[orders["2"]] not in uniq_2_level:
                 uniq_2_level.append(each[orders["2"]])
+
             if temp.get(main_field_value, None):
-                temp[main_field_value].update(
-                    {second_field_value: measure_field_value}
-                )
+                if temp[main_field_value].get(second_field_value, None):
+                    temp[main_field_value][second_field_value] += measure_field_value
+                else:
+                    temp[main_field_value].update(
+                        {second_field_value: measure_field_value}
+                    )
             else:
                 temp[main_field_value] = {second_field_value: measure_field_value}
 
