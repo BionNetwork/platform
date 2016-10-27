@@ -98,7 +98,6 @@ class DatasourceViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         source = self.get_object()
         DataSourceService.delete_datasource(source)
-        # DataSourceService.tree_full_clean(source)
         return super(DatasourceViewSet, self).destroy(request, *args, **kwargs)
 
     @detail_route(methods=['get'])
@@ -113,7 +112,7 @@ class DatasourceViewSet(viewsets.ModelViewSet):
     @detail_route(methods=['post'], serializer_class=IndentSerializer)
     def indent(self, request, pk):
         """
-        Отступ в соурсах, предположительно в файлах
+        Отступ в источниках, предположительно в файлах
         """
         post = request_data(request)
 
@@ -307,7 +306,7 @@ class CubeViewSet(viewsets.ModelViewSet):
             "dims": [
             {
                 "name": "d_name",
-                "type": "DateDim",
+                "type": "date",
                 "field": "d",
                 "filters": {
                     "range": ["2016-02-28", "2016-03-04"]
@@ -316,7 +315,7 @@ class CubeViewSet(viewsets.ModelViewSet):
 
             }, {
                 "name": "org",
-                "type": "TextDim",
+                "type": "text",
                 "field": "org",
                 "order": "desc",
                 "visible": True,
@@ -325,7 +324,7 @@ class CubeViewSet(viewsets.ModelViewSet):
                     },
             }, {
                 "name": "project",
-                "type": "TextDim",
+                "type": "text",
                 "field": "project",
                 "filters": {
                     "match": ['Татмедиа'],
@@ -348,7 +347,7 @@ class CubeViewSet(viewsets.ModelViewSet):
             data = request_data(request)
 
             data = QueryGenerate(pk, data).parse()
-            return Response(json.loads(data))
+            return Response(data)
         except Exception as err:
             raise APIException("Ошибка обработки запроса: {0}".format(err))
 
