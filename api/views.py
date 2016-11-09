@@ -343,13 +343,13 @@ class CubeViewSet(viewsets.ModelViewSet):
             }]
         }
         """
-        try:
-            data = request_data(request)
 
-            data = QueryGenerate(pk, data).parse()
-            return Response(data)
-        except Exception as err:
-            raise APIException("Ошибка обработки запроса: {0}".format(err))
+        data = request_data(request)
+
+        data = QueryGenerate(pk, data).parse()
+        return Response(data)
+        # except Exception as err:
+        #     raise APIException("Ошибка обработки запроса: {0}".format(err))
 
     @detail_route(['post', 'get'], serializer_class=LoadDataSerializer)
     def data(self, request, pk):
@@ -835,6 +835,13 @@ class JoinViewSet(viewsets.ViewSet):
             left_node, right_node, join_type, joins)
 
         return Response(data=data)
+
+
+class FileUnionViewSet(viewsets.ViewSet):
+    """
+    Объединение файлов
+    """
+
 
 
 d = \
