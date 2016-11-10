@@ -2,7 +2,7 @@
 
 import requests
 import json
-
+from collections import OrderedDict
 
 class QueryException(Exception):
     pass
@@ -141,8 +141,18 @@ class QueryGenerate(object):
         return data
 
     def transform(self, data):
+        """
+        Трансформация результирующих данных
+        Args:
+            data: Входные данные
+
+        Returns:
+
+        """
+
         uniq_2_level = []
         orders = {}
+        # Формируем словарь вида {'1': 'name_1', '2': 'name_2'}
         if self.input.get('dims', None):
             for dim in self.input['dims']:
                 orders.update({dim["order"]: dim["name"]})
@@ -151,7 +161,7 @@ class QueryGenerate(object):
             for dim in self.input['measures']:
                 orders.update({dim["order"]: dim["name"]})
 
-        temp = {}
+        temp = OrderedDict()
         res = []
         for each in data:
             main_field_value = each[orders["1"]]
