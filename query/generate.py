@@ -296,6 +296,8 @@ class DateDimParse(Parse):
         res[GROUP_BY] = ['{field}'.format(field=self.name)]
         if self.filter_block:
             res[WHERE] = [self.filter(self.field, self.filter_block).parse()]
+        if self.order_by:
+            res[ORDER_BY] = ['{field} {order_type}'.format(field=self.name, order_type=self.order_by)]
 
         return res
 
@@ -620,3 +622,29 @@ class Expression(object):
     def modulo(self, arg1, arg2):
         self._operation('modulo', arg1, arg2)
 
+
+
+# a = '{"transform": "true",
+# "dims": [
+#                 {
+#                     "field": "c_48_122_1833492329905061937_7422639360442476521",
+#                     "type": "date",
+#                     "name": "date",
+#                     "order": "1"
+#                 },
+#                 {
+#                     "field": "c_48_122_1833492329905061937_8218494750998370053",
+#                     "type": "text",
+#                     "name": "org",
+#                     "order": "2"
+#                 }],
+# "measures":[
+# {
+#                     "field": "c_48_122_1833492329905061937_902542484652044934",
+#                     "type": "field",
+#                     "agg_type": "sum",
+#                     "name": "remain",
+#                     "order": "3"
+#                 }
+# ]
+#                 }'
