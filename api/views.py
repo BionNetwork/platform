@@ -16,8 +16,8 @@ from rest_framework import status
 from api.serializers import (
     DatasourceSerializer, NodeSerializer,
     TreeSerializerRequest, ParentIdSerializer, IndentSerializer,
-    LoadDataSerializer, DatasetSerializer, ColumnsSerializer, SettingsSerializer
-)
+    LoadDataSerializer, DatasetSerializer, ColumnsSerializer, SettingsSerializer,
+    DatasourceIdSerializer, DatasourceIdsSerializer)
 
 from core.models import (
     Datasource, Dataset, EmptyEnum, DatasourceSettings,
@@ -841,6 +841,7 @@ class FileUnionViewSet(viewsets.ViewSet):
     """
     Объединение файлов
     """
+    serializer_class = DatasourceIdsSerializer
 
 
 

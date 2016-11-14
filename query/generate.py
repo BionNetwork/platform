@@ -116,7 +116,7 @@ class QueryGenerate(object):
                 self.update_key_words(self.dimension_parser(dim).run())
         if self.input.get('measures', None):
             for measure in self.input.get('measures'):
-                self.update_key_words(MeasureParse(measure).run())
+                self.update_key_words(self.measure_parser(measure).run())
 
         select_block = "SELECT %s" % ", ".join(self.key_words["SELECT"])
         where_block = "WHERE %s" % " AND ".join(self.key_words[WHERE]).replace('"', "'").replace("'", '"') if self.key_words[WHERE] else ""
@@ -328,7 +328,7 @@ class MeasureParse(Parse):
 
     def run(self):
         res = dict()
-        inner_name = "{type}({field})".format(type=self.agg_type, field=self.field)
+        inner_name = "{agg_type}({field})".format(agg_type=self.agg_type, field=self.field)
         res[SELECT] = ["{field} as {name}".format(field=inner_name, name=self.name)] if self.visible else []
         if self.filter_block:
             res[HAVING] = [self.filter(inner_name, self.filter_block).parse()]
@@ -346,7 +346,9 @@ class ExpressionMeasureParse(MeasureParse):
 
     def run(self):
         res = dict()
-        res[SELECT] = [Expression().parse(self.expression)]
+        inner_name = "{agg_type}({field})".format(agg_type=self.agg_type, field=Expression().parse(self.expression))
+        res[SELECT] = ["{field} as {name}".format(field=inner_name, name=self.name)] if self.visible else []
+        return res
 
 
 LT = 'lt'
@@ -576,7 +578,9 @@ class Expression(object):
             str - строка ошибки
 
         """
-        operator, expr_args = expression.items()
+        for key, value in expression.items():
+            operator = key
+            expr_args = value
         if not getattr(self, operator, None):
             return False, "Оператора {0} указан некорректно".format(operator)
         if len(expr_args) != 2:
@@ -612,13 +616,14 @@ class Expression(object):
         """
         is_valid, error_message = self._validate(expression)
         if is_valid:
-            operator, expr_args = expression.items()
+            for key, value in expression.items():
+                operator, expr_args = key, value
             return getattr(self, operator, None)(self.get_value(expr_args))
         else:
             raise QueryException(error_message)
 
-    def plus(self, arg1, arg2):
-        self._operation('plus', arg1, arg2)
+    def plus(self, args):
+        return self._operation('plus', args[0], args[1])
 
     def minus(self, arg1, arg2):
         self._operation('minus', arg1, arg2)

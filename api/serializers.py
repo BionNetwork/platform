@@ -198,3 +198,20 @@ class ColumnsSerializer(serializers.Serializer):
     param = serializers.CharField(required=True)
     type = serializers.CharField(required=True)
     default = serializers.IntegerField(required=True)
+
+
+class DatasourceIdSerializer(serializers.Serializer):
+    """
+    Сериализатор для id источника
+    """
+    sid = serializers.IntegerField()
+
+
+class DatasourceIdsSerializer(serializers.Serializer):
+    """
+    Сериализатор для нескольких источников
+    """
+    ids = serializers.ListField(
+        child=serializers.IntegerField()
+    )
+
